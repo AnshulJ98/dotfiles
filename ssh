@@ -1,0 +1,14 @@
+ssh -XYL 1234:wwwstu.csci.viu.ca:80 joshia@otter.csci.viu.ca   
+ssh -xyL 1234:database.csci.viu.ca:8080 joshia@otter.csci.viu.ca 
+ssh -xyL 1235:127.0.0.1:1235 joshia@otter.csci.viu.ca 
+ssh -L 1235:127.0.0.1:1234 joshia@cub10
+
+
+sudo sshfs -o allow_other joshia@csci.viu.ca:/home/student/joshia /mnt/joshia
+sudo sshfs -o allow_other joshia@csci.viu.ca:/ /mnt/otter
+
+systemctl enable --now tlp-sleep.service
+rclone --vfs-cache-mode writes mount joshia: ~/gDrivejoshia
+xrandr --output HDMI1 --auto --right-of eDP1  
+ps -ef | grep sshfs | grep -v grep
+qdbus org.kde.plasmashell /PlasmaShell evaluateScript "lockCorona(true)"

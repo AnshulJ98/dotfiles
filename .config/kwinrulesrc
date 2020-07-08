@@ -1,0 +1,33 @@
+[1]
+Description=Window settings for google-chrome
+clientmachine=localhost
+clientmachinematch=0
+noborder=true
+noborderrule=2
+title=How to disable window decorations? • KDE Community Forums - Google Chrome
+titlematch=0
+types=1
+windowrole=browser
+windowrolematch=1
+wmclass=google-chrome
+wmclasscomplete=false
+wmclassmatch=1
+
+[2]
+Description=Application settings for glava
+below=true
+belowrule=4
+clientmachine=localhost
+clientmachinematch=0
+skippager=false
+skippagerrule=4
+skipswitcher=false
+skipswitcherrule=4
+skiptaskbar=false
+skiptaskbarrule=4
+wmclass=glava
+wmclasscomplete=false
+wmclassmatch=1
+
+[General]
+count=2
