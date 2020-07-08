@@ -1,0 +1,11 @@
+[OSD]
+Enabled=true
+
+[PlasmaToolTips]
+Delay=0.7
+
+[Theme]
+name=Sweet
+
+[Wallpapers]
+usersWallpapers=/tmp/screen.png,/home/anshulj/Pictures/Wallpapers/IMG_174897.jpg

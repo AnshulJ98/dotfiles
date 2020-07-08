@@ -1,10 +1,10 @@
 #!/bin/bash
-rm /tmp/screen.png
+#rm /tmp/screen.png
 
-TMPBG=/tmp/screen.png
-scrot /tmp/screen.png
-convert $TMPBG -scale 10% -scale 1000% $TMPBG
-convert $TMPBG -gravity top -composite -matte $TMPBG
+#TMPBG=/tmp/screen.png
+#scrot /tmp/screen.png
+#convert $TMPBG -scale 10% -scale 1000% $TMPBG
+#convert $TMPBG -gravity top -composite -matte $TMPBG
 #i3lock -u -i $TMPBG
 exec qdbus org.freedesktop.ScreenSaver /ScreenSaver Lock
 
