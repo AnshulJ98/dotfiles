@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# Excellent JankyBorders config
+# - Pronounced active border for clear focus (soft purple accent, matches many dark themes like PaulMillr)
+# - Subtle inactive border (avoids clutter in multi-window layouts)
+# - Glow effect on active for extra visibility without increasing width
+# - Exclude common problematic apps (Finder, QuickTime, etc.) to prevent double/overlapping borders
+# - Order above windows (covers native shadows cleanly)
+
+options=(
+    style=round               # Rounded corners (macOS-native feel); use 'square' for sharp i3 style
+    width=8.0                 # Thicker than default for better visibility on 4K monitors
+    hidpi=off                 # Off for performance; set 'on' if borders appear too thin on Retina
+    order=above               # Draws over native window shadows (cleaner look)
+    
+    active_color=glow(0xcce2e2e3)     # Light gray with glow (your original active + subtle halo)
+    # Alternative: active_color=gradient(top_left=0xffb4a1db,bottom_right=0xff7daea3)  # Purple-green gradient for flair
+    # Alternative plain: active_color=0xffb4a1db  # Soft purple (Catppuccin-inspired mauve)
+    
+    inactive_color=0x88414550         # Semi-transparent version of your original (less distracting)
+    
+    blacklist="Finder,QuickTime Player,ScreenRecorder"  # Quote if needed; prevents borders on floating/system windows
+)
+
+borders "${options[@]}"
