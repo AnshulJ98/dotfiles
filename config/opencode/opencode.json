@@ -1,0 +1,87 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "github-copilot/claude-sonnet-4.6",
+  "default_agent": "orchestrator",
+  "enabled_providers": [
+    "github-copilot"
+  ],
+  "provider": {
+    "github-copilot": {}
+  },
+  "instructions": [
+    "/Users/anshulj/.config/opencode/AGENTS.md",
+    "/Users/anshulj/.config/opencode/rules/*.md"
+  ],
+  "mcp": {
+    "memory": {
+      "type": "local",
+      "command": [
+        "/opt/homebrew/bin/mcp-server-memory",
+        "--db",
+        "/Users/anshulj/.local/state/agent-memory/memory.jsonl"
+      ],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "enabled": true
+    },
+    "fetch": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "mcp-server-fetch"
+      ],
+      "enabled": true
+    }
+  },
+  "formatter": {
+    "prettier": {
+      "command": [
+        "npx",
+        "-y",
+        "prettier",
+        "--write",
+        "$FILE"
+      ],
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".json",
+        ".css",
+        ".md"
+      ]
+    },
+    "biome": {
+      "command": [
+        "npx",
+        "-y",
+        "@biomejs/biome",
+        "format",
+        "--write",
+        "$FILE"
+      ],
+      "extensions": [
+        ".ts",
+        ".tsx"
+      ]
+    },
+    "black": {
+      "command": [
+        "uvx",
+        "black",
+        "$FILE"
+      ],
+      "extensions": [
+        ".py"
+      ]
+    }
+  }
+}
