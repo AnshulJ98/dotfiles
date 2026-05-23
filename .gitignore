@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+
+# Common backups / orig files
+*.bak
+*.bak.*
+*.orig
+*.pre-rebuild
+*.tui-migration.bak
+
+# Lock files and build artifacts that shouldn't be tracked here
+node_modules/
+package-lock.json
+bun.lock
+yarn.lock
+pnpm-lock.yaml
+
+# Runtime state / caches / logs (always machine-local)
+*.log
+logs/
+session-state/
+session-store.db
+session-store.db-shm
+session-store.db-wal
+command-history-state.json
+vscode.session.metadata.cache.json
+mcp-needs-auth-cache.json
+ide/
+
+# Secrets — never commit
+.env
+.env.*
+*credentials*
+*.pem
+*.key
+*.p12
+*_rsa
+*_ed25519
+*_ecdsa

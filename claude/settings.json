@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "model": "opus",
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true,
+  "verbose": true,
+  "agentPushNotifEnabled": true,
+  "inputNeededNotifEnabled": true,
+
+  "statusLine": {
+    "type": "command",
+    "command": "/Users/anshulj/.claude/statusline-command.sh",
+    "padding": 0
+  },
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/Users/anshulj/.claude/hooks/session-start.sh", "timeout": 5 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bunx -y ccstatusline@latest --hook" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          { "type": "command", "command": "bunx -y ccstatusline@latest --hook" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "/Users/anshulj/.claude/hooks/pre-tool-guard.sh", "timeout": 3 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "/Users/anshulj/.claude/hooks/post-tool-format.sh", "timeout": 15 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/Users/anshulj/.claude/hooks/stop-handoff.sh", "timeout": 5 }
+        ]
+      }
+    ]
+  },
+
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "planning-with-files@planning-with-files": true
+  },
+
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/mcp-server-memory",
+      "args": ["--db", "/Users/anshulj/.local/state/agent-memory/memory.jsonl"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/playwright-mcp"
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/anshulj/Dev",
+        "/Users/anshulj/Documents"
+      ]
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"]
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp"]
+    }
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(pwd)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(fd:*)",
+      "Bash(tree:*)",
+      "Bash(ast-grep:*)",
+      "Bash(jq:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)",
+      "Bash(git stash list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull --ff-only:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git rebase:*)",
+      "Bash(git merge:*)",
+      "Bash(git worktree:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh issue:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh repo list:*)",
+      "Bash(gh search:*)",
+      "Bash(gh api:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh run:*)",
+      "Bash(pnpm:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(bun:*)",
+      "Bash(bunx:*)",
+      "Bash(yarn:*)",
+      "Bash(node:*)",
+      "Bash(tsx:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(uv:*)",
+      "Bash(uvx:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(ruff:*)",
+      "Bash(pytest:*)",
+      "Bash(mypy:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(go fmt:*)",
+      "Bash(go vet:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(make:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker inspect:*)",
+      "Bash(kubectl get:*)",
+      "Bash(kubectl describe:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(aws sts:*)",
+      "Bash(aws s3 ls:*)",
+      "Bash(brew list:*)",
+      "Bash(brew info:*)",
+      "Bash(brew search:*)",
+      "Bash(prettier:*)",
+      "Bash(eslint:*)",
+      "Bash(biome:*)",
+      "Bash(black:*)",
+      "Bash(shfmt:*)",
+      "Bash(gofmt:*)",
+      "Bash(rustfmt:*)",
+      "Bash(open:*)",
+      "mcp__memory__search_nodes",
+      "mcp__memory__open_nodes",
+      "mcp__memory__read_graph",
+      "mcp__memory__add_observations",
+      "mcp__memory__create_entities",
+      "mcp__memory__create_relations",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__search_files",
+      "mcp__sequential-thinking__sequentialthinking"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf $HOME:*)",
+      "Bash(sudo rm:*)",
+      "Bash(mkfs.*:*)",
+      "Bash(dd if=*of=/dev/*)",
+      "Bash(:(){:|:&};:)",
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)",
+      "Bash(wget * | bash)"
+    ]
+  }
+}

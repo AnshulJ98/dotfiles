@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__edit_file",
+      "Bash(find ~/.vscode-insiders/extensions/beardedbear.beardedtheme-10.1.0/themes/ -name *monokai*black* -o -name *Monokai*Black*)",
+      "Bash(nvim --headless -c \"luafile colors/bearded-monokai.lua\" -c \"q\")",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(nvim --headless -c \"luafile $f\" -c \"q\")",
+      "Bash(done)",
+      "Bash(python3:*)",
+      "Bash(nvim --headless -c \"luafile lua/config/options.lua\" -c \"q\")",
+      "Bash(nvim --headless -c \"colorscheme bearded-monokai\" -c \"echo ''''COLORSCHEME OK''''\" -c \"q\")",
+      "Bash(nvim --headless -c \"lua require\\(''''config.options''''\\)\" -c \"lua require\\(''''config.keymaps''''\\)\" -c \"echo ''''CONFIG OK''''\" -c \"q\")",
+      "Bash(brew list:*)",
+      "Bash(nvim --headless -c \"colorscheme bearded-monokai\" -c \"echo ''OK''\" -c \"q\")",
+      "Bash(opencode --help)",
+      "Bash(nvim --headless -c \"luafile lua/plugins/ai.lua\" -c \"q\")",
+      "Bash(nvim --headless -c \"luafile lua/config/keymaps.lua\" -c \"q\")",
+      "Bash(curl -s \"https://api.github.com/search/repositories?q=CopilotChat+neovim&sort=stars&order=desc\")",
+      "Bash(rm -rf ~/.local/share/nvim/lazy/CopilotChat.nvim)",
+      "Bash(nvim --headless -c 'luafile lua/plugins/ai.lua' -c q)",
+      "Bash(opencode)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(curl -s \"https://api.github.com/repos/brianhuster/live-preview.nvim\")",
+      "Bash(curl -s \"https://api.github.com/repos/lalitmee/browse.nvim\")",
+      "Bash(curl -s \"https://api.github.com/repos/sontungexpt/url-open\")",
+      "Bash(ls:*)"
+    ]
+  }
+}
