@@ -1,23 +1,26 @@
 /**
- * MLX local provider — DORMANT (absent from settings.json "extensions").
+ * MLX local provider — OMLX server, OpenAI-compatible, API-key auth.
  *
- * Pulls REAL model ids + context window straight from the running MLX server's
- * OpenAI-compatible /v1/models endpoint — nothing about the model is baked in.
- * If the server isn't up, it registers nothing and stays silent (safe to enable
- * even before the server exists; it auto-activates once /v1/models responds).
+ * Pulls REAL model ids + context window straight from the running server's
+ * /v1/models endpoint — nothing about the model is baked in. If the server is
+ * down OR the key is missing/wrong (401), it registers nothing and stays silent
+ * (safe to keep enabled; auto-activates once /v1/models responds with 200).
  *
- * Enable: add this file to settings.json "extensions", then /reload.
- *   Serve first:  mlx_lm.server --model <qwen3-30b-a3b> --port 8080
+ * Config via ENV (never hardcode the key in tracked dotfiles):
+ *   export OMLX_API_KEY="<key from the OMLX admin panel>"   # required (server demands Bearer)
+ *   export OMLX_BASE_URL="http://localhost:11434/v1"        # optional, this is the default
+ * Then launch pi from that shell (so it inherits the env) and /reload.
  *
- * Caveat: the OpenAI /v1/models schema does not require a context field, and
- * mlx_lm.server may omit it. When absent there is no real value to pull — the
- * window is set by how YOU serve it (RAM / --max-tokens) — so FALLBACK_CONTEXT
- * is used. Set it to your real serving window; pi's compaction triggers relative
- * to it. Local mode = a single small-scoped primary agent, never a background one.
+ * Caveat 1: the OpenAI /v1/models schema does not require a context field. When
+ * absent the window is whatever YOU serve (RAM / --max-tokens) — FALLBACK_CONTEXT
+ * is used; set it to your real serving window so compaction triggers correctly.
+ * Caveat 2: Qwen-based thinking models may need `compat.thinkingFormat`
+ * ("qwen" or "qwen-chat-template") on the model — add if reasoning misbehaves.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const MLX_BASE = "http://localhost:8080/v1";
+const MLX_BASE = process.env.OMLX_BASE_URL ?? "http://localhost:11434/v1";
+const API_KEY = process.env.OMLX_API_KEY ?? "";
 const FALLBACK_CONTEXT = 32768;
 const FALLBACK_MAX_TOKENS = 8192;
 
@@ -32,16 +35,21 @@ interface MlxModel {
 export default async function (pi: ExtensionAPI) {
   let data: MlxModel[];
   try {
-    const res = await fetch(`${MLX_BASE}/models`, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) return;
+    const res = await fetch(`${MLX_BASE}/models`, {
+      signal: AbortSignal.timeout(1500),
+      headers: API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {},
+    });
+    if (!res.ok) return; // server down or unauthorized (401) — stay dormant, no error
     data = ((await res.json()) as { data?: MlxModel[] }).data ?? [];
   } catch {
-    return; // server not running — stay dormant, no error
+    return; // server not reachable — stay dormant
   }
   if (data.length === 0) return;
 
   pi.registerProvider("mlx-local", {
     baseUrl: MLX_BASE,
+    apiKey: "$OMLX_API_KEY",
+    authHeader: true,
     api: "openai-completions",
     models: data.map((m) => ({
       id: m.id,
