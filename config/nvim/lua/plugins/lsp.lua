@@ -25,6 +25,29 @@ return {
           prefix = "",
         },
       },
+      -- Per-server setup overrides
+      setup = {
+        -- Nil-safe rewrite of LazyVim's gopls semantic-tokens workaround.
+        -- Upstream (lang/go.lua:60) indexes client.config.capabilities.textDocument
+        -- which is nil on nvim 0.12+ under the new vim.lsp.config flow.
+        gopls = function(_, _)
+          Snacks.util.lsp.on({ name = "gopls" }, function(_, client)
+            if client.server_capabilities.semanticTokensProvider then return end
+            local caps = client.config and client.config.capabilities
+            local td = caps and caps.textDocument
+            local semantic = td and td.semanticTokens
+            if not semantic then return end
+            client.server_capabilities.semanticTokensProvider = {
+              full = true,
+              legend = {
+                tokenTypes = semantic.tokenTypes,
+                tokenModifiers = semantic.tokenModifiers,
+              },
+              range = true,
+            }
+          end)
+        end,
+      },
       servers = {
         -- TypeScript inlay hints (vtsls) — primary language
         vtsls = {

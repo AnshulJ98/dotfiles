@@ -42,6 +42,13 @@ const exploreTool = defineTool({
   }),
 
   async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+    if (typeof params.query !== "string" || params.query.startsWith("-")) {
+      return {
+        content: [{ type: "text", text: "explore: invalid query — must be a non-empty string that does not start with '-'." }],
+        isError: true,
+      };
+    }
+
     const args = [
       "-p",
       "--no-skills",
