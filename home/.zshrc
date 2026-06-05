@@ -87,3 +87,21 @@ source ~/.zsh/plugins/powerlevel10k/powerlevel10k.zsh-theme
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 export PATH=$PATH:/Users/anshulj/.spicetify
+export PATH="/Users/anshulj/.bun/bin:$PATH"
+# ── Claude Code ─────────────────────────────────────────────────────────────
+# YOLO: launch Claude Code with all permission prompts disabled.
+# Use only on trusted machines + trusted projects — bypasses guard rails.
+alias yolo='claude --dangerously-skip-permissions'
+
+# Plan mode (read-only research session — no edits/writes).
+alias claude-plan='claude --permission-mode plan'
+
+# Orchestrator-as-main-session.
+alias claude-orch='claude --agent orchestrator'
+
+# GitHub MCP server (claude-plugins-official) reads this env var.
+# Token is sourced from `gh auth token` so it stays in sync with gh CLI auth.
+# Added 2026-05-23 by Claude Code config audit.
+if command -v gh >/dev/null 2>&1; then
+  export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token 2>/dev/null)"
+fi
