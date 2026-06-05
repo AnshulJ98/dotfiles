@@ -1,0 +1,49 @@
+{
+  "lastChangelogVersion": "0.78.1",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "claude-haiku-4.5",
+  "defaultThinkingLevel": "high",
+  "hideThinkingBlock": false,
+  "theme": "tokyo-night",
+  "quietStartup": true,
+  "editorPaddingX": 2,
+  "enabledModels": [
+    "github-copilot/claude-haiku-4.5",
+    "github-copilot/gpt-5.4-mini",
+    "github-copilot/claude-sonnet-4.6",
+    "github-copilot/claude-opus-4.6",
+    "github-copilot/gpt-5.4"
+  ],
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 16000
+  },
+  "prompts": [
+    "~/Dev/dotfiles/config/pi/prompts"
+  ],
+  "extensions": [
+    "~/Dev/dotfiles/config/pi/extensions/explore.ts",
+    "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts"
+  ],
+  "enableSkillCommands": true,
+  "packages": [
+    {
+      "source": "npm:@spences10/pi-themes",
+      "extensions": []
+    },
+    {
+      "source": "npm:pi-theme-synthwave-84",
+      "extensions": []
+    },
+    {
+      "source": "npm:@codella/pi-theme-cyberpunk",
+      "extensions": []
+    },
+    {
+      "source": "npm:@codella/pi-theme-candy",
+      "extensions": []
+    },
+    "npm:pi-rtk-optimizer"
+  ]
+}

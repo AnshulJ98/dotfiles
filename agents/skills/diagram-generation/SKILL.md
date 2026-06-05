@@ -1,6 +1,6 @@
 ---
 name: diagram-generation
-description: Use when the user asks to create, draw, or visualize diagrams — architecture diagrams, pipeline flows, flowcharts, decision trees, system context maps, comparison diagrams, or any SVG/.drawio output. Trigger words: diagram, chart, flow, flowchart, visualize, draw, SVG, draw.io, .drawio, .svg, architecture diagram, system context, pipeline flow, decision tree, dark theme diagram.
+description: "Use when the user asks to create, draw, or visualize diagrams — architecture diagrams, pipeline flows, flowcharts, decision trees, system context maps, comparison diagrams, or any SVG/.drawio output. Trigger words: diagram, chart, flow, flowchart, visualize, draw, SVG, draw.io, .drawio, .svg, architecture diagram, system context, pipeline flow, decision tree, dark theme diagram."
 tags:
   - diagrams
   - svg
