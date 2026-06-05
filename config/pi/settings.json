@@ -24,6 +24,7 @@
   ],
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/explore.ts",
+    "~/Dev/dotfiles/config/pi/extensions/context7.ts",
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts"
   ],
   "enableSkillCommands": true,
@@ -44,6 +45,7 @@
       "source": "npm:@codella/pi-theme-candy",
       "extensions": []
     },
-    "npm:pi-rtk-optimizer"
+    "npm:pi-rtk-optimizer",
+    "npm:pi-fetch"
   ]
 }
