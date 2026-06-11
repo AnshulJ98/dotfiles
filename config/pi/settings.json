@@ -22,6 +22,9 @@
   "prompts": [
     "~/Dev/dotfiles/config/pi/prompts"
   ],
+  "skills": [
+    "~/Dev/dotfiles/config/pi/skills"
+  ],
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/explore.ts",
     "~/Dev/dotfiles/config/pi/extensions/context7.ts",
