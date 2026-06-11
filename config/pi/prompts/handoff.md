@@ -1,10 +1,10 @@
 ---
-description: Distill this session into cross-tool handoff notes at ~/.copilot/instructions/handoff.instructions.md
+description: Distill this session into handoff notes at the current repo root (HANDOFF.md)
 argument-hint: "[extra notes to include]"
 ---
 Write handoff notes for the next session (any tool — pi, Claude Code, OpenCode). Extra notes from me: $@
 
-Distill THIS session into `~/.copilot/instructions/handoff.instructions.md` (overwrite — it holds only the latest handoff):
+Distill THIS session into `HANDOFF.md` at the repo root — `git rev-parse --show-toplevel`, or the cwd if not in a git repo (overwrite — it holds only the latest handoff):
 
 ```
 # Session Handoff
