@@ -46,6 +46,7 @@
       "extensions": []
     },
     "npm:pi-rtk-optimizer",
-    "npm:pi-fetch"
+    "npm:pi-fetch",
+    "npm:pi-ask-user"
   ]
 }
