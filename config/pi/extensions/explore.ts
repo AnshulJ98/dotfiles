@@ -52,6 +52,7 @@ const exploreTool = defineTool({
     const args = [
       "-p",
       "--no-skills",
+      "--no-extensions",
       "--no-session",
       "--model",
       EXPLORE_MODEL,
