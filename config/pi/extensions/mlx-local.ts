@@ -9,7 +9,8 @@
  * Config via ENV (never hardcode the key in tracked dotfiles):
  *   export OMLX_API_KEY="<key from the OMLX admin panel>"   # required (server demands Bearer)
  *   export OMLX_BASE_URL="http://localhost:11434/v1"        # optional, this is the default
- * Then launch pi from that shell (so it inherits the env) and /reload.
+ * Then launch pi from that shell. NOTE: env is frozen at process launch —
+ * /reload re-runs extensions but does NOT re-read env; restart pi after export.
  *
  * Caveat 1: the OpenAI /v1/models schema does not require a context field. When
  * absent the window is whatever YOU serve (RAM / --max-tokens) — FALLBACK_CONTEXT
