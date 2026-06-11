@@ -8,6 +8,7 @@ Walk down each branch of the design tree, resolving dependencies between decisio
 
 Rules:
 - One question at a time. Each question states YOUR recommended answer and why.
+- Pose every question through the `ask_user` tool (one call per question): your recommended answer is the FIRST option, alternatives after it, and put the why in the context field. Plain text only if the tool is unavailable.
 - If the codebase can answer a question, explore it (read/grep/bash) instead of asking me.
 - Surface the decisions I haven't noticed I'm making: data shape, failure modes, edge cases, migration, naming.
 - Do not start implementing. No code until I explicitly say go.

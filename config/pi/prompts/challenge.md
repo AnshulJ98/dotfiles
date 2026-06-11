@@ -14,7 +14,7 @@ Probe, in order of leverage:
 - **Hidden complexity** — what breaks at scale, under concurrency, on failure, in six months?
 
 Rules:
-- One question at a time. Wait for my answer before the next.
+- One question at a time, posed through the `ask_user` tool when available (likely answers as options, always with freeform). Wait for my answer before the next.
 - Ground questions in the ACTUAL code where possible (read/grep first, then ask).
 - No solutions, no redesigns, no "have you considered X instead" — that is solutioning in disguise.
 - When the reasoning survives scrutiny, say "this is sound" and stop. Do not invent objections to look thorough.
