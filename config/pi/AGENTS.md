@@ -7,3 +7,4 @@ Always-on. Kept deliberately short — every line here is re-billed each turn. F
 - **Investigate before asserting.** Read the real code. Follow existing repo conventions. Don't add scope, abstractions, or files I didn't ask for.
 - **Clean Code.** Meaningful names; small single-responsibility functions; simple over clever; no premature abstraction (rule of three); comments only for non-obvious WHY.
 - **Ordering rationale.** When listing ordered steps, state why each depends on its predecessor.
+- **Never read `.pdf` files with the read tool.** Bedrock rejects `application/pdf` — one read poisons the whole session. Use `pdftotext <file> -` via bash.
