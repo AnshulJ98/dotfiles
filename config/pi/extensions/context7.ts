@@ -33,14 +33,19 @@ function pickBestId(query: string, results: SearchResult[]): string | undefined 
   return [...results].sort((a, b) => (b.trustScore ?? 0) - (a.trustScore ?? 0))[0]?.id;
 }
 
-async function getJson(url: string, timeoutMs: number): Promise<unknown> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+function fetchSignal(timeoutMs: number, cancel?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return cancel ? AbortSignal.any([cancel, timeout]) : timeout;
+}
+
+async function getJson(url: string, timeoutMs: number, cancel?: AbortSignal): Promise<unknown> {
+  const res = await fetch(url, { signal: fetchSignal(timeoutMs, cancel) });
   if (!res.ok) throw new Error(`context7 ${res.status} for ${url}`);
   return res.json();
 }
 
-async function getText(url: string, timeoutMs: number): Promise<string> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+async function getText(url: string, timeoutMs: number, cancel?: AbortSignal): Promise<string> {
+  const res = await fetch(url, { signal: fetchSignal(timeoutMs, cancel) });
   if (!res.ok) throw new Error(`context7 ${res.status} for ${url}`);
   return res.text();
 }
@@ -65,7 +70,7 @@ const context7Tool = defineTool({
     ),
   }),
 
-  async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+  async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
     const { library, topic } = params;
     const tokens = params.tokens && params.tokens > 0 ? params.tokens : DEFAULT_TOKENS;
 
@@ -77,6 +82,7 @@ const context7Tool = defineTool({
         const data = (await getJson(
           `${API}/search?query=${encodeURIComponent(library)}`,
           SEARCH_TIMEOUT_MS,
+          signal,
         )) as { results?: SearchResult[] };
         const results = data.results ?? [];
         id = pickBestId(library, results);
@@ -93,7 +99,7 @@ const context7Tool = defineTool({
       const url = `${API}${id.startsWith("/") ? id : `/${id}`}?type=txt&tokens=${tokens}${
         topic ? `&topic=${encodeURIComponent(topic)}` : ""
       }`;
-      const docs = (await getText(url, DOCS_TIMEOUT_MS)).trim();
+      const docs = (await getText(url, DOCS_TIMEOUT_MS, signal)).trim();
 
       if (!docs) {
         return {
