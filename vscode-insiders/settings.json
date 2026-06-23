@@ -382,7 +382,7 @@
   "vscode-pets.throwBallWithMouse": true,
   "vscode-pets.petSize": "large",
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
   },
   "chat.tips.enabled": false,
   "vim.autoSwitchInputMethod.enable": true,

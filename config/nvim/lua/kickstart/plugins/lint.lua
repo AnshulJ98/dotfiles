@@ -3,8 +3,18 @@
 vim.pack.add { 'https://github.com/mfussenegger/nvim-lint' }
 
 local lint = require 'lint'
+
+lint.linters.markdownlint = require('lint').linters.markdownlint
+lint.linters.markdownlint.args = {
+  '--stdin',
+  '--config', vim.fn.expand '~' .. '/.markdownlint.jsonc',
+}
+
 lint.linters_by_ft = {
-  markdown = { 'markdownlint' }, -- Make sure to install `markdownlint` via mason / npm
+  markdown = { 'markdownlint' },
+  python = { 'ruff' },
+  sh = { 'shellcheck' },
+  bash = { 'shellcheck' },
 }
 
 -- To allow other plugins to add linters to require('lint').linters_by_ft,
