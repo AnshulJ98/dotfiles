@@ -99,7 +99,7 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -210,6 +210,7 @@ do
   }
 
   vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+  vim.keymap.set('n', '<leader>td', function() vim.diagnostic.enable(not vim.diagnostic.is_enabled()) end, { desc = '[T]oggle [D]iagnostics' })
 
   -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
   -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -330,24 +331,7 @@ local function gh(repo) return 'https://github.com/' .. repo end
 -- guess-indent, gitsigns, which-key, colorscheme, todo-comments, mini modules
 -- ============================================================
 do
-  vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
-  -- Add the bearded-nvim plugin using the built-in pack manager
-  vim.pack.add {
-    gh 'Ferouk/bearded-nvim',
-  }
-
-  -- Configure the theme options
-  require('bearded').setup {
-    flavor = 'arc', -- Choose your flavor (e.g., arc, Nord, Monokai, etc.)
-    transparent = false, -- Set to true if you want a transparent background
-    bold = true, -- Enable bold text
-    italic = true, -- Enable italic text
-  }
-
-  -- Set the colorscheme active
-  vim.cmd.colorscheme 'bearded'
-
-  -- [[ Installing and Configuring Plugins ]]
+    -- [[ Installing and Configuring Plugins ]]
   --
   -- To install a plugin simply call `vim.pack.add` with its git url.
   -- This will download the default branch of the plugin, which will usually be `main` or `master`
@@ -363,6 +347,10 @@ do
   vim.pack.add { gh 'NMAC427/guess-indent.nvim' }
   require('guess-indent').setup {}
 
+  -- practice with vim be good
+  vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
+
+  --kitty scrollback to open bufferrs in nvim
   require('kitty-scrollback').setup()
 
   -- Here is a more advanced configuration example that passes options to `gitsigns.nvim`
@@ -408,15 +396,61 @@ do
   --     comments = { italic = false }, -- Disable italics in comments
   --   },
   -- }
+  -- Add the bearded-nvim plugin using the built-in pack manager
+    vim.pack.add {
+    gh 'Ferouk/bearded-nvim',
+  }
+
+  -- Configure the theme options
+  require('bearded').setup {
+    flavor = 'arc', -- Choose your flavor (e.g., arc, Nord, Monokai, etc.)
+    transparent = false, -- Set to true if you want a transparent background
+    bold = true, -- Enable bold text
+    italic = true, -- Enable italic text
+  }
 
   -- Load the colorscheme here.
   -- Like many other themes, this one has different styles, and you could load
   -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
   -- vim.cmd.colorscheme 'tokyonight-night'
-  --
+  vim.cmd.colorscheme 'bearded'
+
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
   require('todo-comments').setup { signs = false }
+
+  vim.pack.add { gh 'MeanderingProgrammer/render-markdown.nvim' }
+
+  -- Bearded-arc heading bands for render-markdown.nvim
+  -- To disable: comment out this autocmd block and set heading.backgrounds = {} in setup below
+  local function apply_render_markdown_hl()
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH1Bg', { fg = '#69C3FF', bg = '#1a2a3d' })
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH2Bg', { fg = '#3CEC85', bg = '#1a2d2a' })
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH3Bg', { fg = '#B78AFF', bg = '#252040' })
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH4Bg', { fg = '#EACD61', bg = '#2a2820' })
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH5Bg', { fg = '#FF955C', bg = '#2d2420' })
+    vim.api.nvim_set_hl(0, 'RenderMarkdownH6Bg', { fg = '#F38CEC', bg = '#2d2030' })
+  end
+  apply_render_markdown_hl()
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    group = vim.api.nvim_create_augroup('render-markdown-hl', { clear = true }),
+    callback = apply_render_markdown_hl,
+  })
+
+  vim.opt.conceallevel = 2
+
+  require('render-markdown').setup {
+    heading = {
+      backgrounds = {
+        'RenderMarkdownH1Bg',
+        'RenderMarkdownH2Bg',
+        'RenderMarkdownH3Bg',
+        'RenderMarkdownH4Bg',
+        'RenderMarkdownH5Bg',
+        'RenderMarkdownH6Bg',
+      },
+    },
+  }
 
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
@@ -711,20 +745,43 @@ do
   --  See `:help lsp-config` for information about keys and how to configure
   ---@type table<string, vim.lsp.Config>
   local servers = {
-    -- clangd = {},
-    -- gopls = {},
-    -- pyright = {},
-    -- rust_analyzer = {},
-    --
-    -- Some languages (like typescript) have entire language plugins that can be useful:
-    --    https://github.com/pmizio/typescript-tools.nvim
-    --
-    -- But for many setups, the LSP (`ts_ls`) will work just fine
-    -- ts_ls = {},
+    vtsls = {
+      settings = {
+        typescript = {
+          inlayHints = {
+            parameterNames = { enabled = 'literals', suppressWhenArgumentMatchesName = true },
+            parameterTypes = { enabled = true },
+            variableTypes = { enabled = true, suppressWhenTypeMatchesName = true },
+            propertyDeclarationTypes = { enabled = true },
+            functionLikeReturnTypes = { enabled = true },
+            enumMemberValues = { enabled = true },
+          },
+        },
+        javascript = {
+          inlayHints = {
+            parameterNames = { enabled = 'literals' },
+            parameterTypes = { enabled = true },
+            variableTypes = { enabled = true },
+            propertyDeclarationTypes = { enabled = true },
+            functionLikeReturnTypes = { enabled = true },
+            enumMemberValues = { enabled = true },
+          },
+        },
+      },
+    },
 
-    stylua = {}, -- Used to format Lua code
+    pyright = {},
 
-    -- Special Lua Config, as recommended by neovim help docs
+    eslint = {
+      root_markers = { '.eslintrc', '.eslintrc.js', '.eslintrc.json', '.eslintrc.yml', '.eslintrc.yaml', 'eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', 'eslint.config.mts' },
+    },
+
+    jsonls = {},
+    yamlls = {},
+    bashls = {},
+
+    stylua = {},
+
     lua_ls = {
       on_init = function(client)
         client.server_capabilities.documentFormattingProvider = false -- Disable formatting (formatting is done by stylua)
@@ -764,6 +821,7 @@ do
     gh 'mason-org/mason.nvim',
     gh 'mason-org/mason-lspconfig.nvim',
     gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
+    gh 'b0o/SchemaStore.nvim',
   }
 
   -- Automatically install LSPs and related tools to stdpath for Neovim
@@ -778,10 +836,28 @@ do
   -- You can press `g?` for help in this menu.
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
-    -- You can add other tools here that you want Mason to install
+    'prettierd',
+    'ruff',
+    'shfmt',
+    'shellcheck',
+    'markdownlint',
   })
 
   require('mason-tool-installer').setup { ensure_installed = ensure_installed }
+
+  -- Wire SchemaStore schemas into jsonls/yamlls (must be after vim.pack.add loads the plugin)
+  servers.jsonls.settings = {
+    json = {
+      schemas = require('schemastore').json.schemas(),
+      validate = { enable = true },
+    },
+  }
+  servers.yamlls.settings = {
+    yaml = {
+      schemaStore = { enable = false, url = '' },
+      schemas = require('schemastore').yaml.schemas(),
+    },
+  }
 
   for name, server in pairs(servers) do
     vim.lsp.config(name, server)
@@ -799,28 +875,32 @@ do
   require('conform').setup {
     notify_on_error = false,
     format_on_save = function(bufnr)
-      -- You can specify filetypes to autoformat on save here:
-      local enabled_filetypes = {
-        -- lua = true,
-        -- python = true,
-      }
-      if enabled_filetypes[vim.bo[bufnr].filetype] then
-        return { timeout_ms = 500 }
-      else
-        return nil
-      end
+      local disabled_filetypes = { c = true, cpp = true, markdown = true }
+      if disabled_filetypes[vim.bo[bufnr].filetype] then return nil end
+      return { timeout_ms = 1000, lsp_format = 'fallback' }
     end,
     default_format_opts = {
-      lsp_format = 'fallback', -- Use external formatters if configured below, otherwise use LSP formatting. Set to `false` to disable LSP formatting entirely.
+      lsp_format = 'fallback',
     },
-    -- You can also specify external formatters in here.
     formatters_by_ft = {
-      -- rust = { 'rustfmt' },
-      -- Conform can also run multiple formatters sequentially
-      -- python = { "isort", "black" },
-      --
-      -- You can use 'stop_after_first' to run the first available formatter from the list
-      -- javascript = { "prettierd", "prettier", stop_after_first = true },
+      javascript = { 'prettierd' },
+      javascriptreact = { 'prettierd' },
+      typescript = { 'prettierd' },
+      typescriptreact = { 'prettierd' },
+      json = { 'prettierd' },
+      jsonc = { 'prettierd' },
+      html = { 'prettierd' },
+      css = { 'prettierd' },
+      scss = { 'prettierd' },
+      yaml = { 'prettierd' },
+      markdown = { 'prettierd' },
+      python = { 'ruff_organize_imports', 'ruff_format' },
+      lua = { 'stylua' },
+      sh = { 'shfmt' },
+      bash = { 'shfmt' },
+    },
+    formatters = {
+      shfmt = { prepend_args = { '-i', '2' } },
     },
   }
 
@@ -989,7 +1069,7 @@ do
   require 'kickstart.plugins.indent_line'
   require 'kickstart.plugins.lint'
   require 'kickstart.plugins.autopairs'
-  require 'kickstart.plugins.neo-tree'
+  -- require 'kickstart.plugins.neo-tree'
   require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
