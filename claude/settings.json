@@ -139,7 +139,7 @@
       "Bash(wget * | bash)"
     ]
   },
-  "model": "claude-opus-4-8",
+  "model": "claude-opus-4-6",
   "skillOverrides": {
     "caveman": "user-invocable-only",
     "tdd-workflow": "off",
@@ -309,6 +309,7 @@
   },
   "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
   "verbose": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
