@@ -25,6 +25,12 @@
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-folder-pre-request.instructions.md": true,
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-http-request-post-response.instructions.md": true,
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-http-request-pre-request.instructions.md": true,
+    "/private/tmp/postman-collections-post-response.instructions.md": true,
+    "/private/tmp/postman-collections-pre-request.instructions.md": true,
+    "/private/tmp/postman-folder-post-response.instructions.md": true,
+    "/private/tmp/postman-folder-pre-request.instructions.md": true,
+    "/private/tmp/postman-http-request-post-response.instructions.md": true,
+    "/private/tmp/postman-http-request-pre-request.instructions.md": true,
   },
   "workbench.colorCustomizations": {
     "editorBracketHighlight.foreground1": "#ffee00",
@@ -374,7 +380,7 @@
   "inlineChat.defaultModel": "GPT-5 mini (copilot)",
   "chat.tools.global.autoApprove": true,
   "vscode-pets.throwBallWithMouse": true,
-  "vscode-pets.petSize": "medium",
+  "vscode-pets.petSize": "large",
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
   },
@@ -679,7 +685,6 @@
   "chat.generalPurposeAgent.enabled": true,
   "git.useEditorAsCommitInput": false,
   "chat.viewSessions.orientation": "stacked",
-  "vscode-pets.theme": "forest",
   "markdown-preview-enhanced.codeBlockTheme": "vscode.css",
   "markdown-preview-enhanced.previewTheme": "atom-dark.css",
   "markdown-preview-enhanced.revealjsTheme": "none.css",
@@ -703,4 +708,8 @@
     "vibrancy": "fullscreen-ui",
   },
   "terminal.external.osxExec": "kitty.app",
+  "editor.experimental.preferTreeSitter.css": true,
+  "vscode_custom_css.imports": [
+    "file:///Users/anshulj/Library/Application Support/Code - Insiders/User/css/.vscode-custom.css",
+  ],
 }

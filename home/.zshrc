@@ -38,7 +38,7 @@ zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # case-insensitive
 
 # === Plugins (fast, direct load) ===
 source ~/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#666666,bold"  # Subtle suggestion
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#666666,bold"
 
 # Syntax highlighting (defer-loaded internally)
 source ~/.zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
@@ -79,7 +79,7 @@ alias ll='ls -l'
 alias vim='nvim'
 alias ..='cd ..'
 alias ...='cd ../..'
-
+alias code='code-insiders'
 # === Load P10K ===
 source ~/.zsh/plugins/powerlevel10k/powerlevel10k.zsh-theme
 

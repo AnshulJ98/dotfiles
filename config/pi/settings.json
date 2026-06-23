@@ -1,10 +1,10 @@
 {
-  "lastChangelogVersion": "0.79.1",
+  "lastChangelogVersion": "0.79.10",
   "defaultProvider": "github-copilot",
   "defaultModel": "claude-haiku-4.5",
   "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
-  "theme": "tokyo-night",
+  "theme": "bearded-arc",
   "quietStartup": true,
   "editorPaddingX": 2,
   "enabledModels": [
@@ -50,6 +50,7 @@
     },
     "npm:pi-rtk-optimizer",
     "npm:pi-fetch",
-    "npm:pi-ask-user"
+    "npm:pi-ask-user",
+    "npm:@taterdoge/pi-ayu"
   ]
 }
