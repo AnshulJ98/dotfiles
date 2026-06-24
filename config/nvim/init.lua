@@ -108,9 +108,7 @@ do
 
   -- Make line numbers default
   vim.o.number = true
-  -- You can also add relative line numbers, to help with jumping.
-  --  Experiment for yourself to see if you like it!
-  -- vim.o.relativenumber = true
+  vim.o.relativenumber = true
 
   -- Enable mouse mode, can be useful for resizing splits for example!
   vim.o.mouse = 'a'
@@ -212,6 +210,11 @@ do
   vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
   vim.keymap.set('n', '<leader>td', function() vim.diagnostic.enable(not vim.diagnostic.is_enabled()) end, { desc = '[T]oggle [D]iagnostics' })
 
+  vim.keymap.set('n', '[q', '<cmd>cprev<CR>', { desc = 'Previous quickfix' })
+  vim.keymap.set('n', ']q', '<cmd>cnext<CR>', { desc = 'Next quickfix' })
+  vim.keymap.set('n', '[Q', '<cmd>cfirst<CR>', { desc = 'First quickfix' })
+  vim.keymap.set('n', ']Q', '<cmd>clast<CR>', { desc = 'Last quickfix' })
+
   -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
   -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
   -- is not what someone will guess without a bit more experience.
@@ -306,11 +309,6 @@ do
         return
       end
 
-      if name == 'LuaSnip' then
-        if vim.fn.has 'win32' ~= 1 and vim.fn.executable 'make' == 1 then run_build(name, { 'make', 'install_jsregexp' }, ev.data.path) end
-        return
-      end
-
       if name == 'nvim-treesitter' then
         if not ev.data.active then vim.cmd.packadd 'nvim-treesitter' end
         vim.cmd 'TSUpdate'
@@ -347,8 +345,10 @@ do
   vim.pack.add { gh 'NMAC427/guess-indent.nvim' }
   require('guess-indent').setup {}
 
-  -- practice with vim be good
-  vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
+  -- vim-be-good: practice game, only loaded with VIM_PRACTICE=1 (alias: vimpractice)
+  if vim.env.VIM_PRACTICE then
+    vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
+  end
 
   --kitty scrollback to open bufferrs in nvim
   vim.pack.add { gh 'mikesmithgh/kitty-scrollback.nvim' }
@@ -358,16 +358,7 @@ do
   --
   -- See `:help gitsigns` to understand what each configuration key does.
   -- Adds git related signs to the gutter, as well as utilities for managing changes
-  vim.pack.add { gh 'lewis6991/gitsigns.nvim' }
-  require('gitsigns').setup {
-    signs = {
-      add = { text = '+' }, ---@diagnostic disable-line: missing-fields
-      change = { text = '~' }, ---@diagnostic disable-line: missing-fields
-      delete = { text = '_' }, ---@diagnostic disable-line: missing-fields
-      topdelete = { text = '‾' }, ---@diagnostic disable-line: missing-fields
-      changedelete = { text = '~' }, ---@diagnostic disable-line: missing-fields
-    },
-  }
+  -- gitsigns: plugin loaded + setup + keymaps consolidated in kickstart/plugins/gitsigns.lua
 
   -- Useful plugin to show you pending keybinds.
   vim.pack.add { gh 'folke/which-key.nvim' }
@@ -474,7 +465,11 @@ do
   --  - yiiq - [Y]ank [I]nside [I]+1 [Q]uote
   --  - ci'  - [C]hange [I]nside [']quote
   require('mini.ai').setup {
-    -- NOTE: Avoid conflicts with the built-in incremental selection mappings on Neovim>=0.12 (see `:help treesitter-incremental-selection`)
+    -- nvim 0.12 added built-in v_an/v_in for treesitter node selection, which
+    -- conflicts with mini.ai's around_next/inside_next defaults. Remapped here
+    -- to avoid the collision. See kickstart.nvim #1971.
+    -- aa/ii may shadow mini.ai custom textobjects (around-argument, inside-indent)
+    -- if you add those later — pick different keys at that point.
     mappings = {
       around_next = 'aa',
       inside_next = 'ii',
@@ -500,10 +495,18 @@ do
   -- default behavior. For example, here we set the section for
   -- cursor location to LINE:COLUMN
   ---@diagnostic disable-next-line: duplicate-set-field
-  statusline.section_location = function() return '%2l:%-2v' end
+  statusline.section_location = function() return '%2l:%-2v %P' end
 
-  -- ... and there is more!
-  --  Check out: https://github.com/nvim-mini/mini.nvim
+  ---@diagnostic disable-next-line: duplicate-set-field
+  statusline.section_lsp = function()
+    local clients = vim.lsp.get_clients { bufnr = 0 }
+    if #clients == 0 then return '' end
+    local names = {}
+    for _, c in ipairs(clients) do
+      names[#names + 1] = c.name
+    end
+    return ' ' .. table.concat(names, ' ')
+  end
 end
 
 -- ============================================================
@@ -739,6 +742,7 @@ do
       --
       -- This may be unwanted, since they displace some of your code
       if client and client:supports_method('textDocument/inlayHint', event.buf) then
+        vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
         map('<leader>th', function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }) end, '[T]oggle Inlay [H]ints')
       end
     end,
@@ -795,8 +799,6 @@ do
     yamlls = {},
     bashls = {},
 
-    stylua = {},
-
     lua_ls = {
       on_init = function(client)
         client.server_capabilities.documentFormattingProvider = false -- Disable formatting (formatting is done by stylua)
@@ -851,6 +853,7 @@ do
   -- You can press `g?` for help in this menu.
   local ensure_installed = vim.tbl_keys(servers or {})
   vim.list_extend(ensure_installed, {
+    'stylua',
     'prettierd',
     'ruff',
     'shfmt',
@@ -923,23 +926,17 @@ do
 end
 
 -- ============================================================
--- SECTION 8: AUTOCOMPLETE & SNIPPETS
--- blink.cmp and luasnip setup
+-- SECTION 8: AUTOCOMPLETE
+-- blink.cmp setup
 -- ============================================================
 do
-  -- [[ Snippet Engine ]]
-
-  -- NOTE: You can also specify plugin using a version range for its git tag.
-  --  See `:help vim.version.range()` for more info
-  vim.pack.add { { src = gh 'L3MON4D3/LuaSnip', version = vim.version.range '2.*' } }
-  require('luasnip').setup {}
-
-  -- `friendly-snippets` contains a variety of premade snippets.
-  --    See the README about individual language/framework/plugin snippets:
-  --    https://github.com/rafamadriz/friendly-snippets
-  --
+  -- LuaSnip removed: blink.cmp handles LSP snippet expansion natively.
+  -- To restore custom snippets, uncomment and add snippet files:
+  -- vim.pack.add { { src = gh 'L3MON4D3/LuaSnip', version = vim.version.range '2.*' } }
+  -- require('luasnip').setup {}
   -- vim.pack.add { gh 'rafamadriz/friendly-snippets' }
   -- require('luasnip.loaders.from_vscode').lazy_load()
+  -- Then set snippets = { preset = 'luasnip' } in blink.cmp below.
 
   -- [[ Autocomplete Engine ]]
   vim.pack.add { { src = gh 'saghen/blink.cmp', version = vim.version.range '1.*' } }
@@ -981,14 +978,14 @@ do
     completion = {
       -- By default, you may press `<c-space>` to show the documentation.
       -- Optionally, set `auto_show = true` to show the documentation after a delay.
-      documentation = { auto_show = false, auto_show_delay_ms = 500 },
+      documentation = { auto_show = true, auto_show_delay_ms = 500 },
     },
 
     sources = {
       default = { 'lsp', 'path', 'snippets' },
     },
 
-    snippets = { preset = 'luasnip' },
+    snippets = { preset = 'default' },
 
     -- Blink.cmp includes an optional, recommended rust fuzzy matcher,
     -- which automatically downloads a prebuilt binary when enabled.
@@ -997,7 +994,7 @@ do
     -- the rust implementation via `'prefer_rust_with_warning'`
     --
     -- See `:help blink-cmp-config-fuzzy` for more information
-    fuzzy = { implementation = 'lua' },
+    fuzzy = { implementation = 'prefer_rust_with_warning' },
 
     -- Shows a signature help window while you type arguments for a function
     signature = { enabled = true },
@@ -1018,7 +1015,7 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+  local parsers = { 'diff', 'javascript', 'json', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'tsx', 'typescript', 'vim', 'vimdoc', 'yaml' }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
