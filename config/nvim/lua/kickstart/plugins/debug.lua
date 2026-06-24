@@ -21,6 +21,22 @@ vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = '
 vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
 vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI' })
+vim.keymap.set({ 'n', 'v' }, '<leader>de', function() require('dapui').eval() end, { desc = 'Debug: [E]val expression' })
+
+vim.keymap.set('n', '<leader>dy', function()
+  local session = require('dap').session()
+  if not session then return end
+  local word = vim.fn.expand '<cexpr>'
+  session:request('evaluate', {
+    expression = 'JSON.stringify(' .. word .. ', null, 2)',
+    context = 'repl',
+    frameId = (session.current_frame or {}).id,
+  }, function(err, resp)
+    if err then vim.notify(tostring(err), vim.log.levels.ERROR) return end
+    vim.fn.setreg('+', resp.result)
+    vim.notify('Yanked ' .. word .. ' to clipboard', vim.log.levels.INFO)
+  end)
+end, { desc = 'Debug: [Y]ank variable as JSON' })
 
 local dap = require 'dap'
 local dapui = require 'dapui'
