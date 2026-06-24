@@ -795,6 +795,10 @@ do
       },
     },
 
+    markdown_oxide = {
+      root_markers = { '.obsidian', '.moxide.toml', '.git' },
+    },
+
     jsonls = {},
     yamlls = {},
     bashls = {},
@@ -859,6 +863,7 @@ do
     'shfmt',
     'shellcheck',
     'markdownlint',
+    'markdown-oxide',
   })
 
   require('mason-tool-installer').setup { ensure_installed = ensure_installed }
