@@ -331,7 +331,7 @@ local function gh(repo) return 'https://github.com/' .. repo end
 -- guess-indent, gitsigns, which-key, colorscheme, todo-comments, mini modules
 -- ============================================================
 do
-    -- [[ Installing and Configuring Plugins ]]
+  -- [[ Installing and Configuring Plugins ]]
   --
   -- To install a plugin simply call `vim.pack.add` with its git url.
   -- This will download the default branch of the plugin, which will usually be `main` or `master`
@@ -351,6 +351,7 @@ do
   vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
 
   --kitty scrollback to open bufferrs in nvim
+  vim.pack.add { gh 'mikesmithgh/kitty-scrollback.nvim' }
   require('kitty-scrollback').setup()
 
   -- Here is a more advanced configuration example that passes options to `gitsigns.nvim`
@@ -397,7 +398,7 @@ do
   --   },
   -- }
   -- Add the bearded-nvim plugin using the built-in pack manager
-    vim.pack.add {
+  vim.pack.add {
     gh 'Ferouk/bearded-nvim',
   }
 
@@ -437,7 +438,10 @@ do
     callback = apply_render_markdown_hl,
   })
 
-  vim.opt.conceallevel = 2
+  vim.api.nvim_create_autocmd('FileType', {
+    pattern = 'markdown',
+    callback = function() vim.opt_local.conceallevel = 2 end,
+  })
 
   require('render-markdown').setup {
     heading = {
@@ -773,7 +777,18 @@ do
     pyright = {},
 
     eslint = {
-      root_markers = { '.eslintrc', '.eslintrc.js', '.eslintrc.json', '.eslintrc.yml', '.eslintrc.yaml', 'eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', 'eslint.config.mts' },
+      root_markers = {
+        '.eslintrc',
+        '.eslintrc.js',
+        '.eslintrc.json',
+        '.eslintrc.yml',
+        '.eslintrc.yaml',
+        'eslint.config.js',
+        'eslint.config.mjs',
+        'eslint.config.cjs',
+        'eslint.config.ts',
+        'eslint.config.mts',
+      },
     },
 
     jsonls = {},
