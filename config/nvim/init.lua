@@ -1003,6 +1003,16 @@ do
 
     -- Shows a signature help window while you type arguments for a function
     signature = { enabled = true },
+
+    cmdline = {
+      enabled = true,
+      sources = function()
+        local type = vim.fn.getcmdtype()
+        if type == '/' or type == '?' then return { 'buffer' } end
+        if type == ':' then return { 'cmdline' } end
+        return {}
+      end,
+    },
   }
 end
 
