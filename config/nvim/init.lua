@@ -165,6 +165,9 @@ do
   -- Minimal number of screen lines to keep above and below the cursor.
   vim.o.scrolloff = 10
 
+  -- Treesitter folding: start with all folds open, close manually with zc/zM
+  vim.o.foldlevel = 99
+
   -- if performing an operation that would fail due to unsaved changes in the buffer (like `:q`),
   -- instead raise a dialog asking if you wish to save the current file(s)
   -- See `:help 'confirm'`
@@ -346,9 +349,7 @@ do
   require('guess-indent').setup {}
 
   -- vim-be-good: practice game, only loaded with VIM_PRACTICE=1 (alias: vimpractice)
-  if vim.env.VIM_PRACTICE then
-    vim.pack.add { gh 'ThePrimeagen/vim-be-good' }
-  end
+  if vim.env.VIM_PRACTICE then vim.pack.add { gh 'ThePrimeagen/vim-be-good' } end
 
   --kitty scrollback to open bufferrs in nvim
   vim.pack.add { gh 'mikesmithgh/kitty-scrollback.nvim' }
@@ -1030,7 +1031,8 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'diff', 'javascript', 'json', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'tsx', 'typescript', 'vim', 'vimdoc', 'yaml' }
+  local parsers =
+    { 'diff', 'javascript', 'json', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'tsx', 'typescript', 'vim', 'vimdoc', 'yaml' }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
@@ -1043,8 +1045,8 @@ do
 
     -- Enable treesitter based folds
     -- For more info on folds see `:help folds`
-    -- vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-    -- vim.wo.foldmethod = 'expr'
+    vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+    vim.wo.foldmethod = 'expr'
 
     -- Check if treesitter indentation is available for this language, and if so enable it
     -- in case there is no indent query, the indentexpr will fallback to the vim's built in one
