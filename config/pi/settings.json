@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.79.10",
   "defaultProvider": "github-copilot",
-  "defaultModel": "claude-haiku-4.5",
+  "defaultModel": "gpt-5.4-mini",
   "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
   "theme": "bearded-arc",
