@@ -10,9 +10,17 @@ vim.pack.add {
   'https://github.com/jay-babu/mason-nvim-dap.nvim',
   'https://github.com/leoluz/nvim-dap-go',
   'https://github.com/theHamsta/nvim-dap-virtual-text',
+  'https://github.com/igorlfs/nvim-dap-view',
 }
 
 require('nvim-dap-virtual-text').setup()
+require('dap-view').setup {
+  winbar = {
+    base_sections = {
+      repl = { label = 'REPL', keymap = 'P' },
+    },
+  },
+}
 
 vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = 'Debug: Start/Continue' })
 vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
@@ -20,21 +28,34 @@ vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 
 vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
 vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
-vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI' })
+vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI (splits)' })
+vim.keymap.set('n', '<F8>', '<cmd>DapViewToggle<CR>', { desc = 'Debug: Toggle DAP View (single window)' })
 vim.keymap.set({ 'n', 'v' }, '<leader>de', function() require('dapui').eval() end, { desc = 'Debug: [E]val expression' })
+vim.keymap.set('n', '<leader>df', function() require('dapui').float_element('scopes', { enter = true }) end, { desc = 'Debug: [F]loat scopes' })
+vim.keymap.set('n', '<leader>dk', function() require('dapui').float_element('stacks', { enter = true }) end, { desc = 'Debug: stac[K]s float' })
+vim.keymap.set('n', '<leader>dw', function() require('dapui').float_element('watches', { enter = true }) end, { desc = 'Debug: [W]atches float' })
+
+local function dap_expr_under_cursor()
+  local node = vim.treesitter.get_node()
+  if not node then return vim.fn.expand '<cexpr>' end
+  while node:parent() and vim.tbl_contains({ 'member_expression', 'subscript_expression' }, node:parent():type()) do
+    node = node:parent()
+  end
+  return vim.treesitter.get_node_text(node, 0)
+end
 
 vim.keymap.set('n', '<leader>dy', function()
   local session = require('dap').session()
   if not session then return end
-  local word = vim.fn.expand '<cexpr>'
+  local expr = dap_expr_under_cursor()
   session:request('evaluate', {
-    expression = 'JSON.stringify(' .. word .. ', null, 2)',
+    expression = 'JSON.stringify(' .. expr .. ', null, 2)',
     context = 'repl',
     frameId = (session.current_frame or {}).id,
   }, function(err, resp)
     if err then vim.notify(tostring(err), vim.log.levels.ERROR) return end
     vim.fn.setreg('+', resp.result)
-    vim.notify('Yanked ' .. word .. ' to clipboard', vim.log.levels.INFO)
+    vim.notify('Yanked ' .. expr .. ' to clipboard', vim.log.levels.INFO)
   end)
 end, { desc = 'Debug: [Y]ank variable as JSON' })
 
@@ -54,6 +75,21 @@ require('mason-nvim-dap').setup {
 dapui.setup {
   icons = { expanded = '▾', collapsed = '▸', current_frame = '▶' },
   floating = { border = 'rounded' },
+  layouts = {
+    {
+      elements = {
+        { id = 'scopes', size = 0.6 },
+        { id = 'watches', size = 0.4 },
+      },
+      position = 'left',
+      size = 35,
+    },
+    {
+      elements = { { id = 'repl', size = 1.0 } },
+      position = 'bottom',
+      size = 8,
+    },
+  },
   ---@diagnostic disable-next-line: missing-fields
   controls = {
     icons = {

@@ -247,6 +247,22 @@ do
   -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
   -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+  -- Resize mode: enter with <leader>wr, use hjkl to resize, q/Esc to exit
+  vim.keymap.set('n', '<leader>wr', function()
+    vim.notify('Resize: h/l width, j/k height, = equalize, q/Esc exit', vim.log.levels.INFO)
+    while true do
+      local key = vim.fn.getcharstr()
+      if key == 'h' then vim.cmd 'vertical resize -2'
+      elseif key == 'l' then vim.cmd 'vertical resize +2'
+      elseif key == 'j' then vim.cmd 'resize -2'
+      elseif key == 'k' then vim.cmd 'resize +2'
+      elseif key == '=' then vim.cmd 'wincmd ='
+      elseif key == 'q' or key == '\27' then break
+      end
+    end
+    vim.notify('', vim.log.levels.INFO)
+  end, { desc = '[W]indow [R]esize mode' })
+
   -- [[ Basic Autocommands ]]
   --  See `:help lua-guide-autocommands`
 
@@ -407,6 +423,12 @@ do
   -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
   -- vim.cmd.colorscheme 'tokyonight-night'
   vim.cmd.colorscheme 'bearded'
+
+  -- Tone down diff highlights so hunk previews are readable
+  vim.api.nvim_set_hl(0, 'DiffAdd', { bg = '#1a3a2a' })
+  vim.api.nvim_set_hl(0, 'DiffChange', { bg = '#1a2a3a' })
+  vim.api.nvim_set_hl(0, 'DiffDelete', { bg = '#3a1a1a' })
+  vim.api.nvim_set_hl(0, 'DiffText', { bg = '#2a3a4a' })
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
