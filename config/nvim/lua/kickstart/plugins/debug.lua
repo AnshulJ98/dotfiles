@@ -15,6 +15,21 @@ vim.pack.add {
 
 require('nvim-dap-virtual-text').setup()
 require('dap-view').setup {
+  windows = {
+    position = 'right',
+    size = 40,
+  },
+  switchbuf = function(bufnr)
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_get_buf(win) == bufnr then return win end
+    end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if not vim.wo[win].winfixbuf and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then
+        return win
+      end
+    end
+  end,
+  auto_toggle = true,
   winbar = {
     base_sections = {
       repl = { label = 'REPL', keymap = 'P' },
@@ -112,9 +127,11 @@ vim.fn.sign_define('DapLogPoint', { text = '◉', texthl = 'DiagnosticInfo', num
 vim.fn.sign_define('DapStopped', { text = '▶', texthl = 'DiagnosticOk', linehl = 'Visual', numhl = 'DiagnosticOk' })
 vim.fn.sign_define('DapBreakpointRejected', { text = '✖', texthl = 'DiagnosticError', numhl = 'DiagnosticError' })
 
-dap.listeners.after.event_initialized['dapui_config'] = dapui.open
-dap.listeners.before.event_terminated['dapui_config'] = dapui.close
-dap.listeners.before.event_exited['dapui_config'] = dapui.close
+-- dap-view handles auto-toggle via auto_toggle = true.
+-- To use dap-ui instead, uncomment these and set auto_toggle = false above.
+-- dap.listeners.after.event_initialized['dapui_config'] = dapui.open
+-- dap.listeners.before.event_terminated['dapui_config'] = dapui.close
+-- dap.listeners.before.event_exited['dapui_config'] = dapui.close
 
 -- Go
 require('dap-go').setup {
