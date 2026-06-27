@@ -271,7 +271,10 @@ Persistent knowledge at `~/.local/state/agent-memory/memory.jsonl`. Shared acros
 
 <!--
   Removed from auto-import (2026-05-23 audit):
-  - tdd-workflow → duplicated /tdd skill; load /tdd on demand instead.
   - caveman → it's an output mode, not a discipline. Invoke /caveman when wanted.
+  Deleted skills (2026-06-26):
+  - tdd-workflow → replaced by testing strategy in clean-code skill.
+  - cleancode → dead duplicate of clean-code.
+  - test-design → React testing patterns derivable from training data + context7.
 -->
 
