@@ -139,6 +139,10 @@
       "Bash(wget * | bash)"
     ]
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "model": "claude-opus-4-6",
   "skillOverrides": {
     "caveman": "user-invocable-only",

@@ -16,6 +16,7 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const API = "https://context7.com/api/v1";
 const DEFAULT_TOKENS = 4000;
+const MAX_TOKENS = 15000;
 const SEARCH_TIMEOUT_MS = 8000;
 const DOCS_TIMEOUT_MS = 12000;
 
@@ -72,7 +73,7 @@ const context7Tool = defineTool({
 
   async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
     const { library, topic } = params;
-    const tokens = params.tokens && params.tokens > 0 ? params.tokens : DEFAULT_TOKENS;
+    const tokens = Math.min(params.tokens && params.tokens > 0 ? params.tokens : DEFAULT_TOKENS, MAX_TOKENS);
 
     try {
       let id = library.includes("/") ? library : undefined;
