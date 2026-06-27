@@ -14,8 +14,9 @@
 - Prefer existing project scripts, repo-local tooling, and checked-in automation.
 - Show the exact command used for verification whenever possible.
 
-## TDD
-- Start from a failing test, a missing test, or a verified baseline when practical.
+## Testing
+- Pure logic (parsers, state machines, algorithms): test-first, table-driven, zero mocks.
+- I/O coordination: integration tests against real deps. Mocks only at system boundaries.
 - Update tests alongside behavior changes.
 - Never claim a fix without rerunning the checks that prove it.
 

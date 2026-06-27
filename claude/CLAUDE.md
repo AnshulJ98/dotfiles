@@ -157,14 +157,16 @@ Use official CLIs. Never hand-write:
 - Tailwind → `npx tailwindcss init`
 - shadcn/ui → `npx shadcn@latest init`
 
-## TDD Only
-RED → GREEN → REFACTOR. Tests first. No exceptions.
+## Testing Strategy
+Match test approach to code type (Bernhardt's functional core / imperative shell):
+- **Pure logic** (parsers, state machines, algorithms): test-first, table-driven, zero mocks.
+- **I/O coordination** (network, filesystem, process spawning, TUI): integration tests
+  against real dependencies. No fakes unless genuinely impractical.
+- **Mocks/fakes**: only at system boundaries. If you need one, question the decomposition.
 
-This is enforced TWO ways:
-1. The `coder` subagent refuses to write implementation without a failing test
-2. The `/tdd` skill provides full red-green-refactor guidance + anti-pattern reference
-
-Vertical slicing is mandatory (one test → one impl → repeat). Horizontal slicing (all tests then all impl) is rejected — it produces tests of imagined behavior.
+The `/tdd` skill is available for strict red-green-refactor when wanted.
+Vertical slicing is mandatory (one test → one impl → repeat). Horizontal
+slicing (all tests then all impl) is rejected.
 
 ## Lint Is Law
 Fix all lint errors before commit. No pre-existing excuses. PostToolUse hook auto-formats; lint failures are yours to fix.
