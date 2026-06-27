@@ -83,7 +83,7 @@ Eight hand-rolled subagents, each with its own context window and tool allowlist
 
 ### Domain (shared with OpenCode at work, via symlinks)
 
-`/adr-patterns`, `/clean-code` (auto-loaded), `/cli-builder`, `/code-review`, `/context7`, `/decision-framework`, `/diagram-generation`, `/docs-generation`, `/error-prevention` (auto-loaded), `/git-patterns` (auto-loaded), `/guard-checks`, `/mission`, `/nextjs-app-router`, `/pdf-images`, `/resolve-conflicts`, `/security-review`, `/skill-creator`, `/system-design`, `/tdd` (canonical TDD skill — load on demand, not auto-imported), `/test-runner`, `/testing-patterns`, `/typescript-patterns`, `/typescript-strict`, `/caveman` (mode toggle — invoke when wanted)
+`/adr-patterns`, `/cli-builder`, `/code-review`, `/context7`, `/decision-framework`, `/diagram-generation`, `/docs-generation`, `/error-prevention` (auto-loaded), `/git-patterns` (auto-loaded), `/guard-checks`, `/mission`, `/nextjs-app-router`, `/pdf-images`, `/resolve-conflicts`, `/security-review`, `/skill-creator`, `/system-design`, `/tdd` (canonical TDD skill — load on demand, not auto-imported), `/test-runner`, `/testing-patterns`, `/typescript-patterns`, `/typescript-strict`, `/caveman` (mode toggle — invoke when wanted)
 
 ## Hooks (automated, in `~/.claude/hooks/`)
 
@@ -144,6 +144,55 @@ When encountering `.pdf` files:
 **CRITICAL**: Never read multiple binary files in a single message or parallel tool calls. 4+ binary reads simultaneously crashes the conversation.
 
 For screenshots, images, diagrams: one file per message turn only.
+
+---
+
+# Coding Standards
+
+## Philosophy
+
+Draws from multiple sources — none followed dogmatically:
+- **Martin** — clean naming, small functions, self-documenting code, SOLID as guidelines
+- **Ousterhout** — deep modules, information hiding, complexity management, error absorption
+- **Bernhardt** — functional core / imperative shell
+- **Feathers** — seams for altering behaviour without editing in place
+
+Where they conflict: **depth over ceremony**. Prefer designs that hide complexity behind simple interfaces over designs that distribute complexity across many small, exposed units. Never use emoji in code, comments, or docs.
+
+## Module Design
+
+**Deep modules** — small interface, large implementation. Callers get leverage; maintainers get locality. Shallow modules (interface as complex as implementation) are the anti-pattern.
+
+**Information hiding** — each module hides its design decisions. Signs of leakage: callers passing implementation-shaped config, error types revealing internals, ordering requirements between calls.
+
+**Seam discipline** — one adapter = hypothetical seam. Two adapters = real one. Don't inject in-process dependencies for testability — test through the module's interface.
+
+## SOLID (guidelines, not laws)
+
+- **SRP** — one reason to change, scoped to the module's abstraction. A deep module can do many things internally.
+- **OCP** — extend, don't modify.
+- **LSP** — subtypes must be substitutable.
+- **ISP** — don't force unused interface members, but don't shatter into single-method contracts either.
+- **DIP** — abstractions at real seams only.
+
+## Error Handling
+
+1. **Absorb** — handle inside the module when possible.
+2. **Detect early** — validate at boundaries, not deep in the stack.
+3. **Crash hard** — for unrecoverable states. Clean crash beats silent corruption.
+
+## Complexity Red Flags
+
+- **Change amplification** — one change requires edits in many places
+- **Cognitive load** — reader must hold too much context
+- **Unknown unknowns** — things that break in non-obvious ways
+
+## TypeScript
+
+- `any` forbidden. `unknown` when genuinely unknown.
+- Strict mode: `noImplicitAny`, `strictNullChecks`.
+- `interface` over `type` for object shapes. Discriminated unions for state machines.
+- Exhaustive `switch` with `never`. Narrow types. Barrel exports only at module boundaries.
 
 ---
 
@@ -263,8 +312,6 @@ Persistent knowledge at `~/.local/state/agent-memory/memory.jsonl`. Shared acros
 
 # Always-Loaded Skills (auto-imported)
 
-@~/.agents/skills/clean-code/SKILL.md
-
 @~/.agents/skills/error-prevention/SKILL.md
 
 @~/.agents/skills/git-patterns/SKILL.md
@@ -272,6 +319,10 @@ Persistent knowledge at `~/.local/state/agent-memory/memory.jsonl`. Shared acros
 <!--
   Removed from auto-import (2026-05-23 audit):
   - caveman → it's an output mode, not a discipline. Invoke /caveman when wanted.
+  Removed from auto-import (2026-06-27):
+  - clean-code → coding standards are always-on instructions, not a skill.
+    Blended philosophy (Martin + Ousterhout + Bernhardt + Feathers) now inline
+    in the "Coding Standards" section above.
   Deleted skills (2026-06-26):
   - tdd-workflow → replaced by testing strategy in clean-code skill.
   - cleancode → dead duplicate of clean-code.

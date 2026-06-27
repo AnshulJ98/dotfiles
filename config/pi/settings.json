@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.79.10",
+  "lastChangelogVersion": "0.80.2",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.4-mini",
   "defaultThinkingLevel": "high",
@@ -26,10 +26,15 @@
     "~/Dev/dotfiles/config/pi/skills"
   ],
   "extensions": [
-    "~/Dev/dotfiles/config/pi/extensions/explore.ts",
     "~/Dev/dotfiles/config/pi/extensions/context7.ts",
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts"
   ],
+  "subagents": {
+    "disableBuiltins": true,
+    "parallel": {
+      "concurrency": 2
+    }
+  },
   "enableSkillCommands": true,
   "packages": [
     {
@@ -51,6 +56,8 @@
     "npm:pi-rtk-optimizer",
     "npm:pi-fetch",
     "npm:pi-ask-user",
-    "npm:@taterdoge/pi-ayu"
+    "npm:pi-subagents",
+    "npm:@taterdoge/pi-ayu",
+    "npm:pi-usage-widget"
   ]
 }
