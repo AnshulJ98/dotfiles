@@ -17,16 +17,14 @@ require('nvim-dap-virtual-text').setup()
 require('dap-view').setup {
   windows = {
     position = 'right',
-    size = 40,
+    size = 60,
   },
   switchbuf = function(bufnr)
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
       if vim.api.nvim_win_get_buf(win) == bufnr then return win end
     end
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if not vim.wo[win].winfixbuf and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then
-        return win
-      end
+      if not vim.wo[win].winfixbuf and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then return win end
     end
   end,
   auto_toggle = true,
@@ -68,7 +66,10 @@ vim.keymap.set('n', '<leader>dy', function()
     context = 'repl',
     frameId = (session.current_frame or {}).id,
   }, function(err, resp)
-    if err then vim.notify(tostring(err), vim.log.levels.ERROR) return end
+    if err then
+      vim.notify(tostring(err), vim.log.levels.ERROR)
+      return
+    end
     vim.fn.setreg('+', resp.result)
     vim.notify('Yanked ' .. expr .. ' to clipboard', vim.log.levels.INFO)
   end)
