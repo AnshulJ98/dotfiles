@@ -28,10 +28,14 @@ Robert C. Martin's Clean Code. No exceptions. Every code generation task follows
 
 ## Testing Philosophy
 
-- RED → GREEN → REFACTOR. Tests first. No exceptions.
-- Test behavior, not implementation.
+- Test behavior, not implementation. The unit is the module, not the class.
+- Match strategy to code type (Bernhardt's functional core / imperative shell):
+  - Pure logic (parsers, state machines, transformations): test-first, table-driven, zero mocks.
+  - I/O coordination (network, filesystem, process management): integration tests against real deps.
+- Mocks/fakes only at genuine system boundaries. If you need a mock, question the decomposition first.
 - One assertion per test when practical.
 - Descriptive test names: `should [expected] when [condition]`.
+- Test sandwich: baseline before, verify after. Never claim a fix without the check that proves it.
 
 ## Communication — Smart Brevity
 
