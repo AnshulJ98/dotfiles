@@ -229,6 +229,23 @@ Match test approach to the kind of code:
 - Composition over inheritance.
 - Abstract on the third use, not before. Premature abstraction is worse than duplication.
 - Match existing repo style. Always. The codebase is a social contract.
+- Deletion over addition. The best code is the code never written.
+
+### Solution Ladder
+
+Stop at the first rung that holds. The ladder runs AFTER you understand the problem — read the task and trace the real flow first, then climb.
+
+1. Does this need to exist at all? Speculative need = skip it. (YAGNI)
+2. Already in this codebase? Look before you write.
+3. Stdlib does it? Use it.
+4. Native platform feature covers it? (`<input type="date">` over a picker lib, CSS over JS, DB constraint over app code.)
+5. Already-installed dependency solves it? Never add a new dep for what a few lines can do.
+6. Can it be one line? One line.
+7. Only then: the minimum code that works.
+
+### Bug Fix Discipline
+
+A report names a symptom. Before editing, grep every caller of the function you're about to touch. The root-cause fix is the laziest fix: one guard in the shared function beats a guard in every caller.
 
 ## CLI-First Scaffolding
 
