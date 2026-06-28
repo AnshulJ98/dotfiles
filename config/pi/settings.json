@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.80.2",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-5.4-mini",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-6",
   "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
   "theme": "bearded-arc",

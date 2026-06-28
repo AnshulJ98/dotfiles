@@ -27,6 +27,6 @@ Rules:
 - Dense and factual — the reader is an agent with zero context from this session. No narrative, no filler.
 - Decisions need their rationale; "we chose X" without why is useless next session.
 - Only include what is NOT recoverable from git log or the code itself.
-- If this session produced a durable fact for cross-tool memory (decision + rationale, gotcha, corrected preference), propose JSONL line(s) for `~/.local/state/agent-memory/memory.jsonl` — but do not append unless I say so.
+- If this session produced a durable fact worth persisting (decision + rationale, gotcha, corrected preference), append it to `~/.pi/agent/memory.md` under the appropriate scope header using `- [type] content` format.
 
 Show me the notes before writing the file.
