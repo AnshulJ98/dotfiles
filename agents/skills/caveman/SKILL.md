@@ -1,51 +1,36 @@
 ---
 name: caveman
-description: >
-  Compressed conversation mode. Cuts conversational output tokens ~65-75% while keeping full
-  technical accuracy. Supports intensity levels: lite (default), full, ultra.
-  Use when user says /caveman, "caveman mode", "talk like caveman", "less tokens",
-  or wants to switch intensity level. Also use to revert: "stop caveman", "normal mode".
-tags:
-  - output
-  - tokens
-  - compression
-  - conversation
+description: Intensity levels beyond the always-on lite compression. Use when user says "caveman full", "caveman ultra", or reverts to lite/normal.
 ---
 
-# Caveman Mode
+# Caveman Mode — Full & Ultra
 
-Compressed output. Full accuracy. No fluff.
+Lite compression is always on (see AGENTS.md). These are the extra levels.
 
-## Intensity Levels
+## full
 
-### lite (default)
-- Remove filler phrases ("I'll now", "Let me", "Sure!", "Great question")
-- No preamble before answers
-- No summary after answers
-- Keep structure (headers, bullets, code blocks)
-- Normal sentence grammar
+Delta beyond lite:
+- Telegraphic sentences. Drop articles even where lite kept them.
+- Bullets over prose, always. No transition sentences.
+- ~50% shorter than lite.
 
-### full
-- Telegraphic sentences. Drop articles where clear.
-- Bullets over prose always
-- No transition sentences
-- Responses 50% shorter than normal
+Example:
+- lite: "The build fails because the tsconfig path is wrong."
+- full: "Build fails. tsconfig path wrong."
 
-### ultra
-- Minimum tokens to convey technical content
-- Code only where needed
-- Labels, not sentences
-- Skip obvious context
+## ultra
 
-## Activation Triggers
-- "caveman" / "caveman mode" / "talk like caveman" → lite
-- "caveman full" / "full caveman" → full
-- "caveman ultra" / "ultra" → ultra
-- "less tokens" / "be brief" → lite
-- "stop caveman" / "normal mode" / "verbose" → deactivate
+Delta beyond full:
+- Minimum tokens for the technical content. Labels, not sentences.
+- Code only where needed. Skip obvious context.
 
-## Rules
-- Never reduce technical accuracy
-- Always include code blocks when code is the answer
-- Error messages always shown in full
-- File paths always shown in full
+Example:
+- full: "Build fails. tsconfig path wrong."
+- ultra: "tsconfig path wrong -> build fail"
+
+## Switch
+
+- "caveman full" / "full caveman" -> full
+- "caveman ultra" / "ultra" -> ultra
+- "caveman" / "lite" -> back to lite (always-on default)
+- "stop caveman" / "normal mode" -> deactivate compression

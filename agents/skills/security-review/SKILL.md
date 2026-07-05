@@ -29,9 +29,8 @@ description: OWASP-lens security review checklist for code changes. Use before c
 - [ ] Internal network addresses (`169.254.x.x`, `10.x.x.x`, `127.x.x.x`) blocked
 - [ ] Redirects don't blindly follow to user-supplied URLs
 
-## XSS
-- [ ] User content rendered in HTML is escaped
-- [ ] `dangerouslySetInnerHTML` only used with sanitized content
+## Output Encoding
+- [ ] User content rendered in HTML/templates is escaped
 - [ ] Content Security Policy headers set
 
 ## CORS

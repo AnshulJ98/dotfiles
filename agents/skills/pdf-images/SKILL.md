@@ -7,7 +7,7 @@ description: Use this skill whenever the user wants to do anything with PDF file
 
 ## Tools Available
 
-- `pdftotext` — text extraction (`/opt/homebrew/bin/pdftotext` ✓ installed)
+- `pdftotext` — text extraction (`/opt/homebrew/bin/pdftotext`, installed)
 - `qpdf` — merge/split/rotate/encrypt PDFs (installed via Homebrew)
 - `tesseract` — OCR for scanned PDFs (installed)
 - `imagemagick` — image extraction and processing (installed)
