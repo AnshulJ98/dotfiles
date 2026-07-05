@@ -1,98 +1,109 @@
 ---
 name: git-patterns
-description: Complex git operations, rebasing, merge conflict strategies, branch workflows, and recovery from bad states. Use when rebasing with conflicts, cherry-picking across branches, recovering from detached HEAD, cleaning history, or choosing between merge/rebase/squash.
+description: Non-obvious git operations — bisect, worktrees, autosquash fixups, reflog recovery, and merge-conflict strategy. Use when hunting a regression, running parallel branches, cleaning history before a PR, recovering lost commits, or resolving conflicts during a rebase.
 ---
 
 # Git Patterns
 
-## Rebase vs Merge vs Squash
+Basic rebase/merge/cherry-pick/reset are assumed known. This covers only the sharp edges.
 
-| Strategy | When to use | Result |
-|----------|-------------|--------|
-| Merge | Integration branches, preserving history | Merge commit, full history |
-| Rebase | Feature branches before PR | Linear history, cleaner log |
-| Squash | Small/messy PR commits before merge | Single clean commit |
+## Golden Rule
 
-**Rule**: rebase your own feature branch onto main. Never rebase shared branches.
+Never rebase (or otherwise rewrite) a branch anyone else has pulled. History rewrites invalidate every downstream clone. Rebase only your own un-pushed feature branch onto `main`.
 
-## Common Workflows
+When you must overwrite a remote branch you own, use `--force-with-lease`, never `--force`. `--force-with-lease` aborts if the remote moved since your last fetch (someone else pushed); `--force` clobbers their work silently.
 
-### Feature branch rebase
+## Bisect — find the commit that introduced a bug
+
 ```bash
-git fetch origin
-git rebase origin/main          # rebase onto latest main
-# if conflicts:
-git status                      # see conflicted files
-git add <resolved>
-git rebase --continue           # or --abort to cancel
-git push --force-with-lease     # safe force push (fails if someone else pushed)
+git bisect start
+git bisect bad                 # current commit is broken
+git bisect good <known-good-sha>
+# git checks out the midpoint; test, then mark good/bad; repeat ~log2(n) times
+git bisect reset               # return to original HEAD
 ```
 
-### Interactive rebase (clean up commits)
+Automate it — this is the high-value form. `git bisect run` drives the whole search with a script whose exit code decides the verdict (0 = good, 1–124/126/127 = bad, 125 = skip/untestable):
+
 ```bash
-git rebase -i HEAD~5            # edit last 5 commits
-# s = squash into previous
-# r = reword commit message
-# d = drop commit
-# f = fixup (squash, discard message)
+git bisect start HEAD <known-good-sha>
+git bisect run ./test.sh       # or: npm test, pytest -x, cargo test, etc.
+git bisect reset
 ```
 
-### Cherry-pick
+The script must be executable and self-contained (rebuild if needed). Use `exit 125` for commits that can't be tested (e.g. won't compile) so bisect skips rather than mismarks them.
+
+## Worktrees — multiple branches checked out at once
+
+One repo, many working directories sharing the same object store. Beats stash-juggling or a second clone: review a PR, run a long build, or hotfix `main` without disturbing your in-progress branch.
+
 ```bash
-git cherry-pick <sha>           # apply single commit
-git cherry-pick <sha1>..<sha2>  # apply range (exclusive..inclusive)
-git cherry-pick --no-commit <sha>  # apply changes without committing
+git worktree add ../proj-hotfix main        # existing branch in a new dir
+git worktree add -b feature/x ../proj-x     # create branch + worktree
+git worktree list
+git worktree remove ../proj-hotfix          # when done
+git worktree prune                          # clean stale admin files
 ```
 
-## Recovery Patterns
+A branch can only be checked out in one worktree at a time. Deleting a worktree's directory by hand leaves dangling metadata — use `git worktree remove` (or `prune`).
 
-### Undo last commit (keep changes staged)
+## Fixup + autosquash — amend earlier commits cleanly
+
+Instead of a messy `git rebase -i` reorder, tag the fix to its target commit and let git slot it in:
+
 ```bash
-git reset --soft HEAD~1
+git commit --fixup <target-sha>       # stages a "fixup! <subject>" commit
+git commit --squash <target-sha>      # same, but lets you edit the combined message
+git rebase -i --autosquash <base>     # reorders + marks fixups automatically; just save
 ```
 
-### Undo last commit (keep changes unstaged)
+Set `git config --global rebase.autosquash true` to make `-i` autosquash by default.
+
+## Recovery
+
+### Reflog — the undo log for HEAD
+
+Almost nothing is truly lost for ~90 days. Reflog records every HEAD move (commits, resets, rebases, checkouts), even on "deleted" branches or after a bad `reset --hard`.
+
 ```bash
-git reset HEAD~1
+git reflog                          # find the SHA of the state you want back
+git reset --hard HEAD@{2}           # jump HEAD back to a prior position
+git branch recovered <sha>          # resurrect a deleted branch / detached commit
 ```
 
-### Recover deleted branch
+After a botched rebase, `git reflog` shows the pre-rebase HEAD — reset to it to bail out entirely.
+
+### Stash to a branch
+
+When a stash won't apply cleanly onto the current branch (it has moved on), `git stash branch` recreates the exact commit state the stash was made against, then applies it — no conflicts:
+
 ```bash
-git reflog                      # find the SHA
-git checkout -b <branch> <sha>
+git stash branch <new-branch> [stash@{n}]
 ```
-
-### Detached HEAD recovery
-```bash
-git branch temp-save            # save current state
-git checkout main
-git merge temp-save
-```
-
-### Revert a pushed commit (safe for shared branches)
-```bash
-git revert <sha>                # creates a new "undo" commit
-```
-
-## Commit Message Convention
-
-```
-type(scope): short description
-
-Body: why, not what. Max 72 chars per line.
-
-Closes #123
-```
-
-Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
 
 ## Conflict Resolution
 
-1. `git status` — identify conflicted files
-2. Open file — look for `<<<<<<<`, `=======`, `>>>>>>>`
-3. Edit to desired state, remove markers
-4. `git add <file>`
-5. `git rebase --continue` or `git merge --continue`
+Strategy per file, not per merge. Don't blanket `git checkout --theirs .` — inspect each conflict and choose:
 
-For "take theirs": `git checkout --theirs <file>`
-For "take ours": `git checkout --ours <file>`
+| File type | Usual choice |
+|-----------|--------------|
+| Two real feature changes | Manual merge, keep both behaviors |
+| Lock file (package-lock, bun.lock, poetry.lock) | Take one side, then re-run install to regenerate |
+| Generated / build output | Regenerate from source after resolving the source conflict |
+| Added on one side, deleted on other | Decide intent explicitly — git can't |
+
+`git checkout --ours <file>` / `--theirs <file>` resolve a single file; `git add` marks it done; `--continue` proceeds.
+
+### Marker orientation is inverted during a rebase
+
+During a **rebase**, `<<<<<<< HEAD` is the branch you are rebasing *onto* (e.g. `main`), and `>>>>>>>` is *your* commit being replayed — the opposite of a merge, where `HEAD` is your current branch. `--ours` means the branch you're landing on; `--theirs` means your own changes. Read the SHAs, not your instinct, or you'll discard the wrong side.
+
+### Before completing a merge, grep for stray markers
+
+A missed marker compiles as garbage or silently corrupts config. Confirm none survive:
+
+```bash
+grep -rn '<<<<<<<' . --exclude-dir=node_modules --exclude-dir=.git
+```
+
+Then `git add` + `--continue`. To bail out of any conflicted state entirely: `git rebase --abort` / `git merge --abort` / `git cherry-pick --abort`.

@@ -49,7 +49,7 @@ Eight hand-rolled subagents, each with its own context window and tool allowlist
 
 ## Skills (`~/.claude/skills/`)
 
-45 skills total — 21 in `~/.claude/skills/` (Pocock + hand-rolled) + 24 symlinked from `~/.agents/skills/` (shared with OpenCode/Copilot-CLI).
+30 skills total — 21 in `~/.claude/skills/` (Pocock + hand-rolled) + 9 symlinked from `~/.agents/skills/` (shared with OpenCode/Copilot-CLI).
 
 ### Engineering (use daily)
 
@@ -83,7 +83,9 @@ Eight hand-rolled subagents, each with its own context window and tool allowlist
 
 ### Domain (shared with OpenCode at work, via symlinks)
 
-`/adr-patterns`, `/cli-builder`, `/code-review`, `/context7`, `/decision-framework`, `/diagram-generation`, `/docs-generation`, `/error-prevention` (auto-loaded), `/git-patterns` (auto-loaded), `/guard-checks`, `/mission`, `/nextjs-app-router`, `/pdf-images`, `/resolve-conflicts`, `/security-review`, `/skill-creator`, `/system-design`, `/tdd` (canonical TDD skill — load on demand, not auto-imported), `/test-runner`, `/testing-patterns`, `/typescript-patterns`, `/typescript-strict`, `/caveman` (mode toggle — invoke when wanted)
+`/caveman` (mode toggle — invoke when wanted), `/context7`, `/d2-diagrams`, `/decisions` (ADR + Goal-Options-Plan), `/git-patterns` (auto-loaded), `/mission`, `/pdf-images`, `/security-review`, `/testing-patterns`
+
+Pruned 2026-07-05 (27 → 9 shared): philosophy-restatement and off-stack skills deleted; survivors are non-obvious reference material only. See `~/Dev/dotfiles/config/pi/DESIGN.md`.
 
 ## Hooks (automated, in `~/.claude/hooks/`)
 
@@ -312,8 +314,6 @@ Persistent knowledge at `~/.local/state/agent-memory/memory.jsonl`. Shared acros
 
 # Always-Loaded Skills (auto-imported)
 
-@~/.agents/skills/error-prevention/SKILL.md
-
 @~/.agents/skills/git-patterns/SKILL.md
 
 <!--
@@ -327,5 +327,12 @@ Persistent knowledge at `~/.local/state/agent-memory/memory.jsonl`. Shared acros
   - tdd-workflow → replaced by testing strategy in clean-code skill.
   - cleancode → dead duplicate of clean-code.
   - test-design → React testing patterns derivable from training data + context7.
+  Spartan prune (2026-07-05): error-prevention (auto-import removed here),
+  typescript-patterns, typescript-strict, docs-generation, cli-builder,
+  guard-checks, nextjs-app-router, skill-creator, diagram-generation,
+  test-runner, code-review, system-design deleted. adr-patterns +
+  decision-framework merged into decisions; resolve-conflicts folded into
+  git-patterns. All were philosophy restatements or off-stack (React/frontend)
+  drift. Survivors: reference artifacts only.
 -->
 

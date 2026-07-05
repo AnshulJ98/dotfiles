@@ -169,7 +169,7 @@ Guiding principles, not absolute laws. Apply with judgment — dogmatic applicat
 
 - **Well-named**: names must clearly express intent. Function names are verbs (`calculateTotal`). Class names are nouns (`PaymentProcessor`). Abbreviations are forbidden without domain consensus.
 - **Focused**: each function does one thing at one level of abstraction. Extract when a function has multiple responsibilities — not when it's merely "long."
-- **Self-documenting**: code must be clear enough that comments on _what_ or _how_ are unnecessary. Comments are acceptable only for _why_ (business rationale, hidden constraints, workaround for a specific bug).
+- **Self-documenting**: code must be clear enough that comments on _what_ or _how_ are unnecessary. Comments are acceptable only for _why_ (business rationale, hidden constraints, workaround for a specific bug). JSDoc only on exported/public functions. Never `@todo` without a linked ticket.
 - **Private depth is fine**: a deep module's internal functions can and should be small, well-named helpers. The constraint is on the module's _interface_, not its internal decomposition.
 
 ## Newspaper Format
@@ -221,6 +221,8 @@ Match test approach to the kind of code:
 - Barrel `index.ts` only at module boundaries.
 - Named paths from `tsconfig.json` over deep relative traversal.
 - Narrow types — expose the minimum the caller needs.
+- `@ts-expect-error` (with a reason comment) over `@ts-ignore`. Never suppress bare.
+- CLI arg parsing: `parseArgs` from `node:util`. No commander/yargs for what stdlib covers.
 
 ## Architecture Philosophy
 
