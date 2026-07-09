@@ -1,6 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "skillListingBudgetFraction": 0.02,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Bash(ls:*)",
@@ -139,11 +143,7 @@
       "Bash(wget * | bash)"
     ]
   },
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "model": "claude-opus-4-6",
+  "model": "opus[1m]",
   "skillOverrides": {
     "caveman": "user-invocable-only",
     "grill-me": "off"
@@ -202,7 +202,6 @@
         ]
       },
       {
-        "_tag": "ccstatusline-managed",
         "hooks": [
           {
             "type": "command",
@@ -268,14 +267,13 @@
         ]
       },
       {
-        "_tag": "ccstatusline-managed",
+        "matcher": "Skill",
         "hooks": [
           {
             "type": "command",
             "command": "ccstatusline --hook"
           }
-        ],
-        "matcher": "Skill"
+        ]
       }
     ],
     "PostToolUse": [

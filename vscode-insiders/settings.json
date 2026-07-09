@@ -30,7 +30,7 @@
     "/private/tmp/postman-folder-post-response.instructions.md": true,
     "/private/tmp/postman-folder-pre-request.instructions.md": true,
     "/private/tmp/postman-http-request-post-response.instructions.md": true,
-    "/private/tmp/postman-http-request-pre-request.instructions.md": true,
+    "/private/tmp/postman-http-request-pre-request.instructions.md": true
   },
   "workbench.colorCustomizations": {
     "editorBracketHighlight.foreground1": "#ffee00",
