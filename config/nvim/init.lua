@@ -252,12 +252,18 @@ do
     vim.notify('Resize: h/l width, j/k height, = equalize, q/Esc exit', vim.log.levels.INFO)
     while true do
       local key = vim.fn.getcharstr()
-      if key == 'h' then vim.cmd 'vertical resize -2'
-      elseif key == 'l' then vim.cmd 'vertical resize +2'
-      elseif key == 'j' then vim.cmd 'resize -2'
-      elseif key == 'k' then vim.cmd 'resize +2'
-      elseif key == '=' then vim.cmd 'wincmd ='
-      elseif key == 'q' or key == '\27' then break
+      if key == 'h' then
+        vim.cmd 'vertical resize -2'
+      elseif key == 'l' then
+        vim.cmd 'vertical resize +2'
+      elseif key == 'j' then
+        vim.cmd 'resize -2'
+      elseif key == 'k' then
+        vim.cmd 'resize +2'
+      elseif key == '=' then
+        vim.cmd 'wincmd ='
+      elseif key == 'q' or key == '\27' then
+        break
       end
     end
     vim.notify('', vim.log.levels.INFO)
@@ -574,20 +580,29 @@ do
 
   -- See `:help telescope` and `:help telescope.setup()`
   require('telescope').setup {
-    -- You can put your default mappings / updates / etc. in here
-    --  All the info you're looking for is in `:help telescope.setup()`
-    --
-    -- defaults = {
-    --   mappings = {
-    --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-    --   },
-    -- },
-    -- pickers = {}
+    defaults = {
+      vimgrep_arguments = {
+        'rg',
+        '--color=never',
+        '--no-heading',
+        '--with-filename',
+        '--line-number',
+        '--column',
+        '--smart-case',
+        '--hidden',
+        '--glob',
+        '!**/.git/*',
+      },
+    },
+    pickers = {
+      find_files = {
+        find_command = { 'rg', '--files', '--hidden', '--glob', '!**/.git/*' },
+      },
+    },
     extensions = {
       ['ui-select'] = { require('telescope.themes').get_dropdown() },
     },
   }
-
   -- Enable Telescope extensions if they are installed
   pcall(require('telescope').load_extension, 'fzf')
   pcall(require('telescope').load_extension, 'ui-select')
@@ -1120,7 +1135,7 @@ do
   require 'kickstart.plugins.indent_line'
   require 'kickstart.plugins.lint'
   require 'kickstart.plugins.autopairs'
-  -- require 'kickstart.plugins.neo-tree'
+  require 'kickstart.plugins.neo-tree'
   require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
