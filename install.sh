@@ -4,11 +4,17 @@
 #
 # Usage:
 #   git clone <remote> ~/Dev/dotfiles
-#   cd ~/Dev/dotfiles && ./install.sh
+#   cd ~/Dev/dotfiles && ./install.sh [--work]
+#
+# --work links the work AGENTS variant for pi (default: home).
 
 set -euo pipefail
 
 DOT="${DOT:-$HOME/Dev/dotfiles}"
+PI_VARIANT="home"
+for arg in "$@"; do
+  if [ "$arg" = "--work" ]; then PI_VARIANT="work"; fi
+done
 TS="$(date +%s)"
 VSC_USER="$HOME/Library/Application Support/Code - Insiders/User"
 
@@ -82,6 +88,17 @@ link "$DOT/claude/skills"              "$HOME/.claude/skills"
 # 6. ~/.agents/* -------------------------------------------------------------
 mkdir -p "$HOME/.agents"
 link "$DOT/agents/skills" "$HOME/.agents/skills"
+
+# 6.5 ~/.pi/agent (pi coding agent) -------------------------------------------
+bash "$DOT/config/pi/build-agents.sh" --check || warn "pi AGENTS files drifted from fragments — run config/pi/build-agents.sh"
+mkdir -p "$HOME/.pi/agent"
+if [ "$PI_VARIANT" = "work" ]; then
+  link "$DOT/config/pi/AGENTS.work.md" "$HOME/.pi/agent/AGENTS.md"
+else
+  link "$DOT/config/pi/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
+fi
+link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
+link "$DOT/config/pi/agents"        "$HOME/.pi/agent/agents"
 
 # 7. ~/.copilot/* ------------------------------------------------------------
 mkdir -p "$HOME/.copilot"
