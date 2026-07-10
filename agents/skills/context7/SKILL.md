@@ -14,24 +14,23 @@ Activate when:
 - Version-specific behavior ("Does React 19 still need forwardRef?")
 - Any mention of a specific framework or library
 
-## MCP Tool Usage
+## Tools
+
+Context7 exposes two tools. The names are stable; the prefix depends on the harness — Claude Code and Copilot get them from the context7 MCP server (e.g. `mcp__context7__resolve-library-id`), pi gets bare names from the `@upstash/context7-pi` package (which also ships a `/c7-docs <library> <question>` command for manual lookups).
 
 ### Step 1: Resolve the Library ID
 
 ```
-mcp_context7_resolve-library-id({ libraryName: "nextjs" })
-→ "/vercel/next.js"
+resolve-library-id  { libraryName: "nextjs" }  →  "/vercel/next.js"
 ```
 
-### Step 2: Fetch Documentation
+### Step 2: Query Documentation
 
 ```
-mcp_context7_get-library-docs({
-  context7CompatibleLibraryID: "/vercel/next.js",
-  topic: "middleware",
-  tokens: 5000
-})
+query-docs  { the resolved "/org/project" id, plus a focused topic }
 ```
+
+Check the tool's parameter schema in your harness — argument names vary slightly between the MCP server and the pi package.
 
 ## Common Library IDs
 

@@ -1,8 +1,8 @@
 {
-  "lastChangelogVersion": "0.80.2",
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-6",
-  "defaultThinkingLevel": "high",
+  "lastChangelogVersion": "0.80.6",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
+  "defaultThinkingLevel": "xhigh",
   "hideThinkingBlock": false,
   "theme": "bearded-arc",
   "quietStartup": true,
@@ -12,7 +12,12 @@
     "github-copilot/gpt-5.4-mini",
     "github-copilot/claude-sonnet-4.6",
     "github-copilot/claude-opus-4.6",
-    "github-copilot/gpt-5.4"
+    "github-copilot/claude-opus-4.8",
+    "github-copilot/gpt-5.4",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-opus-4-6",
+    "openai-codex/gpt-5.5",
+    "openai-codex/gpt-5.4-mini"
   ],
   "compaction": {
     "enabled": true,
@@ -26,7 +31,6 @@
     "~/Dev/dotfiles/config/pi/skills"
   ],
   "extensions": [
-    "~/Dev/dotfiles/config/pi/extensions/context7.ts",
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts"
   ],
   "subagents": {
@@ -55,6 +59,7 @@
     },
     "npm:pi-rtk-optimizer",
     "npm:pi-fetch",
+    "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
     "npm:pi-subagents",
     "npm:@taterdoge/pi-ayu",
