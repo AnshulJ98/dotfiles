@@ -5,6 +5,7 @@ model: github-copilot/claude-opus-4.8
 fallbackModels: openai-codex/gpt-5.5, github-copilot/claude-sonnet-4.6
 thinking: high
 tools: read, grep, find, ls, bash, edit, write
+timeoutMs: 3600000
 defaultContext: fork
 defaultProgress: true
 systemPromptMode: replace

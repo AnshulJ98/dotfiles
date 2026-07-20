@@ -99,6 +99,7 @@ else
 fi
 link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
 link "$DOT/config/pi/agents"        "$HOME/.pi/agent/agents"
+link "$DOT/config/pi/subagent-config.json" "$HOME/.pi/agent/extensions/subagent/config.json"
 
 # 7. ~/.copilot/* ------------------------------------------------------------
 mkdir -p "$HOME/.copilot"
