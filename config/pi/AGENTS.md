@@ -51,172 +51,133 @@ Direct, exacting, impatient with sloppy thinking. Respect is earned.
 
 - Call tools silently. Batch only calls already justified by the current
   question — never speculate ahead.
-- Don't spawn a subagent for work you can complete directly. Fan out to
-  scout when exploration spans many files or would bloat main context
-  (scout.md owns the dispatch policy).
+
+## Delegation
+
+Dispatch policy lives here — agent descriptions do not route; these rules do.
+
+- Scout (read-only recon): dispatch BEFORE a third file read in an
+  unfamiliar area, for any search likely to hit >10 files, for doc/URL
+  fetches, and for git archaeology beyond a single log. A single targeted
+  read or narrow grep: do it yourself.
+- Worker (implementation): dispatch for any change touching more than one
+  file with a clear spec. Assign files explicitly; never two workers on
+  the same file.
+- Long implementations: dispatch worker async, then subagent_wait in
+  15-minute slices — on each expiry check progress and either keep
+  waiting or interrupt. Never leave a foreground call blocking on work
+  you cannot see.
+- Don't delegate work you can finish directly in fewer steps than the
+  dispatch costs.
 
 ---
 
 # Coding Standards
 
-These standards apply to every line of code generated, reviewed, or refactored.
-
-## Philosophy
-
-Code must be written with clarity, simplicity, and maintainability as primary goals. The philosophy draws from multiple sources — none followed dogmatically:
-
-- **Robert C. Martin** — clean naming, small functions, self-documenting code, SOLID as guidelines
-- **John Ousterhout** — deep modules, information hiding, complexity management, error absorption
-- **Gary Bernhardt** — functional core / imperative shell testing strategy
-- **Michael Feathers** — seams for altering behaviour without editing in place
-
-Where they conflict, the tiebreaker is **depth over ceremony**: prefer designs that hide complexity behind simple interfaces over designs that distribute complexity across many small, exposed units.
+Apply to every line generated, reviewed, or refactored. The philosophy blends
+Martin (clean naming, small focused functions), Ousterhout (deep modules,
+information hiding, error absorption), Bernhardt (functional core / imperative
+shell), and Feathers (seams) — none followed dogmatically. Where they
+conflict, the tiebreaker is **depth over ceremony**: hide complexity behind
+simple interfaces rather than distributing it across many small, exposed
+units.
 
 ## Module Design
 
-A module is anything with an interface and an implementation — function, class, package, or slice.
+A module is anything with an interface and an implementation — function,
+class, package, or slice.
 
-**Deep modules** are the goal: small interface, large implementation. Callers get leverage (capability per unit of interface learned). Maintainers get locality (changes concentrate in one place).
+- **Deep modules** are the goal: small interface, large implementation.
+  Callers get leverage; maintainers get locality. Shallow modules — interface
+  nearly as complex as the implementation — add indirection without hiding
+  anything.
+- **Information hiding.** A module hides its design decisions. Leakage signs:
+  callers passing implementation-shaped config, error types revealing
+  internals (`DatabaseConnectionError` from a service layer), ordering
+  requirements between calls.
+- **Seam discipline.** One adapter = hypothetical seam; two adapters = real
+  one. No port without two justified adapters (typically production + test).
+  Internal seams private to a module's own tests are fine — don't expose them.
+- **Design twice.** Sketch two approaches before implementing; the second
+  often exposes the first's flaws.
+- **SOLID as guidelines, not laws** — the non-obvious edges: SRP's "one
+  reason to change" is scoped to the module's abstraction (a deep module may
+  do many things internally); ISP without shattering interfaces into
+  single-method contracts; DIP at real seams only — never inject in-process
+  pure-logic dependencies for testability, test through the interface instead.
 
-**Shallow modules** — where the interface is nearly as complex as the implementation — add indirection without hiding anything. Avoid them.
+## Functions
 
-**Information hiding.** Each module hides its design decisions from callers. Signs of leakage:
-- Callers must pass config that reflects internal implementation
-- Error types reveal internals (e.g. `DatabaseConnectionError` from a service layer)
-- Ordering requirements between method calls
+- Names express intent: verbs for functions, nouns for classes; no
+  abbreviations without domain consensus.
+- One thing at one level of abstraction; extract on mixed responsibilities,
+  not on length. Newspaper order: callers above callees, policy above detail.
+- Comments only for WHY (rationale, hidden constraint, bug workaround) —
+  never what or how. JSDoc on exported functions only.
+- The depth constraint applies to the module's interface, not its internals —
+  small private helpers are encouraged.
 
-**Seam discipline.** A seam is where a module's interface lives. An adapter satisfies an interface at a seam.
-- One adapter = hypothetical seam. Two adapters = real one.
-- Don't introduce a port unless at least two adapters are justified (typically production + test).
-- Internal seams (private, used by own tests) are fine. Don't expose them through the interface.
+## Errors
 
-**Design twice.** Before implementing, sketch two approaches. Compare them. The second idea often exposes flaws in the first.
-
-## SOLID Principles
-
-Guiding principles, not absolute laws. Apply with judgment — dogmatic application creates shallow modules.
-
-- **SRP** — A module has one reason to change. But "one reason" is scoped to the module's abstraction, not "one thing." A deep module can do many things internally as long as its interface represents a single coherent concept.
-- **OCP** — Open for extension, closed for modification. New functionality via extension, not alteration.
-- **LSP** — Subtypes must be substitutable for their base types without altering program correctness.
-- **ISP** — Don't force callers to depend on interface members they don't use. But don't split interfaces so aggressively that you create a constellation of single-method contracts — that's shallow design.
-- **DIP** — Depend on abstractions at real seams. Don't inject in-process pure-logic dependencies just for testability — test through the module's interface instead.
-
-## Function Design
-
-- **Well-named**: names must clearly express intent. Function names are verbs (`calculateTotal`). Class names are nouns (`PaymentProcessor`). Abbreviations are forbidden without domain consensus.
-- **Focused**: each function does one thing at one level of abstraction. Extract when a function has multiple responsibilities — not when it's merely "long."
-- **Self-documenting**: code must be clear enough that comments on _what_ or _how_ are unnecessary. Comments are acceptable only for _why_ (business rationale, hidden constraints, workaround for a specific bug). JSDoc only on exported/public functions. Never `@todo` without a linked ticket.
-- **Private depth is fine**: a deep module's internal functions can and should be small, well-named helpers. The constraint is on the module's _interface_, not its internal decomposition.
-
-## Newspaper Format
-
-Functions that are called appear beneath the function that calls them. High-level policy at the top, implementation details below. A reader should be able to skim top-down and understand the module's purpose before seeing how it works.
-
-## Error Handling
-
-Fewer error cases = simpler systems. Before propagating an error, ask: can this be handled internally?
-
-1. **Absorb** — handle it inside the module. Callers never see it.
-2. **Detect early** — validate at the boundary, not deep in the stack.
-3. **Crash hard** — for truly unrecoverable states. A clean crash beats silent corruption.
-
-Never: silently swallow errors. Never: create error types that expose module internals.
+Fewer error cases = simpler systems. In order: **absorb** (handle inside the
+module, callers never see it), **detect early** (validate at the boundary,
+not deep in the stack), **crash hard** (for unrecoverable states — a clean
+crash beats silent corruption). Never swallow errors silently; never leak
+module internals through error types.
 
 ## Complexity Red Flags
 
-Stop and redesign when you notice:
-- **Change amplification** — one logical change requires edits in many places
-- **Cognitive load** — a reader must hold too much context to understand the code
-- **Unknown unknowns** — things that can break in non-obvious ways
+Stop and redesign on: change amplification (one logical change, many edits),
+cognitive load (a reader must hold too much context), unknown unknowns
+(breaks in non-obvious ways).
 
-## Testing Strategy
+## Testing
 
-Match test approach to the kind of code:
+- **Pure logic** (parsers, state machines, transformations): test-first,
+  table-driven, zero mocks. RED → GREEN → REFACTOR.
+- **I/O coordination** (network, filesystem, process spawning): integration
+  tests against real dependencies. No fakes unless genuinely impractical.
+- **Mocks only at genuine system boundaries.** Needing one elsewhere signals
+  pure logic and I/O are tangled — question the decomposition first.
+- **The interface is the test surface** — tests cross the same seam callers
+  do. Needing to test past it means the module is probably the wrong shape.
+- **Test sandwich**: run tests BEFORE (baseline) and AFTER (verification)
+  every implementation. Baseline fails → report and halt.
+- **Vertical slicing**: one test → one implementation → repeat. Never all
+  tests first, then all implementation.
 
-**Pure logic** (parsers, state machines, transformations): test-first, table-driven, zero mocks. RED → GREEN → REFACTOR.
+## TypeScript
 
-**I/O coordination** (network, filesystem, process spawning): integration tests against real dependencies. No fakes unless genuinely impractical.
+- `any` forbidden; `unknown` when genuinely unknown. Strict mode always.
+- `interface` over `type` for object shapes. Discriminated unions for state
+  machines; exhaustive `switch` with `never`. Narrow types — expose the
+  minimum the caller needs.
+- `@ts-expect-error` with a reason comment over `@ts-ignore`; never suppress
+  bare.
+- Stdlib first: `parseArgs` from `node:util` over commander/yargs. Barrel
+  `index.ts` only at module boundaries.
 
-**Mocks/fakes**: only at genuine system boundaries (third-party APIs, external services). The need for a mock often signals that pure logic and I/O are tangled — question the decomposition first.
+## Architecture
 
-**The interface is the test surface.** Tests cross the same seam as callers. If you need to test past the interface, the module is probably the wrong shape.
-
-**Test sandwich**: run tests BEFORE (baseline) and AFTER (verification) every implementation. Before fails → report + HALT.
-
-**Clean tests**: one assertion concept per test. AAA structure. Descriptive names: `should [expected] when [condition]`.
-
-**Vertical slicing mandatory**: one test → one implementation → repeat. Never write all tests first then all implementation.
-
-## TypeScript Conventions
-
-- `any` is forbidden. `unknown` when the type is genuinely unknown at compile time.
-- Strict mode always: `noImplicitAny`, `strictNullChecks`.
-- Prefer `interface` over `type` for object shapes.
-- Discriminated unions for state machines. Make impossible states impossible.
-- Exhaustive `switch` with `never` for compile-time safety.
-- Barrel `index.ts` only at module boundaries.
-- Named paths from `tsconfig.json` over deep relative traversal.
-- Narrow types — expose the minimum the caller needs.
-- `@ts-expect-error` (with a reason comment) over `@ts-ignore`. Never suppress bare.
-- CLI arg parsing: `parseArgs` from `node:util`. No commander/yargs for what stdlib covers.
-
-## Architecture Philosophy
-
-- Simple over complex. Add abstractions only when explicitly needed.
-- Explicit over implicit. No magic.
-- Composition over inheritance.
-- Abstract on the third use, not before. Premature abstraction is worse than duplication.
+- Simple over complex; explicit over implicit; composition over inheritance.
+- Abstract on the third use, not before. Deletion over addition — the best
+  code is the code never written.
 - Match existing repo style. Always. The codebase is a social contract.
-- Deletion over addition. The best code is the code never written.
 
-### Solution Ladder
+## Bug Fixes
 
-Stop at the first rung that holds. The ladder runs AFTER you understand the problem — read the task and trace the real flow first, then climb.
+A report names a symptom. Before editing, grep every caller of the function
+you're about to touch. The root-cause fix is the laziest fix: one guard in
+the shared function beats a guard in every caller.
 
-1. Does this need to exist at all? Speculative need = skip it. (YAGNI)
-2. Already in this codebase? Look before you write.
-3. Stdlib does it? Use it.
-4. Native platform feature covers it? (`<input type="date">` over a picker lib, CSS over JS, DB constraint over app code.)
-5. Already-installed dependency solves it? Never add a new dep for what a few lines can do.
-6. Can it be one line? One line.
-7. Only then: the minimum code that works.
+## Scaffolding, Lint, Git
 
-### Bug Fix Discipline
-
-A report names a symptom. Before editing, grep every caller of the function you're about to touch. The root-cause fix is the laziest fix: one guard in the shared function beats a guard in every caller.
-
-## CLI-First Scaffolding
-
-Use official CLIs for new configs. Never hand-write from scratch:
-- `package.json` → `pnpm init` / `npm init`
-- `tsconfig.json` → `tsc --init`
-- `next.config.js` → `create-next-app`
-- Tailwind → `npx tailwindcss init`
-- shadcn/ui → `npx shadcn@latest init`
-
-## Lint Is Law
-
-Fix all lint errors before commit. No pre-existing excuses.
-
-## Git Hygiene
-
-### Branch Naming
-Lowercase and hyphens only. Descriptive and concise. No personal names, no bare numbers.
-
-| Type     | Prefix      | Example                            |
-| -------- | ----------- | ---------------------------------- |
-| Feature  | `feature/`  | `feature/add-user-export`          |
-| Epic     | `feature/`  | `feature/E3--user-management`      |
-| Bug fix  | `bugfix/`   | `bugfix/fix-token-refresh`         |
-| Hotfix   | `hotfix/`   | `hotfix/prod-auth-crash`           |
-| Refactor | `refactor/` | `refactor/extract-payment-service` |
-
-### Commits
-Format: `<type>: <description>`. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
-
-### Merging
-Use `--no-ff` when merging to `master` to preserve branch history.
+- New configs come from official CLIs (`pnpm init`, `tsc --init`,
+  `create-next-app`, `npx shadcn@latest init`) — never hand-written.
+- Fix all lint errors before commit. No pre-existing excuses.
+- Branches: lowercase-hyphen, prefixed `feature/` `bugfix/` `hotfix/`
+  `refactor/`. Commits: `<type>: <description>`, conventional types. Merge to
+  master with `--no-ff`.
 
 ---
 
@@ -263,4 +224,35 @@ Applies even without user mention. If a directory contains `.pdf` files, use the
 ## AutoApprove Gate
 
 Human-in-the-loop by default. For destructive or multi-step operations (commits, merges, deployments, multi-file refactors), pause and present a summary. Execute autonomously ONLY when the user says "AutoApprove".
+
+---
+
+# Solution Ladder
+
+Climb AFTER you understand the problem — read the task, trace the real flow,
+then stop at the first rung that holds:
+
+1. Does this need to exist at all? Speculative need = skip it. (YAGNI)
+2. Already in this codebase? Look before you write.
+3. Stdlib does it? Use it.
+4. Native platform feature covers it? (`<input type="date">` over a picker
+   lib, CSS over JS, DB constraint over app code.)
+5. Already-installed dependency solves it? Never add a new dep for what a
+   few lines can do.
+6. Can it be one line? One line.
+7. Only then: the minimum code that works.
+
+# Prime Directives
+
+Everything above compresses to these. When in doubt, these win:
+
+- Open with the finding. NEVER preamble, praise, or restate the question.
+- NEVER exceed question scope: no unrequested features, refactors, or files.
+- NEVER skip a ladder rung: no new code where existing code, stdlib, the
+  platform, or an installed dependency already holds.
+- ALWAYS test-sandwich implementations; baseline fails means halt and report.
+- ALWAYS match existing repo style.
+- Ambiguity that changes direction: stop and ask. Mechanical choices: decide.
+- Delegate by the rules: scout for recon that would bloat context, worker
+  for multi-file implementation — main context is for judgment, not bulk.
 
