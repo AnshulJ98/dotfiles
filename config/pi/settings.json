@@ -1,9 +1,10 @@
 {
-  "lastChangelogVersion": "0.80.6",
+  "lastChangelogVersion": "0.80.10",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "xhigh",
   "hideThinkingBlock": false,
+  "showCacheMissNotices": true,
   "theme": "bearded-arc",
   "quietStartup": true,
   "editorPaddingX": 2,
@@ -31,7 +32,8 @@
     "~/Dev/dotfiles/config/pi/skills"
   ],
   "extensions": [
-    "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts"
+    "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",
+    "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts"
   ],
   "subagents": {
     "disableBuiltins": true,
@@ -63,6 +65,7 @@
     "npm:pi-ask-user",
     "npm:pi-subagents",
     "npm:@taterdoge/pi-ayu",
-    "npm:pi-usage-widget"
+    "npm:pi-usage-widget",
+    "npm:pi-context-prune"
   ]
 }
