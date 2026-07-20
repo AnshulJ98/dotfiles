@@ -22,8 +22,8 @@ build() {
 }
 
 emit() {
-  build "$1/AGENTS.md"      persona.md standards.md ops.md
-  build "$1/AGENTS.work.md" persona.md standards.md ops.md env.work.md
+  build "$1/AGENTS.md"      persona.md standards.md ops.md ladder.md
+  build "$1/AGENTS.work.md" persona.md standards.md ops.md env.work.md ladder.md
 }
 
 if [[ "${1:-}" == "--check" ]]; then
