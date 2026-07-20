@@ -143,7 +143,7 @@
       "Bash(wget * | bash)"
     ]
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "skillOverrides": {
     "caveman": "user-invocable-only",
     "grill-me": "off"
@@ -361,7 +361,7 @@
     "security-guidance@claude-plugins-official": true,
     "planning-with-files@planning-with-files": true
   },
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
