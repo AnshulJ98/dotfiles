@@ -6,6 +6,7 @@ fallbackModels: openai-codex/gpt-5.4-mini
 thinking: low
 tools: read, grep, find, ls, bash
 output: context.md
+timeoutMs: 300000
 defaultProgress: true
 systemPromptMode: replace
 inheritProjectContext: true
