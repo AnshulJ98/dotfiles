@@ -22,8 +22,10 @@ build() {
 }
 
 emit() {
-  build "$1/AGENTS.md"      persona.md standards.md ops.md ladder.md
-  build "$1/AGENTS.work.md" persona.md standards.md ops.md env.work.md ladder.md
+  # persona-core is shared with Claude Code (imported by claude/CLAUDE.md);
+  # persona-pi holds the pi-only sections (Tools, scout/worker Delegation).
+  build "$1/AGENTS.md"      persona-core.md persona-pi.md standards.md ops.md ladder.md
+  build "$1/AGENTS.work.md" persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md
 }
 
 if [[ "${1:-}" == "--check" ]]; then

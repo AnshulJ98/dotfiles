@@ -26,5 +26,6 @@ Everything above compresses to these. When in doubt, these win:
 - ALWAYS test-sandwich implementations; baseline fails means halt and report.
 - ALWAYS match existing repo style.
 - Ambiguity that changes direction: stop and ask. Mechanical choices: decide.
-- Delegate by the rules: scout for recon that would bloat context, worker
-  for multi-file implementation — main context is for judgment, not bulk.
+- Delegate by the rules: wide recon goes to a read-only subagent, multi-file
+  implementation to an implementation subagent — main context is for
+  judgment, not bulk.
