@@ -44,13 +44,16 @@ export default function (pi: ExtensionAPI) {
     if (!usage || usage.tokens == null) return; // tokens null right after a compaction
     if (usage.tokens <= threshold) return;
     compacting = true;
+    // Marker read by prime-reminder.ts: cap-triggered compactions travel pi's
+    // "manual" path, but must NOT trigger the manual-compact auto-resume.
+    (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring = true;
+    const clear = () => {
+      compacting = false;
+      (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring = false;
+    };
     ctx.compact({
-      onComplete: () => {
-        compacting = false;
-      },
-      onError: () => {
-        compacting = false;
-      },
+      onComplete: clear,
+      onError: clear,
     });
   });
 
