@@ -44,13 +44,14 @@ export default function (pi: ExtensionAPI) {
     pending = true;
     if (event.reason === "manual" && !event.willRetry && !fromCap) {
       // Manual /compact aborted the run; try to resume it. Deferred past
-      // compact()'s unwind (session is agent-disconnected during the event).
-      // Verified swallowed in headless RPC mode; if it is also inert in the
-      // TUI, the armed reminder still fires on the user's next prompt — the
-      // resume attempt can only help, never harm.
+      // compact()'s unwind: pi drops prompts that arrive while a compaction
+      // is settling (verified 2026-07-21 — accepted with success:true, never
+      // run). 1s landed inside that window; 5s clears it in testing. If the
+      // resume is still swallowed, the armed reminder above fires on the
+      // user's next prompt — this attempt can only help, never harm.
       setTimeout(() => {
         ctx.sendUserMessage(RESUME);
-      }, 1000);
+      }, 5000);
     }
   });
 
