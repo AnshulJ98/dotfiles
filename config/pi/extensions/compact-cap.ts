@@ -30,6 +30,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_THRESHOLD = 190_000;
 
+// Handshake key shared with prime-reminder.ts (Symbol.for = cross-file safe).
+// Caveat: the cap is only as good as getContextUsage(), which reflects the
+// provider's usage accounting — on models with junk telemetry (e.g.
+// qwen3.7-max via opencode-go) it is blind. Per-provider guarantee, not absolute.
+const FIRING = Symbol.for("pi.compact-cap.firing");
+
 export default function (pi: ExtensionAPI) {
   if (DEFAULT_THRESHOLD <= 0) return; // hard-disabled via constant
   if (process.env.PI_SUBAGENT_CHILD === "1") return; // never run in subagent children
@@ -46,10 +52,10 @@ export default function (pi: ExtensionAPI) {
     compacting = true;
     // Marker read by prime-reminder.ts: cap-triggered compactions travel pi's
     // "manual" path, but must NOT trigger the manual-compact auto-resume.
-    (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring = true;
+    (globalThis as Record<symbol, unknown>)[FIRING] = true;
     const clear = () => {
       compacting = false;
-      (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring = false;
+      (globalThis as Record<symbol, unknown>)[FIRING] = false;
     };
     ctx.compact({
       onComplete: clear,

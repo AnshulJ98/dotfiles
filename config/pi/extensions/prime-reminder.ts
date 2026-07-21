@@ -28,7 +28,11 @@ const REMINDER =
 const RESUME =
   "A task was likely in progress when this compaction interrupted the run: resume it " +
   "from where it left off using the compaction summary above. If nothing was actually " +
-  "in progress, say you are ready and stop.";
+  "in progress, say you are ready and stop. Do not ask interactive questions " +
+  "(ask_user) to resume — if input is genuinely required, state what is needed and stop.";
+
+// Shared with compact-cap.ts — cap-triggered compactions must not auto-resume.
+const FIRING = Symbol.for("pi.compact-cap.firing");
 
 export default function (pi: ExtensionAPI) {
   if (process.env.PI_SUBAGENT_CHILD === "1") return; // children are short-lived; not worth the tokens
@@ -36,22 +40,18 @@ export default function (pi: ExtensionAPI) {
   let pending = false;
 
   pi.on("session_compact", async (event, ctx) => {
-    const fromCap = Boolean(
-      (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring,
-    );
+    const fromCap = Boolean((globalThis as Record<symbol, unknown>)[FIRING]);
     // Always arm the passive reminder — whichever turn comes next (auto-resume
     // or the user's manual re-prompt) gets the pointer injected. Fail-open.
     pending = true;
     if (event.reason === "manual" && !event.willRetry && !fromCap) {
-      // Manual /compact aborted the run; try to resume it. Deferred past
-      // compact()'s unwind: pi drops prompts that arrive while a compaction
-      // is settling (verified 2026-07-21 — accepted with success:true, never
-      // run). 1s landed inside that window; 5s clears it in testing. If the
-      // resume is still swallowed, the armed reminder above fires on the
-      // user's next prompt — this attempt can only help, never harm.
-      setTimeout(() => {
-        ctx.sendUserMessage(RESUME);
-      }, 5000);
+      // Manual /compact aborted the run; queue a resume. deliverAs "followUp"
+      // rides pi's message queue instead of racing the post-compaction
+      // settling window, where raw sends are ACKed then silently dropped
+      // (verified 2026-07-21; a timer bet against that unobservable window
+      // was the previous, worse design). If this is still swallowed, the
+      // armed reminder above fires on the user's next prompt regardless.
+      ctx.sendUserMessage(RESUME, { deliverAs: "followUp" });
     }
   });
 
