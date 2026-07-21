@@ -55,14 +55,24 @@ export EDITOR='nvim'  # or 'nvim' if you switch
 
 # === Lazy Load NVM ===
 export NVM_DIR="$HOME/.nvm"
+
+# Eagerly put the default node version's bin dir on PATH without sourcing
+# nvm.sh (which is the slow part). This makes node, npm, and every npm
+# global binary (pi, etc.) resolvable in a fresh shell. The alias file may
+# hold a partial version ("24"), so glob for the highest matching install.
+_nvm_default="$(cat "$NVM_DIR/alias/default" 2>/dev/null)"
+_nvm_bins=("$NVM_DIR/versions/node/v${_nvm_default#v}"*/bin(Nn))
+(( $#_nvm_bins )) && export PATH="${_nvm_bins[-1]}:$PATH"
+unset _nvm_default _nvm_bins
+
+# nvm itself stays lazy — only sourced when you actually call it
+# (version switching, installs).
 nvm() {
-  unset -f nvm node npm
+  unset -f nvm
   [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"
   [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
   nvm "$@"
 }
-node() { nvm; node "$@"; }
-npm() { nvm; npm "$@"; }
 
 # === Other Tool Activations ===
 [[ -f "$HOME/.langflow/uv/env" ]] && source "$HOME/.langflow/uv/env"
