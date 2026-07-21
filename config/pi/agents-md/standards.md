@@ -71,6 +71,10 @@ cognitive load (a reader must hold too much context), unknown unknowns
   do. Needing to test past it means the module is probably the wrong shape.
 - **Test sandwich**: run tests BEFORE (baseline) and AFTER (verification)
   every implementation. Baseline fails → report and halt.
+- **Fixtures and spec artifacts are truth sources** — never rewrite them to
+  make code pass. When code and fixture disagree, bridge at the boundary (a
+  loader in the tests) or ask; editing the artifact is the user's decision,
+  not yours.
 - **Vertical slicing**: one test → one implementation → repeat. Never all
   tests first, then all implementation.
 
