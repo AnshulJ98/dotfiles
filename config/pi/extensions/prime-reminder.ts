@@ -26,8 +26,7 @@ const REMINDER =
   "ladder before writing code, delegate per the dispatch policy.";
 
 const RESUME =
-  REMINDER +
-  " A task was likely in progress when this compaction interrupted the run: resume it " +
+  "A task was likely in progress when this compaction interrupted the run: resume it " +
   "from where it left off using the compaction summary above. If nothing was actually " +
   "in progress, say you are ready and stop.";
 
@@ -40,12 +39,19 @@ export default function (pi: ExtensionAPI) {
     const fromCap = Boolean(
       (globalThis as { __compactCapFiring?: boolean }).__compactCapFiring,
     );
-    if (event.reason === "manual" && !event.willRetry && !fromCap) {
-      pending = false; // the resume turn carries the reminder inline
-      ctx.sendUserMessage(RESUME);
-      return;
-    }
+    // Always arm the passive reminder — whichever turn comes next (auto-resume
+    // or the user's manual re-prompt) gets the pointer injected. Fail-open.
     pending = true;
+    if (event.reason === "manual" && !event.willRetry && !fromCap) {
+      // Manual /compact aborted the run; try to resume it. Deferred past
+      // compact()'s unwind (session is agent-disconnected during the event).
+      // Verified swallowed in headless RPC mode; if it is also inert in the
+      // TUI, the armed reminder still fires on the user's next prompt — the
+      // resume attempt can only help, never harm.
+      setTimeout(() => {
+        ctx.sendUserMessage(RESUME);
+      }, 1000);
+    }
   });
 
   pi.on("before_agent_start", async () => {
