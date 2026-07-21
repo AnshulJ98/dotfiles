@@ -33,7 +33,8 @@
   ],
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",
-    "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts"
+    "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts",
+    "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts"
   ],
   "subagents": {
     "disableBuiltins": true,
