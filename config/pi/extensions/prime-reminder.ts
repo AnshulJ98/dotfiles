@@ -3,19 +3,19 @@
  *
  * Two behaviors, both timed to the moment instructions/tasks actually break:
  *
- * 1. MANUAL /compact mid-task ABORTS the run and pi never resumes it (core
- *    behavior: AgentSession.compact() disconnects + aborts, no retry). This
- *    extension auto-resumes: after a user-initiated compaction it sends one
- *    continuation message (reminder + "resume the in-progress task").
+ * 1. Compactions that ABORT a running task get an auto-resume (pi never
+ *    retries the run itself: AgentSession.compact() disconnects + aborts).
+ *    Two cases: manual /compact mid-task, and compact-cap's turn_end path
+ *    (mid-run cap firing). One queued continuation message resumes the task.
  *
- * 2. Any OTHER compaction (native threshold, overflow, compact-cap backstop)
- *    arms a one-shot reminder injected on the NEXT user turn — a brief pointer
- *    back to the Prime Directives / Solution Ladder, not a re-injection of the
- *    rules themselves. Sessions that never compact never pay a token.
+ * 2. Every compaction (native threshold, overflow, cap-after-settle) arms a
+ *    one-shot reminder injected on the NEXT turn — a brief pointer back to
+ *    the Prime Directives / Solution Ladder, not a re-injection of the rules.
+ *    Sessions that never compact never pay a token.
  *
- * compact-cap.ts marks its own firings via globalThis.__compactCapFiring so a
- * backstop compaction (task already settled) never triggers the auto-resume.
- * Skipped in pi-subagents children.
+ * compact-cap.ts signals via Symbol.for keys whether a compaction is its own
+ * firing and whether that firing interrupted a run. Skipped in pi-subagents
+ * children.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -31,27 +31,67 @@ const RESUME =
   "in progress, say you are ready and stop. Do not ask interactive questions " +
   "(ask_user) to resume — if input is genuinely required, state what is needed and stop.";
 
-// Shared with compact-cap.ts — cap-triggered compactions must not auto-resume.
+// Shared with compact-cap.ts. FIRING: cap compaction in flight. INTERRUPTED:
+// it fired mid-run (turn_end path) and aborted an active task — resume it.
 const FIRING = Symbol.for("pi.compact-cap.firing");
+const INTERRUPTED = Symbol.for("pi.compact-cap.interrupted");
 
 export default function (pi: ExtensionAPI) {
   if (process.env.PI_SUBAGENT_CHILD === "1") return; // children are short-lived; not worth the tokens
 
+  if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
+    pi.on("session_start", async (_event, ctx) => {
+      ctx.ui.notify("prime-reminder: loaded, handlers registered", "info");
+    });
+  }
+
   let pending = false;
 
   pi.on("session_compact", async (event, ctx) => {
-    const fromCap = Boolean((globalThis as Record<symbol, unknown>)[FIRING]);
+    const g = globalThis as Record<symbol, unknown>;
+    const fromCap = Boolean(g[FIRING]);
+    const capInterrupted = Boolean(g[INTERRUPTED]);
+    if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
+      ctx.ui.notify(
+        `prime-reminder: session_compact reason=${event.reason} willRetry=${String(event.willRetry)} fromCap=${String(fromCap)} interrupted=${String(capInterrupted)}`,
+        "info",
+      );
+    }
     // Always arm the passive reminder — whichever turn comes next (auto-resume
     // or the user's manual re-prompt) gets the pointer injected. Fail-open.
     pending = true;
-    if (event.reason === "manual" && !event.willRetry && !fromCap) {
-      // Manual /compact aborted the run; queue a resume. deliverAs "followUp"
-      // rides pi's message queue instead of racing the post-compaction
-      // settling window, where raw sends are ACKed then silently dropped
-      // (verified 2026-07-21; a timer bet against that unobservable window
-      // was the previous, worse design). If this is still swallowed, the
-      // armed reminder above fires on the user's next prompt regardless.
-      ctx.sendUserMessage(RESUME, { deliverAs: "followUp" });
+    // Resume whenever a RUNNING task was aborted: manual /compact mid-task,
+    // or compact-cap's turn_end firing (INTERRUPTED symbol). Sends from
+    // inside THIS handler race the compaction's agent-disconnect window
+    // (session_compact is emitted before reconnect) and get eaten; deferring
+    // 1500ms clears both that window and the aborted run's unwind. The send
+    // itself is guarded — an uncaught throw inside setTimeout kills the pi
+    // process (learned 2026-07-23). Fail-open: if the send is still lost,
+    // the armed reminder above injects on the user's next prompt.
+    const manualInterrupt = event.reason === "manual" && !event.willRetry && !fromCap;
+    if (manualInterrupt || (fromCap && capInterrupted)) {
+      if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
+        ctx.ui.notify("prime-reminder: scheduling RESUME send", "info");
+      }
+      setTimeout(() => {
+        try {
+          // pi.sendUserMessage, NOT ctx.sendUserMessage: 0.81.x exposes the
+          // send on the ExtensionAPI object; the events ctx lacks it (calling
+          // it there throws "not a function" — the silent resume failure).
+          pi.sendUserMessage(RESUME);
+          if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
+            ctx.ui.notify("prime-reminder: RESUME sendUserMessage returned", "info");
+          }
+        } catch (e) {
+          // reminder remains armed; never crash the harness from a timer
+          if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
+            ctx.ui.notify(
+              `prime-reminder: RESUME send threw: ${e instanceof Error ? e.message : String(e)}`,
+              "warning",
+            );
+          }
+        }
+      }, 1500);
     }
   });
 
