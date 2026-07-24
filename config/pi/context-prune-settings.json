@@ -4,6 +4,5 @@
   "summarizerModel": "openai-codex/gpt-5.4-mini",
   "summarizerThinking": "off",
   "pruneOn": "agent-message",
-  "remindUnprunedCount": true,
-  "batchingMode": "turn"
+  "batchingMode": "agent-message"
 }

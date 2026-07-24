@@ -1,8 +1,8 @@
 {
-  "lastChangelogVersion": "0.80.10",
+  "lastChangelogVersion": "0.81.1",
   "defaultProvider": "opencode-go",
-  "defaultModel": "deepseek-v4-flash",
-  "defaultThinkingLevel": "max",
+  "defaultModel": "kimi-k3",
+  "defaultThinkingLevel": "high",
   "hideThinkingBlock": false,
   "showCacheMissNotices": true,
   "theme": "bearded-arc",
