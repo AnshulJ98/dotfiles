@@ -45,10 +45,7 @@
     "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts"
   ],
   "subagents": {
-    "disableBuiltins": true,
-    "parallel": {
-      "concurrency": 2
-    }
+    "disableBuiltins": true
   },
   "enableSkillCommands": true,
   "packages": [

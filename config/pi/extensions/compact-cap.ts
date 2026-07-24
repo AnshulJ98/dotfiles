@@ -13,9 +13,9 @@
  * agent run (AgentSession.compact() disconnects + aborts) — the turn_end path
  * accepts that abort deliberately: it fires at a clean turn boundary (assistant
  * message + tool executions complete) and prime-reminder.ts auto-resumes the
- * task via a queued follow-up, so context stops within one turn of the cap
- * instead of ballooning 20-50k while the run finishes. The agent_settled path
- * covers growth that lands on a run's final message; nothing to resume there.
+ * task (deferred pi.sendUserMessage), so context stops within one turn of the
+ * cap instead of ballooning 20-50k while the run finishes. The agent_settled
+ * path covers growth that lands on a run's final message; nothing to resume.
  *
  * Skipped in pi-subagents children (PI_SUBAGENT_CHILD=1): children inherit
  * settings.json extensions, and compacting a child session wastes an LLM
@@ -48,6 +48,7 @@ export default function (pi: ExtensionAPI) {
   let enabled = true;
   let threshold = DEFAULT_THRESHOLD;
   let compacting = false; // guard against re-entrant compaction
+  let failureCooldownUntil = 0; // after a failed mid-run compaction, back off
 
   interface CapCtx {
     getContextUsage(): { tokens?: number | null } | undefined;
@@ -65,24 +66,56 @@ export default function (pi: ExtensionAPI) {
     const g = globalThis as Record<symbol, unknown>;
     g[FIRING] = true;
     g[INTERRUPTED] = interruptsRun;
-    // The resume of an interrupted run is prime-reminder's job — its
-    // session_compact ctx has sendUserMessage; the turn_end ctx here does NOT
-    // (calling it crashed pi with an uncaught TypeError, 2026-07-23). The
-    // session_compact event is emitted BEFORE compact() resolves, so the
-    // symbols are still set when prime-reminder reads them.
+    // On SUCCESS the resume of an interrupted run is prime-reminder's job:
+    // session_compact (emitted before compact() resolves, symbols still set)
+    // triggers its deferred pi.sendUserMessage. On FAILURE session_compact
+    // never fires (pi emits it only on the success path), yet the run was
+    // already aborted at compact() entry — without the recovery below the
+    // task would silently die, a worse outcome than no cap at all.
     const clear = () => {
       compacting = false;
       g[FIRING] = false;
       g[INTERRUPTED] = false;
     };
-    ctx.compact({ onComplete: clear, onError: clear });
+    const notify = (msg: string, type: string) => {
+      try {
+        (ctx as unknown as { ui: { notify(m: string, t: string): void } }).ui.notify(msg, type);
+      } catch {
+        // stale ctx after session switch/reload — nothing to notify
+      }
+    };
+    ctx.compact({
+      onComplete: clear,
+      onError: (e) => {
+        clear();
+        if (!interruptsRun) return;
+        // Aborted run + failed summarization: resume with UNREDUCED context
+        // and back off so a persistently failing provider doesn't thrash an
+        // abort/resume loop at every turn boundary.
+        failureCooldownUntil = Date.now() + 5 * 60_000;
+        notify(
+          `compact-cap: compaction failed (${e.message}) — resuming the interrupted task uncompacted, retrying the cap in 5 min`,
+          "warning",
+        );
+        setTimeout(() => {
+          try {
+            pi.sendUserMessage(
+              "A compaction attempt interrupted your in-progress task and then failed; context is unchanged. " +
+                "Resume the task from where it left off. Do not ask interactive questions to resume.",
+            );
+          } catch {
+            // fail-open: the user's next prompt continues the session
+          }
+        }, 1500);
+      },
+    });
   };
 
   // Mid-run path: turn_end fires at turn boundaries inside the agentic loop
   // (assistant message + its tool executions complete, next LLM call not yet
-  // useful). ctx.compact() aborts the run — prime-reminder auto-resumes it via
-  // a queued follow-up, so the task continues from the summary instead of
-  // ballooning 20-50k past the cap while the run finishes on its own.
+  // useful). ctx.compact() aborts the run — prime-reminder auto-resumes it
+  // (deferred pi.sendUserMessage), so the task continues from the summary
+  // instead of ballooning 20-50k past the cap while the run finishes.
   pi.on("turn_end", async (_event, ctx) => {
     if (process.env.PI_COMPACT_CAP_DEBUG === "1") {
       const u = ctx.getContextUsage();
@@ -92,6 +125,7 @@ export default function (pi: ExtensionAPI) {
       );
     }
     if (!enabled || compacting) return;
+    if (Date.now() < failureCooldownUntil) return;
     if (!overBudget(ctx)) return;
     fire(ctx, true);
   });
@@ -134,12 +168,19 @@ export default function (pi: ExtensionAPI) {
       const m = arg.match(/^(\d+(?:\.\d+)?)(k)?$/);
       if (m) {
         const n = Math.round(parseFloat(m[1]) * (m[2] ? 1000 : 1));
+        if (n === 0) {
+          enabled = false;
+          ctx.ui.notify("compact-cap: off for this session (0 = off)", "info");
+          return;
+        }
         // Floor: below compaction's own output size (keepRecentTokens ~16k +
         // summary) the cap re-trips immediately after every compaction — a
         // compact/resume thrash loop. 30k clears that floor with margin.
         if (n > 0 && n < 30_000) {
           ctx.ui.notify(
-            "compact-cap: thresholds below 30k thrash (compaction output alone exceeds them) — not set",
+            n < 1000
+              ? `compact-cap: ${n} tokens is below the 30k floor — did you mean ${n}k?`
+              : "compact-cap: thresholds below 30k thrash (compaction output alone exceeds them) — not set",
             "warning",
           );
           return;

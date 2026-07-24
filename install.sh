@@ -101,6 +101,7 @@ link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
 link "$DOT/config/pi/agents"        "$HOME/.pi/agent/agents"
 link "$DOT/config/pi/subagent-config.json" "$HOME/.pi/agent/extensions/subagent/config.json"
 link "$DOT/config/pi/context-prune-settings.json" "$HOME/.pi/agent/context-prune/settings.json"
+link "$DOT/config/pi/themes/bearded-arc.json" "$HOME/.pi/agent/themes/bearded-arc.json"
 
 # 7. ~/.copilot/* ------------------------------------------------------------
 mkdir -p "$HOME/.copilot"
