@@ -2,11 +2,11 @@
 name: worker
 description: "Implementation agent. Writes code, runs tests, verifies changes. Scoped to explicitly assigned files only."
 model: github-copilot/claude-opus-4.8
-fallbackModels: openai-codex/gpt-5.5, github-copilot/claude-sonnet-4.6
+fallbackModels: openai-codex/gpt-5.5, github-copilot/claude-sonnet-4.6, opencode-go/kimi-k3
 thinking: high
 tools: read, grep, find, ls, bash, edit, write
 timeoutMs: 3600000
-defaultContext: fork
+defaultContext: fresh
 defaultProgress: true
 systemPromptMode: replace
 inheritProjectContext: true
@@ -48,3 +48,7 @@ If you hit genuine ambiguity that would change the implementation direction, sto
 1. **Changes** — what files you modified and why
 2. **Tests** — which tests pass, any new tests added
 3. **Issues** — anything the main agent should know about
+
+Total budget roughly 300 words. Diffs and full test output stay out of the
+return; write anything longer to a file and return the path. Every word you
+return is re-billed in the parent's context on every later turn.
