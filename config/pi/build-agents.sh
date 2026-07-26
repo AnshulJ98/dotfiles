@@ -22,23 +22,28 @@ build() {
 }
 
 emit() {
-  # persona-core is shared with Claude Code (imported by claude/CLAUDE.md);
-  # persona-pi holds the pi-only sections (Tools, scout/worker Delegation).
+  # persona-core/standards/ops/ladder are shared across harnesses;
+  # persona-pi holds the pi-only sections (Tools, Delegation, memory, PDF),
+  # claude-delta the Claude-Code-only ones (subagents, hooks, MCP memory).
+  # ladder.md is concatenated LAST in every variant (recency slot).
   build "$1/AGENTS.md"      persona-core.md persona-pi.md standards.md ops.md ladder.md
   build "$1/AGENTS.work.md" persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md
+  build "$1/CLAUDE.md"      persona-core.md claude-delta.md standards.md ops.md ladder.md
 }
 
 if [[ "${1:-}" == "--check" ]]; then
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   emit "$tmp"
-  if diff -q "$tmp/AGENTS.md" AGENTS.md >/dev/null && diff -q "$tmp/AGENTS.work.md" AGENTS.work.md >/dev/null; then
-    echo "OK: AGENTS files match fragments"
+  if diff -q "$tmp/AGENTS.md" AGENTS.md >/dev/null \
+    && diff -q "$tmp/AGENTS.work.md" AGENTS.work.md >/dev/null \
+    && diff -q "$tmp/CLAUDE.md" CLAUDE.md >/dev/null; then
+    echo "OK: AGENTS/CLAUDE files match fragments"
   else
-    echo "DRIFT: AGENTS files do not match fragments — run build-agents.sh" >&2
+    echo "DRIFT: generated files do not match fragments — run build-agents.sh" >&2
     exit 1
   fi
 else
   emit .
-  echo "Wrote AGENTS.md ($(wc -l <AGENTS.md | tr -d ' ') lines), AGENTS.work.md ($(wc -l <AGENTS.work.md | tr -d ' ') lines)"
+  echo "Wrote AGENTS.md ($(wc -l <AGENTS.md | tr -d ' ') lines), AGENTS.work.md ($(wc -l <AGENTS.work.md | tr -d ' ') lines), CLAUDE.md ($(wc -l <CLAUDE.md | tr -d ' ') lines)"
 fi
