@@ -71,7 +71,6 @@
     "npm:pi-ask-user",
     "npm:pi-subagents",
     "npm:@taterdoge/pi-ayu",
-    "npm:pi-usage-widget",
-    "npm:pi-context-prune"
+    "npm:pi-usage-widget"
   ]
 }
