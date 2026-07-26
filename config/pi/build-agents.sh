@@ -21,14 +21,22 @@ build() {
   } > "$out"
 }
 
+# Fragment manifests. ORDER IS LOAD-BEARING (Lost-in-the-Middle: models
+# weight the extremes of the prompt; the middle decays). persona leads
+# (primacy: identity + dispatch contracts); standards/ops sit mid;
+# ladder.md is concatenated LAST in every variant (recency: the Solution
+# Ladder + Prime Directives get the final-word slot).
+# Variants differ ONLY by fragment selection/swap — never by in-fragment
+# conditionals. Batch fragment edits: every edit cache-misses all surfaces
+# on their next session.
+PI_HOME=(persona-core.md persona-pi.md standards.md ops.md ladder.md)
+PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md)
+CLAUDE=(persona-core.md claude-delta.md standards.md ops.md ladder.md)
+
 emit() {
-  # persona-core/standards/ops/ladder are shared across harnesses;
-  # persona-pi holds the pi-only sections (Tools, Delegation, memory, PDF),
-  # claude-delta the Claude-Code-only ones (subagents, hooks, MCP memory).
-  # ladder.md is concatenated LAST in every variant (recency slot).
-  build "$1/AGENTS.md"      persona-core.md persona-pi.md standards.md ops.md ladder.md
-  build "$1/AGENTS.work.md" persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md
-  build "$1/CLAUDE.md"      persona-core.md claude-delta.md standards.md ops.md ladder.md
+  build "$1/AGENTS.md"      "${PI_HOME[@]}"
+  build "$1/AGENTS.work.md" "${PI_WORK[@]}"
+  build "$1/CLAUDE.md"      "${CLAUDE[@]}"
 }
 
 if [[ "${1:-}" == "--check" ]]; then

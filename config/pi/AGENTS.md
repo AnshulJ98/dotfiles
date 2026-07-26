@@ -200,6 +200,9 @@ every caller.
 - Branches are lowercase-hyphen with `feature/` `bugfix/` `hotfix/`
   `refactor/` prefixes. Commit messages are conventional
   (`<type>: <description>`). Merge to master with `--no-ff`.
+- Agent instruction changes go through `config/pi/agents-md/` fragments in
+  the dotfiles repo. Editing a generated `AGENTS.md` or `CLAUDE.md`
+  directly is an error; `build-agents.sh --check` enforces this.
 
 
 # Operating Rules
