@@ -71,11 +71,6 @@ link "$DOT/config/nvim"            "$HOME/.config/nvim"
 link "$DOT/config/kitty"           "$HOME/.config/kitty"
 link "$DOT/config/starship.toml"   "$HOME/.config/starship.toml"
 
-# OpenCode is item-by-item because node_modules + lock stays machine-local
-mkdir -p "$HOME/.config/opencode"
-for item in AGENTS.md opencode.json ocx.jsonc agent command; do
-  [ -e "$DOT/config/opencode/$item" ] && link "$DOT/config/opencode/$item" "$HOME/.config/opencode/$item"
-done
 
 # 5. ~/.claude/* -------------------------------------------------------------
 mkdir -p "$HOME/.claude"
@@ -131,7 +126,6 @@ cat <<'EOF'
 Remaining manual steps (not automatable):
   • Sign into Claude Code:    `claude` then follow OAuth flow
   • Sign into Copilot CLI:    `gh auth login` then `copilot auth`
-  • Install OpenCode if used: see https://opencode.ai/docs/install
   • Set up MCP server creds:  edit ~/.copilot/mcp-config.json tokens
   • Generate SSH keys:        `ssh-keygen -t ed25519`
   • Sign into GitHub:         `gh auth login`

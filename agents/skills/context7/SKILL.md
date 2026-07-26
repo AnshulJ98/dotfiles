@@ -1,53 +1,49 @@
 ---
 name: context7
-description: Query up-to-date library documentation and code examples via Context7. Use when the agent needs current API docs, version-specific behavior, or code examples for any programming library.
+description: Query up-to-date library documentation and code examples via the Context7 HTTP API (no MCP). Use when the agent needs current API docs, version-specific behavior, or code examples for any programming library.
 ---
 
-# Context7 — Live Library Documentation
+# Context7 — Live Library Documentation (HTTP API)
+
+Direct HTTP calls, same backend the pi `@upstash/context7-pi` package uses.
+No MCP server, no resident tool schemas. Use WebFetch or `curl` via Bash.
 
 ## When to Use
 
-Activate when:
 - Setup or configuration questions ("How do I configure Next.js middleware?")
 - Code involving libraries ("Write a Prisma query for...")
-- API references ("What are the Supabase auth methods?")
-- Version-specific behavior ("Does React 19 still need forwardRef?")
-- Any mention of a specific framework or library
+- API references, version-specific behavior ("Does React 19 still need forwardRef?")
+- Any time training-data knowledge of a library may be stale
 
-## Tools
-
-Context7 exposes two tools. The names are stable; the prefix depends on the harness — Claude Code and Copilot get them from the context7 MCP server (e.g. `mcp__context7__resolve-library-id`), pi gets bare names from the `@upstash/context7-pi` package (which also ships a `/c7-docs <library> <question>` command for manual lookups).
-
-### Step 1: Resolve the Library ID
+## Step 1: Resolve the library
 
 ```
-resolve-library-id  { libraryName: "nextjs" }  →  "/vercel/next.js"
+GET https://context7.com/api/v1/search?query=<library name>
 ```
 
-### Step 2: Query Documentation
+Returns JSON `results[]` with `id` (e.g. `/vercel/next.js`), `title`,
+`description`, `trustScore`, `benchmarkScore`, `totalSnippets`,
+`lastUpdateDate`. Pick by trustScore and recency when several match; do not
+guess ids.
+
+## Step 2: Fetch focused docs
 
 ```
-query-docs  { the resolved "/org/project" id, plus a focused topic }
+GET https://context7.com/api/v1/<id>?type=txt&topic=<focus>&tokens=<n>
 ```
 
-Check the tool's parameter schema in your harness — argument names vary slightly between the MCP server and the pi package.
-
-## Common Library IDs
-
-| Library | ID |
-|---------|-----|
-| Next.js | `/vercel/next.js` |
-| React | `/facebook/react` |
-| Prisma | `/prisma/prisma` |
-| Tailwind | `/tailwindlabs/tailwindcss` |
-| shadcn/ui | `/shadcn-ui/ui` |
-| Supabase | `/supabase/supabase` |
-| tRPC | `/trpc/trpc` |
-| Zod | `/colinhacks/zod` |
-| Drizzle | `/drizzle-team/drizzle-orm` |
+- `<id>` is the resolved id including the leading slash, e.g.
+  `https://context7.com/api/v1/vercel/next.js?type=txt&topic=middleware&tokens=2500`
+- `topic` narrows to the relevant sections; always set it.
+- `tokens` caps the response size. Default to 2000-3000; raise only when the
+  first fetch was insufficient. Never fetch unbounded docs into context.
 
 ## Rules
 
-- Always resolve ID first — don't guess library IDs
-- Prefer specific topic queries over broad fetches
-- Combine with existing codebase patterns — don't blindly copy docs examples
+- Anonymous access works with rate limits. If `CONTEXT7_API_KEY` is set,
+  send `Authorization: Bearer $CONTEXT7_API_KEY` for higher limits.
+- Responses are pre-chunked snippets with source URLs; cite the source URL,
+  not context7, in user-facing output.
+- Combine with existing codebase patterns — don't blindly copy docs examples.
+- pi parity: pi's `resolve-library-id` / `query-docs` tools call these same
+  two endpoints; this skill is the Claude Code port of that setup.
