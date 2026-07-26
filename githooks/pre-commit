@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Golden test: generated AGENTS/CLAUDE outputs must match their fragments.
+exec config/pi/build-agents.sh --check

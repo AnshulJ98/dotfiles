@@ -85,6 +85,7 @@ mkdir -p "$HOME/.agents"
 link "$DOT/agents/skills" "$HOME/.agents/skills"
 
 # 6.5 ~/.pi/agent (pi coding agent) -------------------------------------------
+git -C "$DOT" config core.hooksPath githooks
 bash "$DOT/config/pi/build-agents.sh" --check || warn "pi AGENTS files drifted from fragments — run config/pi/build-agents.sh"
 mkdir -p "$HOME/.pi/agent"
 if [ "$PI_VARIANT" = "work" ]; then
