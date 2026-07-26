@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: Pattern migration across codebase using ast-grep for structural changes or ripgrep for literal patterns. Spawns parallel coder Tasks per file batch with type-check verification after each wave. Use when the user says "migrate X to Y" or "/migrate <from> <to>".
+description: Pattern migration across codebase using ast-grep for structural changes or ripgrep for literal patterns. Spawns parallel worker Tasks per file batch with type-check verification after each wave. Use when the user says "migrate X to Y" or "/migrate <from> <to>".
 allowed-tools: Bash, Read, Edit, Task, Grep, Glob
 ---
 
@@ -46,7 +46,7 @@ Thresholds:
 | Scope | Strategy |
 |-------|----------|
 | <5 files | Single coder Task |
-| 5-20 files | Parallel coder Tasks, one per file (max 4 concurrent) |
+| 5-20 files | Parallel worker Tasks, one per file (max 4 concurrent) |
 | >20 files | Batch into waves of 4, verify after each wave |
 
 ## Step 4: Dry-Run (if --dry-run)
@@ -82,7 +82,7 @@ Task(subagent_type="coder",
      Return: { filesChanged, instancesReplaced, typeCheckPassed }""")
 ```
 
-### Structural patterns — use ast-grep directly (faster than coder Tasks)
+### Structural patterns — use ast-grep directly (faster than worker Tasks)
 
 ```bash
 ast-grep --pattern '<from-pattern>' --rewrite '<to-pattern>' --lang typescript src/

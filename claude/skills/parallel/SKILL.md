@@ -17,7 +17,7 @@ The user provides tasks as:
 
 ## Step 1: Parse Tasks
 
-Extract each task. Each becomes a separate Task call to the `coder` subagent.
+Extract each task. Each becomes a separate Task call to the `worker` subagent.
 
 ## Step 2: Branch Strategy
 
@@ -127,4 +127,4 @@ EOF
 - Single-file change (overhead exceeds benefit)
 - Tasks require shared state coordination
 
-For dependent work, use the `orchestrator` subagent with phase planning instead.
+For dependent work, run the phases sequentially in the main session instead.
