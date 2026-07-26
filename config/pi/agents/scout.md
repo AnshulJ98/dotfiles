@@ -2,7 +2,7 @@
 name: scout
 description: "Read-only retrieval and research. Explores codebase, gathers context, returns file + summary digest. Never edits."
 model: github-copilot/gpt-5.4-mini
-fallbackModels: openai-codex/gpt-5.4-mini, opencode-go/glm-5.2
+fallbackModels: opencode-go/glm-5.2, openai-codex/gpt-5.4-mini
 thinking: low
 tools: read, grep, find, ls, bash
 timeoutMs: 300000
