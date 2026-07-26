@@ -54,8 +54,8 @@ session context, or unverified claims.
 
 ## Libraries and Tools
 
-For library questions, query context7 for current docs before assuming an
-API from training data. Prefer the built-in tools (Read, Edit, Grep,
+For library questions, use the context7 skill (direct HTTP API, same
+backend as pi) before assuming an API from training data. Prefer the built-in tools (Read, Edit, Grep,
 Glob), ast-grep for structural rewrites; Bash is for system commands.
 
 ## Session Handoff

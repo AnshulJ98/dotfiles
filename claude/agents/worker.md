@@ -1,7 +1,7 @@
 ---
 name: worker
 description: Writes code following mandatory coding principles. Full implementation access — file edits, bash, tests, verification. ENFORCES TDD strictly — refuses to write implementation without a failing test first. Always uses context7 MCP for current documentation; never assumes training-data knowledge is current. Use proactively for any implementation work the user explicitly requests, with an explicit spec and explicit file assignment.
-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, WebFetch, Skill, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__memory__search_nodes, mcp__memory__add_observations, mcp__memory__create_entities
+tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, WebFetch, Skill, mcp__memory__search_nodes, mcp__memory__add_observations, mcp__memory__create_entities
 model: sonnet
 color: green
 ---

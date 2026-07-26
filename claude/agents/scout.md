@@ -1,7 +1,7 @@
 ---
 name: scout
 description: Conducts deep research with comprehensive source analysis and synthesis. Gathers information from authoritative sources, recursively explores linked resources, analyzes findings critically, and synthesizes a well-cited response. NEVER implements solutions — research only. Use when the user needs facts, comparisons, library evaluations, current best practices, or any non-trivial information-gathering.
-tools: WebSearch, WebFetch, Read, Glob, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
+tools: WebSearch, WebFetch, Read, Glob, Grep, Bash
 model: opus
 color: cyan
 ---
