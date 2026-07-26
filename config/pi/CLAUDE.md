@@ -70,47 +70,69 @@ certain where certainty has been earned.
   distress.
 
 
-## Tools
+# Claude Code
 
-- Batch only tool calls already justified by the current question; never
-  speculate ahead.
+This harness is Claude Code. The fragments above are shared with the pi
+config in this repo; this section covers only what differs here.
 
-## Delegation
+## Who You're Working With
 
-Two subagents exist. Dispatch is explicit: when the user asks, or when wide
-recon or a well-specified slice is better done in isolation.
+Anshul Joshi, tech lead. Backend-heavy full stack: TypeScript and Python,
+Next.js, AWS CDK. Personal projects live in `~/Dev/`. OpenCode at work,
+Claude Code at home. Teach concepts when they come up: explain why, not
+just what.
 
-- Scout: read-only recon (files, docs, URLs, git history) returning a
-  digest. Use it before spending main context on wide reads.
-- Worker: implementation against an explicit spec with explicit file
-  assignment. Never two workers on one file. For long runs, dispatch async
-  and wait in 15-minute slices rather than blocking on work you cannot see.
+## Subagents
+
+Two custom agents, the same scout/worker split as pi. The harness already
+lists every available agent and skill with descriptions each session, so no
+catalog is kept here.
+
+- `scout`: deep retrieval with cited sources across web, docs, and code. Dispatch for wide recon that would bloat main
+  context. The built-in Explore agent covers quick read-only codebase
+  sweeps.
+- `worker`: implementation against an explicit spec with explicit file
+  assignment, TDD enforced. Never two workers on one file.
 - Subagent reports are bounded: past roughly 300 words, the full report
   goes to a file and the return carries the path plus a short summary.
-- Do not delegate work you can finish directly in fewer steps than the
-  dispatch costs.
+- Dispatch is explicit, as in pi. Planning and synthesis beyond recon stay
+  in the main agent; do not delegate work you can finish directly in fewer
+  steps than the dispatch costs.
+- Parallel work: decompose into units with non-overlapping file sets,
+  spawn all Agent calls in one message, at most 4 concurrent, never two
+  agents on one file.
 
-## Memory
+## Hooks (already automatic; do not re-implement)
 
-Persistent knowledge lives at `~/.pi/agent/memory.md`: scope headers
-(`## project`), typed bullets (`- [type] content`). Use `/memory <query>`
-for manual access. Grep it (do not read it whole) when starting on a known
-project, when hitting an error, or before an architecture decision. Append
-when a non-trivial bug is resolved, a decision is made with its reasons, a
-convention or gotcha is discovered, or the user corrects you.
+SessionStart loads git state and handoff notes. PreToolUse blocks
+catastrophic bash patterns and soft-blocks `git push --force`,
+`git reset --hard origin/X`, and `git clean -fd` (append `# yolo` to
+override in an emergency). PostToolUse auto-formats edited files.
+PreCompact dumps task state to `~/.claude/handoffs/`. Stop and
+SubagentStop write audit logs.
 
-## PDF Files
+## Memory (MCP knowledge graph)
 
-Never open a `.pdf` with the read tool. Amazon Bedrock rejects
-`application/pdf`, and a single read poisons every later message in the
-session. Use `pdftotext <file> -` for text, or load `/skill:pdf-images`
-for tables, images, and OCR.
+`mcp__memory__*` tools, shared with OpenCode, stored at
+`~/.local/state/agent-memory/memory.jsonl`. Scope by context:
+`{project}/` for project work, `tooling/` for config work, `global/` for
+cross-project knowledge. Entity types: project, decision, bugfix, gotcha,
+preference, learning, tool. Search on session start for a known project,
+on errors, and before architecture decisions. Write resolved root causes,
+decisions with their reasons, discovered conventions, and user
+corrections. Never store what the codebase already records, transient
+session context, or unverified claims.
 
-## Skills
+## Libraries and Tools
 
-Skills auto-discover from `~/.agents/skills` (shared across harnesses) and
-`~/Dev/dotfiles/config/pi/skills` (pi-only). Invoke with `/skill:X` or read
-the `SKILL.md` directly.
+For library questions, query context7 for current docs before assuming an
+API from training data. Prefer the built-in tools (Read, Edit, Grep,
+Glob), ast-grep for structural rewrites; Bash is for system commands.
+
+## Session Handoff
+
+At the end of a session with meaningful work, `/handoff` compacts it into
+a doc the SessionStart hook reloads next time.
 
 
 # Coding Standards
