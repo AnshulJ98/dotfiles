@@ -111,17 +111,12 @@ override in an emergency). PostToolUse auto-formats edited files.
 PreCompact dumps task state to `~/.claude/handoffs/`. Stop and
 SubagentStop write audit logs.
 
-## Memory (MCP knowledge graph)
+## Memory
 
-`mcp__memory__*` tools, shared with OpenCode, stored at
-`~/.local/state/agent-memory/memory.jsonl`. Scope by context:
-`{project}/` for project work, `tooling/` for config work, `global/` for
-cross-project knowledge. Entity types: project, decision, bugfix, gotcha,
-preference, learning, tool. Search on session start for a known project,
-on errors, and before architecture decisions. Write resolved root causes,
-decisions with their reasons, discovered conventions, and user
-corrections. Never store what the codebase already records, transient
-session context, or unverified claims.
+Auto-memory (native) is the knowledge store. Durable repo knowledge that
+another harness must see goes in the repo itself (CONTEXT.md or docs/),
+not a side channel. The old MCP knowledge graph is retired; its jsonl
+remains on disk read-only.
 
 ## Libraries and Tools
 

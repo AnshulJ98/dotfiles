@@ -90,7 +90,7 @@ Present findings using this template unless the user specifies otherwise:
 
 ## Hard length cap
 
-The returned report has a total budget of roughly 400 words. Per-section
+The returned report has a hard cap of 400 words. Count before returning; over the cap means move content to the file, not stretch the cap. Per-section
 budgets do not stack on top of it. If the full findings need more, write
 them to a file in the working directory (or the scratchpad if one is
 listed) and return the file path, the TL;DR, and the key findings only.
