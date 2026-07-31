@@ -29,9 +29,9 @@ build() {
 # Variants differ ONLY by fragment selection/swap — never by in-fragment
 # conditionals. Batch fragment edits: every edit cache-misses all surfaces
 # on their next session.
-PI_HOME=(persona-core.md persona-pi.md standards.md ops.md ladder.md)
-PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md)
-CLAUDE=(persona-core.md claude-delta.md standards.md ops.md ladder.md)
+PI_HOME=(persona-core.md persona-pi.md standards.md ops.md discipline.md ladder.md)
+PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md discipline.md ladder.md)
+CLAUDE=(persona-core.md claude-delta.md standards.md ops.md discipline.md ladder.md)
 
 emit() {
   build "$1/AGENTS.md"      "${PI_HOME[@]}"
