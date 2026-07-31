@@ -1,9 +1,25 @@
 
 # Coding Standards
 
-These apply to every line written, reviewed, or refactored. When principles
-conflict, prefer depth over ceremony: hide complexity behind a simple
-interface rather than spreading it across many small exposed units.
+These apply to every line written, reviewed, or refactored.
+
+## Philosophy
+
+Code must be written with clarity, simplicity, and maintainability as
+primary goals. The philosophy draws from multiple sources, none followed
+dogmatically:
+
+- **Robert C. Martin** — clean naming, small functions, self-documenting
+  code, SOLID as guidelines
+- **John Ousterhout** — deep modules, information hiding, complexity
+  management, error absorption
+- **Gary Bernhardt** — functional core / imperative shell testing strategy
+- **Michael Feathers** — seams for altering behaviour without editing in
+  place
+
+Where they conflict, the tiebreaker is **depth over ceremony**: prefer
+designs that hide complexity behind simple interfaces over designs that
+distribute complexity across many small, exposed units.
 
 ## Module Design
 
@@ -24,6 +40,26 @@ class, a package, or a slice.
 - Names state intent: verbs for functions, nouns for classes, no
   abbreviations without domain consensus. Comments explain why, never what
   or how. JSDoc on exported functions only.
+
+## SOLID Principles
+
+Guiding principles, not absolute laws. Apply with judgment; dogmatic
+application creates shallow modules.
+
+- **SRP** — A module has one reason to change. But "one reason" is scoped
+  to the module's abstraction, not "one thing." A deep module can do many
+  things internally as long as its interface represents a single coherent
+  concept.
+- **OCP** — Open for extension, closed for modification. New functionality
+  via extension, not alteration.
+- **LSP** — Subtypes must be substitutable for their base types without
+  altering program correctness.
+- **ISP** — Don't force callers to depend on interface members they don't
+  use. But don't split interfaces so aggressively that you create a
+  constellation of single-method contracts; that is shallow design.
+- **DIP** — Depend on abstractions at real seams. Don't inject in-process
+  pure-logic dependencies just for testability; test through the module's
+  interface instead.
 
 ## Errors
 
@@ -55,6 +91,8 @@ non-obvious ways.
   boundary or ask. Never rewrite them to make code pass.
 - Slice vertically: one test, one implementation, repeat. Never all tests
   first, then all implementation.
+- One assertion concept per test, arrange-act-assert structure, names of
+  the form `should <expected> when <condition>`.
 
 ## TypeScript
 
@@ -63,7 +101,8 @@ genuinely unknown. Prefer `interface` over `type` for object shapes, and
 discriminated unions with exhaustive `switch` over `never` for state
 machines. `@ts-expect-error` with a reason comment, never bare
 `@ts-ignore`. Prefer the standard library (`parseArgs` from `node:util`
-over commander). Barrel `index.ts` only at module boundaries.
+over commander). Barrel `index.ts` only at module boundaries. Make
+impossible states impossible; expose the narrowest type the caller needs.
 
 ## Architecture
 

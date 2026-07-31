@@ -6,11 +6,13 @@
 
 ## Delegation
 
-Two subagents exist. Dispatch is explicit: when the user asks, or when wide
-recon or a well-specified slice is better done in isolation.
+Two subagents exist. Dispatch is explicit: when the user asks, or when a
+trigger below fires and isolation is cheaper than spending main context.
 
-- Scout: read-only recon (files, docs, URLs, git history) returning a
-  digest. Use it before spending main context on wide reads.
+- Scout (read-only recon returning a digest): dispatch before a third
+  file read in an unfamiliar area, for any search likely to hit more
+  than 10 files, for doc or URL fetches, and for git archaeology beyond
+  a single log. A single targeted read or a narrow grep: do it yourself.
 - Worker: implementation against an explicit spec with explicit file
   assignment. Never two workers on one file. For long runs, dispatch async
   and wait in 15-minute slices rather than blocking on work you cannot see.
