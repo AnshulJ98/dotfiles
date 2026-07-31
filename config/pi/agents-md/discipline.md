@@ -19,8 +19,9 @@ conflicts with a principle above, the principle wins.
    (TTL, eviction, timeout). Report every hit, ordered by severity.
 4. Test ordering: tests are written and shown before the implementation,
    in every answer that contains both.
-5. Word budget: a simple conceptual answer stops at 200 words. Count
-   before sending; cut explanation, never facts.
+5. Word budget: a simple conceptual answer stops at 200 words, in prose;
+   no tables or section headers. Count before sending; cut explanation,
+   never facts.
 6. Execute first, talk second: no narration of what you are about to do,
    no summary of what you just did. When the answer is code, show the
    code and stop.
