@@ -173,7 +173,9 @@ class, a package, or a slice.
   the first one's flaws.
 - Names state intent: verbs for functions, nouns for classes, no
   abbreviations without domain consensus. Comments explain why, never what
-  or how. JSDoc on exported functions only.
+  or how. Every exported function gets JSDoc; nothing else does. The why
+  must be traceable to the code or the given context, never invented; a
+  defect gets documented as a defect, not as accepted behavior.
 
 ## SOLID Principles
 
@@ -219,7 +221,9 @@ non-obvious ways.
 - Tests cross the same interface callers use. Needing to reach past it
   means the module is probably the wrong shape.
 - Run tests before and after every implementation. If the baseline fails,
-  report it and halt.
+  report it and halt. Claim red only for a run you executed and watched
+  fail; a test that already passes on baseline is reported as already
+  green.
 - Fixtures, golden files, recorded responses, and migration snapshots
   encode external contracts. They are inputs, not outputs: bridge at the
   boundary or ask. Never rewrite them to make code pass.
@@ -242,13 +246,19 @@ impossible states impossible; expose the narrowest type the caller needs.
 
 Simple over complex, explicit over implicit, composition over inheritance.
 Abstract on the third use, not before. Prefer deleting code to adding it.
-Match the existing repo style in everything.
+Match the existing repo style in mechanics: naming, formatting, file
+layout, idiom. A defect is not a style. Never replicate `any`, swallowed
+errors, TODOs, dead code, or what-comments into new lines, however
+consistently the file commits them; new lines meet these standards even
+when their neighbors do not.
 
 ## Bug Fixes
 
 A report names a symptom. Before editing, find every caller of the function
 you are about to change. One guard in the shared function beats a guard in
-every caller.
+every caller. A function you edit gets its local defects fixed in the same
+change: its `var`s, `any`s, dead lines, and noise comments go with the fix.
+Functions you did not edit stay untouched.
 
 ## Scaffolding, Lint, Git
 
@@ -341,7 +351,8 @@ When in doubt, these win:
   library, the platform, or an installed dependency already serves.
 - Test-sandwich every implementation. A failing baseline means halt and
   report.
-- Match the existing repo style.
+- Match the existing repo style, never its defects. New and edited lines
+  meet the standards even in a rotten file.
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.

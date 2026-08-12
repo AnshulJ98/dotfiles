@@ -27,7 +27,8 @@ When in doubt, these win:
   library, the platform, or an installed dependency already serves.
 - Test-sandwich every implementation. A failing baseline means halt and
   report.
-- Match the existing repo style.
+- Match the existing repo style, never its defects. New and edited lines
+  meet the standards even in a rotten file.
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
