@@ -60,16 +60,32 @@ link() {
   ok "linked: $dst"
 }
 
-# 3. ~/ files (shell rcs, gitconfig, wezterm) --------------------------------
-for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .wezterm.lua; do
+# 3. ~/ files (shell rcs, gitconfig, prompt) ---------------------------------
+for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .p10k.zsh; do
   [ -e "$DOT/home/$f" ] && link "$DOT/home/$f" "$HOME/$f"
 done
+
+# 3.5 zsh plugins (.zshrc sources these; not distributed via brew) -----------
+ZSH_PLUGINS="$HOME/.zsh/plugins"
+mkdir -p "$ZSH_PLUGINS"
+clone_plugin() {
+  local repo="$1" dir="$ZSH_PLUGINS/$2"
+  if [ -d "$dir" ]; then ok "plugin present: $2"; else
+    log "Cloning $2..."
+    git clone --depth=1 "$repo" "$dir"
+  fi
+}
+clone_plugin https://github.com/romkatv/powerlevel10k.git            powerlevel10k
+clone_plugin https://github.com/zdharma-continuum/fast-syntax-highlighting.git fast-syntax-highlighting
+clone_plugin https://github.com/zsh-users/zsh-autosuggestions.git    zsh-autosuggestions
 
 # 4. ~/.config/* -------------------------------------------------------------
 mkdir -p "$HOME/.config"
 link "$DOT/config/nvim"            "$HOME/.config/nvim"
 link "$DOT/config/kitty"           "$HOME/.config/kitty"
-link "$DOT/config/starship.toml"   "$HOME/.config/starship.toml"
+link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
+link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
+link "$DOT/config/borders"         "$HOME/.config/borders"
 
 
 # 5. ~/.claude/* -------------------------------------------------------------
