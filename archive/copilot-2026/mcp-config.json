@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "/opt/homebrew/bin/mcp-server-memory",
+      "args": ["--db", "/Users/anshulj/.local/state/agent-memory/memory.jsonl"],
+      "type": "stdio"
+    },
+    "playwright": {
+      "command": "/opt/homebrew/bin/playwright-mcp",
+      "type": "stdio"
+    }
+  }
+}

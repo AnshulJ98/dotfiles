@@ -98,19 +98,13 @@ link "$DOT/config/pi/agents"        "$HOME/.pi/agent/agents"
 link "$DOT/config/pi/subagent-config.json" "$HOME/.pi/agent/extensions/subagent/config.json"
 link "$DOT/config/pi/themes/bearded-arc.json" "$HOME/.pi/agent/themes/bearded-arc.json"
 
-# 7. ~/.copilot/* ------------------------------------------------------------
-mkdir -p "$HOME/.copilot"
-for item in config.json mcp-config.json settings.json statusline.sh instructions knowledge agents command; do
-  [ -e "$DOT/copilot/$item" ] && link "$DOT/copilot/$item" "$HOME/.copilot/$item"
-done
-
-# 8. VSCode Insiders (macOS-specific path) -----------------------------------
+# 7. VSCode Insiders (macOS-specific path) -----------------------------------
 mkdir -p "$VSC_USER"
 for item in settings.json keybindings.json snippets; do
   [ -e "$DOT/vscode-insiders/$item" ] && link "$DOT/vscode-insiders/$item" "$VSC_USER/$item"
 done
 
-# 9. Post-install: bootstrap nvim plugins + mason tools ----------------------
+# 8. Post-install: bootstrap nvim plugins + mason tools ----------------------
 if command -v nvim >/dev/null 2>&1; then
   log "Bootstrapping Lazy plugins (headless)..."
   nvim --headless "+Lazy! install" "+qa" || warn "Lazy install reported errors — open nvim and run :Lazy"
@@ -126,8 +120,6 @@ cat <<'EOF'
 
 Remaining manual steps (not automatable):
   • Sign into Claude Code:    `claude` then follow OAuth flow
-  • Sign into Copilot CLI:    `gh auth login` then `copilot auth`
-  • Set up MCP server creds:  edit ~/.copilot/mcp-config.json tokens
   • Generate SSH keys:        `ssh-keygen -t ed25519`
   • Sign into GitHub:         `gh auth login`
 
