@@ -1,0 +1,34 @@
+{
+  "model": "claude-sonnet-4.6",
+  "effortLevel": "high",
+  "scm.addAICoAuthor": "off",
+  "includeCoAuthoredBy": false,
+  "git.addAICoAuthor": "off",
+  "trusted_folders": [
+    "~/Dev"
+  ],
+  "showReasoning": true,
+  "disabledSkills": [
+    "d2-diagrams",
+    "mermaid-diagrams"
+  ],
+  "footer": {
+    "showModelEffort": true,
+    "showDirectory": true,
+    "showBranch": true,
+    "showContextWindow": true,
+    "showQuota": true,
+    "showAgent": true,
+    "showCodeChanges": true,
+    "showUsername": true,
+    "showCustom": true
+  },
+  "experimental": true,
+  "theme": "dark",
+  "colorMode": "default",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.copilot/statusline.sh",
+    "padding": 1
+  }
+}

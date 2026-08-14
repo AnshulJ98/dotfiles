@@ -37,7 +37,7 @@
     "~/Dev/dotfiles/config/pi/prompts"
   ],
   "skills": [
-    "~/Dev/dotfiles/config/pi/skills"
+    "~/.pi/agent/skills-local"
   ],
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",

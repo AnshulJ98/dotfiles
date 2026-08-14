@@ -15,7 +15,7 @@ Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/s
 
 ## Obsidian Knowledge Vault
 
-Document-level knowledge at `~/Documents/NotesVault`. Full rules: load the `vault` skill.
+Document-level knowledge at `~/Documents/NotesVault`. Full rules: the `vault` skill, hosted locally on the work machine (not in this repo).
 
 - **Never touch**: `Secrets/`, `DailyLogs/`, `External-Markdown/`
 - **Routing**: 1-3 sentences → `~/.pi/agent/memory.md`. Needs a document → vault under `Projects/{repo}/`
