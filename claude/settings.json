@@ -1,6 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "skillListingBudgetFraction": 0.02,
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4"
+  },
   "attribution": {
     "commit": "",
     "pr": ""
@@ -293,7 +297,7 @@
     "security-guidance@claude-plugins-official": true,
     "planning-with-files@planning-with-files": true
   },
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
@@ -358,9 +362,5 @@
         "chrome-devtools-mcp"
       ]
     }
-  },
-  "env": {
-    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
-    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4"
   }
 }
