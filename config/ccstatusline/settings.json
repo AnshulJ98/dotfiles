@@ -1,0 +1,162 @@
+{
+  "version": 3,
+  "lines": [
+    [
+      {
+        "id": "cwd",
+        "type": "current-working-dir",
+        "color": "blue",
+        "backgroundColor": "hex:171921",
+        "bold": false,
+        "rawValue": true,
+        "metadata": {
+          "abbreviateHome": "true",
+          "segments": "3"
+        }
+      },
+      {
+        "id": "git-br",
+        "type": "git-branch",
+        "color": "blue",
+        "backgroundColor": "hex:1b1e26",
+        "metadata": {
+          "hideNoGit": "true"
+        },
+        "bold": false
+      },
+      {
+        "id": "git-ch",
+        "type": "git-changes",
+        "color": "yellow",
+        "backgroundColor": "hex:292d35",
+        "metadata": {
+          "hideNoGit": "true"
+        },
+        "bold": false
+      },
+      {
+        "id": "chip-model",
+        "type": "custom-text",
+        "color": "hex:4C526B",
+        "backgroundColor": "hex:171921",
+        "customText": "Model"
+      },
+      {
+        "id": "model",
+        "type": "model",
+        "color": "blue",
+        "backgroundColor": "hex:1b1e26",
+        "rawValue": true,
+        "bold": false
+      },
+      {
+        "id": "chip-eff",
+        "type": "custom-text",
+        "color": "",
+        "backgroundColor": "hex:171921",
+        "customText": "Effort"
+      },
+      {
+        "id": "effort",
+        "type": "thinking-effort",
+        "color": "blue",
+        "backgroundColor": "hex:1b1e26",
+        "rawValue": true
+      },
+      {
+        "id": "chip-ctx",
+        "type": "custom-text",
+        "color": "hex:4c526b",
+        "backgroundColor": "hex:171921",
+        "customText": "ctx"
+      },
+      {
+        "id": "ctx-pct",
+        "type": "context-percentage",
+        "color": "blue",
+        "backgroundColor": "hex:292D35",
+        "bold": true,
+        "rawValue": true
+      },
+      {
+        "id": "ctx-tok",
+        "type": "context-length",
+        "color": "blue",
+        "backgroundColor": "hex:292d35",
+        "rawValue": true
+      },
+      {
+        "id": "chip-sess",
+        "type": "custom-text",
+        "color": "hex:4c526b",
+        "backgroundColor": "hex:171921",
+        "customText": "s"
+      },
+      {
+        "id": "sess-pct",
+        "type": "session-usage",
+        "color": "blue",
+        "backgroundColor": "hex:1b1e26",
+        "rawValue": true
+      },
+      {
+        "id": "chip-wk",
+        "type": "custom-text",
+        "color": "hex:4c526b",
+        "backgroundColor": "hex:171921",
+        "customText": "w"
+      },
+      {
+        "id": "wk-pct",
+        "type": "weekly-usage",
+        "color": "blue",
+        "backgroundColor": "hex:1b1e26",
+        "rawValue": true,
+        "metadata": {
+          "display": "time"
+        }
+      },
+      {
+        "id": "68adca67-8925-48a4-9337-da4396e70a52",
+        "type": "session-cost",
+        "color": "hex:4C526B"
+      },
+      {
+        "id": "2eedd0f4-c7cd-4143-aa95-992881ca41d2",
+        "type": "skills",
+        "color": "blue",
+        "backgroundColor": "hex:171921"
+      }
+    ]
+  ],
+  "flexMode": "full-until-compact",
+  "compactThreshold": 60,
+  "colorLevel": 3,
+  "defaultPadding": " ",
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": true,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [
+      ""
+    ],
+    "endCaps": [
+      ""
+    ],
+    "theme": "custom",
+    "autoAlign": true,
+    "continueThemeAcrossLines": true
+  },
+  "installation": {
+    "method": "pinned",
+    "installedVersion": "2.2.19"
+  }
+}
