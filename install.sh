@@ -86,6 +86,7 @@ link "$DOT/config/kitty"           "$HOME/.config/kitty"
 link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 link "$DOT/config/borders"         "$HOME/.config/borders"
+link "$DOT/config/tmux"            "$HOME/.config/tmux"
 
 
 # 5. ~/.claude/* -------------------------------------------------------------
