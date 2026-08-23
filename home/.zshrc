@@ -24,6 +24,7 @@ setopt HIST_REDUCE_BLANKS
 setopt HIST_VERIFY
 
 # === Keybinds ===
+bindkey -e  # explicit emacs keymap; EDITOR=nvim otherwise flips zsh into viins
 autoload -U up-line-or-beginning-search
 autoload -U down-line-or-beginning-search
 zle -N up-line-or-beginning-search
