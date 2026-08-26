@@ -1,20 +1,17 @@
 {
-  "lastChangelogVersion": "0.84.1",
-  "defaultProvider": "opencode-go",
-  "defaultModel": "kimi-k3",
-  "defaultThinkingLevel": "high",
+  "lastChangelogVersion": "0.84.3",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-opus-4-8",
+  "defaultThinkingLevel": "low",
   "hideThinkingBlock": false,
   "showCacheMissNotices": true,
   "theme": "bearded-arc",
   "quietStartup": true,
   "editorPaddingX": 2,
   "enabledModels": [
-    "github-copilot/claude-haiku-4.5",
-    "github-copilot/gpt-5.4-mini",
-    "github-copilot/claude-sonnet-4.6",
-    "github-copilot/claude-opus-4.6",
-    "github-copilot/claude-opus-4.8",
-    "github-copilot/gpt-5.4",
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-fable-5",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-opus-4-6",
     "openai-codex/gpt-5.5",
@@ -71,6 +68,7 @@
     "npm:pi-ask-user",
     "npm:pi-subagents",
     "npm:@taterdoge/pi-ayu",
-    "npm:pi-usage-widget"
+    "npm:pi-usage-widget",
+    "npm:@gotgenes/pi-anthropic-auth"
   ]
 }
