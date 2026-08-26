@@ -344,6 +344,8 @@ When in doubt, these win:
 - Match the existing repo style, never its defects. New and edited lines
   meet the standards even in a rotten file.
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
+  Headless (`-p`) runs cannot ask: end with the verdict and the missing
+  fact named, never with a question.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
 - Delegate wide recon to the read-only scout; keep the main context for
