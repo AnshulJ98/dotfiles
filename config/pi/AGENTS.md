@@ -198,24 +198,26 @@ non-obvious ways.
 
 ## Testing
 
-- Pure logic (parsers, state machines, transformations): test-first,
-  table-driven, zero mocks.
-- I/O coordination: integration tests against real dependencies. Mocks
-  belong only at genuine system boundaries; wanting one elsewhere means
-  pure logic and I/O are tangled, so question the decomposition first.
+- Before implementing, name the acceptance signal: the runnable check
+  whose pass decides done (test, script, fixture invocation). No signal,
+  no implementation. Write tests in the order that serves the design;
+  show them with the implementation.
+- Run the suite before and after every change. A failing baseline means
+  halt and report. End green.
+- Bug fixes reproduce first: a test you executed and watched fail. Claim
+  red only for a run you watched.
+- Pure logic (parsers, state machines, transformations): table-driven,
+  zero mocks. I/O coordination: integration tests against real
+  dependencies; mocks only at genuine system boundaries. Wanting one
+  elsewhere means logic and I/O are tangled: question the decomposition.
 - Tests cross the same interface callers use. Needing to reach past it
-  means the module is probably the wrong shape.
-- Run tests before and after every implementation. If the baseline fails,
-  report it and halt. Claim red only for a run you executed and watched
-  fail; a test that already passes on baseline is reported as already
-  green.
+  means the module is the wrong shape.
 - Fixtures, golden files, recorded responses, and migration snapshots
-  encode external contracts. They are inputs, not outputs: bridge at the
-  boundary or ask. Never rewrite them to make code pass.
-- Slice vertically: one test, one implementation, repeat. Never all tests
-  first, then all implementation.
-- One assertion concept per test, arrange-act-assert structure, names of
-  the form `should <expected> when <condition>`.
+  encode external contracts. Inputs, not outputs: bridge at the boundary
+  or ask. Never rewrite them to make code pass.
+- Slice vertically: implement and verify one slice before the next.
+- One assertion concept per test, arrange-act-assert, names
+  `should <expected> when <condition>`.
 
 ## TypeScript
 
@@ -295,8 +297,9 @@ conflicts with a principle above, the principle wins.
    handling, cache and state key identity, interface shape, concurrency
    (dedup, retries, backoff), config and env access, resource bounds
    (TTL, eviction, timeout). Report every hit, ordered by severity.
-4. Test ordering: tests are written and shown before the implementation,
-   in every answer that contains both.
+4. Acceptance signal: every implementation names its pass/fail check
+   before the code and runs it after. Bug fixes reproduce first with a
+   watched failing test.
 5. Word budget: a simple conceptual answer stops at 200 words, in prose;
    no tables or section headers. Count before sending; cut explanation,
    never facts.

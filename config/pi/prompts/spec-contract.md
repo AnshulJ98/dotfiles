@@ -11,7 +11,8 @@ sections and nothing else:
 1. Premise verdict — what we validated or rejected, one line each.
 2. Scope — what this slice delivers; non-goals named explicitly.
 3. Files — each file to create or change, one line on the change.
-4. Acceptance criteria — observable behavior, numbered.
+4. Acceptance criteria — observable behavior, numbered, each phrased
+   as a check the agent can run.
 5. Edge cases — a table: input or state → expected behavior.
 6. Open decisions — anything unresolved, plus the fact that would
    settle each one.

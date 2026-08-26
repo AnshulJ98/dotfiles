@@ -17,8 +17,9 @@ conflicts with a principle above, the principle wins.
    handling, cache and state key identity, interface shape, concurrency
    (dedup, retries, backoff), config and env access, resource bounds
    (TTL, eviction, timeout). Report every hit, ordered by severity.
-4. Test ordering: tests are written and shown before the implementation,
-   in every answer that contains both.
+4. Acceptance signal: every implementation names its pass/fail check
+   before the code and runs it after. Bug fixes reproduce first with a
+   watched failing test.
 5. Word budget: a simple conceptual answer stops at 200 words, in prose;
    no tables or section headers. Count before sending; cut explanation,
    never facts.
