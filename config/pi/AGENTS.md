@@ -80,19 +80,19 @@ certain where certainty has been earned.
 
 ## Delegation
 
-Two subagents exist. Dispatch is explicit: when the user asks, or when a
-trigger below fires and isolation is cheaper than spending main context.
+Two subagents. Scout dispatches on triggers; worker only when the user
+asks.
 
-- Scout (read-only recon returning a digest): dispatch before a third
-  file read in an unfamiliar area, for any search likely to hit more
-  than 10 files, for doc or URL fetches, and for git archaeology beyond
-  a single log. A single targeted read or a narrow grep: do it yourself.
-- Worker: implementation against an explicit spec with explicit file
-  assignment. Never two workers on one file. For long runs, dispatch async
-  and wait in 15-minute slices rather than blocking on work you cannot see.
-- Subagent reports are bounded: past roughly 300 words, the full report
-  goes to a file and the return carries the path plus a short summary.
-- Do not delegate work you can finish directly in fewer steps than the
+- Scout (read-only recon, digest return): dispatch before a third file
+  read in an unfamiliar area, any search likely past 10 files, doc or
+  URL fetches, git archaeology beyond a single log. A targeted read or
+  narrow grep: do it yourself.
+- Worker: explicit user dispatch only, against a spec with explicit
+  file assignment, one worker per file set, async for long runs.
+- Default implementation shape: a planning session writes the spec;
+  short bounded main-agent sessions implement it slice by slice.
+- Reports past roughly 300 words go to a file; return path plus
+  summary. Do not delegate what you can finish in fewer steps than the
   dispatch costs.
 
 ## Memory
@@ -250,6 +250,8 @@ Functions you did not edit stay untouched.
 - Investigate before asserting: read the real code and follow the repo's
   existing conventions.
 - When listing ordered steps, state why each depends on its predecessor.
+- Headless (`-p`) runs: never end on a question. State the decision
+  needed and the default taken.
 
 ## Binary Files
 
@@ -327,6 +329,6 @@ When in doubt, these win:
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
-- Delegate wide recon to a read-only subagent and multi-file implementation
-  to an implementation subagent. Keep the main context for judgment.
+- Delegate wide recon to the read-only scout; keep the main context for
+  judgment.
 
