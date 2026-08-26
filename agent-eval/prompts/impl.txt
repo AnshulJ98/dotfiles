@@ -1,0 +1,1 @@
+Implement slugify(title: string): string in slugify.ts in this directory: lowercase, spaces and runs of non-alphanumerics become single hyphens, no leading or trailing hyphens. Include tests runnable with node --test.
