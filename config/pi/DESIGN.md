@@ -1,6 +1,6 @@
 # pi-coding-agent — lightweight harness config
 
-_Built 2026-06-05, last revised 2026-07-26 (fragment rewrite for plain register + length governance, A/B-tested live; context-prune removed; subagent report bounds; CLAUDE.md now generated from the same fragments). Targets: work laptop (GitHub Copilot + local MLX) and personal machine (openai-codex gpt-5.5 daily-driver; anthropic direct for Claude models)._
+_Built 2026-06-05, last revised 2026-08-26 (testing rewritten to acceptance-signal-first; fragments compressed; worker demoted to explicit dispatch; model configuration declared authoritative in settings.json and agent frontmatter). Previously revised 2026-07-26 (fragment rewrite for plain register + length governance, A/B-tested live; context-prune removed; subagent report bounds; CLAUDE.md now generated from the same fragments). Targets: work laptop (GitHub Copilot + local MLX) and personal machine (openai-codex gpt-5.5 daily-driver; anthropic direct for Claude models)._
 
 ## Goal
 
@@ -11,8 +11,7 @@ A lightweight, fast, visually-pleasing pi config that delivers high-quality outp
 | Area | Decision | Why |
 |------|----------|-----|
 | Agent model | Single steerable agent + soft modes. Two opt-in subagents (scout + worker) via pi-subagents. | Token billing punishes context carried every turn; subagents run in isolated context with controlled concurrency (max 2). |
-| Default model | `opencode-go/kimi-k3`, thinking `high` (home, user trial 2026-07-23; previously openai-codex/gpt-5.5 xhigh). At work the default doesn't resolve — pi tolerates it; pick per-session. | Trying opencode-go quota; codex remains the flat-rate fallback. Escalate manually via `/model`. |
-| Model bench (Ctrl+P) | haiku-4.5 · gpt-5.4-mini · sonnet-4.6 · opus-4.6 · gpt-5.4 | Cheap→dear ladder; `/model` for the full picker. |
+| Model config | AUTHORITATIVE in `settings.json` (default provider/model/thinking, enabledModels) and `agents/*.md` frontmatter (subagent chains). This document does not track model choices. | Model churn outpaced this file twice (2026-07, 2026-08); a stale table is worse than none. Core pi has no fallback chain for the main session (verified 0.84.3) — on provider quota exhaustion, switch models manually via `/model` or `--model`. |
 | Thinking | Default `high`; `Shift+Tab` cycles; editor border color = live HUD. | Reliable, visible level control. Spend tokens on reasoning, save them on context. |
 | Compaction | Mario defaults, `keepRecentTokens` trimmed 20k→16k. Plus `extensions/compact-cap.ts`: a flat ~165k ceiling — fires at `turn_end` (mid-run, at turn boundaries) and `agent_settled` (between-run growth). Session command `/compact-cap [on|off|<n>k]`, 30k floor (below compaction's own output it thrashes). | Native trigger is per-model (`contextWindow - reserveTokens`) — useless on 1M-window models. Mid-run firing stops the 20-50k balloon past the cap that settle-only firing allowed; prime-reminder auto-resumes the aborted run (fleet-verified 2026-07-23: two consecutive cap→compact→resume cycles in one session, work continuing each time). |
 | Modes | `/plan`, `/review`, `/memory`, `/challenge`, `/grill`, `/diagnose`, `/handoff` (prompt-templates, SOFT). | Reusable behavioral steers; no tool-gating. `/ask` redundant with default; `/spec` redundant with `mission`/`to-prd`. challenge/grill/diagnose are pi-native adaptations of the OpenCode challenger agent + Pocock grill-me/diagnose skills. |
@@ -24,7 +23,7 @@ A lightweight, fast, visually-pleasing pi config that delivers high-quality outp
 | Skills | Auto-loaded from `~/.agents/skills` (9, shared); the work-only `vault` skill lives on the work machine, not in this repo. All model-invocable. | pi natively discovers this dir; progressive disclosure keeps always-on cost to descriptions only. Pruned 2026-07-05 (27 -> 10): kept only non-obvious reference skills; philosophy restatements deleted (now inline). |
 | Persona | AGENTS files GENERATED from `agents-md/` fragments (persona + standards + ops shared; env.work overlay; ladder last) via `build-agents.sh`. Persona rewritten 2026-07-10 for Opus-4.8-era models. Restructured 2026-07-20 for salience: delegation contracts front-loaded in the persona fragments (persona-core.md shared with Claude Code + persona-pi.md pi-only; trigger catalog cut 2026-07-21 — auto-dispatch is probabilistic, contracts + explicit dispatch are not); standards compressed 163→108 lines (catalog → principles); Solution Ladder + Prime Directives digest moved to `ladder.md`, concatenated LAST in both variants. | Lost-in-the-Middle U-curve: content at prompt extremes gets used, the middle decays — the ladder sat at 65% depth, squarely in the trough. Primacy for identity + dispatch, recency for the ladder + digest. Edit fragments, never outputs — `--check` fails on drift. |
 | Themes | 5 maintained packs, switch in `/settings`. Default `bearded-arc`. | Drop-in, maintained upstream, zero hand-maintenance. Installed themes-only (no bundled extensions). |
-| Subagents | `pi-subagents` (npm), `disableBuiltins: true`, two custom agents: scout (read-only, gpt-5.4-mini → fallback `openai-codex/gpt-5.4-mini`, 5-min timeout) + worker (implementation, copilot claude-opus-4.8 → fallbacks `openai-codex/gpt-5.5`, copilot sonnet-4.6, 60-min runaway timeout, `defaultContext: fresh` since 2026-07-26 — fork made worker cost scale with parent-session size on per-token billing; the explicit spec carries the context instead). Both agents carry a ~300-word report budget with file overflow. Max 2 concurrent. `subagent-config.json` (symlinked to `~/.pi/agent/extensions/subagent/config.json`) sets `intercomBridge: off` — verified 2026-07-20: children's tool list excludes `contact_supervisor`. | Context isolation without always-on fan-out. Bridge-off kills the indefinite-stall class: the native supervisor tool is otherwise injected into every child regardless of frontmatter allowlists, and a child calling it blocks up to 10 min against a parent that may never poll. Long implementations go async + `subagent_wait` slices (see persona Delegation) instead of blocking foreground. |
+| Subagents | `pi-subagents` (npm), `disableBuiltins: true`, two custom agents: scout (read-only, 5-min timeout) + worker (implementation, explicit user dispatch only since 2026-08-26, 60-min runaway timeout, `defaultContext: fresh` since 2026-07-26 — fork made worker cost scale with parent-session size on per-token billing; the explicit spec carries the context instead). Both agents carry a ~300-word report budget with file overflow. Max 2 concurrent. `subagent-config.json` (symlinked to `~/.pi/agent/extensions/subagent/config.json`) sets `intercomBridge: off` — verified 2026-07-20: children's tool list excludes `contact_supervisor`. | Context isolation without always-on fan-out. Bridge-off kills the indefinite-stall class: the native supervisor tool is otherwise injected into every child regardless of frontmatter allowlists, and a child calling it blocks up to 10 min against a parent that may never poll. Long implementations go async + `subagent_wait` slices (see persona Delegation) instead of blocking foreground. |
 | MLX | Auto-activating provider (`extensions/mlx-local.ts`, loaded). OMLX at `localhost:11434/v1`, Bearer auth via `$OMLX_API_KEY`. | Registers nothing when the server is down or the key is absent — safe to keep enabled everywhere. Env is frozen at pi launch; restart (not `/reload`) after exporting the key. |
 | Bedrock | Built into pi (`amazon-bedrock` provider, Converse API, auto cache points). Export `AWS_BEARER_TOKEN_BEDROCK` (or `AWS_PROFILE`) + `AWS_REGION`; add `amazon-bedrock/us.anthropic.claude-*` ids to `enabledModels` when adopting. | Frontier escalation without Copilot's proxy limits. Mind: 5-min cache TTL, thinking-`high` cost on opus, 1M-window sessions never auto-compact — keep Bedrock sessions short. |
 | Tracking | Files in `~/Dev/dotfiles/config/pi/`, symlinked into `~/.pi/agent/`. Pi itself installs npm-global (nvm), NOT brew — the brew formula lags releases (was pinned 0.80.6 when npm had 0.80.10); update via `pi update`, don't reintroduce brew. | Mirrors the OpenCode dotfiles pattern; version-controlled. |
@@ -35,7 +34,6 @@ A lightweight, fast, visually-pleasing pi config that delivers high-quality outp
 ~/Dev/dotfiles/config/pi/
 ├── settings.json            # → symlinked to ~/.pi/agent/settings.json (both machines)
 ├── subagent-config.json     # → symlinked to ~/.pi/agent/extensions/subagent/config.json (intercomBridge off)
-├── context-prune-settings.json # → symlinked to ~/.pi/agent/context-prune/settings.json (trial)
 ├── agents-md/               # SOURCE fragments — edit these, never the outputs
 │   ├── persona-core.md      # register + judgment + scope (shared: @-imported by claude/CLAUDE.md)
 │   ├── persona-pi.md        # pi-only: Tools + scout/worker Delegation contracts
@@ -47,8 +45,8 @@ A lightweight, fast, visually-pleasing pi config that delivers high-quality outp
 ├── AGENTS.md                # GENERATED: persona+standards+ops → ~/.pi/agent/AGENTS.md on PERSONAL
 ├── AGENTS.work.md           # GENERATED: same + env.work.md → ~/.pi/agent/AGENTS.md on WORK
 ├── agents/                  # → symlinked to ~/.pi/agent/agents/ (both machines)
-│   ├── scout.md             # read-only retrieval (gpt-5.4-mini + openai fallback)
-│   └── worker.md            # scoped implementation (opus-4.8 + fallback chain)
+│   ├── scout.md             # read-only retrieval (models: see frontmatter)
+│   └── worker.md            # scoped implementation, explicit dispatch only (models: see frontmatter)
 ├── prompts/
 │   ├── plan.md              # /plan
 │   ├── review.md            # /review
@@ -56,7 +54,8 @@ A lightweight, fast, visually-pleasing pi config that delivers high-quality outp
 │   ├── challenge.md         # /challenge  (interrogate a plan — no solutions)
 │   ├── grill.md             # /grill      (requirements interview via ask_user)
 │   ├── diagnose.md          # /diagnose   (feedback-loop-first bug discipline)
-│   └── handoff.md           # /handoff    (session → repo-root HANDOFF.md)
+│   ├── handoff.md           # /handoff    (session → repo-root HANDOFF.md)
+│   └── spec-contract.md     # brainstorm → implementation-spec compressor (paste target)
 ├── extensions/
 │   ├── mlx-local.ts         # OMLX provider, auto-activates when server up (loaded)
 │   ├── compact-cap.ts       # flat ~165k compaction safety-net, mid-run capable (/compact-cap command)
@@ -97,10 +96,8 @@ Surveyed from a maximalist community pi build:
 
 Two agents defined in `agents/`, `pi-subagents` package with `disableBuiltins: true` — only our definitions load, not the 8 builtins.
 
-- **scout** — always available. Read-only retrieval. gpt-5.4-mini (copilot at work, `openai-codex/gpt-5.4-mini` fallback at home), low thinking, tools: read/grep/find/ls/bash. Returns `context.md`. Prefer over direct reads for broad exploration, multi-file lookups, unfamiliar code. Deliberately non-Anthropic (injection-surface isolation).
-- **worker** — scoped implementation. `github-copilot/claude-opus-4.8` → `openai-codex/gpt-5.5` (home) → `github-copilot/claude-sonnet-4.6` (floor if 4.8 is absent at work). Forks context. Tools: read/grep/find/ls/bash/edit/write. Carries a Verification block: no unverified "complete", list what wasn't verified, never invent metrics.
-
-Model ladder: Qwen3 MLX (free, mechanical lookups only, when available) → gpt-5.4-mini (scout) → gpt-5.5 (home default) → opus-4.8 (worker at work / heavy reasoning).
+- **scout** — always available. Read-only retrieval, low thinking, tools: read/grep/find/ls/bash. Returns `context.md`. Prefer over direct reads for broad exploration, multi-file lookups, unfamiliar code. Deliberately non-Anthropic (injection-surface isolation). Models: frontmatter.
+- **worker** — scoped implementation, explicit user dispatch only (2026-08-26: auto-dispatch triggers removed — fresh-context spec-string delegation is the documented multi-agent failure mode; short bounded main-agent sessions do the same work observably). Tools: read/grep/find/ls/bash/edit/write. Carries a Verification block: no unverified "complete", list what wasn't verified, never invent metrics. Models: frontmatter.
 
 The old `explore.ts` has been deleted — scout fully replaces it.
 
@@ -117,7 +114,7 @@ The pre-migration Opus-4.6 config is preserved at git tag `pi-config-opus-4.6` (
 ## Verification
 
 - `python3 -c 'import json;json.load(open(...))'` — settings is valid JSON.
-- `pi list` — 4 theme packages present.
+- `pi list` — 5 theme packages present.
 - Confirm theme id from installed package JSON `name` fields; correct `settings.json "theme"` if needed.
 - One cheap `pi -p` Haiku run confirms config + extension load without error.
 
