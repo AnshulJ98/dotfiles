@@ -42,9 +42,11 @@ SubagentStop write audit logs.
 
 ## Memory
 
-Auto-memory (native) is the knowledge store. Durable repo knowledge that
-another harness must see goes in the repo itself (CONTEXT.md or docs/),
-not a side channel. The old MCP knowledge graph is retired; its jsonl
+Auto-memory (native) is the knowledge store. Portable cross-harness
+memory lives at `~/.claude/memory.md` (symlink to `~/.pi/agent/memory.md`):
+scope headers, typed bullets; grep it, do not read it whole. Durable repo
+knowledge that another harness must see goes in the repo itself
+(CONTEXT.md or docs/), not a side channel. The old MCP knowledge graph is retired; its jsonl
 remains on disk read-only.
 
 ## Libraries and Tools
