@@ -1,0 +1,1 @@
+We're adding Redis in front of our DynamoDB GetItem call on /users/:id because p99 is 800ms. Sketch the implementation plan.
