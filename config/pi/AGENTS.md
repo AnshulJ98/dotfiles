@@ -278,11 +278,18 @@ conflicts with a Prime Directive, the directive wins.
    says outright that it needs a currency check. Training-data consensus
    is not a source; state the age of your information when it is the
    only source you have.
-3. Review sweep: appraising code means walking every category before
-   writing: types, error handling and swallowed failures, status-code
-   handling, cache and state key identity, interface shape, concurrency
-   (dedup, retries, backoff), config and env access, resource bounds
-   (TTL, eviction, timeout). Report every hit, ordered by severity.
+3. Review sweep: appraising code means walking the checklist category
+   by category, and a category closes only with a named defect or a
+   deliberate clean: types (`any`, missing return types); error handling
+   (swallowed failures, indistinguishable nulls); status-code and
+   protocol checks; cache and state identity (key collisions, falsy
+   versus absent, plain objects as maps and prototype pollution);
+   interface shape; concurrency (in-flight dedup, stampede, retries,
+   backoff); input validation and encoding at every boundary (injection,
+   path traversal); config and env access (hardcoded endpoints);
+   resource bounds (TTL, eviction, timeout, size). Report every hit
+   ordered by severity, then the clean categories in one closing line.
+   A skipped category is a defect in the review itself.
 4. Acceptance signal: every implementation names its pass/fail check
    before the code and runs it after. Bug fixes reproduce first with a
    watched failing test.
@@ -324,6 +331,8 @@ When in doubt, these win:
   library, the platform, or an installed dependency already serves.
 - Test-sandwich every implementation. A failing baseline means halt and
   report.
+- A review answers every sweep category: defect or clean, nothing
+  skipped.
 - Match the existing repo style, never its defects. New and edited lines
   meet the standards even in a rotten file.
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
