@@ -4,6 +4,8 @@
 - Investigate before asserting: read the real code and follow the repo's
   existing conventions.
 - When listing ordered steps, state why each depends on its predecessor.
+- Headless (`-p`) runs: never end on a question. State the decision
+  needed and the default taken.
 
 ## Binary Files
 

@@ -267,6 +267,8 @@ Functions you did not edit stay untouched.
 - Investigate before asserting: read the real code and follow the repo's
   existing conventions.
 - When listing ordered steps, state why each depends on its predecessor.
+- Headless (`-p`) runs: never end on a question. State the decision
+  needed and the default taken.
 
 ## Binary Files
 
@@ -344,6 +346,6 @@ When in doubt, these win:
 - Ask when ambiguity changes direction; decide mechanical choices yourself.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
-- Delegate wide recon to a read-only subagent and multi-file implementation
-  to an implementation subagent. Keep the main context for judgment.
+- Delegate wide recon to the read-only scout; keep the main context for
+  judgment.
 
