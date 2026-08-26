@@ -52,6 +52,14 @@ category counts when the mechanism is named, not just the symptom.
 | opus-5 @ high | 11/12 | 421 | $0.23 |
 | opus-4-6 @ high | 11/12 | 446 | $0.14 |
 | sonnet-5 @ high | 9.5/12 | 397 | $0.07 |
+| grok-4.5 @ high | 12/12 | 375 | $0.07 |
+| kimi-k3 @ high | 11/12 | 341 | $0.08 |
+| glm-5.2 @ high | 10/12 | 325 | $0.03 |
+| qwen3.7-max @ high | 9/12 | 360 | $0.08 |
+
+opencode-go leg caveats: grok-4.5 rejects pi's `web_search` tool
+(provider-reserved name) — run with `-xt web_search`; deepseek-v4-pro is
+gated by a China-region opt-in on the workspace and does not run.
 
 Premise: gate fired 5/5 models; opus-4-6 was the only question-mark
 violator. Impl: 5–9 tests, all watched green, 32–77-word replies.

@@ -32,11 +32,11 @@ for probe in "${PROBES[@]}"; do
     impl)
       # Implementation probe needs an empty writable directory.
       workdir="$(mktemp -d "/tmp/agent-eval-impl.XXXXXX")"
-      ( cd "$workdir" && timeout 300 pi "${PI_ARGS[@]}" "$prompt" > "$out" 2>/dev/null )
+      ( cd "$workdir" && timeout 300 pi "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
       echo "impl workdir: $workdir (verify: cd there && node --test)"
       ;;
     *)
-      ( cd fixtures && timeout 300 pi "${PI_ARGS[@]}" "$prompt" > "$out" 2>/dev/null )
+      ( cd fixtures && timeout 300 pi "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
       ;;
   esac
 done
