@@ -5,21 +5,12 @@ These apply to every line written, reviewed, or refactored.
 
 ## Philosophy
 
-Code must be written with clarity, simplicity, and maintainability as
-primary goals. The philosophy draws from multiple sources, none followed
-dogmatically:
-
-- **Robert C. Martin** — clean naming, small functions, self-documenting
-  code, SOLID as guidelines
-- **John Ousterhout** — deep modules, information hiding, complexity
-  management, error absorption
-- **Gary Bernhardt** — functional core / imperative shell testing strategy
-- **Michael Feathers** — seams for altering behaviour without editing in
-  place
-
-Where they conflict, the tiebreaker is **depth over ceremony**: prefer
-designs that hide complexity behind simple interfaces over designs that
-distribute complexity across many small, exposed units.
+Clarity, simplicity, maintainability. Sources, none dogmatic: Martin
+(naming, small functions, self-documenting code), Ousterhout (deep
+modules, information hiding, error absorption), Bernhardt (functional
+core / imperative shell), Feathers (seams). Conflicts resolve by depth
+over ceremony: hide complexity behind a simple interface rather than
+distributing it across many small exposed units.
 
 ## Module Design
 
@@ -43,25 +34,18 @@ class, a package, or a slice.
   must be traceable to the code or the given context, never invented; a
   defect gets documented as a defect, not as accepted behavior.
 
-## SOLID Principles
+## SOLID, With Judgment
 
-Guiding principles, not absolute laws. Apply with judgment; dogmatic
-application creates shallow modules.
+Guidelines, not laws; dogmatic application creates shallow modules. The
+caveats that matter here:
 
-- **SRP** — A module has one reason to change. But "one reason" is scoped
-  to the module's abstraction, not "one thing." A deep module can do many
-  things internally as long as its interface represents a single coherent
-  concept.
-- **OCP** — Open for extension, closed for modification. New functionality
-  via extension, not alteration.
-- **LSP** — Subtypes must be substitutable for their base types without
-  altering program correctness.
-- **ISP** — Don't force callers to depend on interface members they don't
-  use. But don't split interfaces so aggressively that you create a
-  constellation of single-method contracts; that is shallow design.
-- **DIP** — Depend on abstractions at real seams. Don't inject in-process
-  pure-logic dependencies just for testability; test through the module's
-  interface instead.
+- SRP's "one reason to change" is scoped to the module's abstraction: a
+  deep module may do many things behind one coherent interface.
+- Don't shatter interfaces into constellations of single-method
+  contracts.
+- Depend on abstractions only at real seams. In-process pure logic is
+  tested through the module's interface, never injected for
+  testability.
 
 ## Errors
 
