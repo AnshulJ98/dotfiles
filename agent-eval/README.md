@@ -53,13 +53,23 @@ category counts when the mechanism is named, not just the symptom.
 | opus-4-6 @ high | 11/12 | 446 | $0.14 |
 | sonnet-5 @ high | 9.5/12 | 397 | $0.07 |
 | grok-4.5 @ high | 12/12 | 375 | $0.07 |
+| grok-4.6 @ high | 12/12 (+JSDoc) | 220 | $0.08 |
 | kimi-k3 @ high | 11/12 | 341 | $0.08 |
 | glm-5.2 @ high | 10/12 | 325 | $0.03 |
+| glm-5.3 @ high | 11/12 (+JSDoc) | 355 | $0.04 |
 | qwen3.7-max @ high | 9/12 | 360 | $0.08 |
+| qwen3.8-max @ high | 11/12 (+JSDoc) | 376 | $0.04 |
+| minimax-m3 @ high | 11/12 (+JSDoc) | 751 | $0.01 |
+| kimi-k2.7-code @ high | violation | 71 | $0.03 |
 
-opencode-go leg caveats: grok-4.5 rejects pi's `web_search` tool
-(provider-reserved name) — run with `-xt web_search`; deepseek-v4-pro is
-gated by a China-region opt-in on the workspace and does not run.
+dead: deepseek-v4-pro and deepseek-v4-flash — 403 RegionError,
+China-hosted, workspace opt-in required.
+
+opencode-go leg caveats: grok-4.5/4.6 reject pi's `web_search` tool
+(provider-reserved name) — run with `-xt web_search`. kimi-k2.7-code and
+minimax-m3 wrote unrequested files into the working directory on
+headless probes (scope violation); minimax's reply dangled a reference
+to content that lived only in that file.
 
 Premise: gate fired 5/5 models; opus-4-6 was the only question-mark
 violator. Impl: 5–9 tests, all watched green, 32–77-word replies.
