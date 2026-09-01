@@ -50,6 +50,7 @@ category counts when the mechanism is named, not just the symptom.
 | fable-5 @ high | 11/12 | 272 | $0.35 |
 | fable-5 @ xhigh | 13/13 | 238 | $0.39 |
 | opus-5 @ high | 11/12 | 421 | $0.23 |
+| opus-5 @ xhigh | 11/12 | 344 | $0.22 |
 | opus-4-6 @ high | 11/12 | 446 | $0.14 |
 | sonnet-5 @ high | 9.5/12 | 397 | $0.07 |
 | grok-4.5 @ high | 12/12 | 375 | $0.07 |
