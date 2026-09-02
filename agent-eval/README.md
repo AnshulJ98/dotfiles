@@ -49,6 +49,9 @@ category counts when the mechanism is named, not just the symptom.
 | opus-4-8 @ low (then-default) | 9–10/12 | 320–329 | $0.18 |
 | fable-5 @ high | 11/12 | 272 | $0.35 |
 | fable-5 @ xhigh | 13/13 | 238 | $0.39 |
+| fable-5-1 @ high | 11/12 | 330 | $0.37 |
+| fable-5-1 @ xhigh | 13/13 | 430 | $0.16* |
+| fable-5-1 @ max | 13/13 +2 beyond-rubric | 407 | $0.69 |
 | opus-5 @ high | 11/12 | 421 | $0.23 |
 | opus-5 @ xhigh | 11/12 | 344 | $0.22 |
 | opus-5 @ max | 12/12 | 319 | $0.26 |
@@ -71,6 +74,14 @@ category counts when the mechanism is named, not just the symptom.
 
 dead: deepseek-v4-pro and deepseek-v4-flash — 403 RegionError,
 China-hosted, workspace opt-in required.
+
+*fable-5-1 xhigh cost benefited from prompt cache written by the
+preceding high leg; cold-cache cost is closer to $0.35–0.40.
+
+fable-5-1 requires a local patch: @gotgenes/pi-anthropic-auth (2.0.6)
+pins CLAUDE_CODE_VERSION = "2.1.206" and Anthropic gates the model at
+>= 2.1.251. Patched to 2.1.251 in ~/.pi/agent/npm/node_modules and
+~/.pi/agent/tmp/extensions (.bak kept); any package update reverts it.
 
 opencode-go leg caveats: grok-4.5/4.6 reject pi's `web_search` tool
 (provider-reserved name) — run with `-xt web_search`. kimi-k2.7-code and
