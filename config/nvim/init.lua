@@ -414,14 +414,78 @@ do
   -- Add the bearded-nvim plugin using the built-in pack manager
   vim.pack.add {
     gh 'Ferouk/bearded-nvim',
+    gh 'Shatur/neovim-ayu',
+    gh 'ellisonleao/gruvbox.nvim',
+    gh 'tjdevries/colorbuddy.nvim', -- vitesse.nvim dependency
+    gh '2nthony/vitesse.nvim',
   }
+  -- AYU
+  -- require('ayu').setup {
+  --   mirage = false, -- true → mirage when background=dark
+  --   terminal = true,
+  --   overrides = {},
+  -- }
+  -- vim.cmd.colorscheme 'ayu-dark' -- or 'ayu-mirage'
+  --
+  -- GRUVBOX
+  -- require('gruvbox').setup {
+  --   contrast = 'hard', -- '', 'soft', or 'hard'
+  --   italic = { comments = true, strings = false, operators = false, folds = true, emphasis = true },
+  --   transparent_mode = false,
+  -- }
+  -- vim.o.background = 'dark'
+  -- vim.cmd.colorscheme 'gruvbox'
+  --
+  -- Vitesse
+  -- require('vitesse').setup {
+  --   comment_italics = true,
+  --   transparent_background = false,
+  --   transparent_float_background = false,
+  -- }
+  -- vim.cmd.colorscheme 'vitesse'
+  --
+  -- -- Configure the theme options
+  local function tint(color, bg, alpha)
+    local function ch(h, i) return tonumber(h:sub(i, i + 1), 16) end
+    local out = {}
+    for i = 2, 6, 2 do
+      out[#out + 1] = string.format('%02x', math.floor(ch(color, i) * alpha + ch(bg, i) * (1 - alpha) + 0.5))
+    end
+    return '#' .. table.concat(out)
+  end
 
-  -- Configure the theme options
   require('bearded').setup {
-    flavor = 'arc', -- Choose your flavor (e.g., arc, Nord, Monokai, etc.)
+    flavor = 'hc-midnightvoid', -- Choose your flavor (e.g., arc, Nord, Monokai, etc.)
     transparent = false, -- Set to true if you want a transparent background
     bold = true, -- Enable bold text
     italic = true, -- Enable italic text
+    -- Runs on setup, :colorscheme bearded and :BeardedReload, so everything below
+    -- follows the active flavor instead of being pinned to one palette.
+    on_highlights = function(set, palette)
+      local c, ui = palette.colors, palette.ui
+      local bg = ui.uibackground
+      -- bearded ships neon Diff backgrounds (#2cfc82). render-markdown links H1Bg..H6Bg
+      -- to those Diff groups, so both the diffs and the heading bands are retinted here.
+      set('DiffAdd', { bg = tint(c.green, bg, 0.18) })
+      set('DiffDelete', { bg = tint(c.red, bg, 0.18) })
+      set('DiffChange', { bg = tint(c.blue, bg, 0.14) })
+      set('DiffText', { bg = tint(c.blue, bg, 0.28) })
+      -- Per-level heading bands were already in this file (arc hex). Same six roles,
+      -- now from the active flavor. Heading text in a plain buffer stays Bearded yellow
+      -- (@markup.heading); render-markdown applies HnBg (priority 4096) on the line.
+      for i, color in ipairs { c.blue, c.green, c.purple, c.yellow, c.orange, c.pink } do
+        set('RenderMarkdownH' .. i .. 'Bg', { fg = color, bg = tint(color, bg, 0.14) })
+      end
+      -- @markup.raw stays Bearded purple (VS Code markup.inline.raw / fenced_code.block).
+      -- @markup.bold is a stale capture; modern treesitter uses @markup.strong.
+      set('@markup.strong', { fg = c.salmon, bold = true })
+      set('@markup.strikethrough', { fg = c.red, strikethrough = true }) -- VS Code markup.strikethrough
+      set('RenderMarkdownCode', { bg = ui.uibackgroundalt })
+      set('RenderMarkdownCodeInline', { bg = ui.primaryalt })
+      set('RenderMarkdownBullet', { fg = c.blue })
+      set('RenderMarkdownDash', { fg = ui.defaultalt })
+      set('RenderMarkdownTableRow', { fg = ui.default })
+    end,
   }
 
   -- Load the colorscheme here.
@@ -430,51 +494,18 @@ do
   -- vim.cmd.colorscheme 'tokyonight-night'
   vim.cmd.colorscheme 'bearded'
 
-  -- Tone down diff highlights so hunk previews are readable
-  vim.api.nvim_set_hl(0, 'DiffAdd', { bg = '#1a3a2a' })
-  vim.api.nvim_set_hl(0, 'DiffChange', { bg = '#1a2a3a' })
-  vim.api.nvim_set_hl(0, 'DiffDelete', { bg = '#3a1a1a' })
-  vim.api.nvim_set_hl(0, 'DiffText', { bg = '#2a3a4a' })
-
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
   require('todo-comments').setup { signs = false }
 
   vim.pack.add { gh 'MeanderingProgrammer/render-markdown.nvim' }
 
-  -- Bearded-arc heading bands for render-markdown.nvim
-  -- To disable: comment out this autocmd block and set heading.backgrounds = {} in setup below
-  local function apply_render_markdown_hl()
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH1Bg', { fg = '#69C3FF', bg = '#1a2a3d' })
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH2Bg', { fg = '#3CEC85', bg = '#1a2d2a' })
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH3Bg', { fg = '#B78AFF', bg = '#252040' })
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH4Bg', { fg = '#EACD61', bg = '#2a2820' })
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH5Bg', { fg = '#FF955C', bg = '#2d2420' })
-    vim.api.nvim_set_hl(0, 'RenderMarkdownH6Bg', { fg = '#F38CEC', bg = '#2d2030' })
-  end
-  apply_render_markdown_hl()
-  vim.api.nvim_create_autocmd('ColorScheme', {
-    group = vim.api.nvim_create_augroup('render-markdown-hl', { clear = true }),
-    callback = apply_render_markdown_hl,
-  })
-
   vim.api.nvim_create_autocmd('FileType', {
     pattern = 'markdown',
     callback = function() vim.opt_local.conceallevel = 2 end,
   })
 
-  require('render-markdown').setup {
-    heading = {
-      backgrounds = {
-        'RenderMarkdownH1Bg',
-        'RenderMarkdownH2Bg',
-        'RenderMarkdownH3Bg',
-        'RenderMarkdownH4Bg',
-        'RenderMarkdownH5Bg',
-        'RenderMarkdownH6Bg',
-      },
-    },
-  }
+  require('render-markdown').setup {}
 
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
@@ -780,7 +811,7 @@ do
       --
       -- This may be unwanted, since they displace some of your code
       if client and client:supports_method('textDocument/inlayHint', event.buf) then
-        vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
+        vim.lsp.inlay_hint.enable(false, { bufnr = event.buf })
         map('<leader>th', function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }) end, '[T]oggle Inlay [H]ints')
       end
     end,
