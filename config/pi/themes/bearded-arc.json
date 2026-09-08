@@ -33,21 +33,19 @@
     "warning": "orange",
     "muted": "fgDim",
     "dim": "fgMuted",
-    "text": "",
+    "text": "fg",
     "thinkingText": "fgDim",
-
     "selectedBg": "primaryAlt",
     "userMessageBg": "bgAlt",
-    "userMessageText": "",
+    "userMessageText": "fg",
     "customMessageBg": "bgMid",
-    "customMessageText": "",
+    "customMessageText": "fg",
     "customMessageLabel": "purple",
     "toolPendingBg": "#1a2231",
     "toolSuccessBg": "#1c2a31",
     "toolErrorBg": "#26232b",
-    "toolTitle": "",
+    "toolTitle": "fg",
     "toolOutput": "primary",
-
     "mdHeading": "yellow",
     "mdLink": "blue",
     "mdLinkUrl": "fgDim",
@@ -58,11 +56,9 @@
     "mdQuoteBorder": "pink",
     "mdHr": "fgDim",
     "mdListBullet": "blue",
-
     "toolDiffAdded": "green",
     "toolDiffRemoved": "red",
     "toolDiffContext": "fgDim",
-
     "syntaxComment": "fgDim",
     "syntaxKeyword": "turquoise",
     "syntaxFunction": "blue",
@@ -72,19 +68,17 @@
     "syntaxType": "purple",
     "syntaxOperator": "yellow",
     "syntaxPunctuation": "fgDim",
-
     "thinkingOff": "bgDark",
     "thinkingMinimal": "fgMuted",
     "thinkingLow": "primary",
     "thinkingMedium": "blue",
     "thinkingHigh": "purple",
     "thinkingXhigh": "salmon",
-
     "bashMode": "green"
   },
   "export": {
-    "pageBg": "#1c2433",
-    "cardBg": "#181f2c",
-    "infoBg": "#253043"
+    "pageBg": "bg",
+    "cardBg": "bgAlt",
+    "infoBg": "primaryAlt"
   }
 }
