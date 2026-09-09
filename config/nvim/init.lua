@@ -454,27 +454,44 @@ do
     return '#' .. table.concat(out)
   end
 
+  -- kitty applies background_opacity to every cell whose background equals the terminal
+  -- default by value (kitty.conf, background_opacity), so with kitty on the same Bearded
+  -- flavor the editor went translucent despite transparent = false. Moving the blue
+  -- channel by 1/255 keeps nvim opaque and is invisible.
+  local function opaque(bg)
+    local b = tonumber(bg:sub(6, 7), 16)
+    return bg:sub(1, 5) .. string.format('%02x', b == 255 and 254 or b + 1)
+  end
+
   require('bearded').setup {
-    flavor = 'hc-midnightvoid', -- Choose your flavor (e.g., arc, Nord, Monokai, etc.)
+    flavor = 'hc-midnightvoid', -- see require('bearded').available_flavors()
     transparent = false, -- Set to true if you want a transparent background
     bold = true, -- Enable bold text
     italic = true, -- Enable italic text
     -- Runs on setup, :colorscheme bearded and :BeardedReload, so everything below
     -- follows the active flavor instead of being pinned to one palette.
-    on_highlights = function(set, palette)
+    on_highlights = function(set, palette, opts)
       local c, ui = palette.colors, palette.ui
       local bg = ui.uibackground
+      if not opts.transparent then
+        local solid = opaque(bg)
+        set('Normal', { fg = ui.default, bg = solid })
+        set('NormalNC', { fg = ui.default, bg = solid })
+        set('WinSeparator', { fg = ui.border, bg = solid })
+      end
       -- bearded ships neon Diff backgrounds (#2cfc82). render-markdown links H1Bg..H6Bg
       -- to those Diff groups, so both the diffs and the heading bands are retinted here.
-      set('DiffAdd', { bg = tint(c.green, bg, 0.18) })
-      set('DiffDelete', { bg = tint(c.red, bg, 0.18) })
-      set('DiffChange', { bg = tint(c.blue, bg, 0.14) })
-      set('DiffText', { bg = tint(c.blue, bg, 0.28) })
+      -- 0.10 is Bearded's own diffEditor.*Background alpha (0x1a); DiffText doubles it so
+      -- changed text stays visible inside a DiffChange line.
+      set('DiffAdd', { bg = tint(c.green, bg, 0.10) })
+      set('DiffDelete', { bg = tint(c.red, bg, 0.10) })
+      set('DiffChange', { bg = tint(c.blue, bg, 0.10) })
+      set('DiffText', { bg = tint(c.blue, bg, 0.20) })
       -- Per-level heading bands were already in this file (arc hex). Same six roles,
       -- now from the active flavor. Heading text in a plain buffer stays Bearded yellow
       -- (@markup.heading); render-markdown applies HnBg (priority 4096) on the line.
       for i, color in ipairs { c.blue, c.green, c.purple, c.yellow, c.orange, c.pink } do
-        set('RenderMarkdownH' .. i .. 'Bg', { fg = color, bg = tint(color, bg, 0.14) })
+        set('RenderMarkdownH' .. i .. 'Bg', { fg = color, bg = tint(color, bg, 0.10) })
       end
       -- @markup.raw stays Bearded purple (VS Code markup.inline.raw / fenced_code.block).
       -- @markup.bold is a stale capture; modern treesitter uses @markup.strong.
@@ -484,7 +501,6 @@ do
       set('RenderMarkdownCodeInline', { bg = ui.primaryalt })
       set('RenderMarkdownBullet', { fg = c.blue })
       set('RenderMarkdownDash', { fg = ui.defaultalt })
-      set('RenderMarkdownTableRow', { fg = ui.default })
     end,
   }
 
