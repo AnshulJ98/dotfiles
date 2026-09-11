@@ -232,42 +232,7 @@ do
   -- vim.keymap.set('n', '<up>', '<cmd>echo "Use k to move!!"<CR>')
   -- vim.keymap.set('n', '<down>', '<cmd>echo "Use j to move!!"<CR>')
 
-  -- Keybinds to make split navigation easier.
-  --  Use CTRL+<hjkl> to switch between windows
-  --
-  --  See `:help wincmd` for a list of all window commands
-  vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
-  vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
-  vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
-  vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
-
-  -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
-  -- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
-  -- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
-  -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
-  -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
-
-  -- Resize mode: enter with <leader>wr, use hjkl to resize, q/Esc to exit
-  vim.keymap.set('n', '<leader>wr', function()
-    vim.notify('Resize: h/l width, j/k height, = equalize, q/Esc exit', vim.log.levels.INFO)
-    while true do
-      local key = vim.fn.getcharstr()
-      if key == 'h' then
-        vim.cmd 'vertical resize -2'
-      elseif key == 'l' then
-        vim.cmd 'vertical resize +2'
-      elseif key == 'j' then
-        vim.cmd 'resize -2'
-      elseif key == 'k' then
-        vim.cmd 'resize +2'
-      elseif key == '=' then
-        vim.cmd 'wincmd ='
-      elseif key == 'q' or key == '\27' then
-        break
-      end
-    end
-    vim.notify('', vim.log.levels.INFO)
-  end, { desc = '[W]indow [R]esize mode' })
+  -- Window navigation, resize, and swap keymaps live with smart-splits in SECTION 4.
 
   -- [[ Basic Autocommands ]]
   --  See `:help lua-guide-autocommands`
@@ -394,9 +359,34 @@ do
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
       { '<leader>t', group = '[T]oggle' },
       { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
+      { '<leader>w', group = '[W]indow' },
+      { '<leader>ws', group = '[S]wap' },
       { 'gr', group = 'LSP Actions', mode = { 'n' } },
     },
   }
+
+  -- [[ smart-splits ]]
+  -- Directional window management: resize moves the divider in the pressed
+  -- direction from whichever side the cursor is on, instead of wider/narrower.
+  -- Alt+hjkl is owned by AeroSpace and Ctrl+Shift+h by kitty-scrollback, so
+  -- resize sits under <leader>w; <leader>wr opens which-key's Hydra mode so
+  -- hjkl can be tapped repeatedly until <Esc>.
+  vim.pack.add { gh 'smart-splits-nvim/smart-splits.nvim' }
+  local splits = require 'smart-splits'
+  splits.setup {
+    default_amount = 3,
+    at_edge = 'stop',
+    -- kitty is auto-detected via $KITTY_LISTEN_ON, but the kittens are not
+    -- installed; without this every edge move would shell out and fail.
+    multiplexer_integration = false,
+  }
+  for key, dir in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
+    vim.keymap.set('n', '<C-' .. key .. '>', splits['move_cursor_' .. dir], { desc = 'Focus window ' .. dir })
+    vim.keymap.set('n', '<leader>w' .. key, splits['resize_' .. dir], { desc = 'Resize ' .. dir })
+    vim.keymap.set('n', '<leader>ws' .. key, splits['swap_buf_' .. dir], { desc = 'Swap buffer ' .. dir })
+  end
+  vim.keymap.set('n', '<leader>w=', '<C-w>=', { desc = 'Equalize windows' })
+  vim.keymap.set('n', '<leader>wr', function() require('which-key').show { keys = '<leader>w', loop = true } end, { desc = '[R]esize mode' })
 
   -- [[ Colorscheme ]]
   -- You can easily change to a different colorscheme.
@@ -521,8 +511,18 @@ do
     callback = function() vim.opt_local.conceallevel = 2 end,
   })
 
-  require('render-markdown').setup {}
-
+  require('render-markdown').setup {
+    -- pipe_table = { enabled = true, render_modes = { 'i' } },
+    pipe_table = { enabled = false },
+  }
+  vim.pack.add { gh 'ice345/markdown-table-wrap.nvim' }
+  require('markdown-table-wrap').setup {
+    preview_mode = 'inline',
+    inline_mode = 'replace',
+    inline_wrap_scope = 'always',
+    inline_disable_wrap = true,
+    row_separator = false,
+  }
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
   vim.pack.add { gh 'nvim-mini/mini.nvim' }
