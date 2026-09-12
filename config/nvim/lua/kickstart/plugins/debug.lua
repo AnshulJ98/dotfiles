@@ -47,6 +47,32 @@ vim.keymap.set({ 'n', 'v' }, '<leader>de', function() require('dapui').eval() en
 vim.keymap.set('n', '<leader>df', function() require('dapui').float_element('scopes', { enter = true }) end, { desc = 'Debug: [F]loat scopes' })
 vim.keymap.set('n', '<leader>dk', function() require('dapui').float_element('stacks', { enter = true }) end, { desc = 'Debug: stac[K]s float' })
 vim.keymap.set('n', '<leader>dw', function() require('dapui').float_element('watches', { enter = true }) end, { desc = 'Debug: [W]atches float' })
+-- dap-view hover: word under cursor, or the visual selection. <CR> expands, [[ parent, s set value, q closes.
+vim.keymap.set({ 'n', 'v' }, '<leader>dh', function() require('dap-view').hover(nil, true) end, { desc = 'Debug: [H]over variable' })
+
+-- dap-view re-applies its configured size on every WinClosed/WinNew (its issue
+-- #190), undoing manual resizes. WinClosed fires before the layout changes, so
+-- snapshotting the current size into its baseline makes the restore a no-op.
+vim.api.nvim_create_autocmd({ 'WinClosed', 'WinNew' }, {
+  group = vim.api.nvim_create_augroup('dap_view_keep_size', { clear = true }),
+  callback = function()
+    local state = require 'dap-view.state'
+    if state.winnr and vim.api.nvim_win_is_valid(state.winnr) then
+      state.og_width = vim.api.nvim_win_get_width(state.winnr)
+      state.og_height = vim.api.nvim_win_get_height(state.winnr)
+    end
+  end,
+})
+
+-- Long values in scopes/hover wrap instead of running off screen.
+vim.api.nvim_create_autocmd('FileType', {
+  group = vim.api.nvim_create_augroup('dap_view_wrap', { clear = true }),
+  pattern = { 'dap-view', 'dap-view-hover' },
+  callback = function()
+    vim.wo.wrap = true
+    vim.wo.linebreak = true
+  end,
+})
 
 local function dap_expr_under_cursor()
   local node = vim.treesitter.get_node()
@@ -154,8 +180,39 @@ dap.adapters['pwa-node'] = {
   },
 }
 
+-- Debug shell: js-debug injects its bootloader into the shell via NODE_OPTIONS,
+-- so any node / npm / npx / ts-node run inside auto-attaches as a child session
+-- with breakpoints already set. The root session outlives every child.
+local debug_shell = {
+  type = 'pwa-node',
+  request = 'launch',
+  name = 'Debug shell (auto-attach)',
+  runtimeExecutable = vim.o.shell,
+  cwd = '${workspaceFolder}',
+  console = 'integratedTerminal',
+  autoAttachChildProcesses = true,
+  sourceMaps = true,
+  skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+}
+
+-- Same shell in a new kitty OS window. js-debug polls the processId returned
+-- by runInTerminal and terminates the session when it exits, so the launcher
+-- must outlive the window; `kitten @ launch` returns at once and fails.
+-- --single-instance with --wait-for-single-instance-window-close blocks until
+-- the window closes and carries env and cwd across the handoff.
+local debug_shell_kitty = vim.tbl_extend('force', debug_shell, { name = 'Debug shell (kitty window)', console = 'externalTerminal' })
+dap.defaults['pwa-node'].external_terminal = {
+  command = 'kitty',
+  args = { '--single-instance', '--wait-for-single-instance-window-close' },
+}
+
+vim.keymap.set('n', '<leader>ds', function() dap.run(debug_shell) end, { desc = 'Debug: debug [S]hell (split)' })
+vim.keymap.set('n', '<leader>dS', function() dap.run(debug_shell_kitty) end, { desc = 'Debug: debug [S]hell (kitty window)' })
+
 for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascriptreact' } do
   dap.configurations[lang] = {
+    debug_shell,
+    debug_shell_kitty,
     {
       type = 'pwa-node',
       request = 'launch',
