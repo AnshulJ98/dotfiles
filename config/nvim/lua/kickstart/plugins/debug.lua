@@ -13,7 +13,18 @@ vim.pack.add {
   'https://github.com/igorlfs/nvim-dap-view',
 }
 
-require('nvim-dap-virtual-text').setup()
+-- Values are capped so large payloads do not wrap the code line; inline
+-- virtual text spanning many screen rows stalls redraw on cursor movement.
+-- Full values remain reachable via hover (<leader>dh) and the scopes pane.
+require('nvim-dap-virtual-text').setup {
+  display_callback = function(variable, _, _, _, options)
+    local value = variable.value:gsub('%s+', ' ')
+    if #value > 50 then value = value:sub(1, 50) .. '…' end
+    if options.virt_text_pos == 'inline' then return ' = ' .. value end
+    return variable.name .. ' = ' .. value
+  end,
+}
+vim.api.nvim_set_hl(0, 'NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
 require('dap-view').setup {
   windows = {
     position = 'right',
@@ -43,6 +54,7 @@ vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() e
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
 vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI (splits)' })
 vim.keymap.set('n', '<F8>', '<cmd>DapViewToggle<CR>', { desc = 'Debug: Toggle DAP View (single window)' })
+vim.keymap.set('n', '<leader>dv', '<cmd>DapVirtualTextToggle<CR>', { desc = 'Debug: Toggle [V]irtual text' })
 vim.keymap.set({ 'n', 'v' }, '<leader>de', function() require('dapui').eval() end, { desc = 'Debug: [E]val expression' })
 vim.keymap.set('n', '<leader>df', function() require('dapui').float_element('scopes', { enter = true }) end, { desc = 'Debug: [F]loat scopes' })
 vim.keymap.set('n', '<leader>dk', function() require('dapui').float_element('stacks', { enter = true }) end, { desc = 'Debug: stac[K]s float' })
