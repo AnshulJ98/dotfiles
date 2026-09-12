@@ -95,6 +95,24 @@ opus-4-6 miss falsy-vs-absent and node-fetch; sonnet-5 misses timeout,
 falsy, and node-fetch. grok-4.6 and fable-5 @ xhigh have hit every
 category.
 
+## Impl board (slugify probe, 2026-09-12)
+
+All legs: two files only, watched `node --test` green, independently
+re-verified green. Ranked by test depth and spec handling, then cost.
+
+| # | Leg | Tests | Words | Cost | Note |
+|---|---|---|---|---|---|
+| 1 | opus-5 @ medium | 11, table-driven + idempotence | 56 | $0.19 | house `should…when` names; flagged the diacritics decision |
+| 2 | fable-5 @ high | 7, table-driven | 51 | $0.66 | house names; flagged the diacritics decision |
+| 3 | sonnet-5 @ high | 7 | 26 | $0.13 | house names; no decision flagged |
+| 4 | terra @ xhigh | 4 | 9 | $0.07 | house names; wrote test first and watched it fail |
+| 5 | luna @ high | 4 | 12 | $0.007 | SILENT SPEC CHANGE: kept Unicode letters (`\p{L}\p{N}`), tested `über-café-2` as a feature, never flagged it; `.js` test file, non-house names |
+| — | grok-4.6 @ high | not run | | | opencode-go weekly limit (429), resets 2026-09-13 |
+
+Earlier impl data (2026-08-26, opus-4-8 @ low): 5–9 tests, 32–77 words,
+$0.20. kimi-k2.7-code and minimax-m3 wrote unrequested files on headless
+probes.
+
 dead: deepseek-v4-pro and deepseek-v4-flash — 403 RegionError,
 China-hosted, workspace opt-in required.
 
@@ -116,8 +134,9 @@ minimax-m3 wrote unrequested files into the working directory on
 headless probes (scope violation); minimax's reply dangled a reference
 to content that lived only in that file.
 
-Premise: gate fired 5/5 models; opus-4-6 was the only question-mark
-violator. Impl: 5–9 tests, all watched green, 32–77-word replies.
+Premise: gate fired on every model probed; opus-4-6 was the only
+question-mark violator (once). GPT-5.6 legs hedge for one sentence and
+then deliver the full plan.
 
 Known findings encoded here: misses are quasi-independent noise (union
 of two runs ≈ 12/12); mechanical rules outlive conceptual ones; forced
