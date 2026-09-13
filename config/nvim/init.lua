@@ -164,6 +164,10 @@ do
   -- Show which line your cursor is on
   vim.o.cursorline = true
 
+  -- Floating windows that pass no border of their own (LSP hover, blink menu
+  -- and docs, which-key, dap-view hover) get one, so they stand off the code.
+  vim.o.winborder = 'rounded'
+
   -- Minimal number of screen lines to keep above and below the cursor.
   vim.o.scrolloff = 10
 
@@ -228,6 +232,39 @@ do
   -- or just use <C-\><C-n> to exit terminal mode
   vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 
+  -- Toggle terminal: one shell in a full-width split at the bottom, hidden and
+  -- reshown with its scrollback intact. <C-_> is what terminals without the
+  -- kitty keyboard protocol send for Ctrl+/. A shell that exits takes its
+  -- window with it so the next toggle starts a fresh one.
+  do
+    local buf, win
+    local function toggle_terminal()
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_hide(win)
+        win = nil
+        return
+      end
+      if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+        buf = vim.api.nvim_create_buf(false, false)
+        vim.api.nvim_buf_call(buf, function()
+          vim.fn.jobstart(vim.o.shell, {
+            term = true,
+            on_exit = function()
+              vim.schedule(function()
+                if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+                buf, win = nil, nil
+              end)
+            end,
+          })
+        end)
+      end
+      win = vim.api.nvim_open_win(buf, true, { split = 'below', win = -1, height = 15 })
+      vim.cmd.startinsert()
+    end
+    vim.keymap.set({ 'n', 't' }, '<C-/>', toggle_terminal, { desc = 'Toggle terminal' })
+    vim.keymap.set({ 'n', 't' }, '<C-_>', toggle_terminal, { desc = 'Toggle terminal' })
+  end
+
   -- TIP: Disable arrow keys in normal mode
   -- vim.keymap.set('n', '<left>', '<cmd>echo "Use h to move!!"<CR>')
   -- vim.keymap.set('n', '<right>', '<cmd>echo "Use l to move!!"<CR>')
@@ -246,6 +283,23 @@ do
     desc = 'Highlight when yanking (copying) text',
     group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
     callback = function() vim.hl.on_yank() end,
+  })
+
+  -- Only the focused window shows its cursor line, and terminals never do;
+  -- VS Code does the same. Every window is touched on each switch because a
+  -- window opened without entering it (the debugger panel) fires no WinEnter
+  -- of its own. BufWinEnter covers a buffer re-shown in a new window: that
+  -- restores the window options it was last hidden with, after WinEnter.
+  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+    desc = 'Cursor line in the focused window only',
+    group = vim.api.nvim_create_augroup('kickstart-cursorline-focus', { clear = true }),
+    callback = function()
+      local current = vim.api.nvim_get_current_win()
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local is_terminal = vim.bo[vim.api.nvim_win_get_buf(win)].buftype == 'terminal'
+        vim.wo[win][0].cursorline = win == current and not is_terminal
+      end
+    end,
   })
 end
 
@@ -360,6 +414,7 @@ do
     spec = {
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
       { '<leader>t', group = '[T]oggle' },
+      { '<leader>d', group = '[D]ebug', mode = { 'n', 'v' } },
       { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
       { '<leader>w', group = '[W]indow' },
       { '<leader>ws', group = '[S]wap' },
@@ -587,15 +642,19 @@ do
   ---@diagnostic disable-next-line: duplicate-set-field
   statusline.section_location = function() return '%2l:%-2v %P' end
 
+  -- Attached LSP client names, then the debugger's state (`Stopped at line
+  -- 16`, `Running`) while a session exists. dap.status() keeps returning the
+  -- last progress message after the session ends, hence the session guard.
   ---@diagnostic disable-next-line: duplicate-set-field
   statusline.section_lsp = function()
-    local clients = vim.lsp.get_clients { bufnr = 0 }
-    if #clients == 0 then return '' end
-    local names = {}
-    for _, c in ipairs(clients) do
-      names[#names + 1] = c.name
+    local parts = {}
+    for _, c in ipairs(vim.lsp.get_clients { bufnr = 0 }) do
+      parts[#parts + 1] = c.name
     end
-    return ' ' .. table.concat(names, ' ')
+    local text = #parts > 0 and (' ' .. table.concat(parts, ' ')) or ''
+    local dap = package.loaded.dap
+    if dap and dap.session() then text = text .. '  ' .. dap.status():gsub('%%', '%%%%') end
+    return text
   end
 end
 
