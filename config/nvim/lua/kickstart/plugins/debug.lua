@@ -53,6 +53,8 @@ require('dap-view').setup {
   windows = {
     position = 'right',
     size = 60,
+    -- nvim-dap owns the pwa-node terminal (see terminal_win_cmd below).
+    terminal = { hide = { 'pwa-node' } },
   },
   switchbuf = function(bufnr)
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -69,6 +71,9 @@ require('dap-view').setup {
     -- would clip the leftmost section to `<S]`; hints stay in the help popup,
     -- and js-debug cannot step back anyway.
     show_keymap_hints = false,
+    -- dap-view opens on watches and only re-renders scopes on stop when
+    -- scopes is already showing, so a first stop would land on an empty pane.
+    default_section = 'scopes',
     sections = { 'scopes', 'watches', 'breakpoints', 'threads', 'repl' },
     base_sections = {
       repl = { label = 'REPL', keymap = 'P' },
@@ -84,6 +89,13 @@ vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = '
 vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
 vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
 vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
+vim.keymap.set('n', '<leader>dt', function() require('dap').terminate() end, { desc = 'Debug: [T]erminate' })
+vim.keymap.set('n', '<leader>dr', function() require('dap').restart() end, { desc = 'Debug: [R]estart' })
+vim.keymap.set('n', '<leader>dc', function() require('dap').run_to_cursor() end, { desc = 'Debug: Run to [C]ursor' })
+vim.keymap.set('n', '<leader>dl', function() require('dap').run_last() end, { desc = 'Debug: Run [L]ast' })
+vim.keymap.set('n', '<leader>dp', function() require('dap').pause() end, { desc = 'Debug: [P]ause' })
+vim.keymap.set('n', '<leader>d[', function() require('dap').up() end, { desc = 'Debug: Frame up (caller)' })
+vim.keymap.set('n', '<leader>d]', function() require('dap').down() end, { desc = 'Debug: Frame down (callee)' })
 vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
 vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI (splits)' })
@@ -113,8 +125,12 @@ vim.api.nvim_create_autocmd({ 'WinClosed', 'WinNew' }, {
 -- dap-view window options. Long values wrap instead of running off screen;
 -- the tree indents with literal tabs, so `list` would draw a » per level;
 -- the panel takes DapViewNormal so it reads as chrome rather than code.
--- bufwinid so the options land on the panel even when FileType fires with
--- another window current. The `[0]` form is `:setlocal`: `vim.wo[win].x`
+-- dap-view opens the panel without entering it and forces cursorline just
+-- before setting the filetype, so the focused-window rule from init.lua is
+-- restated here; inside FileType the buffer's own window is current, so the
+-- filetype stands in for focus (the hover float is entered, the panel is
+-- not). bufwinid so the options land on the panel even when FileType fires
+-- with another window current. The `[0]` form is `:setlocal`: `vim.wo[win].x`
 -- acts as `:set` when win is current (the hover float is entered before its
 -- filetype is set), which would hand these values to every window split from
 -- it.
@@ -130,7 +146,17 @@ vim.api.nvim_create_autocmd('FileType', {
     wo.list = false
     wo.signcolumn = 'no'
     wo.winhighlight = 'Normal:DapViewNormal,NormalNC:DapViewNormal'
+    wo.cursorline = args.match == 'dap-view-hover'
   end,
+})
+
+-- The REPL is a prompt buffer, which blink.cmp refuses by design, so
+-- completion comes from nvim-dap's own omnifunc, triggered on the adapter's
+-- trigger characters (`.` `[` `"` `'` for js-debug). Native popup keys apply.
+vim.api.nvim_create_autocmd('FileType', {
+  group = vim.api.nvim_create_augroup('dap_repl_completion', { clear = true }),
+  pattern = 'dap-repl',
+  callback = function(args) require('dap.ext.autocompl').attach(args.buf) end,
 })
 
 local function dap_expr_under_cursor()
@@ -210,6 +236,29 @@ dapui.setup {
   },
 }
 
+-- The integrated terminal is a split under the code, owned by nvim-dap.
+-- dapui.setup claims terminal_win_cmd for a console element no layout uses,
+-- and dap-view would otherwise carve the terminal out of its own panel
+-- (panel 30 wide, terminal 102 on the first stop) and hide it when the
+-- child session exits, although the debug shell inside is still running.
+-- focus_terminal puts the cursor in that shell at launch. The split is
+-- relative to the current window; botright would span the panel too and
+-- cost the scopes pane fifteen rows.
+dap.defaults.fallback.terminal_win_cmd = 'belowright 15new'
+dap.defaults['pwa-node'].focus_terminal = true
+
+-- focus_terminal lands in terminal-normal mode, one `i` short of typing.
+-- It moves the cursor after TermOpen, so the check is deferred one tick.
+vim.api.nvim_create_autocmd('TermOpen', {
+  group = vim.api.nvim_create_augroup('dap_terminal_insert', { clear = true }),
+  callback = function(args)
+    if not vim.b[args.buf]['dap-type'] then return end
+    vim.schedule(function()
+      if vim.api.nvim_get_current_buf() == args.buf then vim.cmd.startinsert() end
+    end)
+  end,
+})
+
 -- dap-ui writes each value as one DapUIValue extmark (priority 4096), so the
 -- string is a single colour. Attaching the javascript parser colours strings
 -- and numbers inside `{id: 11, name: 'Maria'}`; names and types stay covered
@@ -256,6 +305,18 @@ dap.adapters['pwa-node'] = {
     args = { js_debug_path .. '/js-debug/src/dapDebugServer.js', '${port}' },
   },
 }
+
+-- js-debug answers setBreakpoints with provisional entries that omit `line`.
+-- nvim-dap then keys sign state on a nil line, every breakpoint shares one
+-- state table, and the Rejected sign never clears on the later ones
+-- (nvim-dap #1501). DAP guarantees response order matches the request, so
+-- the line is recoverable by index. Must run before nvim-dap's own handler.
+dap.listeners.before.setBreakpoints['js-debug-line'] = function(_, err, response, request)
+  if err or not response or not request then return end
+  for i, bp in ipairs(response.breakpoints or {}) do
+    bp.line = bp.line or (request.breakpoints[i] or {}).line
+  end
+end
 
 -- Debug shell: js-debug injects its bootloader into the shell via NODE_OPTIONS,
 -- so any node / npm / npx / ts-node run inside auto-attaches as a child session
