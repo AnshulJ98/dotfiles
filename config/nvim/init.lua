@@ -263,6 +263,7 @@ do
     end
     vim.keymap.set({ 'n', 't' }, '<C-/>', toggle_terminal, { desc = 'Toggle terminal' })
     vim.keymap.set({ 'n', 't' }, '<C-_>', toggle_terminal, { desc = 'Toggle terminal' })
+    vim.keymap.set('n', '<leader>tt', toggle_terminal, { desc = '[T]oggle [T]erminal' })
   end
 
   -- TIP: Disable arrow keys in normal mode
@@ -539,7 +540,8 @@ do
       -- it at 2.0:1 and matches VS Code's stackFrameHighlight hue. The dap-view panel
       -- takes the float/statusline background so it reads as chrome, not code.
       set('DapStoppedLine', { bg = tint(c.yellow, bg, 0.10) })
-      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt })
+      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
+      set('NvimDapViewWatchExpr', { fg = c.blue })
       -- dap-ui floats: names blue and scope headers yellow as in VS Code's debug
       -- token colours; the expand arrows recede. Values are parsed as javascript
       -- (debug.lua) so they take the ordinary string and number colours.
