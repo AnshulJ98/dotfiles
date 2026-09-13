@@ -85,11 +85,50 @@ require('dap-view').setup {
   },
 }
 
+local function toggle_dap_terminal()
+  local session = require('dap').session()
+  local buf = session and session.term_buf
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    vim.notify('No active DAP terminal', vim.log.levels.WARN)
+    return
+  end
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_buf(win) == buf then
+      vim.api.nvim_win_hide(win)
+      return
+    end
+  end
+
+  local target = vim.api.nvim_get_current_win()
+  if vim.bo[vim.api.nvim_win_get_buf(target)].buftype ~= '' then
+    target = nil
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then
+        target = win
+        break
+      end
+    end
+  end
+  if not target then
+    vim.notify('No code window is available for the DAP terminal', vim.log.levels.WARN)
+    return
+  end
+
+  local win = vim.api.nvim_open_win(buf, true, { split = 'below', win = target, height = 15 })
+  local wo = vim.wo[win][0]
+  wo.number = false
+  wo.relativenumber = false
+  wo.signcolumn = 'no'
+  vim.cmd.startinsert()
+end
+
 vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = 'Debug: Start/Continue' })
 vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
 vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
 vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
 vim.keymap.set('n', '<leader>dt', function() require('dap').terminate() end, { desc = 'Debug: [T]erminate' })
+vim.keymap.set('n', '<leader>dT', toggle_dap_terminal, { desc = 'Debug: Toggle integrated [T]erminal' })
 vim.keymap.set('n', '<leader>dr', function() require('dap').restart() end, { desc = 'Debug: [R]estart' })
 vim.keymap.set('n', '<leader>dc', function() require('dap').run_to_cursor() end, { desc = 'Debug: Run to [C]ursor' })
 vim.keymap.set('n', '<leader>dl', function() require('dap').run_last() end, { desc = 'Debug: Run [L]ast' })
@@ -124,7 +163,9 @@ vim.api.nvim_create_autocmd({ 'WinClosed', 'WinNew' }, {
 
 -- dap-view window options. Long values wrap instead of running off screen;
 -- the tree indents with literal tabs, so `list` would draw a » per level;
--- the panel takes DapViewNormal so it reads as chrome rather than code.
+-- the panel takes DapViewNormal so it reads as chrome rather than code. Its
+-- values are JavaScript expressions from js-debug, so the parser colours
+-- object summaries without replacing dap-view's higher-priority highlights.
 -- dap-view opens the panel without entering it and forces cursorline just
 -- before setting the filetype, so the focused-window rule from init.lua is
 -- restated here; inside FileType the buffer's own window is current, so the
@@ -143,10 +184,13 @@ vim.api.nvim_create_autocmd('FileType', {
     local wo = vim.wo[win][0]
     wo.wrap = true
     wo.linebreak = true
+    wo.breakindent = true
     wo.list = false
     wo.signcolumn = 'no'
     wo.winhighlight = 'Normal:DapViewNormal,NormalNC:DapViewNormal'
     wo.cursorline = args.match == 'dap-view-hover'
+    vim.bo[args.buf].tabstop = 2
+    pcall(vim.treesitter.start, args.buf, 'javascript')
   end,
 })
 
