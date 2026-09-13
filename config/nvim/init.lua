@@ -155,6 +155,8 @@ do
   --   and `:help lua-guide-options`
   vim.o.list = true
   vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
+  -- No `~` filler past the end of a buffer (code windows and the dap-view panel).
+  vim.opt.fillchars:append { eob = ' ' }
 
   -- Preview substitutions live, as you type!
   vim.o.inccommand = 'split'
@@ -455,7 +457,7 @@ do
 
   require('bearded').setup {
     flavor = 'hc-midnightvoid', -- see require('bearded').available_flavors()
-    transparent = false, -- Set to true if you want a transparent background
+    transparent = true, -- Set to true if you want a transparent background
     bold = true, -- Enable bold text
     italic = true, -- Enable italic text
     -- Runs on setup, :colorscheme bearded and :BeardedReload, so everything below
@@ -477,6 +479,18 @@ do
       set('DiffDelete', { bg = tint(c.red, bg, 0.10) })
       set('DiffChange', { bg = tint(c.blue, bg, 0.10) })
       set('DiffText', { bg = tint(c.blue, bg, 0.20) })
+      -- Debugger. The stopped line used Visual (0.3 primary over bg), on which
+      -- @punctuation (ui.defaultalt) measures 1.04:1 and vanishes. 0.10 yellow keeps
+      -- it at 2.0:1 and matches VS Code's stackFrameHighlight hue. The dap-view panel
+      -- takes the float/statusline background so it reads as chrome, not code.
+      set('DapStoppedLine', { bg = tint(c.yellow, bg, 0.10) })
+      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt })
+      -- dap-ui floats: names blue and scope headers yellow as in VS Code's debug
+      -- token colours; the expand arrows recede. Values are parsed as javascript
+      -- (debug.lua) so they take the ordinary string and number colours.
+      set('DapUIScope', { fg = c.yellow, bold = true })
+      set('DapUIVariable', { fg = c.blue })
+      set('DapUIDecoration', { fg = ui.defaultalt })
       -- Per-level heading bands were already in this file (arc hex). Same six roles,
       -- now from the active flavor. Heading text in a plain buffer stays Bearded yellow
       -- (@markup.heading); render-markdown applies HnBg (priority 4096) on the line.

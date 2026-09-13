@@ -25,6 +25,30 @@ require('nvim-dap-virtual-text').setup {
   end,
 }
 vim.api.nvim_set_hl(0, 'NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
+
+-- nvim-dap-virtual-text refreshes on every `variables` response, and three
+-- consumers (nvim-dap, dap-view scopes, dap-ui's scopes element even while
+-- closed) each request variables per scope per stop. Each refresh clears all
+-- extmarks and re-runs the treesitter locals query over the whole buffer.
+-- Coalescing the burst into one refresh 20 ms after the last response cut the
+-- per-step main-loop stall from 19 ms to 8 ms on a 1100-line file (3 scopes)
+-- and from 37 ms to 17 ms on a 3300-line file, with no visible delay. The slot
+-- is assigned once in setup; DapVirtualTextToggle does not reassign it.
+do
+  local variables = require('dap').listeners.after.variables
+  local refresh = variables['nvim-dap-virtual-text']
+  local pending
+  variables['nvim-dap-virtual-text'] = function(session)
+    if pending then
+      pending:stop()
+      pending:close()
+    end
+    pending = vim.defer_fn(function()
+      pending = nil
+      refresh(session)
+    end, 20)
+  end
+end
 require('dap-view').setup {
   windows = {
     position = 'right',
@@ -40,8 +64,18 @@ require('dap-view').setup {
   end,
   auto_toggle = true,
   winbar = {
+    -- The winbar has 60 columns: five labels take 44, and each button costs
+    -- three. Hints, exceptions, and the step_back/run_last/disconnect buttons
+    -- would clip the leftmost section to `<S]`; hints stay in the help popup,
+    -- and js-debug cannot step back anyway.
+    show_keymap_hints = false,
+    sections = { 'scopes', 'watches', 'breakpoints', 'threads', 'repl' },
     base_sections = {
       repl = { label = 'REPL', keymap = 'P' },
+    },
+    controls = {
+      enabled = true,
+      buttons = { 'play', 'step_into', 'step_over', 'step_out', 'terminate' },
     },
   },
 }
@@ -76,13 +110,26 @@ vim.api.nvim_create_autocmd({ 'WinClosed', 'WinNew' }, {
   end,
 })
 
--- Long values in scopes/hover wrap instead of running off screen.
+-- dap-view window options. Long values wrap instead of running off screen;
+-- the tree indents with literal tabs, so `list` would draw a » per level;
+-- the panel takes DapViewNormal so it reads as chrome rather than code.
+-- bufwinid so the options land on the panel even when FileType fires with
+-- another window current. The `[0]` form is `:setlocal`: `vim.wo[win].x`
+-- acts as `:set` when win is current (the hover float is entered before its
+-- filetype is set), which would hand these values to every window split from
+-- it.
 vim.api.nvim_create_autocmd('FileType', {
-  group = vim.api.nvim_create_augroup('dap_view_wrap', { clear = true }),
+  group = vim.api.nvim_create_augroup('dap_view_window', { clear = true }),
   pattern = { 'dap-view', 'dap-view-hover' },
-  callback = function()
-    vim.wo.wrap = true
-    vim.wo.linebreak = true
+  callback = function(args)
+    local win = vim.fn.bufwinid(args.buf)
+    if win == -1 then return end
+    local wo = vim.wo[win][0]
+    wo.wrap = true
+    wo.linebreak = true
+    wo.list = false
+    wo.signcolumn = 'no'
+    wo.winhighlight = 'Normal:DapViewNormal,NormalNC:DapViewNormal'
   end,
 })
 
@@ -129,6 +176,9 @@ require('mason-nvim-dap').setup {
 dapui.setup {
   icons = { expanded = '▾', collapsed = '▸', current_frame = '▶' },
   floating = { border = 'rounded' },
+  -- Types (`Object`, `number`, `string`) on every row are noise; VS Code and
+  -- the dap-view panel both omit them.
+  render = { max_type_length = 0 },
   layouts = {
     {
       elements = {
@@ -160,10 +210,25 @@ dapui.setup {
   },
 }
 
+-- dap-ui writes each value as one DapUIValue extmark (priority 4096), so the
+-- string is a single colour. Attaching the javascript parser colours strings
+-- and numbers inside `{id: 11, name: 'Maria'}`; names and types stay covered
+-- by dap-ui's own extmarks. DapUIValue must be attribute-free for the parser
+-- colours to show, and dap-ui relinks it to Normal on every ColorScheme, so
+-- it is cleared here, on each open, rather than once at startup.
+vim.api.nvim_create_autocmd('FileType', {
+  group = vim.api.nvim_create_augroup('dapui_value_syntax', { clear = true }),
+  pattern = { 'dapui_scopes', 'dapui_watches', 'dapui_hover' },
+  callback = function(args)
+    vim.api.nvim_set_hl(0, 'DapUIValue', {})
+    vim.treesitter.start(args.buf, 'javascript')
+  end,
+})
+
 vim.fn.sign_define('DapBreakpoint', { text = '●', texthl = 'DiagnosticError', numhl = 'DiagnosticError' })
 vim.fn.sign_define('DapBreakpointCondition', { text = '◆', texthl = 'DiagnosticWarn', numhl = 'DiagnosticWarn' })
 vim.fn.sign_define('DapLogPoint', { text = '◉', texthl = 'DiagnosticInfo', numhl = 'DiagnosticInfo' })
-vim.fn.sign_define('DapStopped', { text = '▶', texthl = 'DiagnosticOk', linehl = 'Visual', numhl = 'DiagnosticOk' })
+vim.fn.sign_define('DapStopped', { text = '▶', texthl = 'DiagnosticOk', linehl = 'DapStoppedLine', numhl = 'DiagnosticOk' })
 vim.fn.sign_define('DapBreakpointRejected', { text = '✖', texthl = 'DiagnosticError', numhl = 'DiagnosticError' })
 
 -- dap-view handles auto-toggle via auto_toggle = true.
@@ -204,7 +269,10 @@ local debug_shell = {
   console = 'integratedTerminal',
   autoAttachChildProcesses = true,
   sourceMaps = true,
-  skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+  -- Dependency source maps that point at unshipped .ts sources produce
+  -- sourceReference-only frames; excluding them reports the shipped .js instead.
+  resolveSourceMapLocations = { '${workspaceFolder}/**', '!**/node_modules/**' },
+  skipFiles = { '<node_internals>/**', '**/node_modules/**' },
 }
 
 -- Same shell in a new kitty OS window. js-debug polls the processId returned
@@ -234,7 +302,7 @@ for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascri
       runtimeArgs = { '--enable-source-maps' },
       sourceMaps = true,
       resolveSourceMapLocations = { '${workspaceFolder}/**', '!**/node_modules/**' },
-      skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+      skipFiles = { '<node_internals>/**', '**/node_modules/**' },
     },
     {
       type = 'pwa-node',
@@ -244,7 +312,7 @@ for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascri
       cwd = '${workspaceFolder}',
       runtimeArgs = { '--enable-source-maps' },
       sourceMaps = true,
-      skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+      skipFiles = { '<node_internals>/**', '**/node_modules/**' },
     },
     {
       type = 'pwa-node',
@@ -255,7 +323,7 @@ for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascri
       cwd = '${workspaceFolder}',
       sourceMaps = true,
       resolveSourceMapLocations = { '${workspaceFolder}/**', '!**/node_modules/**' },
-      skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+      skipFiles = { '<node_internals>/**', '**/node_modules/**' },
       console = 'integratedTerminal',
     },
     {
@@ -265,7 +333,7 @@ for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascri
       port = 9229,
       cwd = '${workspaceFolder}',
       sourceMaps = true,
-      skipFiles = { '<node_internals>/**', '${workspaceFolder}/node_modules/**' },
+      skipFiles = { '<node_internals>/**', '**/node_modules/**' },
       restart = true,
     },
   }
