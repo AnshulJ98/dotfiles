@@ -232,79 +232,26 @@ do
   -- or just use <C-\><C-n> to exit terminal mode
   vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 
-  -- Toggle terminal: one shell below the code window, hidden and reshown with
-  -- its scrollback intact. It finds its window rather than caching a window ID:
-  -- DAP and dap-view rebuild the layout, and focus is often in a DAP terminal.
-  -- <C-_> is what terminals without the kitty keyboard protocol send for Ctrl+/.
+  -- Terminals live in kickstart/terminal.lua: a plain shell and nvim-dap's
+  -- integrated terminal, both in a split below the code, both toggled from any
+  -- mode so neither costs a mode change first.
+  --
+  -- Measured on kitty 0.48.2 with nvim 0.12.5: Ctrl+/, Alt+/ and Alt+Enter all
+  -- arrive in normal, insert and terminal mode. Ctrl+Shift+/ needs kitty's
+  -- `map ctrl+shift+slash no_op`, since kitty_mod is ctrl+shift and the chord
+  -- is its search_scrollback; it is kept for keyboards where Alt+/ is awkward.
+  -- <C-_> is what terminals without the kitty keyboard protocol send for
+  -- Ctrl+/; inside kitty that same chord is ctrl+shift+minus, which kitty
+  -- keeps for decrease-font-size, so there it never fires.
   do
-    local buf
-    local maximized_height
-
-    local function terminal_window()
-      if not (buf and vim.api.nvim_buf_is_valid(buf)) then return end
-      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if vim.api.nvim_win_get_buf(win) == buf then return win end
-      end
-    end
-
-    local function code_window()
-      local current = vim.api.nvim_get_current_win()
-      if vim.bo[vim.api.nvim_win_get_buf(current)].buftype == '' then return current end
-      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then return win end
-      end
-    end
-
-    local function toggle_terminal()
-      local win = terminal_window()
-      if win then
-        vim.api.nvim_win_hide(win)
-        maximized_height = nil
-        return
-      end
-      if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-        buf = vim.api.nvim_create_buf(false, false)
-        vim.api.nvim_buf_call(buf, function()
-          vim.fn.jobstart(vim.o.shell, {
-            term = true,
-            on_exit = function()
-              vim.schedule(function()
-                if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
-                buf, maximized_height = nil, nil
-              end)
-            end,
-          })
-        end)
-      end
-      local target = code_window()
-      if not target then
-        vim.notify('No code window is available for the terminal', vim.log.levels.WARN)
-        return
-      end
-      maximized_height = nil
-      vim.api.nvim_open_win(buf, true, { split = 'below', win = target, height = 15 })
-      vim.cmd.startinsert()
-    end
-
-    local function toggle_terminal_maximize()
-      local win = terminal_window()
-      if not win then
-        vim.notify('Open the terminal before maximizing it', vim.log.levels.WARN)
-        return
-      end
-      if maximized_height then
-        vim.api.nvim_win_set_height(win, maximized_height)
-        maximized_height = nil
-        return
-      end
-      maximized_height = vim.api.nvim_win_get_height(win)
-      vim.api.nvim_win_call(win, function() vim.cmd 'wincmd _' end)
-    end
-
-    vim.keymap.set({ 'n', 't' }, '<C-/>', toggle_terminal, { desc = 'Toggle terminal' })
-    vim.keymap.set({ 'n', 't' }, '<C-_>', toggle_terminal, { desc = 'Toggle terminal' })
-    vim.keymap.set('n', '<leader>tt', toggle_terminal, { desc = '[T]oggle [T]erminal' })
-    vim.keymap.set({ 'n', 't' }, '<M-CR>', toggle_terminal_maximize, { desc = 'Maximize terminal' })
+    local term = require 'kickstart.terminal'
+    local anywhere = { 'n', 'i', 't' }
+    vim.keymap.set(anywhere, '<C-/>', term.toggle_shell, { desc = 'Toggle terminal' })
+    vim.keymap.set(anywhere, '<C-_>', term.toggle_shell, { desc = 'Toggle terminal' })
+    vim.keymap.set(anywhere, '<M-/>', term.toggle_debug, { desc = 'Toggle debug terminal' })
+    vim.keymap.set(anywhere, '<C-S-/>', term.toggle_debug, { desc = 'Toggle debug terminal' })
+    vim.keymap.set(anywhere, '<M-CR>', term.toggle_maximize, { desc = 'Maximize terminal' })
+    vim.keymap.set('n', '<leader>tt', term.toggle_shell, { desc = '[T]oggle [T]erminal' })
   end
 
   -- TIP: Disable arrow keys in normal mode
