@@ -168,8 +168,9 @@ vim.api.nvim_create_autocmd('FileType', {
 })
 
 local function dap_expr_under_cursor()
-  local node = vim.treesitter.get_node()
-  if not node then return vim.fn.expand '<cexpr>' end
+  -- get_node raises when the buffer has no parser rather than returning nil.
+  local ok, node = pcall(vim.treesitter.get_node)
+  if not (ok and node) then return vim.fn.expand '<cexpr>' end
   while node:parent() and vim.tbl_contains({ 'member_expression', 'subscript_expression' }, node:parent():type()) do
     node = node:parent()
   end
