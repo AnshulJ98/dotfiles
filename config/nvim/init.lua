@@ -268,21 +268,17 @@ do
   -- mode so neither costs a mode change first.
   --
   -- Measured on kitty 0.48.2 with nvim 0.12.5: Ctrl+/, Alt+/ and Alt+Enter all
-  -- arrive in normal, insert and terminal mode. Ctrl+Shift+/ needs kitty's
-  -- `map ctrl+shift+slash no_op`, since kitty_mod is ctrl+shift and the chord
-  -- is its search_scrollback; it is kept for keyboards where Alt+/ is awkward.
-  -- <C-_> is what terminals without the kitty keyboard protocol send for
-  -- Ctrl+/; inside kitty that same chord is ctrl+shift+minus, which kitty
-  -- keeps for decrease-font-size, so there it never fires.
+  -- arrive in normal, insert and terminal mode. <C-_> is the same shell toggle
+  -- for terminals without the kitty keyboard protocol, which send that for
+  -- Ctrl+/; inside kitty the chord is ctrl+shift+minus, kitty's
+  -- decrease-font-size, so there it never reaches nvim.
   do
     local term = require 'kickstart.terminal'
     local anywhere = { 'n', 'i', 't' }
     vim.keymap.set(anywhere, '<C-/>', term.toggle_shell, { desc = 'Toggle terminal' })
     vim.keymap.set(anywhere, '<C-_>', term.toggle_shell, { desc = 'Toggle terminal' })
     vim.keymap.set(anywhere, '<M-/>', term.toggle_debug, { desc = 'Toggle debug terminal' })
-    vim.keymap.set(anywhere, '<C-S-/>', term.toggle_debug, { desc = 'Toggle debug terminal' })
     vim.keymap.set(anywhere, '<M-CR>', term.toggle_maximize, { desc = 'Maximize terminal' })
-    vim.keymap.set('n', '<leader>tt', term.toggle_shell, { desc = '[T]oggle [T]erminal' })
   end
 
   -- TIP: Disable arrow keys in normal mode
@@ -536,9 +532,9 @@ do
       -- it at 2.0:1 and matches VS Code's stackFrameHighlight hue. The dap-view panel
       -- takes the float/statusline background so it reads as chrome, not code.
       set('DapStoppedLine', { bg = tint(c.yellow, bg, 0.10) })
-      -- No `dim`: nvim emits SGR 2 for it and kitty renders that at
-      -- 'dim_opacity', which washed the panel's own text out.
-      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt })
+      -- `dim` emits SGR 2, which kitty renders at its `dim_opacity`; that is
+      -- what makes the panel recede behind the code instead of competing with it.
+      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
       set('NvimDapViewWatchExpr', { fg = c.blue })
       set('NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
       -- In transparent mode bearded resolves its `bg` to NONE, so every group
