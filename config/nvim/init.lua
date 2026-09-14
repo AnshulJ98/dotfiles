@@ -444,6 +444,18 @@ do
     -- with the cursor low on screen all 62 leader mappings get squeezed into
     -- whatever rows are left under it and the popup turns into a scroller.
     -- `<leader>?` below is the place to read the whole chart.
+    win = {
+      -- `height.max` alone would not have helped. The popup is bottom-anchored
+      -- and `check_overlap` (which-key/view.lua:486-502) rewrites the height
+      -- to `lines - (cursor_row + 1)` whenever the popup would cover the
+      -- cursor, after the max has already been applied. With the cursor eight
+      -- rows off the bottom that is six rows, whatever the cap says.
+      no_overlap = false,
+      -- A fraction of the window rather than the classic preset's flat 25, so
+      -- a taller terminal actually gets a taller chart. The remaining quarter
+      -- keeps the lines around the cursor visible.
+      height = { min = 4, max = 0.75 },
+    },
     layout = {
       width = { min = 20, max = 50 },
       spacing = 3,
