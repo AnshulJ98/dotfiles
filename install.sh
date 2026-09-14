@@ -123,10 +123,12 @@ done
 
 # 8. Post-install: bootstrap nvim plugins + mason tools ----------------------
 if command -v nvim >/dev/null 2>&1; then
-  log "Bootstrapping Lazy plugins (headless)..."
-  nvim --headless "+Lazy! install" "+qa" || warn "Lazy install reported errors — open nvim and run :Lazy"
+  log "Bootstrapping nvim plugins (headless)..."
+  # vim.pack.add installs whatever is missing during the first start.
+  nvim --headless "+qa" || warn "Plugin install reported errors — open nvim and read :messages"
   log "Bootstrapping Mason tools (headless)..."
-  nvim --headless "+MasonInstall stylua shfmt shellcheck prettierd ruff" "+qa" || warn "Mason install partial — run :Mason interactively"
+  # Tool list comes from mason-tool-installer in config/nvim/lua/config/lsp.lua.
+  nvim --headless "+MasonToolsInstallSync" "+qa" || warn "Mason install partial — run :Mason interactively"
   ok "nvim bootstrapped"
 fi
 
