@@ -942,11 +942,16 @@ do
         })
       end
 
-      -- Inlay hints on, as in VS Code; vtsls is trimmed to parameter names
-      -- below so they stay sparse. <leader>th is the off-switch.
+      -- Inlay hints off until asked for. The toggle is buffer-scoped on both
+      -- sides: `is_enabled` reads this buffer, so `enable` has to write it
+      -- too, or one press flips every buffer that has a capable server.
+      -- vtsls is trimmed to parameter names below, for when they are on.
       if client and client:supports_method('textDocument/inlayHint', event.buf) then
-        vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
-        map('<leader>th', function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }) end, '[T]oggle Inlay [H]ints')
+        map(
+          '<leader>th',
+          function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }, { bufnr = event.buf }) end,
+          '[T]oggle Inlay [H]ints'
+        )
       end
 
       -- Colour swatches on colour literals (cssls) and paired JSX/HTML tag
