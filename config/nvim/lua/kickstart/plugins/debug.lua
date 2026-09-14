@@ -85,50 +85,14 @@ require('dap-view').setup {
   },
 }
 
-local function toggle_dap_terminal()
-  local session = require('dap').session()
-  local buf = session and session.term_buf
-  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-    vim.notify('No active DAP terminal', vim.log.levels.WARN)
-    return
-  end
-
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if vim.api.nvim_win_get_buf(win) == buf then
-      vim.api.nvim_win_hide(win)
-      return
-    end
-  end
-
-  local target = vim.api.nvim_get_current_win()
-  if vim.bo[vim.api.nvim_win_get_buf(target)].buftype ~= '' then
-    target = nil
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then
-        target = win
-        break
-      end
-    end
-  end
-  if not target then
-    vim.notify('No code window is available for the DAP terminal', vim.log.levels.WARN)
-    return
-  end
-
-  local win = vim.api.nvim_open_win(buf, true, { split = 'below', win = target, height = 15 })
-  local wo = vim.wo[win][0]
-  wo.number = false
-  wo.relativenumber = false
-  wo.signcolumn = 'no'
-  vim.cmd.startinsert()
-end
+local terminal = require 'kickstart.terminal'
 
 vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = 'Debug: Start/Continue' })
 vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
 vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
 vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
 vim.keymap.set('n', '<leader>dt', function() require('dap').terminate() end, { desc = 'Debug: [T]erminate' })
-vim.keymap.set('n', '<leader>dT', toggle_dap_terminal, { desc = 'Debug: Toggle integrated [T]erminal' })
+vim.keymap.set('n', '<leader>dT', terminal.toggle_debug, { desc = 'Debug: Toggle integrated [T]erminal' })
 vim.keymap.set('n', '<leader>dr', function() require('dap').restart() end, { desc = 'Debug: [R]estart' })
 vim.keymap.set('n', '<leader>dc', function() require('dap').run_to_cursor() end, { desc = 'Debug: Run to [C]ursor' })
 vim.keymap.set('n', '<leader>dl', function() require('dap').run_last() end, { desc = 'Debug: Run [L]ast' })
@@ -285,20 +249,28 @@ dapui.setup {
 -- and dap-view would otherwise carve the terminal out of its own panel
 -- (panel 30 wide, terminal 102 on the first stop) and hide it when the
 -- child session exits, although the debug shell inside is still running.
--- focus_terminal puts the cursor in that shell at launch. The split is
--- relative to the current window; botright would span the panel too and
--- cost the scopes pane fifteen rows.
-dap.defaults.fallback.terminal_win_cmd = 'belowright 15new'
+-- A string here runs `belowright 15new` against the focused window, which
+-- puts the terminal inside dap-view or neo-tree when the session is started
+-- from one; the function anchors it on a code window instead.
+dap.defaults.fallback.terminal_win_cmd = terminal.open_for_dap
 dap.defaults['pwa-node'].focus_terminal = true
 
--- focus_terminal lands in terminal-normal mode, one `i` short of typing.
--- It moves the cursor after TermOpen, so the check is deferred one tick.
+-- Two gaps in nvim-dap's own terminal handling close here. It pools terminal
+-- buffers and skips terminal_win_cmd whenever the pool is not empty, so every
+-- run after the first writes into a buffer with no window; and focus_terminal
+-- only searches for a window, so it silently does nothing in that case.
+-- Deferred one tick because the job starts inside nvim_buf_call.
 vim.api.nvim_create_autocmd('TermOpen', {
   group = vim.api.nvim_create_augroup('dap_terminal_insert', { clear = true }),
   callback = function(args)
-    if not vim.b[args.buf]['dap-type'] then return end
+    local dap_type = vim.b[args.buf]['dap-type']
+    if not dap_type then return end
     vim.schedule(function()
-      if vim.api.nvim_get_current_buf() == args.buf then vim.cmd.startinsert() end
+      if not vim.api.nvim_buf_is_valid(args.buf) then return end
+      local win = terminal.reveal_dap(args.buf)
+      if not dap.defaults[dap_type].focus_terminal then return end
+      vim.api.nvim_set_current_win(win)
+      vim.cmd.startinsert()
     end)
   end,
 })
