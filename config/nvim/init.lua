@@ -155,8 +155,35 @@ do
   --   and `:help lua-guide-options`
   vim.o.list = true
   vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
-  -- No `~` filler past the end of a buffer (code windows and the dap-view panel).
-  vim.opt.fillchars:append { eob = ' ' }
+  -- No `~` filler past the end of a buffer (code windows and the dap-view panel)
+  -- and no `-` filler after a closed fold's text.
+  vim.opt.fillchars:append { eob = ' ', fold = ' ' }
+
+  -- A closed fold shows its first line in syntax colours instead of `+--`.
+  vim.o.foldtext = ''
+
+  -- Wrapped continuation lines are marked; 'breakindent' above aligns them.
+  vim.o.showbreak = '↪ '
+
+  -- One statusline for the whole screen. With one per window, neo-tree, the
+  -- terminal and the debugger panel each drew a line of junk, and the code
+  -- window's own line truncated its path once the panel took 60 columns.
+  vim.o.laststatus = 3
+
+  -- Opening the terminal or the debugger panel keeps the text in place rather
+  -- than scrolling the code window to hold the cursor row.
+  vim.o.splitkeep = 'screen'
+
+  -- kitty shows the window title in its tab: `file - project`.
+  vim.o.title = true
+  vim.o.titlestring = "%t%( %M%) - %{fnamemodify(getcwd(), ':t')}"
+
+  -- No remote plugins are in use; the providers only cost startup time and
+  -- checkhealth warnings.
+  vim.g.loaded_node_provider = 0
+  vim.g.loaded_perl_provider = 0
+  vim.g.loaded_python3_provider = 0
+  vim.g.loaded_ruby_provider = 0
 
   -- Preview substitutions live, as you type!
   vim.o.inccommand = 'split'
@@ -166,7 +193,9 @@ do
 
   -- Floating windows that pass no border of their own (LSP hover, blink menu
   -- and docs, which-key, dap-view hover) get one, so they stand off the code.
+  -- The wildmenu and the native completion popup take the same border.
   vim.o.winborder = 'rounded'
+  vim.o.pumborder = 'rounded'
 
   -- Minimal number of screen lines to keep above and below the cursor.
   vim.o.scrolloff = 10
@@ -199,6 +228,8 @@ do
     severity_sort = true,
     float = { border = 'rounded', source = 'if_many' },
     underline = { severity = { min = vim.diagnostic.severity.WARN } },
+    -- Hints and infos stay off the sign column, which breakpoints share.
+    signs = { severity = { min = vim.diagnostic.severity.WARN } },
 
     -- Can switch between these as you prefer
     virtual_text = true, -- Text shows up at the end of the line
@@ -272,6 +303,18 @@ do
     desc = 'Highlight when yanking (copying) text',
     group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
     callback = function() vim.hl.on_yank() end,
+  })
+
+  -- 'autoread' only compares timestamps after a shell command (`:help
+  -- timestamp`), so a file rewritten by a formatter, an agent in the
+  -- integrated terminal or another kitty tab stayed stale until `:!`.
+  -- `:checktime` is not allowed from the command-line window.
+  vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'TermClose', 'TermLeave' }, {
+    desc = 'Reload files changed outside of nvim',
+    group = vim.api.nvim_create_augroup('kickstart-checktime', { clear = true }),
+    callback = function()
+      if vim.fn.getcmdwintype() == '' then vim.cmd.checktime() end
+    end,
   })
 
   -- Only the focused window shows its cursor line, and terminals never do;
@@ -444,47 +487,8 @@ do
   -- change the command under that to load whatever the name of that colorscheme is.
   --
   -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-  -- vim.pack.add { gh 'folke/tokyonight.nvim' }
-  -- ---@diagnostic disable-next-line: missing-fields
-  -- require('tokyonight').setup {
-  --   styles = {
-  --     comments = { italic = false }, -- Disable italics in comments
-  --   },
-  -- }
-  -- Add the bearded-nvim plugin using the built-in pack manager
-  vim.pack.add {
-    gh 'Ferouk/bearded-nvim',
-    gh 'Shatur/neovim-ayu',
-    gh 'ellisonleao/gruvbox.nvim',
-    gh 'tjdevries/colorbuddy.nvim', -- vitesse.nvim dependency
-    gh '2nthony/vitesse.nvim',
-  }
-  -- AYU
-  -- require('ayu').setup {
-  --   mirage = false, -- true → mirage when background=dark
-  --   terminal = true,
-  --   overrides = {},
-  -- }
-  -- vim.cmd.colorscheme 'ayu-dark' -- or 'ayu-mirage'
-  --
-  -- GRUVBOX
-  -- require('gruvbox').setup {
-  --   contrast = 'hard', -- '', 'soft', or 'hard'
-  --   italic = { comments = true, strings = false, operators = false, folds = true, emphasis = true },
-  --   transparent_mode = false,
-  -- }
-  -- vim.o.background = 'dark'
-  -- vim.cmd.colorscheme 'gruvbox'
-  --
-  -- Vitesse
-  -- require('vitesse').setup {
-  --   comment_italics = true,
-  --   transparent_background = false,
-  --   transparent_float_background = false,
-  -- }
-  -- vim.cmd.colorscheme 'vitesse'
-  --
-  -- -- Configure the theme options
+  vim.pack.add { gh 'Ferouk/bearded-nvim' }
+
   local function tint(color, bg, alpha)
     local function ch(h, i) return tonumber(h:sub(i, i + 1), 16) end
     local out = {}
@@ -511,7 +515,7 @@ do
     -- Runs on setup, :colorscheme bearded and :BeardedReload, so everything below
     -- follows the active flavor instead of being pinned to one palette.
     on_highlights = function(set, palette, opts)
-      local c, ui = palette.colors, palette.ui
+      local c, ui, levels = palette.colors, palette.ui, palette.levels
       local bg = ui.uibackground
       if not opts.transparent then
         local solid = opaque(bg)
@@ -534,12 +538,37 @@ do
       set('DapStoppedLine', { bg = tint(c.yellow, bg, 0.10) })
       set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
       set('NvimDapViewWatchExpr', { fg = c.blue })
-      -- dap-ui floats: names blue and scope headers yellow as in VS Code's debug
-      -- token colours; the expand arrows recede. Values are parsed as javascript
-      -- (debug.lua) so they take the ordinary string and number colours.
-      set('DapUIScope', { fg = c.yellow, bold = true })
-      set('DapUIVariable', { fg = c.blue })
-      set('DapUIDecoration', { fg = ui.defaultalt })
+      set('NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
+      -- In transparent mode bearded resolves its `bg` to NONE, so every group
+      -- built from it lost a colour: CursorLine painted nothing (neo-tree's,
+      -- the quickfix's and the hover pane's cursor lines with it), and
+      -- PmenuSel, Search and IncSearch kept the text's own light foreground
+      -- on a light block. CursorLine takes the blend bearded uses when opaque.
+      set('CursorLine', { bg = tint(ui.primary, bg, 0.06) })
+      set('QuickFixLine', { bg = ui.primaryalt })
+      set('PmenuSel', { fg = ui.uibackgroundalt, bg = ui.primary, bold = true })
+      set('Search', { fg = ui.uibackgroundalt, bg = c.orange })
+      set('IncSearch', { fg = ui.uibackgroundalt, bg = c.blue, bold = true })
+      -- ui.border is a near-black that vanishes on the dimmed kitty background.
+      set('WinSeparator', { fg = ui.primaryalt })
+      -- With 'foldtext' empty a closed fold keeps its syntax colours; the band
+      -- marks it as folded.
+      set('Folded', { bg = ui.primaryalt })
+      set('MatchParen', { fg = c.purple, bg = ui.primaryalt, bold = true })
+      -- The active indent guide had the comment colour, same as the inactive ones.
+      set('IblScope', { fg = ui.defaultMain })
+      set('TreesitterContextBottom', { sp = ui.primaryalt, underline = true })
+      for level, color in pairs { Error = levels.danger, Warn = levels.warning, Info = levels.info, Hint = c.purple } do
+        set('DiagnosticUnderline' .. level, { sp = color, undercurl = true })
+      end
+      -- mini.statusline links the mode blocks to Cursor and the Diff groups,
+      -- here a light block with no foreground and four faint backgrounds, and
+      -- the file name to StatusLineNC, the comment colour. Dark text on the
+      -- mode's accent, as VS Code's status bar does it.
+      for mode, color in pairs { Normal = c.blue, Insert = c.green, Visual = c.purple, Replace = c.red, Command = c.orange, Other = c.pink } do
+        set('MiniStatuslineMode' .. mode, { fg = ui.uibackgroundalt, bg = color, bold = true })
+      end
+      set('MiniStatuslineFilename', { fg = ui.default, bg = ui.uibackgroundalt })
       -- Per-level heading bands were already in this file (arc hex). Same six roles,
       -- now from the active flavor. Heading text in a plain buffer stays Bearded yellow
       -- (@markup.heading); render-markdown applies HnBg (priority 4096) on the line.
@@ -557,10 +586,6 @@ do
     end,
   }
 
-  -- Load the colorscheme here.
-  -- Like many other themes, this one has different styles, and you could load
-  -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  -- vim.cmd.colorscheme 'tokyonight-night'
   vim.cmd.colorscheme 'bearded'
 
   -- Highlight todo, notes, etc in comments
@@ -577,6 +602,8 @@ do
   require('render-markdown').setup {
     -- pipe_table = { enabled = true, render_modes = { 'i' } },
     pipe_table = { enabled = false },
+    -- No latex parser is installed; checkhealth warned on every run.
+    latex = { enabled = false },
   }
   vim.pack.add { gh 'ice345/markdown-table-wrap.nvim' }
   require('markdown-table-wrap').setup {
@@ -635,6 +662,16 @@ do
   -- cursor location to LINE:COLUMN
   ---@diagnostic disable-next-line: duplicate-set-field
   statusline.section_location = function() return '%2l:%-2v %P' end
+
+  -- `parent/file` instead of the full path: a hashed checkout directory pushed
+  -- the name off the line. Special buffers (terminal, panels) keep their name.
+  ---@diagnostic disable-next-line: duplicate-set-field
+  statusline.section_filename = function()
+    if vim.bo.buftype ~= '' then return '%t%( %M%)' end
+    local name = vim.api.nvim_buf_get_name(0)
+    if name == '' then return '[No Name]%( %M%)' end
+    return vim.fn.fnamemodify(name, ':h:t') .. '/' .. vim.fn.fnamemodify(name, ':t') .. '%( %M%R%)'
+  end
 
   -- Attached LSP client names, then the debugger's state (`Stopped at line
   -- 16`, `Running`) while a session exists. dap.status() keeps returning the
@@ -889,14 +926,29 @@ do
         })
       end
 
-      -- The following code creates a keymap to toggle inlay hints in your
-      -- code, if the language server you are using supports them
-      --
-      -- This may be unwanted, since they displace some of your code
+      -- Inlay hints on, as in VS Code; vtsls is trimmed to parameter names
+      -- below so they stay sparse. <leader>th is the off-switch.
       if client and client:supports_method('textDocument/inlayHint', event.buf) then
-        vim.lsp.inlay_hint.enable(false, { bufnr = event.buf })
+        vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
         map('<leader>th', function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }) end, '[T]oggle Inlay [H]ints')
       end
+
+      -- Colour swatches on colour literals (cssls) and paired JSX/HTML tag
+      -- renames (vtsls), both new in 0.12 and only for servers that offer them.
+      if client and client:supports_method('textDocument/documentColor', event.buf) then
+        vim.lsp.document_color.enable(true, { bufnr = event.buf, client_id = client.id })
+      end
+      if client and client:supports_method('textDocument/linkedEditingRange', event.buf) then
+        vim.lsp.linked_editing_range.enable(true, { client_id = client.id })
+      end
+
+      -- K shows the variable's value while stopped in the debugger (VS Code's
+      -- debug hover), and the LSP hover otherwise.
+      map('K', function()
+        local dap = package.loaded.dap
+        if dap and dap.session() then return require('dap-view').hover(nil, true) end
+        vim.lsp.buf.hover()
+      end, 'Hover (debug value while stopped)')
     end,
   })
 
@@ -906,25 +958,18 @@ do
   ---@type table<string, vim.lsp.Config>
   local servers = {
     vtsls = {
+      -- Parameter names on literal arguments only, which is what VS Code shows
+      -- by default; the type hints on every declaration and return doubled
+      -- the width of a line.
       settings = {
         typescript = {
           inlayHints = {
             parameterNames = { enabled = 'literals', suppressWhenArgumentMatchesName = true },
-            parameterTypes = { enabled = true },
-            variableTypes = { enabled = true, suppressWhenTypeMatchesName = true },
-            propertyDeclarationTypes = { enabled = true },
-            functionLikeReturnTypes = { enabled = true },
-            enumMemberValues = { enabled = true },
           },
         },
         javascript = {
           inlayHints = {
-            parameterNames = { enabled = 'literals' },
-            parameterTypes = { enabled = true },
-            variableTypes = { enabled = true },
-            propertyDeclarationTypes = { enabled = true },
-            functionLikeReturnTypes = { enabled = true },
-            enumMemberValues = { enabled = true },
+            parameterNames = { enabled = 'literals', suppressWhenArgumentMatchesName = true },
           },
         },
       },
@@ -1229,33 +1274,28 @@ do
       end
     end,
   })
+
+  -- Sticky scroll: the enclosing class and function signatures stay pinned
+  -- above the viewport, as in VS Code. Bearded ships the highlight groups.
+  vim.pack.add { gh 'nvim-treesitter/nvim-treesitter-context' }
+  require('treesitter-context').setup {
+    max_lines = 4,
+    multiline_threshold = 1,
+    trim_scope = 'inner',
+  }
 end
 
 -- ============================================================
--- SECTION 10: OPTIONAL EXAMPLES / NEXT STEPS
--- kickstart.plugins.* examples
+-- SECTION 10: PLUGIN MODULES
+-- lua/kickstart/plugins/*: debugger, indent guides, lint, autopairs, neo-tree, gitsigns
 -- ============================================================
 do
-  -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
-  -- init.lua. If you want these files, they are in the repository, so you can just download them and
-  -- place them in the correct locations.
-
-  -- NOTE: Next step on your Neovim journey: Add/Configure additional plugins for Kickstart
-  --
-  --  Here are some example plugins that I've included in the Kickstart repository.
-  --  Uncomment any of the lines below to enable them (you will need to restart nvim).
-  --
   require 'kickstart.plugins.debug'
   require 'kickstart.plugins.indent_line'
   require 'kickstart.plugins.lint'
   require 'kickstart.plugins.autopairs'
   require 'kickstart.plugins.neo-tree'
   require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
-
-  -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
-  --
-  --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- require 'custom.plugins'
 end
 
 -- The line beneath this is called `modeline`. See `:help modeline`

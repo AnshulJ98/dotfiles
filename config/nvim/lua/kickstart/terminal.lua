@@ -48,13 +48,27 @@ local function open_below(buf, enter)
   wo.number = false
   wo.relativenumber = false
   wo.signcolumn = 'no'
+  -- The split inherits the code window's treesitter foldexpr, which would then
+  -- run per line on every terminal redraw against a buffer with no parser.
+  wo.foldmethod = 'manual'
   unmaximized[buf] = nil
   return win
 end
 
+-- Floating windows (which-key, completion docs, fidget) count in the tabpage
+-- list but cannot take over as the last window, so only splits are counted.
+---@return integer
+local function split_window_count()
+  local count = 0
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_get_config(win).relative == '' then count = count + 1 end
+  end
+  return count
+end
+
 ---@param win integer
 local function hide(win)
-  if #vim.api.nvim_tabpage_list_wins(0) == 1 then
+  if split_window_count() == 1 then
     vim.notify('The terminal is the only window', vim.log.levels.WARN)
     return
   end
