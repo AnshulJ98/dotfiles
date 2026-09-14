@@ -100,6 +100,8 @@ vim.keymap.set('n', '<leader>dp', function() require('dap').pause() end, { desc 
 vim.keymap.set('n', '<leader>d[', function() require('dap').up() end, { desc = 'Debug: Frame up (caller)' })
 vim.keymap.set('n', '<leader>d]', function() require('dap').down() end, { desc = 'Debug: Frame down (callee)' })
 vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
+-- F9 is VS Code's breakpoint key; the editor uses no function keys of its own.
+vim.keymap.set('n', '<F9>', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
 vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: Toggle DAP UI (splits)' })
 vim.keymap.set('n', '<F8>', '<cmd>DapViewToggle<CR>', { desc = 'Debug: Toggle DAP View (single window)' })

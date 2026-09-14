@@ -17,5 +17,23 @@
         "workbench.action.toggleMaximizedPanel"
       ]
     }
+  },
+  // Stepping keys aligned with Neovim (F1 into, F2 over, F3 out). Scoped to a
+  // paused session so the command palette, rename, and find-next keep F1, F2
+  // and F3 the rest of the time. F5 and F9 already match on both sides.
+  {
+    "key": "f1",
+    "command": "workbench.action.debug.stepInto",
+    "when": "debugState == 'stopped'"
+  },
+  {
+    "key": "f2",
+    "command": "workbench.action.debug.stepOver",
+    "when": "debugState == 'stopped'"
+  },
+  {
+    "key": "f3",
+    "command": "workbench.action.debug.stepOut",
+    "when": "debugState == 'stopped'"
   }
 ]
