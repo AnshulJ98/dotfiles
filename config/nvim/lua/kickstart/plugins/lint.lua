@@ -7,7 +7,8 @@ local lint = require 'lint'
 lint.linters.markdownlint = require('lint').linters.markdownlint
 lint.linters.markdownlint.args = {
   '--stdin',
-  '--config', vim.fn.expand '~' .. '/.markdownlint.jsonc',
+  '--config',
+  vim.fn.expand '~' .. '/.markdownlint.jsonc',
 }
 
 lint.linters_by_ft = {

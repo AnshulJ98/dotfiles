@@ -2,9 +2,9 @@
 --
 -- DAP (Debug Adapter Protocol) for Go and Node.js/TypeScript.
 
+-- mason.nvim is added in init.lua SECTION 6, which runs before this module.
 vim.pack.add {
   'https://github.com/mfussenegger/nvim-dap',
-  'https://github.com/mason-org/mason.nvim',
   'https://github.com/jay-babu/mason-nvim-dap.nvim',
   'https://github.com/leoluz/nvim-dap-go',
   'https://github.com/theHamsta/nvim-dap-virtual-text',
@@ -15,9 +15,12 @@ vim.pack.add {
 -- virtual text spanning many screen rows stalls redraw on cursor movement.
 -- Full values remain reachable via hover (<leader>dh) and the scopes pane.
 require('nvim-dap-virtual-text').setup {
+  enabled = false,
   display_callback = function(variable, _, _, _, options)
     local value = variable.value:gsub('%s+', ' ')
-    if #value > 50 then value = value:sub(1, 50) .. '…' end
+    -- strcharpart, not sub: js-debug's summaries are full of multibyte glyphs
+    -- (…, ƒ) and a byte slice through one renders as <e2>.
+    if vim.fn.strchars(value) > 50 then value = vim.fn.strcharpart(value, 0, 50) .. '…' end
     if options.virt_text_pos == 'inline' then return ' = ' .. value end
     return variable.name .. ' = ' .. value
   end,
@@ -62,6 +65,7 @@ require('dap-view').setup {
       if not vim.wo[win].winfixbuf and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == '' then return win end
     end
   end,
+  -- The panel opens with the session and closes with it.
   auto_toggle = true,
   winbar = {
     -- The winbar has 60 columns: five labels take 44, and each button costs
@@ -86,6 +90,25 @@ require('dap-view').setup {
 local terminal = require 'kickstart.terminal'
 local dap = require 'dap'
 local widgets = require 'dap.ui.widgets'
+
+-- A step or a continue that never stops again leaves nvim-dap's session with
+-- `stopped_thread_id` nil but `current_frame` still set (dap/session.lua,
+-- clear_running); only an adapter-sent `continued` event clears the frame,
+-- and js-debug sends none for a step. dap-view decides between "Session not
+-- stopped" and a variables render on `current_frame`, so the panel kept the
+-- returned frame on screen and re-rendered it from dead `variablesReference`
+-- handles: correct on the stop, then stale values or "No variables returned
+-- from adapter" once the frame had returned. Clearing the frame in the same
+-- direction nvim-dap already cleared the thread makes the panel say what is
+-- true. The refresh is dap-view's own, and on a resumed session it only
+-- writes that one line: no request, no render coroutine.
+for _, event in ipairs { 'continue', 'event_continued' } do
+  dap.listeners.after[event]['dap-view-clear-stale-frame'] = function(session)
+    if session.stopped_thread_id ~= nil then return end
+    session.current_frame = nil
+    require('dap-view.refresher').refresh_session_based_views()
+  end
+end
 
 -- js-debug nests the real program under wrapper sessions (`nest start`
 -- spawns `node dist/main`), and a stop focuses the innermost one.
@@ -165,16 +188,18 @@ vim.keymap.set('n', '<leader>B', function() dap.set_breakpoint(vim.fn.input 'Bre
 -- A logpoint prints its message (with {expr} interpolation) instead of stopping.
 vim.keymap.set('n', '<leader>dL', function() dap.set_breakpoint(nil, nil, vim.fn.input 'Log message: ') end, { desc = 'Debug: Set [L]ogpoint' })
 vim.keymap.set('n', '<leader>dv', '<cmd>DapVirtualTextToggle<CR>', { desc = 'Debug: Toggle [V]irtual text' })
--- Scopes and call stack are nvim-dap's own widgets in a centered float; the
--- panel on the right already shows both, these are for reading a long value.
--- The widgets floats have no syntax colours of their own, so values are
--- parsed as javascript, as the old dap-ui float did. The frames float is
--- file paths and stays plain.
+-- nvim-dap's widget floats carry no syntax colours of their own, so evaluated
+-- values are parsed as javascript, as the old dap-ui float did. The frames
+-- float is file paths and stays plain.
 local function highlight_values(view)
   pcall(vim.treesitter.start, vim.api.nvim_win_get_buf(view.win), 'javascript')
   return view
 end
-vim.keymap.set('n', '<leader>df', function() highlight_values(widgets.centered_float(widgets.scopes)) end, { desc = 'Debug: [F]loat scopes' })
+-- Scopes live in the panel: `dap.ui.widgets.scopes` renders through
+-- `dap.ui.new_tree`, which expands every node that has children on each
+-- render (dap/ui.lua, render_all_expanded), so a float of it dumps the whole
+-- global object graph. The panel's tree is the one that keeps collapse state.
+vim.keymap.set('n', '<leader>df', '<cmd>DapViewJump scopes<CR>', { desc = 'Debug: scopes pane' })
 vim.keymap.set('n', '<leader>dk', function() widgets.centered_float(widgets.frames) end, { desc = 'Debug: stac[K]s float' })
 vim.keymap.set('n', '<leader>de', function()
   local expression = vim.fn.input 'Expression: '

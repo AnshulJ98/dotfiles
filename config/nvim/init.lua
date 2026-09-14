@@ -536,7 +536,9 @@ do
       -- it at 2.0:1 and matches VS Code's stackFrameHighlight hue. The dap-view panel
       -- takes the float/statusline background so it reads as chrome, not code.
       set('DapStoppedLine', { bg = tint(c.yellow, bg, 0.10) })
-      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
+      -- No `dim`: nvim emits SGR 2 for it and kitty renders that at
+      -- 'dim_opacity', which washed the panel's own text out.
+      set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt })
       set('NvimDapViewWatchExpr', { fg = c.blue })
       set('NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
       -- In transparent mode bearded resolves its `bg` to NONE, so every group
