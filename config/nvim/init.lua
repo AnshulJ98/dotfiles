@@ -536,6 +536,17 @@ do
       -- what makes the panel recede behind the code instead of competing with it.
       set('DapViewNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
       set('NvimDapViewWatchExpr', { fg = c.blue })
+      -- Neo-tree paints itself an opaque #151f27 while the code area is
+      -- transparent, so the sidebar read as a second editor rather than as
+      -- chrome. It takes the dap panel's background and dim instead.
+      -- File icons are already coloured (mini.icons mocks nvim-web-devicons,
+      -- init.lua below); directories were the one flat element left, at
+      -- ui.primary, which in this flavor is the near-white #dbefff. Yellow
+      -- because blue, green and orange are spoken for by the git status
+      -- groups and would read as a state rather than as a folder.
+      set('NeoTreeNormal', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
+      set('NeoTreeNormalNC', { fg = ui.defaultMain, bg = ui.uibackgroundalt, dim = true })
+      set('NeoTreeDirectoryIcon', { fg = c.yellow })
       set('NvimDapVirtualText', { link = 'DiagnosticVirtualTextInfo' })
       -- In transparent mode bearded resolves its `bg` to NONE, so every group
       -- built from it lost a colour: CursorLine painted nothing (neo-tree's,
