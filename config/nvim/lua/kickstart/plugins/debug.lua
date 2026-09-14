@@ -195,16 +195,61 @@ local function highlight_values(view)
   pcall(vim.treesitter.start, vim.api.nvim_win_get_buf(view.win), 'javascript')
   return view
 end
--- Scopes live in the panel: `dap.ui.widgets.scopes` renders through
--- `dap.ui.new_tree`, which expands every node that has children on each
--- render (dap/ui.lua, render_all_expanded), so a float of it dumps the whole
--- global object graph. The panel's tree is the one that keeps collapse state.
-vim.keymap.set('n', '<leader>df', '<cmd>DapViewJump scopes<CR>', { desc = 'Debug: scopes pane' })
+
+-- The expression the cursor is on: the whole `a.b[0].c` chain, not the one
+-- identifier `<cexpr>` would return.
+local function dap_expr_under_cursor()
+  -- get_node raises when the buffer has no parser rather than returning nil.
+  local ok, node = pcall(vim.treesitter.get_node)
+  if not (ok and node) then return vim.fn.expand '<cexpr>' end
+  while node:parent() and vim.tbl_contains({ 'member_expression', 'subscript_expression' }, node:parent():type()) do
+    node = node:parent()
+  end
+  return vim.treesitter.get_node_text(node, 0)
+end
+
+-- `dap.ui.widgets.scopes` hands each scope root to `dap.ui.new_tree`'s
+-- render, which force-expands whatever it is given (dap/ui.lua: `if not
+-- is_expanded(value) then set_expanded(value, {}) end`). One of those roots
+-- is js-debug's `Global`, several hundred entries deep, and it buried the
+-- locals. Adapters mark such a scope `expensive`; dap-view drops those and
+-- so does this float. Everything else is the stock widget, so the collapse
+-- state in `view.tree` and the refresh listener are untouched.
+local cheap_scopes = vim.tbl_extend('force', widgets.scopes, {
+  render = function(view)
+    local session = dap.session()
+    local frame = session and session.current_frame or {}
+    if not view.tree then
+      local spec = vim.deepcopy(require('dap.entity').scope.tree_spec)
+      spec.extra_context = { view = view }
+      view.tree = require('dap.ui').new_tree(spec)
+    end
+    local scopes = {}
+    for _, scope in ipairs(frame.scopes or {}) do
+      if not scope.expensive then scopes[#scopes + 1] = scope end
+    end
+    local layer = view.layer()
+    local render
+    render = function(index)
+      local scope = scopes[index]
+      if not scope then return end
+      local replace = index == 1
+      -- Only the first scope replaces the buffer; the rest append, and each
+      -- waits for its predecessor because the children arrive over DAP.
+      view.tree.render(layer, scope, function() render(index + 1) end, replace and 0 or nil, replace and -1 or nil)
+    end
+    render(1)
+  end,
+})
+
+-- Floats for the two trees nvim-dap owns (scopes, stacks); pane jumps for the
+-- sections that exist only in dap-view (watches, REPL).
+vim.keymap.set('n', '<leader>df', function() highlight_values(widgets.centered_float(cheap_scopes)) end, { desc = 'Debug: [F]loat scopes' })
 vim.keymap.set('n', '<leader>dk', function() widgets.centered_float(widgets.frames) end, { desc = 'Debug: stac[K]s float' })
-vim.keymap.set('n', '<leader>de', function()
-  local expression = vim.fn.input 'Expression: '
-  if expression ~= '' then highlight_values(widgets.hover(function() return expression end)) end
-end, { desc = 'Debug: [E]val expression' })
+-- Evaluates the selection in visual mode and the expression under the cursor
+-- in normal mode, with no prompt (widgets.hover checks the mode before it
+-- calls the function it is given).
+vim.keymap.set({ 'n', 'v' }, '<leader>de', function() highlight_values(widgets.hover(dap_expr_under_cursor)) end, { desc = 'Debug: [E]val expression' })
 -- dap-view hover: word under cursor, or the visual selection. <CR> expands, [[ parent, s set value, q closes.
 vim.keymap.set({ 'n', 'v' }, '<leader>dh', function() require('dap-view').hover(nil, true) end, { desc = 'Debug: [H]over variable' })
 vim.keymap.set({ 'n', 'x' }, '<leader>da', '<cmd>DapViewWatch<CR>', { desc = 'Debug: [A]dd watch' })
@@ -296,16 +341,6 @@ vim.api.nvim_create_autocmd('FileType', {
   pattern = 'dap-repl',
   callback = function(args) require('dap.ext.autocompl').attach(args.buf) end,
 })
-
-local function dap_expr_under_cursor()
-  -- get_node raises when the buffer has no parser rather than returning nil.
-  local ok, node = pcall(vim.treesitter.get_node)
-  if not (ok and node) then return vim.fn.expand '<cexpr>' end
-  while node:parent() and vim.tbl_contains({ 'member_expression', 'subscript_expression' }, node:parent():type()) do
-    node = node:parent()
-  end
-  return vim.treesitter.get_node_text(node, 0)
-end
 
 vim.keymap.set('n', '<leader>dy', function()
   local session = require('dap').session()
