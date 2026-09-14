@@ -5,15 +5,34 @@
 vim.pack.add { 'https://github.com/lewis6991/gitsigns.nvim' }
 
 require('gitsigns').setup {
-  -- VS Code's gutter: a bar for added and changed lines, a triangle where
-  -- lines were deleted.
+  -- `signcolumn = 'yes'` is one sign slot two cells wide, and a sign may fill
+  -- both, so the two styles do not have to compete. VS Code's bar and
+  -- triangle carry the peripheral scan; kickstart's `+ ~ _ ‾` says which kind
+  -- of change without reading the colour.
+  --
+  -- Both cells together must stay at two display cells. gitsigns pcalls the
+  -- extmark (gitsigns/signs.lua:112) and Neovim rejects a wider `sign_text`,
+  -- so an over-wide pair does not error, it just stops drawing the sign.
   signs = {
-    add = { text = '▎' }, ---@diagnostic disable-line: missing-fields
-    change = { text = '▎' }, ---@diagnostic disable-line: missing-fields
-    delete = { text = '▸' }, ---@diagnostic disable-line: missing-fields
-    topdelete = { text = '▸' }, ---@diagnostic disable-line: missing-fields
-    changedelete = { text = '▎' }, ---@diagnostic disable-line: missing-fields
-    untracked = { text = '▎' }, ---@diagnostic disable-line: missing-fields
+    add = { text = '▎+' }, ---@diagnostic disable-line: missing-fields
+    change = { text = '▎~' }, ---@diagnostic disable-line: missing-fields
+    delete = { text = '▸_' }, ---@diagnostic disable-line: missing-fields
+    topdelete = { text = '▸‾' }, ---@diagnostic disable-line: missing-fields
+    changedelete = { text = '▎~' }, ---@diagnostic disable-line: missing-fields
+    -- Only ever drawn with `attach_to_untracked = true`, which is off by
+    -- default and stays off: it would put a full-length gutter bar and a
+    -- blame attachment on every untracked file.
+    untracked = { text = '▎+' }, ---@diagnostic disable-line: missing-fields
+  },
+  -- Staged hunks otherwise fall back to gitsigns' own `┃ ▁ ▔`, a third glyph
+  -- set answering to neither style. Same pair, reversed, so staged reads as
+  -- its own state without spending a colour on it.
+  signs_staged = {
+    add = { text = '+▎' }, ---@diagnostic disable-line: missing-fields
+    change = { text = '~▎' }, ---@diagnostic disable-line: missing-fields
+    delete = { text = '_▸' }, ---@diagnostic disable-line: missing-fields
+    topdelete = { text = '‾▸' }, ---@diagnostic disable-line: missing-fields
+    changedelete = { text = '~▎' }, ---@diagnostic disable-line: missing-fields
   },
   current_line_blame = true,
   current_line_blame_opts = { delay = 200 },
