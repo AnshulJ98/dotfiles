@@ -434,11 +434,28 @@ do
 
   -- Useful plugin to show you pending keybinds.
   vim.pack.add { gh 'folke/which-key.nvim' }
+  -- which-key stores a node's key sequence in its display form, so the leader
+  -- arrives as the string `<Space>` rather than a literal space. This is the
+  -- same round trip `which-key.util.norm` does, out of the standard library
+  -- instead of the plugin's private module.
+  local leader_key = vim.fn.keytrans(vim.keycode '<leader>')
   require('which-key').setup {
     -- Delay between pressing a key and opening which-key (milliseconds)
     delay = 0,
     icons = { mappings = vim.g.have_nerd_font },
+    -- Show every mapping instead of collapsing the leader groups behind
+    -- `+[D]ebug` and friends, which cost a second keystroke to read what is
+    -- already on screen. Scoped to the leader so `g`, `z` and `<C-w>` keep
+    -- their short form; which-key skips the marks, registers and spelling
+    -- plugins on its own (which-key/view.lua:300-306).
+    expand = function(node) return node.path[1] == leader_key end,
     layout = {
+      -- Column count is derived, not set: which-key fits
+      -- `floor(columns / (width + spacing))` boxes and stretches them to fill
+      -- (which-key/view.lua:341-343), so a lower max buys another column. 40
+      -- buys a fourth one at 200 cells and costs the two longest hunk
+      -- descriptions to an ellipsis; 50 keeps three columns and every label
+      -- whole, which is the better trade for a list read at a glance.
       width = { min = 20, max = 50 },
       spacing = 3,
     },
@@ -476,6 +493,7 @@ do
   end
   vim.keymap.set('n', '<leader>w=', '<C-w>=', { desc = 'Equalize windows' })
   vim.keymap.set('n', '<leader>wr', function() require('which-key').show { keys = '<leader>w', loop = true } end, { desc = '[R]esize mode' })
+  vim.keymap.set('n', '<leader>?', '<Cmd>WhichKey<CR>', { desc = '[?] All keymaps' })
 
   -- [[ Colorscheme ]]
   -- You can easily change to a different colorscheme.
