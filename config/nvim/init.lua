@@ -399,6 +399,10 @@ do
     -- Delay between pressing a key and opening which-key (milliseconds)
     delay = 0,
     icons = { mappings = vim.g.have_nerd_font },
+    layout = {
+      width = { min = 20, max = 50 },
+      spacing = 3,
+    },
     -- Document existing key chains
     spec = {
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
