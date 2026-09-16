@@ -55,6 +55,16 @@ boundary rather than deep in the stack; crash hard on unrecoverable states,
 because a clean crash beats silent corruption. Never swallow errors
 silently, and never leak module internals through error types.
 
+## Decisions
+
+A choice between real alternatives (tool, framework, schema, protocol,
+infrastructure) gets the verdict in the first line, then the analysis:
+goal, constraints split into hard and soft, at least three options, the
+criteria weighted, and what the rejected options cost. `/skill:decisions`
+carries the full Goal-Options-Plan template. This buys structure at the
+price of words, so it applies only where the alternatives genuinely
+compete; an obvious pick stays one paragraph.
+
 ## Complexity Red Flags
 
 Stop and redesign when one logical change requires edits in many places,
@@ -69,8 +79,6 @@ non-obvious ways.
   show them with the implementation.
 - Run the suite before and after every change. A failing baseline means
   halt and report. End green.
-- Bug fixes reproduce first: a test you executed and watched fail. Claim
-  red only for a run you watched.
 - Pure logic (parsers, state machines, transformations): table-driven,
   zero mocks. I/O coordination: integration tests against real
   dependencies; mocks only at genuine system boundaries. Wanting one
@@ -80,7 +88,8 @@ non-obvious ways.
 - Fixtures, golden files, recorded responses, and migration snapshots
   encode external contracts. Inputs, not outputs: bridge at the boundary
   or ask. Never rewrite them to make code pass.
-- Slice vertically: implement and verify one slice before the next.
+- Slice vertically at feature granularity: implement and verify one
+  user-visible slice before starting the next. Not one test at a time.
 - One assertion concept per test, arrange-act-assert, names
   `should <expected> when <condition>`.
 
