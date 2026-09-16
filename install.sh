@@ -87,6 +87,8 @@ link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
+link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+bash "$DOT/config/imagemagick/check.sh" || warn "ImageMagick cannot decode SVG — see config/imagemagick/delegates.xml"
 
 
 # 5. ~/.claude/* -------------------------------------------------------------
