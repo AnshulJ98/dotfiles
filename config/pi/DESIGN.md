@@ -62,7 +62,8 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 │   ├── compact-cap.ts       # flat ~165k compaction safety-net, mid-run capable (/compact-cap command)
 │   ├── prime-reminder.ts    # post-compaction reminder + manual-compact auto-resume
 │   ├── headless-close.ts    # -p runs may not end on a question (enforced, not asked)
-│   └── headless-close.test.ts  # 11 table tests: node --test headless-close.test.ts
+│   ├── headless-close.test.ts  # 11 table tests: node --test headless-close.test.ts
+│   └── scout.ts             # scout visibility: footer status while running, chat entry on exit (zero tokens)
 └── DESIGN.md                # this file
 ```
 Resource dirs (`prompts`, `extensions`) are referenced by absolute path in `settings.json`; each extension is listed individually in `extensions`, so a new file needs a settings entry and no `install.sh` change. Symlinks (`settings.json`, the AGENTS variant, `agents/`, `themes/`) are installed by `./install.sh [--work]` at the repo root. Skills are auto-discovered from `~/.agents/skills` only — the `config/pi/skills` directory referenced here until 2026-09-16 never existed.
@@ -105,11 +106,15 @@ What replaced it is `bin/scout`, a ~90-line bash wrapper linked to `~/.pi/agent/
 
 ```
 PI_SCOUT_DEPTH=1 timeout 300 pi -p -ne [-e <oauth shim if present>] -nc -ns -np \
-  -t read,grep,find,ls,bash --session-dir $TMPDIR/pi-scout \
+  -t read,grep,find,ls,bash --session-dir ~/.pi/agent/sessions/scout \
   --model anthropic/claude-sonnet-5 --thinking low --system-prompt bin/scout.prompt.md "task"
 ```
 
 Measured child cost: ~3.5k resident tokens (`-t` allowlist, no base prompt, no AGENTS.md, no extensions). Flags: `--brief FILE` injects context via `@FILE`; `--fork` copies `$PI_SESSION_FILE` first (the original is never appended to) and re-bills the whole parent context, so it is opt-in only; `--ctx` keeps AGENTS.md discovery; `--rw` adds edit/write for bounded-spec implementation and nothing else. Exit 2 on nesting (`PI_SCOUT_DEPTH` already set) or usage error, 124 on timeout. The bash tool has no default timeout, so the wrapper's own `timeout` is what stops a hung child from hanging the parent.
+
+**Cost visibility.** Scout sessions live under `~/.pi/agent/sessions/scout/<pid>/` because `pi-usage-widget` walks the sessions tree recursively (`data-collection.ts:456`) and nothing else: scout spend then lands in today/all-time with no widget change (verified: moving the scout files out shifted today by exactly their summed `usage.cost.total`). `/resume` reads only `sessions/<encoded-cwd>/` (`session-manager.js:550`), so the subdirectory never shows up there, and the widget's shared `timestamp:totalTokens` dedupe keeps `--fork` copies from double-counting the parent. Every usage package surveyed on 2026-09-16 (pi-usage-dashboard, @pify/usage, pi-usage-bar, pi-footer, pi-daily-cost, pi-token-usage, pi-tracker, pi-atlas) reads either in-process events or this same tree, so none needed replacing.
+
+**Visibility without tokens (`extensions/scout.ts`).** The wrapper stamps `sessions/scout/.running/<pid>.meta` (model, thinking, start, parent `PI_SESSION_FILE`, task) and tees its digest to `.running/<pid>.out`; an `EXIT` trap moves both to `.done/` with `rc` and `finished`. The extension polls once a second: `.running` drives a footer line (`⟳ scout claude-sonnet-5/low 0:42 $0.013`, cost summed from the child's own `<pid>/*.jsonl`), and `.done` files whose parent session matches become `pi.appendEntry("scout", …)` entries, which pi never sends to the model, rendered one line collapsed (model/effort · elapsed · cost · outcome · task) with the digest under ctrl+o. Ownership by session file means two pi terminals never claim each other's scouts; shell launches with no parent are discarded; a dead-pid `.running` file (SIGKILL skipped the trap) is reaped. The registered-tool alternative (bundled `subagent` shape, `onUpdate` streaming, native parallel tool calls) was planned and rejected on 2026-09-16: 200 to 300 resident tokens and a dispatch re-probe for a cosmetic gain. Measured: headless parent exits normally (timer is `unref`'d) and persists the entry; interactive single and `& wait` pair each produce one entry per scout. Known edge: a headless parent that exits within a second of the scout finishing leaves the `.done` file for the session's next resume, or for the ten-minute orphan sweep.
 
 Why each flag is there is recorded in `~/Dev/pi-scout-plan-2026-09-16.md` (18 gaps, each with the evidence). The ones that bit: `-e <dir>` silently loads nothing (use `index.ts`); `--no-extensions` drops the OAuth compatibility shim, which is loaded back explicitly when installed; `grep/find/ls` are opt-in builtins that only `-t` enables; Anthropic's OAuth pool rate-limits above two concurrent agents, so the delegation rule caps parallel at two.
 

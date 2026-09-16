@@ -49,6 +49,8 @@ certain where certainty has been earned.
   longer one.
 - Research syntheses, audits, and reports past roughly 400 words go into a
   file; the reply gives the path and the conclusions in a short paragraph.
+  A code review of a file the user named is not a report: it stays inline
+  at whatever length the defects require.
 - Never restate code, diffs, or output the reader can already see.
 
 ## Scope

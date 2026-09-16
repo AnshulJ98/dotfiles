@@ -51,6 +51,8 @@ certain where certainty has been earned.
   longer one.
 - Research syntheses, audits, and reports past roughly 400 words go into a
   file; the reply gives the path and the conclusions in a short paragraph.
+  A code review of a file the user named is not a report: it stays inline
+  at whatever length the defects require.
 - Never restate code, diffs, or output the reader can already see.
 
 ## Scope
@@ -90,7 +92,10 @@ in this context; its digest is all that comes back.
   the first tool call is `~/.pi/agent/bin/scout "<task>"`. The digest's
   file:line citations are yours to cite; re-read a cited line range only
   when you need the exact text, never the whole file. A single targeted
-  read or narrow grep in a file you already know: do it yourself.
+  read or narrow grep in a file you already know: do it yourself. Never
+  dispatch for a single named file, however unfamiliar, or for a
+  directory one `ls` covers; the scout's floor is two or more files
+  whose contents you would otherwise have to read.
 - Pass context with `--brief FILE` (write the file first). `--fork`
   re-bills this whole conversation into the child; opt in only when the
   child must see it verbatim.
@@ -286,12 +291,14 @@ summary first. Execute autonomously only when the user says "AutoApprove".
 
 # Work Environment
 
-## Execution Binaries — /opt/homebrew/ Only
+## Language Runtimes and Browsers — /opt/homebrew/ Only
 
-**CRITICAL**: All execution binaries MUST run from `/opt/homebrew/`. Paths under `~` and symlinks from `~` are blocked by macOS security policy.
+**CRITICAL**: Language runtimes and browser binaries MUST run from `/opt/homebrew/`. Paths under `~` and symlinks from `~` are blocked by macOS security policy for those.
 
 - Playwright: `PLAYWRIGHT_BROWSERS_PATH=/opt/homebrew/var/playwright`
 - Node/npm/npx, Python/uvx: resolve to `/opt/homebrew/bin/`
+
+This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`, `bash`, `find`, `sed`) resolve from `PATH` as normal; there is no `/opt/homebrew/bin/ls`, and `/opt/homebrew/bin/bash` is never required. Bash scripts under `~` such as `~/.pi/agent/bin/scout` are read by the shell, not executed as binaries, and run fine.
 
 Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
 
@@ -383,7 +390,8 @@ When in doubt, these win:
   fact as declarations. The final sentence of a headless reply never
   ends in a question mark.
 - A report or audit past roughly 400 words goes into a file, never inline;
-  the reply carries the path and the conclusions.
+  the reply carries the path and the conclusions. A code review of a named
+  file is not a report and stays inline.
 - Keep the main context for judgment. Wide recon may go to the read-only
   scout, but dispatch is a choice, never an obligation.
 
