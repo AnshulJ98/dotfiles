@@ -2,12 +2,14 @@
 
 # Work Environment
 
-## Execution Binaries — /opt/homebrew/ Only
+## Language Runtimes and Browsers — /opt/homebrew/ Only
 
-**CRITICAL**: All execution binaries MUST run from `/opt/homebrew/`. Paths under `~` and symlinks from `~` are blocked by macOS security policy.
+**CRITICAL**: Language runtimes and browser binaries MUST run from `/opt/homebrew/`. Paths under `~` and symlinks from `~` are blocked by macOS security policy for those.
 
 - Playwright: `PLAYWRIGHT_BROWSERS_PATH=/opt/homebrew/var/playwright`
 - Node/npm/npx, Python/uvx: resolve to `/opt/homebrew/bin/`
+
+This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`, `bash`, `find`, `sed`) resolve from `PATH` as normal; there is no `/opt/homebrew/bin/ls`, and `/opt/homebrew/bin/bash` is never required. Bash scripts under `~` such as `~/.pi/agent/bin/scout` are read by the shell, not executed as binaries, and run fine.
 
 Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
 

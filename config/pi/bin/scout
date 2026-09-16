@@ -36,7 +36,13 @@ fi
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 PROMPT="$DIR/scout.prompt.md"
 SHIM="$HOME/.pi/agent/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts"
-SESSIONS="${TMPDIR:-/tmp}/pi-scout"
+# Under the sessions tree so pi-usage-widget (recursive walk) counts scout
+# spend in today/all-time; /resume lists only sessions/<cwd>/, so no leak.
+# One subdirectory per scout so the extension can attribute cost per run.
+SCOUT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/sessions/scout"
+SESSIONS="$SCOUT_ROOT/$$"
+RUNNING="$SCOUT_ROOT/.running"
+DONE="$SCOUT_ROOT/.done"
 MODEL="anthropic/claude-sonnet-5"   # work: amazon-bedrock/openai.gpt-5.6-luna
 THINKING="low"                     # work: medium
 TIMEOUT=300
@@ -64,7 +70,6 @@ done
 TASK="$*"
 
 [ -r "$PROMPT" ] || { echo "scout: prompt file missing: $PROMPT" >&2; exit 2; }
-mkdir -p "$SESSIONS"
 
 # The OAuth compatibility shim is installed on some machines only; load it
 # when present, otherwise pi's native auth (API key or auth.json) is used.
@@ -74,20 +79,42 @@ EXT=()
 SESSION=()
 if [ ${#FORK[@]} -gt 0 ]; then
   [ -r "${PI_SESSION_FILE:-}" ] || { echo "scout: --fork needs PI_SESSION_FILE (run from inside a pi session)" >&2; exit 2; }
-  COPY="$SESSIONS/fork-$(date +%s)-$$.jsonl"
+  mkdir -p "$SESSIONS"
+  COPY="$SESSIONS/fork.jsonl"
   cp "$PI_SESSION_FILE" "$COPY"
   SESSION=(--session "$COPY")
 else
   SESSION=(--session-dir "$SESSIONS")
 fi
 
+# Handoff to the scout extension (extensions/scout.ts). While running:
+# .running/<pid>.meta (model, effort, start, parent session, task) drives the
+# footer status. On exit the digest and meta move to .done/<pid>.*, and the
+# extension turns them into a chat entry for the parent session. The EXIT
+# trap covers normal exit, timeout (124) and SIGINT/SIGTERM; only SIGKILL
+# skips it, which the extension detects by a dead pid.
+mkdir -p "$SESSIONS" "$RUNNING" "$DONE"
+META="$RUNNING/$$.meta"
+OUT="$RUNNING/$$.out"
+FIRST_LINE="${TASK%%$'\n'*}"
+printf 'pid=%s\nmodel=%s\nthinking=%s\nstarted=%s\nsession=%s\ntask=%s\n' \
+  "$$" "$MODEL" "$THINKING" "$(( $(date +%s) * 1000 ))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" > "$META"
+finish() {
+  local rc=$?
+  mv -f "$OUT" "$DONE/$$.out" 2>/dev/null || : > "$DONE/$$.out"
+  { cat "$META"; printf 'rc=%s\nfinished=%s\n' "$rc" "$(( $(date +%s) * 1000 ))"; } > "$DONE/$$.meta.tmp"
+  mv -f "$DONE/$$.meta.tmp" "$DONE/$$.meta"
+  rm -f "$META"
+}
+trap finish EXIT
+
 set +e
 PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${CTX[@]}" -ns -np \
   -t "$TOOLS" "${SESSION[@]}" \
   --model "$MODEL" --thinking "$THINKING" \
   --system-prompt "$(cat "$PROMPT")" \
-  "${BRIEF[@]}" "$TASK"
-rc=$?
+  "${BRIEF[@]}" "$TASK" | tee "$OUT"
+rc=${PIPESTATUS[0]}
 set -e
 if [ $rc -eq 124 ]; then
   echo "scout: timed out after ${TIMEOUT}s" >&2

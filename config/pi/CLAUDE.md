@@ -51,6 +51,8 @@ certain where certainty has been earned.
   longer one.
 - Research syntheses, audits, and reports past roughly 400 words go into a
   file; the reply gives the path and the conclusions in a short paragraph.
+  A code review of a file the user named is not a report: it stays inline
+  at whatever length the defects require.
 - Never restate code, diffs, or output the reader can already see.
 
 ## Scope
@@ -368,7 +370,8 @@ When in doubt, these win:
   fact as declarations. The final sentence of a headless reply never
   ends in a question mark.
 - A report or audit past roughly 400 words goes into a file, never inline;
-  the reply carries the path and the conclusions.
+  the reply carries the path and the conclusions. A code review of a named
+  file is not a report and stays inline.
 - Keep the main context for judgment. Wide recon may go to the read-only
   scout, but dispatch is a choice, never an obligation.
 

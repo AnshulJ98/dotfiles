@@ -16,7 +16,10 @@ in this context; its digest is all that comes back.
   the first tool call is `~/.pi/agent/bin/scout "<task>"`. The digest's
   file:line citations are yours to cite; re-read a cited line range only
   when you need the exact text, never the whole file. A single targeted
-  read or narrow grep in a file you already know: do it yourself.
+  read or narrow grep in a file you already know: do it yourself. Never
+  dispatch for a single named file, however unfamiliar, or for a
+  directory one `ls` covers; the scout's floor is two or more files
+  whose contents you would otherwise have to read.
 - Pass context with `--brief FILE` (write the file first). `--fork`
   re-bills this whole conversation into the child; opt in only when the
   child must see it verbatim.
