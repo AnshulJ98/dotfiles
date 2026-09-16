@@ -1,6 +1,6 @@
 ---
 name: decisions
-description: Record architectural choices as ADRs and analyze technical decisions with Goal-Options-Plan. Use when choosing tools, frameworks, or infrastructure, or comparing implementation approaches.
+description: Record architectural choices as ADRs and analyze technical decisions with Goal-Options-Plan. Use when the user asks which of two or more named tools, libraries, databases, queues, or frameworks to pick, says "X vs Y", asks whether to adopt or migrate to something, or weighs implementation approaches against each other. Load it before answering, alongside any version or currency check, not instead of one.
 ---
 
 # Decisions
