@@ -149,7 +149,6 @@
   },
   "model": "fable[1m]",
   "skillOverrides": {
-    "caveman": "user-invocable-only",
     "grill-me": "off"
   },
   "hooks": {

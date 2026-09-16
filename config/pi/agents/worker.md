@@ -1,9 +1,8 @@
 ---
 name: worker
 description: "Implementation agent. Writes code, runs tests, verifies changes. Scoped to explicitly assigned files only."
-model: opencode-go/kimi-k3
-fallbackModels: opencode-go/glm-5.3, openai-codex/gpt-5.5
-thinking: high
+model: anthropic/claude-sonnet-5
+thinking: medium
 tools: read, grep, find, ls, bash, edit, write
 timeoutMs: 3600000
 defaultContext: fresh

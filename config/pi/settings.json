@@ -15,7 +15,6 @@
     "anthropic/claude-opus-4-8",
     "anthropic/claude-opus-4-6",
     "openai-codex/gpt-5.5",
-    "openai-codex/gpt-5.4-mini",
     "opencode-go/kimi-k3",
     "opencode-go/glm-5.3",
     "opencode-go/grok-4.6"
@@ -34,7 +33,8 @@
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",
     "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts",
-    "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts"
+    "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts",
+    "~/Dev/dotfiles/config/pi/extensions/headless-close.ts"
   ],
   "subagents": {
     "disableBuiltins": true
@@ -47,8 +47,6 @@
     "npm:pi-ask-user",
     "npm:pi-subagents",
     "npm:pi-usage-widget",
-    "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-copilot-web",
-    "npm:pi-copilot-auto"
+    "npm:@gotgenes/pi-anthropic-auth"
   ]
 }

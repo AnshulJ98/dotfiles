@@ -17,9 +17,8 @@ asks.
   file assignment, one worker per file set, async for long runs.
 - Default implementation shape: a planning session writes the spec;
   short bounded main-agent sessions implement it slice by slice.
-- Reports past roughly 300 words go to a file; return path plus
-  summary. Do not delegate what you can finish in fewer steps than the
-  dispatch costs.
+- Do not delegate what you can finish in fewer steps than the dispatch
+  costs.
 
 ## Memory
 
@@ -39,6 +38,7 @@ for tables, images, and OCR.
 
 ## Skills
 
-Skills auto-discover from `~/.agents/skills` (shared across harnesses) and
-`~/Dev/dotfiles/config/pi/skills` (pi-only). Invoke with `/skill:X` or read
-the `SKILL.md` directly.
+Skills auto-discover from `~/.agents/skills`, shared across harnesses.
+Invoke with `/skill:X` or read the `SKILL.md` directly. pi has no
+skill-listing budget, so every description is resident in every turn:
+keep the roster small.

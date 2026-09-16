@@ -54,8 +54,6 @@ integration test against a real (or fake-at-boundary) gateway.
 
 ## Core Discipline
 
-- **Vertical slicing, mandatory.** One test -> one implementation -> repeat.
-  Never write all tests then all implementation.
 - **The interface is the test surface.** Tests cross the same seam callers do.
   Don't reach past the public interface to test internals.
 - **Prefer fakes over mocks (GOOS style).** A working in-memory fake exercises

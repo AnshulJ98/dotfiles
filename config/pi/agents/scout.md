@@ -1,8 +1,7 @@
 ---
 name: scout
 description: "Read-only retrieval and research. Explores codebase, gathers context, returns file + summary digest. Never edits."
-model: opencode-go/glm-5.3
-fallbackModels: opencode-go/kimi-k3, openai-codex/gpt-5.4-mini
+model: anthropic/claude-sonnet-5
 thinking: low
 tools: read, grep, find, ls, bash
 timeoutMs: 300000
