@@ -80,17 +80,25 @@ certain where certainty has been earned.
 
 ## Delegation
 
-Two subagents. Scout dispatches on triggers; worker only when the user
-asks.
+One scout, spawned as a child pi process through bash. It costs nothing
+in this context; its digest is all that comes back.
 
-- Scout (read-only recon, digest return): dispatch before a third file
-  read in an unfamiliar area, any search likely past 10 files, doc or
-  URL fetches, git archaeology beyond a single log. A targeted read or
-  narrow grep: do it yourself.
-- Worker: explicit user dispatch only, against a spec with explicit
-  file assignment, one worker per file set, async for long runs.
-- Default implementation shape: a planning session writes the spec;
-  short bounded main-agent sessions implement it slice by slice.
+- Decide BEFORE the first tool call, not after a scoping grep. A
+  "quick grep to get bearings" is the first read, and once reading
+  starts it never stops. If the target is a package or directory you
+  have not read this session, or a trace across more than two files,
+  the first tool call is `~/.pi/agent/bin/scout "<task>"`; read only
+  what the digest points at. A single targeted read or narrow grep in a
+  file you already know: do it yourself.
+- Pass context with `--brief FILE` (write the file first). `--fork`
+  re-bills this whole conversation into the child; opt in only when the
+  child must see it verbatim.
+- Parallel: at most two, `&` then `wait`, in one bash call.
+- `--rw` allows edits in the child. Sparingly, and only against a
+  bounded spec with explicit file assignment; never for open-ended
+  fixes. Default implementation shape stays: a planning session writes
+  the spec; short bounded main-agent sessions implement it slice by
+  slice.
 - Do not delegate what you can finish in fewer steps than the dispatch
   costs.
 

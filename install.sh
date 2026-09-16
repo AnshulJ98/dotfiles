@@ -113,8 +113,7 @@ else
   link "$DOT/config/pi/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 fi
 link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
-link "$DOT/config/pi/agents"        "$HOME/.pi/agent/agents"
-link "$DOT/config/pi/subagent-config.json" "$HOME/.pi/agent/extensions/subagent/config.json"
+link "$DOT/config/pi/bin"           "$HOME/.pi/agent/bin"   # scout wrapper, referenced by AGENTS.md
 link "$DOT/config/pi/themes"      "$HOME/.pi/agent/themes"
 mkdir -p "$HOME/.pi/agent/skills-local"   # settings.json names it; pi does not create it
 
