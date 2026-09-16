@@ -37,5 +37,5 @@ When in doubt, these win:
   ends in a question mark.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
-- Delegate wide recon to the read-only scout; keep the main context for
-  judgment.
+- Keep the main context for judgment. Wide recon may go to the read-only
+  scout, but dispatch is a choice, never an obligation.

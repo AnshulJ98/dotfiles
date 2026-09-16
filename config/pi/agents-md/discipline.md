@@ -24,9 +24,11 @@ conflicts with a Prime Directive, the directive wins.
    resource bounds (TTL, eviction, timeout, size). Report every hit
    ordered by severity, then the clean categories in one closing line.
    A skipped category is a defect in the review itself.
-4. Acceptance signal: every implementation names its pass/fail check
-   before the code and runs it after. Bug fixes reproduce first with a
-   watched failing test.
+4. Design before signal: name the shape first — the interface, what the
+   module hides, and the decisions the task leaves open — then the
+   acceptance signal, the pass/fail check that decides done. Every
+   implementation names both before the code and runs the check after.
+   Bug fixes reproduce first with a watched failing test.
 5. Word budget: a simple conceptual answer stops at 200 words, in prose;
    no tables or section headers. Cut explanation, never facts.
 6. Execute first, talk second: no narration of what you are about to do,

@@ -1,8 +1,5 @@
 {
 	"intercomBridge": {
 		"mode": "off"
-	},
-	"parallel": {
-		"concurrency": 2
 	}
 }

@@ -191,6 +191,16 @@ boundary rather than deep in the stack; crash hard on unrecoverable states,
 because a clean crash beats silent corruption. Never swallow errors
 silently, and never leak module internals through error types.
 
+## Decisions
+
+A choice between real alternatives (tool, framework, schema, protocol,
+infrastructure) gets the verdict in the first line, then the analysis:
+goal, constraints split into hard and soft, at least three options, the
+criteria weighted, and what the rejected options cost. `/skill:decisions`
+carries the full Goal-Options-Plan template. This buys structure at the
+price of words, so it applies only where the alternatives genuinely
+compete; an obvious pick stays one paragraph.
+
 ## Complexity Red Flags
 
 Stop and redesign when one logical change requires edits in many places,
@@ -205,8 +215,6 @@ non-obvious ways.
   show them with the implementation.
 - Run the suite before and after every change. A failing baseline means
   halt and report. End green.
-- Bug fixes reproduce first: a test you executed and watched fail. Claim
-  red only for a run you watched.
 - Pure logic (parsers, state machines, transformations): table-driven,
   zero mocks. I/O coordination: integration tests against real
   dependencies; mocks only at genuine system boundaries. Wanting one
@@ -216,7 +224,8 @@ non-obvious ways.
 - Fixtures, golden files, recorded responses, and migration snapshots
   encode external contracts. Inputs, not outputs: bridge at the boundary
   or ask. Never rewrite them to make code pass.
-- Slice vertically: implement and verify one slice before the next.
+- Slice vertically at feature granularity: implement and verify one
+  user-visible slice before starting the next. Not one test at a time.
 - One assertion concept per test, arrange-act-assert, names
   `should <expected> when <condition>`.
 
@@ -307,9 +316,11 @@ conflicts with a Prime Directive, the directive wins.
    resource bounds (TTL, eviction, timeout, size). Report every hit
    ordered by severity, then the clean categories in one closing line.
    A skipped category is a defect in the review itself.
-4. Acceptance signal: every implementation names its pass/fail check
-   before the code and runs it after. Bug fixes reproduce first with a
-   watched failing test.
+4. Design before signal: name the shape first — the interface, what the
+   module hides, and the decisions the task leaves open — then the
+   acceptance signal, the pass/fail check that decides done. Every
+   implementation names both before the code and runs the check after.
+   Bug fixes reproduce first with a watched failing test.
 5. Word budget: a simple conceptual answer stops at 200 words, in prose;
    no tables or section headers. Cut explanation, never facts.
 6. Execute first, talk second: no narration of what you are about to do,
@@ -358,6 +369,6 @@ When in doubt, these win:
   ends in a question mark.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
-- Delegate wide recon to the read-only scout; keep the main context for
-  judgment.
+- Keep the main context for judgment. Wide recon may go to the read-only
+  scout, but dispatch is a choice, never an obligation.
 

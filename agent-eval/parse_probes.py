@@ -22,7 +22,7 @@ def word_count(text: str) -> int:
 
 
 def parse_pi(path: Path) -> tuple[str, str, dict]:
-    model, text = "", ""
+    model, parts = "", []
     usage = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "cost": 0.0}
     for line in path.read_text().splitlines():
         line = line.strip()
@@ -34,8 +34,12 @@ def parse_pi(path: Path) -> tuple[str, str, dict]:
             continue
         model = message.get("model", model)
         for block in message.get("content", []):
-            if block.get("type") == "text":
-                text = block["text"]  # last assistant text wins
+            # Every assistant text, not just the last: the headless-close
+            # extension appends a corrected closing as a second message, and
+            # taking only the last one would score the correction instead of
+            # the reply.
+            if block.get("type") == "text" and block.get("text", "").strip():
+                parts.append(block["text"])
         u = message.get("usage") or {}
         for key in ("input", "output", "cacheRead", "cacheWrite"):
             usage[key] += u.get(key, 0)
@@ -44,7 +48,7 @@ def parse_pi(path: Path) -> tuple[str, str, dict]:
             usage["cost"] += cost.get("total", 0.0)
         elif isinstance(cost, (int, float)):
             usage["cost"] += cost
-    return model, text, usage
+    return model, "\n\n".join(parts), usage
 
 
 def parse_claude_code(path: Path) -> tuple[str, str, dict]:
