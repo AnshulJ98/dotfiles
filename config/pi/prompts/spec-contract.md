@@ -1,3 +1,7 @@
+---
+description: Spec contract for a Copilot 365 handoff — turns a think-deeper brainstorm into an implementable spec
+argument-hint: "[paste the brainstorm, or leave empty]"
+---
 # Spec Contract — Copilot 365 handoff
 
 Paste this at the end of a GPT 5.6 think-deeper brainstorm; paste its

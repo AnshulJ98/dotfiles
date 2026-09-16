@@ -13,7 +13,7 @@ what.
 
 ## Subagents
 
-Two custom agents, the same scout/worker split as pi. The harness already
+Two custom agents, a scout/worker split. The harness already
 lists every available agent and skill with descriptions each session, so no
 catalog is kept here.
 

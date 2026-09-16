@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# scout — spawn a minimal, isolated child pi to do read-only recon and
+# return a short digest. Replaces the pi-subagents package: zero resident
+# tool schema in the parent, ~3.5k tokens in the child, one process.
+#
+# Usage:
+#   scout [--brief FILE] [--fork] [--ctx] [--rw] [--model PROVIDER/ID]
+#         [--timeout SECONDS] "task"
+#
+#   --brief FILE   Inject FILE as context (the parent writes what the scout
+#                  needs to know; this is the normal way to pass context).
+#   --fork         Child starts from a COPY of the parent session. Re-bills
+#                  the whole parent context; opt in only when the child must
+#                  see the conversation verbatim. Never the default.
+#   --ctx          Keep AGENTS.md/CLAUDE.md discovery in the child (default
+#                  off; the brief is the intended channel).
+#   --rw           Allow edit/write in the child. Use sparingly, and only
+#                  against a bounded spec with explicit file assignment.
+#                  Never for open-ended "fix it" tasks.
+#   --model        Default anthropic/claude-sonnet-5 at low thinking.
+#   --timeout      Default 300. Exit 124 on expiry.
+#
+# Exit codes: 0 ok, 2 usage or recursion refused, 124 timeout, else pi's.
+set -euo pipefail
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+
+if [ "${PI_SCOUT_DEPTH:-0}" != "0" ]; then
+  echo "scout: refusing to nest — already inside a scout (PI_SCOUT_DEPTH=$PI_SCOUT_DEPTH)" >&2
+  exit 2
+fi
+
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+PROMPT="$DIR/scout.prompt.md"
+SHIM="$HOME/.pi/agent/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts"
+SESSIONS="${TMPDIR:-/tmp}/pi-scout"
+MODEL="anthropic/claude-sonnet-5"
+TIMEOUT=300
+TOOLS="read,grep,find,ls,bash"
+CTX=(-nc)
+BRIEF=()
+FORK=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --brief)   [ -r "${2:-}" ] || { echo "scout: --brief needs a readable file" >&2; exit 2; }
+               BRIEF=("@$2"); shift 2 ;;
+    --fork)    FORK=(fork); shift ;;
+    --ctx)     CTX=(); shift ;;
+    --rw)      TOOLS="$TOOLS,edit,write"; shift ;;
+    --model)   MODEL="${2:?scout: --model needs a value}"; shift 2 ;;
+    --timeout) TIMEOUT="${2:?scout: --timeout needs a value}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; break ;;
+    -*)        echo "scout: unknown flag $1" >&2; usage >&2; exit 2 ;;
+    *)         break ;;
+  esac
+done
+[ $# -ge 1 ] || { usage >&2; exit 2; }
+TASK="$*"
+
+[ -r "$PROMPT" ] || { echo "scout: prompt file missing: $PROMPT" >&2; exit 2; }
+mkdir -p "$SESSIONS"
+
+# The OAuth compatibility shim is installed on some machines only; load it
+# when present, otherwise pi's native auth (API key or auth.json) is used.
+EXT=()
+[ -f "$SHIM" ] && EXT=(-e "$SHIM")
+
+SESSION=()
+if [ ${#FORK[@]} -gt 0 ]; then
+  [ -r "${PI_SESSION_FILE:-}" ] || { echo "scout: --fork needs PI_SESSION_FILE (run from inside a pi session)" >&2; exit 2; }
+  COPY="$SESSIONS/fork-$(date +%s)-$$.jsonl"
+  cp "$PI_SESSION_FILE" "$COPY"
+  SESSION=(--session "$COPY")
+else
+  SESSION=(--session-dir "$SESSIONS")
+fi
+
+set +e
+PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${CTX[@]}" -ns -np \
+  -t "$TOOLS" "${SESSION[@]}" \
+  --model "$MODEL" --thinking low \
+  --system-prompt "$(cat "$PROMPT")" \
+  "${BRIEF[@]}" "$TASK"
+rc=$?
+set -e
+if [ $rc -eq 124 ]; then
+  echo "scout: timed out after ${TIMEOUT}s" >&2
+fi
+exit $rc

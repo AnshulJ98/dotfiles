@@ -80,20 +80,28 @@ certain where certainty has been earned.
 
 ## Delegation
 
-Two subagents. Scout dispatches on triggers; worker only when the user
-asks.
+One scout, spawned as a child pi process through bash. It costs nothing
+in this context; its digest is all that comes back.
 
-- Scout (read-only recon, digest return): dispatch before a third file
-  read in an unfamiliar area, any search likely past 10 files, doc or
-  URL fetches, git archaeology beyond a single log. A targeted read or
-  narrow grep: do it yourself.
-- Worker: explicit user dispatch only, against a spec with explicit
-  file assignment, one worker per file set, async for long runs.
-- Default implementation shape: a planning session writes the spec;
-  short bounded main-agent sessions implement it slice by slice.
-- Reports past roughly 300 words go to a file; return path plus
-  summary. Do not delegate what you can finish in fewer steps than the
-  dispatch costs.
+- Decide BEFORE the first tool call, not after a scoping grep. A
+  "quick grep to get bearings" is the first read, and once reading
+  starts it never stops. If the target is a package or directory you
+  have not read this session, or a trace across more than two files,
+  the first tool call is `~/.pi/agent/bin/scout "<task>"`. The digest's
+  file:line citations are yours to cite; re-read a cited line range only
+  when you need the exact text, never the whole file. A single targeted
+  read or narrow grep in a file you already know: do it yourself.
+- Pass context with `--brief FILE` (write the file first). `--fork`
+  re-bills this whole conversation into the child; opt in only when the
+  child must see it verbatim.
+- Parallel: at most two, `&` then `wait`, in one bash call.
+- `--rw` allows edits in the child. Sparingly, and only against a
+  bounded spec with explicit file assignment; never for open-ended
+  fixes. Default implementation shape stays: a planning session writes
+  the spec; short bounded main-agent sessions implement it slice by
+  slice.
+- Do not delegate what you can finish in fewer steps than the dispatch
+  costs.
 
 ## Memory
 
@@ -113,9 +121,10 @@ for tables, images, and OCR.
 
 ## Skills
 
-Skills auto-discover from `~/.agents/skills` (shared across harnesses) and
-`~/Dev/dotfiles/config/pi/skills` (pi-only). Invoke with `/skill:X` or read
-the `SKILL.md` directly.
+Skills auto-discover from `~/.agents/skills`, shared across harnesses.
+Invoke with `/skill:X` or read the `SKILL.md` directly. pi has no
+skill-listing budget, so every description is resident in every turn:
+keep the roster small.
 
 
 # Coding Standards
@@ -174,6 +183,16 @@ boundary rather than deep in the stack; crash hard on unrecoverable states,
 because a clean crash beats silent corruption. Never swallow errors
 silently, and never leak module internals through error types.
 
+## Decisions
+
+A choice between real alternatives (tool, framework, schema, protocol,
+infrastructure) gets the verdict in the first line, then the analysis:
+goal, constraints split into hard and soft, at least three options, the
+criteria weighted, and what the rejected options cost. `/skill:decisions`
+carries the full Goal-Options-Plan template. This buys structure at the
+price of words, so it applies only where the alternatives genuinely
+compete; an obvious pick stays one paragraph.
+
 ## Complexity Red Flags
 
 Stop and redesign when one logical change requires edits in many places,
@@ -188,8 +207,6 @@ non-obvious ways.
   show them with the implementation.
 - Run the suite before and after every change. A failing baseline means
   halt and report. End green.
-- Bug fixes reproduce first: a test you executed and watched fail. Claim
-  red only for a run you watched.
 - Pure logic (parsers, state machines, transformations): table-driven,
   zero mocks. I/O coordination: integration tests against real
   dependencies; mocks only at genuine system boundaries. Wanting one
@@ -199,7 +216,8 @@ non-obvious ways.
 - Fixtures, golden files, recorded responses, and migration snapshots
   encode external contracts. Inputs, not outputs: bridge at the boundary
   or ask. Never rewrite them to make code pass.
-- Slice vertically: implement and verify one slice before the next.
+- Slice vertically at feature granularity: implement and verify one
+  user-visible slice before starting the next. Not one test at a time.
 - One assertion concept per test, arrange-act-assert, names
   `should <expected> when <condition>`.
 
@@ -313,9 +331,11 @@ conflicts with a Prime Directive, the directive wins.
    resource bounds (TTL, eviction, timeout, size). Report every hit
    ordered by severity, then the clean categories in one closing line.
    A skipped category is a defect in the review itself.
-4. Acceptance signal: every implementation names its pass/fail check
-   before the code and runs it after. Bug fixes reproduce first with a
-   watched failing test.
+4. Design before signal: name the shape first — the interface, what the
+   module hides, and the decisions the task leaves open — then the
+   acceptance signal, the pass/fail check that decides done. Every
+   implementation names both before the code and runs the check after.
+   Bug fixes reproduce first with a watched failing test.
 5. Word budget: a simple conceptual answer stops at 200 words, in prose;
    no tables or section headers. Cut explanation, never facts.
 6. Execute first, talk second: no narration of what you are about to do,
@@ -364,6 +384,6 @@ When in doubt, these win:
   ends in a question mark.
 - A report or audit past roughly 400 words goes into a file, never inline;
   the reply carries the path and the conclusions.
-- Delegate wide recon to the read-only scout; keep the main context for
-  judgment.
+- Keep the main context for judgment. Wide recon may go to the read-only
+  scout, but dispatch is a choice, never an obligation.
 
