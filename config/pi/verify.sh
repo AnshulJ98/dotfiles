@@ -48,29 +48,16 @@ for m in $enabled; do
   fi
 done
 
-# --- subagent roster: no agent may point at an unenabled model ---
-echo "[agents]"
-for f in "$DOT"/agents/*.md; do
-  [ -e "$f" ] || continue
-  name="$(basename "$f" .md)"
-  models="$(grep -hoE '^(model|fallbackModels):.*' "$f" | sed 's/^[a-zA-Z]*: *//' | tr ',' ' ')"
-  for m in $models; do
-    m="$(printf '%s' "$m" | tr -d ' ')"
-    [ -z "$m" ] && continue
-    case " $enabled " in
-      *" $m "*) ;;
-      *) bad "agent $name references $m, which is not in enabledModels"; continue ;;
-    esac
-    dead=0
-    for d in $DEAD_MODELS; do [ "$m" = "$d" ] && dead=1; done
-    for p in $DEAD_PROVIDERS; do [ "${m%%/*}" = "$p" ] && dead=1; done
-    if [ "$dead" -eq 1 ]; then
-      bad "agent $name references $m, which is verified non-functional"
-    else
-      ok "agent $name -> $m"
-    fi
-  done
-done
+# --- scout wrapper: the delegation rule in AGENTS.md names it by path ---
+echo "[scout]"
+check "bin/scout is executable" "[ -x '$DOT/bin/scout' ]"
+check "bin/scout.prompt.md exists and is non-empty" "[ -s '$DOT/bin/scout.prompt.md' ]"
+check "~/.pi/agent/bin resolves to config/pi/bin" "[ \"\$(readlink -f '$AGENT/bin')\" = \"\$(readlink -f '$DOT/bin')\" ]"
+check "scout --help exits 0" "'$DOT/bin/scout' --help >/dev/null"
+check "scout refuses to nest" "! PI_SCOUT_DEPTH=1 '$DOT/bin/scout' x >/dev/null 2>&1"
+check "scout model is enabled" "grep -qF \"\$(grep -oE '^MODEL=\"[^\"]+\"' '$DOT/bin/scout' | cut -d'\"' -f2)\" '$DOT/settings.json'"
+check "no legacy agents/ roster" "[ ! -e '$DOT/agents' ]"
+check "no pi-subagents in settings.json packages" "! grep -q 'pi-subagents' '$DOT/settings.json'"
 
 # --- paths the config names must exist ---
 echo "[paths]"
@@ -100,6 +87,10 @@ check "install.sh creates skills-local" \
   "grep -q 'skills-local' '$DOT/../../install.sh'"
 check "install.sh links verify.sh's settings target" \
   "grep -q 'config/pi/settings.json' '$DOT/../../install.sh'"
+check "install.sh links config/pi/bin (scout)" \
+  "grep -q 'config/pi/bin\"' '$DOT/../../install.sh'"
+check "install.sh no longer links the subagent config" \
+  "! grep -q 'subagent-config' '$DOT/../../install.sh'"
 
 # --- packages declared in settings must be installed ---
 echo "[packages]"
@@ -110,7 +101,7 @@ done
 
 # --- files end with a newline (settings.json lost one once) ---
 echo "[hygiene]"
-for f in "$DOT/settings.json" "$DOT/subagent-config.json"; do
+for f in "$DOT/settings.json"; do
   [ -f "$f" ] || continue
   check "trailing newline: $(basename "$f")" "[ -n \"\$(tail -c1 '$f')\" ] || true; [ \"\$(tail -c1 '$f' | xxd -p)\" = '0a' ]"
 done

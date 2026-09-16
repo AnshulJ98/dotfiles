@@ -36,16 +36,12 @@
     "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts",
     "~/Dev/dotfiles/config/pi/extensions/headless-close.ts"
   ],
-  "subagents": {
-    "disableBuiltins": true
-  },
   "enableSkillCommands": true,
   "packages": [
     "npm:pi-rtk-optimizer",
     "npm:pi-web-access",
     "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
-    "npm:pi-subagents",
     "npm:pi-usage-widget",
     "npm:@gotgenes/pi-anthropic-auth"
   ]
