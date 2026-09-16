@@ -147,7 +147,7 @@
       "Bash(wget * | bash)"
     ]
   },
-  "model": "claude-fable-5[1m]",
+  "model": "fable[1m]",
   "skillOverrides": {
     "caveman": "user-invocable-only",
     "grill-me": "off"

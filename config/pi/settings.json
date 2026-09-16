@@ -1,17 +1,17 @@
 {
-  "lastChangelogVersion": "0.84.3",
+  "lastChangelogVersion": "0.85.1",
   "defaultProvider": "anthropic",
-  "defaultModel": "claude-opus-4-8",
+  "defaultModel": "claude-fable-5-1",
   "defaultThinkingLevel": "low",
   "hideThinkingBlock": false,
   "showCacheMissNotices": true,
-  "theme": "bearded-arc",
+  "theme": "bearded-hc-midnightvoid",
   "quietStartup": true,
   "editorPaddingX": 2,
   "enabledModels": [
     "anthropic/claude-opus-5",
     "anthropic/claude-sonnet-5",
-    "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-opus-4-6",
     "openai-codex/gpt-5.5",
@@ -22,7 +22,7 @@
   ],
   "compaction": {
     "enabled": true,
-    "reserveTokens": 16384,
+    "reserveTokens": 40000,
     "keepRecentTokens": 16000
   },
   "prompts": [
@@ -41,29 +41,14 @@
   },
   "enableSkillCommands": true,
   "packages": [
-    {
-      "source": "npm:@spences10/pi-themes",
-      "extensions": []
-    },
-    {
-      "source": "npm:pi-theme-synthwave-84",
-      "extensions": []
-    },
-    {
-      "source": "npm:@codella/pi-theme-cyberpunk",
-      "extensions": []
-    },
-    {
-      "source": "npm:@codella/pi-theme-candy",
-      "extensions": []
-    },
     "npm:pi-rtk-optimizer",
     "npm:pi-web-access",
     "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
     "npm:pi-subagents",
-    "npm:@taterdoge/pi-ayu",
     "npm:pi-usage-widget",
-    "npm:@gotgenes/pi-anthropic-auth"
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:pi-copilot-web",
+    "npm:pi-copilot-auto"
   ]
 }
