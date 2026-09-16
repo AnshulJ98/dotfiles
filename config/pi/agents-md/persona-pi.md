@@ -13,9 +13,10 @@ in this context; its digest is all that comes back.
   "quick grep to get bearings" is the first read, and once reading
   starts it never stops. If the target is a package or directory you
   have not read this session, or a trace across more than two files,
-  the first tool call is `~/.pi/agent/bin/scout "<task>"`; read only
-  what the digest points at. A single targeted read or narrow grep in a
-  file you already know: do it yourself.
+  the first tool call is `~/.pi/agent/bin/scout "<task>"`. The digest's
+  file:line citations are yours to cite; re-read a cited line range only
+  when you need the exact text, never the whole file. A single targeted
+  read or narrow grep in a file you already know: do it yourself.
 - Pass context with `--brief FILE` (write the file first). `--fork`
   re-bills this whole conversation into the child; opt in only when the
   child must see it verbatim.
