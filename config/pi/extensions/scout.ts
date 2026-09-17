@@ -280,8 +280,10 @@ export default function (pi: ExtensionAPI) {
 
   // session_start also fires for /new, /resume and fork, with the new ctx.
   pi.on("session_start", async (_event, ctx) => start(ctx));
-  pi.on("session_shutdown", async () => {
+  // Headless parents exit before the next poll; claim whatever finished in the last second.
+  pi.on("session_shutdown", async (_event, ctx) => {
     if (timer) clearInterval(timer);
     timer = undefined;
+    tick(ctx);
   });
 }

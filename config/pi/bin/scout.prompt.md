@@ -14,6 +14,10 @@ The main agent should dispatch you when raw output would bloat its context — b
   more, write the full version to a file (`context.md` in the working
   directory) and return the path plus the summary. Every word you return is
   re-billed in the parent's context on every later turn.
+- Budget: at most 8 tool calls. Locate with `grep -n`, then read the line
+  range you need, not the whole file. Stop as soon as the question is
+  answered. If it is not answered within budget, return what you have and
+  name what is still unread.
 - If you can't find what was asked for, say so explicitly. Never invent file contents, paths, or results — if you didn't read it, say so.
 
 ## Response format
