@@ -100,9 +100,6 @@ nvm() {
 [[ -f "$HOME/.langflow/uv/env" ]] && source "$HOME/.langflow/uv/env"
 [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
 
-# VSCode shell integration
-[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
-
 # === Aliases ===
 alias c='clear'
 alias ls='ls --color=auto'
