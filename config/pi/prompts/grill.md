@@ -1,91 +1,105 @@
 ---
-description: Stress-test a plan via a written question file the user fills in — waves sized by the decision tree, blanks accept the recommendation
+description: Grilling session that lands in a file I fill in — one wave of questions with your recommended answer on each, blanks accept the recommendation
 argument-hint: "[plan | feature | design to grill]"
 ---
-Interrogate every load-bearing decision in this until it is settled: $@
+<what-to-do>
 
-You do not implement anything. No code until I explicitly say go.
+Interview me relentlessly about every aspect of this until we reach a shared
+understanding: $@
 
-## 1. Research first
+Walk down each branch of the design tree, resolving dependencies between
+decisions one by one. For each question, give your recommended answer.
 
-Any question the codebase can answer, answer it — read, grep, run things.
-Writing a question costs you one turn; six greps cost six, and you will be
-tempted to ask instead of look. Do not. Every question's Context line either
-cites `file:line` or states outright that the codebase does not settle it.
+The questions go in a file I fill in, not into chat. Write one wave, stop,
+and wait for me to answer.
 
-## 2. Sort the candidate questions
+If a question can be answered by exploring the codebase, explore the codebase
+instead.
 
-Every question lands in exactly one class:
+Do not implement. No code until I say go.
 
-- **Independent** — neither its existence nor its option set changes under
-  any answer to another question. Goes in this wave.
-- **Guarded** — it applies only under one branch, but overturning the parent
-  deletes it rather than replacing it with a different question set. Goes in
-  this wave, carrying an explicit `Applies if` line.
-- **Deferred** — overturning the parent brings 3 or more questions of its
-  own. Only this class forces another wave.
+</what-to-do>
 
-Wave size is an output of the sort, not a setting. A plan with no deferred
-questions ships as a single large wave. Never claim zero deferred on a plan
-that visibly forks.
+<supporting-info>
 
-Cap a wave at 15 questions. Past that, cut the ones whose recommendation you
-would confidently make anyway and list them under Assumed defaults.
+## Sort the questions before writing any
 
-## 3. Write the file
+Every candidate question is one of three kinds:
 
-Path `.grill/<topic>.md`. If the repo does not already ignore `.grill/`, add
-it to `.git/info/exclude`. Then stop the turn.
+- **Independent** — no answer to any other question changes it. Include it.
+- **Guarded** — it applies down one branch only, and taking the other branch
+  deletes it outright. Include it, with an `Applies if` line.
+- **Deferred** — the other branch replaces it with three or more questions of
+  its own. Only this kind needs a second wave.
 
-```markdown
+The sort decides how big the wave is; you don't. A plan that never forks ships
+as one long wave. If you report no deferred questions on a plan that visibly
+forks, you skipped the sort.
+
+Stop at 15. Past that, drop the questions whose recommendation you would make
+confidently anyway and list them as assumed defaults.
+
+## Explore before you ask
+
+Writing a question costs you one turn. The greps that would have answered it
+cost six. Ignore that pressure. Every Context line either cites `file:line` or
+says plainly that the code does not settle the question.
+
+## The file
+
+Write `.grill/<topic>.md`. If the repo does not ignore `.grill/`, add it to
+`.git/info/exclude`.
+
+````markdown
 # Grill: <topic> — wave <n>
 
-Leave an answer blank to accept the recommendation. Save, then tell me to
-re-read. Questions marked "I need this from you" have no default and will
-stop the wave if left blank.
+Leave an answer blank to accept the recommendation. Save the file, then tell
+me to re-read it. Questions marked "I need this from you" have no default and
+will stop the wave if left blank.
 
 **Wave <n>: <N> questions (<a> independent, <b> guarded). Deferred: <c>.**
 
 ## Q1. <question>
-**Context:** why this is load-bearing, citing `file:line`, or why the code
-does not settle it.
+**Context:** what this decision constrains, citing `file:line` — or why the
+code does not settle it.
 **Recommendation:** <pick> — <why, one line>
 **Alternatives:** <B> (costs: …) | <C> (costs: …)
 **Answer:**
 
 ## Q7. <question>
-**Applies if:** Q3 = <branch> (my recommendation). Skip it if you pick
-<other branch>.
+**Applies if:** Q3 = <branch>, which is what I recommend. Skip this one if
+you take <other branch>.
 **Context:** …
 **Recommendation:** …
 **Answer:**
 
 ## Q9. <question>
 **Context:** …
-**Recommendation:** none — I need this from you. <what makes a default
-unsafe: irreversible, destructive, or a fact only you hold.>
+**Recommendation:** none — I need this from you, because <the change is
+irreversible / only you hold the number>.
 **Answer:**
 
 ---
 **Assumed defaults (not asked):** <decision> = <value>. …
 **Deferred to wave <n+1>:** <topic> (needs Q3), <topic> (needs Q5).
-```
+````
 
-## 4. On re-read
+## Reading the answers back
 
-Re-read the file from disk; never answer from your memory of what you wrote.
-Never regenerate or rewrite the file — the answers in it are the user's, and
-a rewrite eats them. Wave `n+1` appends a new section to the same file.
+Re-read from disk. Never answer from your memory of what you wrote, and never
+rewrite the file — the answers in it are mine, and a rewrite eats them. Wave
+`n+1` appends a new section to the same file.
 
-- A blank answer on a normal question means the recommendation is accepted.
-- A blank answer on a `none — I need this from you` question halts the wave.
-  Report which ones and stop.
-- A guarded question whose premise the user overturned is discarded, even if
-  they filled it in.
-- Answers are prose, not letters. "B, but only on the admin path" is a
-  different decision from "B". Restate each one in your own words so I can
-  catch a misreading.
+- Blank means the recommendation stands.
+- Blank on a question you marked "I need this from you" stops the wave. Name
+  the ones you are missing and wait.
+- A guarded question whose branch I did not take is discarded, even if I
+  filled it in.
+- Answers come as prose. "B, but only on the admin path" is not "B". Play
+  every answer back in your own words so I can catch you misreading me.
 
-When every branch is resolved, output a tight spec: goal, every decision with
-its chosen answer as you understood it, assumed defaults, open risks. Then
+Once no branch is left open, write the spec: the goal, every decision with the
+answer as you understood it, the assumed defaults, and the open risks. Then
 wait for my approval.
+
+</supporting-info>
