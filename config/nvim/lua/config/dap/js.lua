@@ -8,7 +8,11 @@ local widgets = require 'config.dap.widgets'
 -- never fetched its registry, which on a new machine aborted the rest of
 -- init.lua. nvim-dap calls the function when a `pwa-node` config is run
 -- (dap.lua:645), so a missing package is reported where it can be acted on.
-dap.adapters['pwa-node'] = function(callback, _)
+dap.adapters['pwa-node'] = function(callback, config)
+  -- VS Code injects __workspaceFolder into every js-debug config; without it
+  -- js-debug drops ${workspaceFolder} defaults (outFiles, rootPath) and
+  -- never binds source-mapped breakpoints. nvim-dap does not inject it.
+  config.__workspaceFolder = config.__workspaceFolder or vim.fn.getcwd()
   local install_path = require('mason-registry').get_package('js-debug-adapter'):get_install_path()
   callback {
     type = 'server',
@@ -19,6 +23,14 @@ dap.adapters['pwa-node'] = function(callback, _)
       args = { install_path .. '/js-debug/src/dapDebugServer.js', '${port}' },
     },
   }
+end
+
+-- launch.json configs written for VS Code use `type: "node"`. VS Code's
+-- js-debug extension rewrites that to `pwa-node` before the DAP server sees
+-- it; the standalone server never answers an attach typed `node`.
+dap.adapters.node = function(callback, config)
+  config.type = 'pwa-node'
+  dap.adapters['pwa-node'](callback, config)
 end
 
 -- js-debug answers setBreakpoints with provisional entries that omit `line`.
