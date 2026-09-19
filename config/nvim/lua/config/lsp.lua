@@ -1,5 +1,11 @@
 vim.pack.add { 'https://github.com/j-hui/fidget.nvim' }
-require('fidget').setup {}
+-- Progress UI has nothing to show before a server attaches; 2.5 ms of setup
+-- waits for the first one.
+vim.api.nvim_create_autocmd('LspAttach', {
+  group = vim.api.nvim_create_augroup('fidget-lazy-setup', { clear = true }),
+  once = true,
+  callback = function() require('fidget').setup {} end,
+})
 
 vim.api.nvim_create_autocmd('LspAttach', {
   group = vim.api.nvim_create_augroup('lsp-attach', { clear = true }),
@@ -109,8 +115,18 @@ local servers = {
     root_markers = { '.obsidian', '.moxide.toml', '.git' },
   },
 
-  jsonls = {},
-  yamlls = {},
+  -- SchemaStore's catalog (2.3 ms to build) is filled in when the server
+  -- starts rather than at startup. In place, not by replacing
+  -- config.settings: the client's own settings table is the same table,
+  -- captured before before_init runs (vim/lsp/client.lua, Client.create).
+  jsonls = {
+    settings = { json = { validate = { enable = true } } },
+    before_init = function(_, config) config.settings.json.schemas = require('schemastore').json.schemas() end,
+  },
+  yamlls = {
+    settings = { yaml = { schemaStore = { enable = false, url = '' } } },
+    before_init = function(_, config) config.settings.yaml.schemas = require('schemastore').yaml.schemas() end,
+  },
   bashls = {},
 
   lua_ls = {
@@ -177,20 +193,6 @@ require('mason-tool-installer').setup {
     'markdownlint',
     'js-debug-adapter',
     'delve',
-  },
-}
-
--- Wire SchemaStore schemas into jsonls/yamlls (must be after vim.pack.add loads the plugin)
-servers.jsonls.settings = {
-  json = {
-    schemas = require('schemastore').json.schemas(),
-    validate = { enable = true },
-  },
-}
-servers.yamlls.settings = {
-  yaml = {
-    schemaStore = { enable = false, url = '' },
-    schemas = require('schemastore').yaml.schemas(),
   },
 }
 
