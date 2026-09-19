@@ -59,6 +59,22 @@ export EDITOR='nvim'  # or 'nvim' if you switch
 # Must be a shell export: it is read before settings.json env injection.
 export CLAUDE_CODE_TMUX_TRUECOLOR=1
 
+# ── Pi ──────────────────────────────────────────────────────────────────────
+# Anthropic prompt-cache TTL: "long" requests 1h retention on models that
+# support it, else falls back to the default 5m (pi-ai anthropic-messages.js).
+export PI_CACHE_RETENTION=long
+# ask_user: open oversized context fully expanded instead of collapsed.
+export PI_ASK_USER_CONTEXT_EXPANDED=true
+# ask_user: render in-place; the overlay compositor cannot draw over inline
+# terminal images (edlsh/pi-ask-user#8).
+export PI_ASK_USER_DISPLAY_MODE=inline
+
+# Homebrew's ImageMagick has no librsvg delegate, so it decodes SVG with its
+# internal MSVG renderer and dies on @font-face fonts (`kitten icat foo.svg`).
+# ~/.config/ImageMagick is searched AFTER the Homebrew config, so the override
+# there only wins from this path. See config/imagemagick/delegates.xml.
+export MAGICK_CONFIGURE_PATH="$HOME/.config/ImageMagick"
+
 # === Lazy Load NVM ===
 export NVM_DIR="$HOME/.nvm"
 
