@@ -41,7 +41,7 @@ outer.right = 10
 
 # Main binding mode (keep this section minimal and concrete)
 [mode.main.binding]
-alt-enter = 'exec-and-forget open -n /Applications/kitty.app'
+# alt-enter = 'exec-and-forget open -n /Applications/kitty.app'
 cmd-enter = 'exec-and-forget open -n /Applications/kitty.app'
 # alt-cmd-h = 'split horizontal'
 # alt-cmd-v = 'split vertical'
