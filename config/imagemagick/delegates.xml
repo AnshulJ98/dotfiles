@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Decode SVG with rsvg-convert, because Homebrew ImageMagick has no librsvg.
+  Read README.md in this directory before editing: the argument count, the
+  unquoted program name, and even the punctuation of this comment are all load
+  bearing. check.sh proves the whole path end to end.
+-->
+<delegatemap>
+  <delegate decode="svg:decode" stealth="True" command="rsvg-convert &apos;%s&apos; --output &apos;%s&apos;"/>
+</delegatemap>
