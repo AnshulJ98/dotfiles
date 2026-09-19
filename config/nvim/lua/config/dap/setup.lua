@@ -1,13 +1,7 @@
 -- Debugging for Node.js/TypeScript (config/dap/js.lua) and Go
--- (config/dap/go.lua): the plugins, the session controls, and the wiring
--- between nvim-dap and the integrated terminal.
-
-vim.pack.add {
-  'https://github.com/mfussenegger/nvim-dap',
-  'https://github.com/leoluz/nvim-dap-go',
-  'https://github.com/theHamsta/nvim-dap-virtual-text',
-  'https://github.com/igorlfs/nvim-dap-view',
-}
+-- (config/dap/go.lua): the session controls and the wiring between nvim-dap
+-- and the integrated terminal. Required on the first debug key by
+-- config/dap/init.lua, which owns the plugin list.
 
 -- Values are capped so large payloads do not wrap the code line; inline
 -- virtual text spanning many screen rows stalls redraw on cursor movement.
