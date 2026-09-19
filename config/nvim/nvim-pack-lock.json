@@ -37,10 +37,6 @@
       "rev": "53fd294658941719d7622471f28e70179d6737a6",
       "src": "https://github.com/mikesmithgh/kitty-scrollback.nvim"
     },
-    "markdown-table-wrap.nvim": {
-      "rev": "a5b676360946c7bce48c0b717ab05929761b88c8",
-      "src": "https://github.com/ice345/markdown-table-wrap.nvim"
-    },
     "mason-tool-installer.nvim": {
       "rev": "443f1ef8b5e6bf47045cb2217b6f748a223cf7dc",
       "src": "https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim"
@@ -104,7 +100,7 @@
       "src": "https://github.com/nvim-lua/plenary.nvim"
     },
     "render-markdown.nvim": {
-      "rev": "f422cb5c6855f150e2ddcfaf44e7157b98b34f6a",
+      "rev": "640a3ec6d538bad17c328be373c7cad0293d9589",
       "src": "https://github.com/MeanderingProgrammer/render-markdown.nvim"
     },
     "smart-splits.nvim": {
