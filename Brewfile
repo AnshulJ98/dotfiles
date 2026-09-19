@@ -91,6 +91,12 @@ brew "jq"
 brew "lazygit"
 # Portable Foreign Function Interface library
 brew "libffi"
+# Library to render SVG files using Cairo
+# Supplies rsvg-convert, which config/imagemagick/delegates.xml wires into
+# ImageMagick as the svg:decode delegate. Was present only as a transitive
+# dependency; declared here so `brew autoremove` cannot take SVG decoding
+# with it.
+brew "librsvg"
 # Package manager for the Lua programming language
 brew "luarocks"
 # Open-source, cross-platform JavaScript runtime environment
