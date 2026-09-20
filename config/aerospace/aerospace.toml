@@ -47,7 +47,12 @@ cmd-enter = 'exec-and-forget open -n /Applications/kitty.app'
 # alt-cmd-v = 'split vertical'
 
 # Layout controls
-alt-f = 'fullscreen'
+# --no-outer-gaps drops the 10pt outer gaps for the fullscreen window only.
+# The menu bar is out of AeroSpace's reach (it lays out inside the screen's
+# visible frame), so full coverage also needs macOS menu bar auto-hide set to
+# Always. macos-native-fullscreen would hide it but exiles the window to its
+# own macOS Space, losing the workspace and the tiling tree.
+alt-f = 'fullscreen --no-outer-gaps'
 alt-e = 'layout tiles horizontal vertical'
 alt-comma = 'layout accordion horizontal vertical'
 
