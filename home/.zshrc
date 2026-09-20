@@ -75,6 +75,12 @@ export PI_ASK_USER_DISPLAY_MODE=inline
 # there only wins from this path. See config/imagemagick/delegates.xml.
 export MAGICK_CONFIGURE_PATH="$HOME/.config/ImageMagick"
 
+# === pnpm ===
+# pnpm self-update writes into PNPM_HOME and relinks $PNPM_HOME/pnpm. Without
+# this on PATH the update is orphaned and an older global pnpm keeps winning.
+export PNPM_HOME="$HOME/Library/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+
 # === Lazy Load NVM ===
 export NVM_DIR="$HOME/.nvm"
 
