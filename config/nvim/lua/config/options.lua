@@ -1,3 +1,8 @@
+-- Experimental in 0.12: replaces the message area and cmdline, so long
+-- messages no longer stop on "Press ENTER". First line so startup messages
+-- already go through it.
+require('vim._core.ui2').enable()
+
 vim.o.number = true
 vim.o.relativenumber = true
 

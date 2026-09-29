@@ -3,19 +3,38 @@
 
 vim.pack.add { 'https://github.com/nvim-mini/mini.nvim' }
 
-require('mini.icons').setup()
+-- Folders mini.icons has no icon for, from the TypeScript projects; each is a
+-- Material Design folder glyph, as VS Code's material-icon-theme draws them.
+-- mini.icons already covers src, test, tests, docs, bin, build, lib and
+-- node_modules.
+require('mini.icons').setup {
+  directory = {
+    __tests__ = { glyph = '󱞊', hl = 'MiniIconsBlue' },
+    assets = { glyph = '󰉏', hl = 'MiniIconsYellow' },
+    config = { glyph = '󱁿', hl = 'MiniIconsCyan' },
+    coverage = { glyph = '󱥾', hl = 'MiniIconsGrey' },
+    dist = { glyph = '󰛫', hl = 'MiniIconsGrey' },
+    e2e = { glyph = '󱞊', hl = 'MiniIconsBlue' },
+    migrations = { glyph = '󰴋', hl = 'MiniIconsCyan' },
+    modules = { glyph = '󰉓', hl = 'MiniIconsPurple' },
+    prisma = { glyph = '󱋣', hl = 'MiniIconsCyan' },
+    public = { glyph = '󰉏', hl = 'MiniIconsYellow' },
+    scripts = { glyph = '󱧺', hl = 'MiniIconsYellow' },
+    utils = { glyph = '󱧼', hl = 'MiniIconsYellow' },
+  },
+}
 -- Used for backwards compatibility with plugins that require `nvim-web-devicons` (e.g. telescope.nvim)
 MiniIcons.mock_nvim_web_devicons()
 
 require('mini.ai').setup {
   -- nvim 0.12 added built-in v_an/v_in for treesitter node selection, which
   -- conflicts with mini.ai's around_next/inside_next defaults. Remapped here
-  -- to avoid the collision. See kickstart.nvim #1971.
-  -- aa/ii may shadow mini.ai custom textobjects (around-argument, inside-indent)
-  -- if you add those later — pick different keys at that point.
+  -- to avoid the collision. See kickstart.nvim #1971. Not to kickstart's
+  -- aa/ii: `a` is mini.ai's built-in argument textobject, so `aa` swallowed
+  -- `daa` (delete an argument with its comma) as "around next".
   mappings = {
-    around_next = 'aa',
-    inside_next = 'ii',
+    around_next = 'aN',
+    inside_next = 'iN',
   },
   n_lines = 500,
 }

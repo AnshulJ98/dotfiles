@@ -49,7 +49,11 @@ vim.api.nvim_create_autocmd('FileType', {
 -- Sticky scroll: the enclosing class and function signatures stay pinned
 -- above the viewport, as in VS Code. Bearded ships the highlight groups.
 vim.pack.add { 'https://github.com/nvim-treesitter/nvim-treesitter-context' }
+-- 'topline' pins the scopes enclosing the first visible line, as VS Code
+-- does; the default 'cursor' follows the cursor, so a function scrolled past
+-- vanished from the header while the cursor sat above it.
 require('treesitter-context').setup {
+  mode = 'topline',
   max_lines = 4,
   multiline_threshold = 1,
   trim_scope = 'inner',
