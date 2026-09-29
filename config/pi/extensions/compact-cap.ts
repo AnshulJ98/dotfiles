@@ -30,7 +30,7 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const DEFAULT_THRESHOLD = 165_000;
+const DEFAULT_THRESHOLD = 210_000;
 
 // Handshake keys shared with prime-reminder.ts (Symbol.for = cross-file safe).
 // FIRING: a cap compaction is in flight. INTERRUPTED: it aborted a running
