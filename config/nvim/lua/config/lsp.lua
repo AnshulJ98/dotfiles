@@ -129,6 +129,22 @@ local servers = {
   },
   bashls = {},
 
+  -- Spell checking for code, VS Code's Code Spell Checker. It flags words
+  -- only where they are defined (comments, strings, declarations), so an
+  -- imported misspelling is not reported at every use. The word list lives
+  -- in codebook.toml, not in cSpell's settings. Its findings are Info, which
+  -- the global diagnostic config shows only as end-of-line text; for this
+  -- server that flips to an undercurl with no text or sign, cSpell's look.
+  codebook = {
+    on_init = function(client)
+      vim.diagnostic.config(
+        -- A bare `true` inherits the global severity floor and draws nothing.
+        { underline = { severity = { min = vim.diagnostic.severity.HINT } }, virtual_text = false, signs = false },
+        vim.lsp.diagnostic.get_namespace(client.id)
+      )
+    end,
+  },
+
   lua_ls = {
     on_init = function(client)
       client.server_capabilities.documentFormattingProvider = false -- Disable formatting (formatting is done by stylua)
@@ -178,6 +194,7 @@ require('mason').setup {}
 require('mason-tool-installer').setup {
   ensure_installed = {
     'bash-language-server',
+    'codebook',
     'eslint-lsp',
     'json-lsp',
     'lua-language-server',

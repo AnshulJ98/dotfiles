@@ -38,6 +38,7 @@ require('which-key').setup {
     { '<leader>t', group = '[T]oggle' },
     { '<leader>d', group = '[D]ebug', mode = { 'n', 'v' } },
     { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
+    { '<leader>g', group = '[G]it diff', mode = { 'n', 'x' } },
     { '<leader>w', group = '[W]indow' },
     { '<leader>ws', group = '[S]wap' },
     { 'gr', group = 'LSP Actions', mode = { 'n' } },
@@ -67,3 +68,32 @@ end
 vim.keymap.set('n', '<leader>w=', '<C-w>=', { desc = 'Equalize windows' })
 vim.keymap.set('n', '<leader>wr', function() require('which-key').show { keys = '<leader>w', loop = true } end, { desc = '[R]esize mode' })
 vim.keymap.set('n', '<leader>?', '<Cmd>WhichKey<CR>', { desc = '[?] All keymaps' })
+
+-- One label per tab page: the focused file's name. The default tabline
+-- shortened whole paths, and CodeDiff, which opens every diff in its own tab
+-- on codediff:// buffers, came out as `c////p/t/c/s/r///:/s/m/w/...`.
+local function tab_label(tab)
+  local label, modified = nil, false
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local name = vim.api.nvim_buf_get_name(buf)
+    modified = modified or vim.bo[buf].modified
+    if not label and name:find '^codediff://' then label = 'diff: ' .. vim.fn.fnamemodify(name, ':t') end
+  end
+  local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(tab)))
+  label = label or (name == '' and '[No Name]' or vim.fn.fnamemodify(name, ':t'))
+  return label:gsub('%%', '%%%%') .. (modified and ' +' or '')
+end
+
+--- Renders 'tabline': clickable tabs labelled by file name.
+---@return string
+function _G.Tabline()
+  local current = vim.api.nvim_get_current_tabpage()
+  local parts = {}
+  for index, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    local hl = tab == current and '%#TabLineSel#' or '%#TabLine#'
+    parts[#parts + 1] = ('%s%%%dT %s '):format(hl, index, tab_label(tab))
+  end
+  return table.concat(parts) .. '%#TabLineFill#%T'
+end
+vim.o.tabline = '%!v:lua.Tabline()'

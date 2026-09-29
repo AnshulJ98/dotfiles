@@ -32,3 +32,25 @@ vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
     end
   end,
 })
+
+-- Reopen a file at the line it was left on, as VS Code does. nvim ships this
+-- only as an example (`:help last-position-jump`); this is that example.
+-- 'filetype' is still empty at BufReadPost, so the check waits for the
+-- buffer's first FileType. Commit and rebase messages are new text each
+-- time, xxd buffers are a transformed view, and diff mode aligns by hunk.
+vim.api.nvim_create_autocmd('BufReadPre', {
+  desc = 'Restore the cursor to its last position',
+  group = vim.api.nvim_create_augroup('restore-cursor', { clear = true }),
+  callback = function(args)
+    vim.api.nvim_create_autocmd('FileType', {
+      buffer = args.buf,
+      once = true,
+      callback = function()
+        local line = vim.api.nvim_buf_get_mark(args.buf, '"')[1]
+        local filetype = vim.bo[args.buf].filetype
+        local excluded = filetype:find('commit', 1, true) or filetype == 'xxd' or filetype == 'gitrebase' or vim.wo.diff
+        if line >= 1 and line <= vim.api.nvim_buf_line_count(args.buf) and not excluded then vim.cmd 'normal! g`"' end
+      end,
+    })
+  end,
+})

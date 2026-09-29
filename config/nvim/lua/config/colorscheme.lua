@@ -81,8 +81,27 @@ require('bearded').setup {
     -- marks it as folded.
     set('Folded', { bg = ui.primaryalt })
     set('MatchParen', { fg = c.purple, bg = ui.primaryalt, bold = true })
-    -- The active indent guide had the comment colour, same as the inactive ones.
-    set('IblScope', { fg = ui.defaultMain })
+    -- Pinned hex, not the flavor palette: these are VS Code's
+    -- editorBracketHighlight.foreground1..6 (vscode-insiders/settings.json), so
+    -- both editors colour brackets identically.
+    for i, color in ipairs { '#ffee00', '#ff44ff', '#44ddff', '#cc88ff', '#44ffcc', '#ff3377' } do
+      set('BracketPair' .. i, { fg = color })
+    end
+    -- The active indent guide takes its bracket pair's colour, as VS Code's
+    -- bracket pair guides do (config.indent_line), dimmed so it sits just
+    -- above the inactive guides: each is the BracketPair colour blended over
+    -- the #151f27 background to a 3.2:1 contrast, against 2.56:1 for the
+    -- inactive guides. IblScope, the same blend of the foreground, is for a
+    -- scope with no bracket (a Lua `function ... end`).
+    for i, color in ipairs { '#707018', '#af37b6', '#2b768a', '#815da6', '#287969', '#c72e64' } do
+      set('IblScopeBracket' .. i, { fg = color })
+    end
+    set('IblScope', { fg = '#5e6f7d' })
+    -- Bearded paints the winbar an opaque bold #07080d; dropbar's breadcrumbs
+    -- sit on it in every window, where it read as a black strip over the
+    -- translucent code. VS Code's breadcrumb.background is transparent too.
+    set('WinBar', { fg = ui.defaultMain })
+    set('WinBarNC', { fg = ui.defaultalt })
     set('TreesitterContextBottom', { sp = ui.primaryalt, underline = true })
     for level, color in pairs { Error = levels.danger, Warn = levels.warning, Info = levels.info, Hint = c.purple } do
       set('DiagnosticUnderline' .. level, { sp = color, undercurl = true })
