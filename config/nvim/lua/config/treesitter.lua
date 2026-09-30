@@ -4,14 +4,40 @@ local parsers =
   { 'diff', 'javascript', 'json', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'tsx', 'typescript', 'vim', 'vimdoc', 'yaml' }
 require('nvim-treesitter').install(parsers)
 
+-- Folds come from the language server when it offers folding ranges, as VS
+-- Code's do, and from treesitter otherwise. vim.lsp.foldexpr() turns a
+-- buffer's LSP folding off whenever 'foldexpr' is set again, so every writer
+-- goes through here and leaves an unchanged value alone.
+---@param buf integer
+local function set_foldexpr(buf)
+  local from_lsp = #vim.lsp.get_clients { bufnr = buf, method = 'textDocument/foldingRange' } > 0
+  if not from_lsp and not vim.treesitter.highlighter.active[buf] then return end
+  local expr = from_lsp and 'v:lua.vim.lsp.foldexpr()' or 'v:lua.vim.treesitter.foldexpr()'
+  for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+    local wo = vim.wo[win][0]
+    if wo.foldexpr ~= expr then wo.foldexpr = expr end
+    wo.foldmethod = 'expr'
+  end
+end
+
+vim.api.nvim_create_autocmd({ 'LspAttach', 'LspDetach' }, {
+  desc = 'Fold from the language server while one with folding ranges is attached',
+  group = vim.api.nvim_create_augroup('lsp-folding', { clear = true }),
+  -- Scheduled: on LspDetach the leaving client still counts as attached.
+  callback = function(args)
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(args.buf) then set_foldexpr(args.buf) end
+    end)
+  end,
+})
+
 ---@param buf integer
 ---@param language string
 local function treesitter_try_attach(buf, language)
   if not vim.treesitter.language.add(language) then return end
   vim.treesitter.start(buf, language)
 
-  vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-  vim.wo.foldmethod = 'expr'
+  set_foldexpr(buf)
 
   -- Without an indent query the indentexpr falls back to vim's built-in one.
   local has_indent_query = vim.treesitter.query.get(language, 'indents') ~= nil
