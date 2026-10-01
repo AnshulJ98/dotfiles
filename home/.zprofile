@@ -16,3 +16,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 export PATH="$PATH:/usr/local/bin"
 export JAVA_HOME=/Applications/Android\ Studio.app/Contents/jbr/Contents/Home
 
+
+# >>> termium >>>
+case ":$PATH:" in *:"$HOME/.local/bin":*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
+# <<< termium <<<
