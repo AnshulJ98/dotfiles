@@ -47,7 +47,8 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 ├── AGENTS.work.md           # GENERATED: same + env.work.md → ~/.pi/agent/AGENTS.md on WORK
 ├── bin/                     # → symlinked to ~/.pi/agent/bin (both machines)
 │   ├── scout                # child-pi scout wrapper (see Scout)
-│   └── scout.prompt.md      # its system prompt (replaces pi's base prompt in the child)
+│   ├── scout.prompt.md      # its system prompt (replaces pi's base prompt in the child)
+│   └── worker.prompt.md     # the --rw worker's system prompt (scout.prompt.md forbids edits)
 ├── prompts/
 │   ├── plan.md              # /plan
 │   ├── review.md            # /review
@@ -63,7 +64,9 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 │   ├── prime-reminder.ts    # post-compaction reminder + manual-compact auto-resume
 │   ├── headless-close.ts    # -p runs may not end on a question (enforced, not asked)
 │   ├── headless-close.test.ts  # 11 table tests: node --test headless-close.test.ts
-│   └── scout.ts             # scout visibility: footer status while running, chat entry on exit (zero tokens)
+│   ├── scout.ts             # scout visibility: footer status while running, chat entry on exit (zero tokens)
+│   ├── worker-sensors.ts    # scout --rw only (loaded with -e, not from settings): files-allowed, bash blocks, settle checks
+│   └── worker-sensors.test.ts  # table tests: node --test worker-sensors.test.ts
 └── DESIGN.md                # this file
 ```
 Resource dirs (`prompts`, `extensions`) are referenced by absolute path in `settings.json`; each extension is listed individually in `extensions`, so a new file needs a settings entry and no `install.sh` change. Symlinks (`settings.json`, the AGENTS variant, `agents/`, `themes/`) are installed by `./install.sh [--work]` at the repo root. Skills are auto-discovered from `~/.agents/skills` only — the `config/pi/skills` directory referenced here until 2026-09-16 never existed.
@@ -73,7 +76,7 @@ Resource dirs (`prompts`, `extensions`) are referenced by absolute path in `sett
 Billed = (input + output + cached tokens) × per-model rate. Levers, in order of impact:
 1. **Context size** — lean `AGENTS.md`, skills as descriptions-only until invoked, background offload.
 2. **Model choice** — local MLX = $0; else cheapest model that's good enough.
-3. **Thinking** — the default is `low`; `Shift+Tab` up for work that earns it. Effort is model-dependent and not monotonic: on the review fixture, `opus-4-6` is flat across high/xhigh/max while `opus-5` and `opus-4-8` only reach 12/12 at `max`.
+3. **Thinking** — the default is `medium` (2026-09-30, with `claude-opus-5-5`); `Shift+Tab` changes it for work that earns it. Effort is model-dependent and not monotonic: on the review fixture, `opus-4-6` is flat across high/xhigh/max while `opus-5` and `opus-4-8` only reach 12/12 at `max`.
 4. **Compaction** — caps context growth automatically.
 
 Not a lever: the size of `AGENTS.md` (see Goal). Measured 2026-09-16, deleting it *raised* output tokens 29%.
@@ -102,7 +105,7 @@ Surveyed from a maximalist community pi build:
 
 `pi-subagents` was removed on 2026-09-16 after measuring what it cost to keep: 8,277 resident tokens of tool schema on every parent turn, 33% of the 24,972-token resident prompt and 2.4x the whole of `AGENTS.md`. Head-to-head on two verifiable scouting tasks (10 runs, same model, same prompt) showed no quality difference against a plain child process, at 2.2–2.6x lower cost per call. The archive branch `archive/pi-subagents-config` holds the last configuration that used it.
 
-What replaced it is `bin/scout`, a ~90-line bash wrapper linked to `~/.pi/agent/bin/scout` and invoked through the existing `bash` tool, so it costs zero resident tokens. It spawns:
+What replaced it is `bin/scout`, a ~150-line bash wrapper linked to `~/.pi/agent/bin/scout` and invoked through the existing `bash` tool, so it costs zero resident tokens. It spawns:
 
 ```
 PI_SCOUT_DEPTH=1 timeout 300 pi -p -ne [-e <oauth shim if present>] -nc -ns -np \
@@ -110,7 +113,7 @@ PI_SCOUT_DEPTH=1 timeout 300 pi -p -ne [-e <oauth shim if present>] -nc -ns -np 
   --model anthropic/claude-sonnet-5 --thinking low --system-prompt bin/scout.prompt.md "task"
 ```
 
-Measured child cost: ~3.5k resident tokens (`-t` allowlist, no base prompt, no AGENTS.md, no extensions). Flags: `--brief FILE` injects context via `@FILE`; `--fork` copies `$PI_SESSION_FILE` first (the original is never appended to) and re-bills the whole parent context, so it is opt-in only; `--ctx` keeps AGENTS.md discovery; `--rw` adds edit/write for bounded-spec implementation and nothing else. Exit 2 on nesting (`PI_SCOUT_DEPTH` already set) or usage error, 124 on timeout. The bash tool has no default timeout, so the wrapper's own `timeout` is what stops a hung child from hanging the parent.
+Measured child cost: ~3.5k resident tokens (`-t` allowlist, no base prompt, no AGENTS.md, no extensions). Flags: `--brief FILE` injects context via `@FILE`; `--fork` copies `$PI_SESSION_FILE` first (the original is never appended to) and re-bills the whole parent context, so it is opt-in only; `--ctx` keeps AGENTS.md discovery; `--rw` turns the scout into a worker (see Worker mode). Exit 2 on nesting (`PI_SCOUT_DEPTH` already set) or usage error, 124 on timeout. The bash tool has no default timeout, so the wrapper's own `timeout` is what stops a hung child from hanging the parent.
 
 **Cost visibility.** Scout sessions live under `~/.pi/agent/sessions/scout/<pid>/` because `pi-usage-widget` walks the sessions tree recursively (`data-collection.ts:456`) and nothing else: scout spend then lands in today/all-time with no widget change (verified: moving the scout files out shifted today by exactly their summed `usage.cost.total`). `/resume` reads only `sessions/<encoded-cwd>/` (`session-manager.js:550`), so the subdirectory never shows up there, and the widget's shared `timestamp:totalTokens` dedupe keeps `--fork` copies from double-counting the parent. Every usage package surveyed on 2026-09-16 (pi-usage-dashboard, @pify/usage, pi-usage-bar, pi-footer, pi-daily-cost, pi-token-usage, pi-tracker, pi-atlas) reads either in-process events or this same tree, so none needed replacing.
 
@@ -121,6 +124,8 @@ Measured child cost: ~3.5k resident tokens (`-t` allowlist, no base prompt, no A
 Why each flag is there is recorded in `~/Dev/pi-scout-plan-2026-09-16.md` (18 gaps, each with the evidence). The ones that bit: `-e <dir>` silently loads nothing (use `index.ts`); `--no-extensions` drops the OAuth compatibility shim, which is loaded back explicitly when installed; `grep/find/ls` are opt-in builtins that only `-t` enables; Anthropic's OAuth pool rate-limits above two concurrent agents, so the delegation rule caps parallel at two.
 
 **Dispatch is the fragile half, and it is prose.** With the old rule ("dispatch before a third file read... a narrow grep: do it yourself") the parent dispatched 0/12 times on a genuine multi-file trace; every thinking trace said "dispatch is right, but I'll do a quick grep first" and momentum finished the job, pulling 25–42 KB into context. The clause was the on-ramp. The current rule in `persona-pi.md` ("decide before the first tool call; a scoping grep is the first read") went 4/4 with the scout as the first call and 6–17 KB into the parent, at +25–30 s latency. On the live config: explicit-cue trace 4/4, casual phrasing 4/4, familiar-repo multi-file trace 3/3, narrow lookup 0/3 and single-known-file edit 0/3 (no over-dispatch). A second erosion was then measured and closed: after the digest the parent re-read cited files whole (2/4 runs, 13–22 KB); "re-read a cited line range only when you need the exact text, never the whole file" took that to 0/4 and 3–16 KB. Explicit "use the scout" dispatch was 4/4 under both rules. Re-run this probe (`/tmp/spike/run6.sh` shape: headless parent, `-nc --append-system-prompt <AGENTS variant>`, unfamiliar-package trace prompt) whenever the Delegation fragment changes.
+
+**Worker mode (`--rw`, 2026-09-30).** The brief must be a spec whose frontmatter carries `files-allowed` (globs) and `tests` (a shell command), optionally `max-lines` (default 400); `prompts/spec-contract.md` emits that shape. The wrapper validates the frontmatter with the sensors' own parser before spending a token, swaps in `worker.prompt.md`, raises defaults to medium thinking and 900 s, and loads `extensions/worker-sensors.ts` with `PI_WORKER_SPEC`. The sensors fail closed if they cannot arm. `tool_call` blocks edit/write outside `files-allowed` (paths resolved as pi resolves them: `@` stripped, `~` expanded) and a token scan of bash: git push/pull/merge/rebase/reset/clean/stash/checkout/switch/restore and `commit --amend`, behind global options and wrappers (`git -C .`, `command`, `sh -c`, `eval`, `$(...)`); recursive `rm`; `find -delete`; package add/remove/update and package-fetching `npx --yes`/`dlx`/`bunx`. That layer is a speed bump, because bash writes files and variables defeat a token scan. The authority is `agent_before_settle`: rerun `tests` (300 s cap), diff the tree against a `git stash create` snapshot plus hashes of untracked files, and fail on files outside the list, lines over `max-lines`, dependency changes, or a test file that lost cases/assertions or gained skip/only markers. One retry via a `custom_message`; a check that cannot run (126/127, `command not found`, ECONNREFUSED/ENOTFOUND/EAI_AGAIN, timeout, aborted run) stops at once. The verdict prints as `WORKER-SENSORS: PASS|FAIL|CANNOT-RUN <reasons>`; a wrapper timeout prints CANNOT-RUN itself because settle never ran. Not covered: gitignored paths (`dist/`, `node_modules/`, `.env`), writes outside the repo, symlink escapes, and a push that slips the scan. `**` does not match dotfiles, so specs list those explicitly. Tool restrictions are bypassable through bash in every harness (Claude Code #31292, #33681); checking the tree after the fact is why the settle check, not the block list, decides the verdict.
 
 The bundled `examples/extensions/subagent` was measured as the alternative (687 resident tokens, typed single/parallel/chain) and rejected: it returns the child's whole streamed transcript as the tool result, 72–79 KB per dispatch against the wrapper's 3–4 KB, and its child inherits the full ~25k prompt.
 
