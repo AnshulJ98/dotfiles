@@ -1,0 +1,57 @@
+# Bearded HC Midnight Void: Vicinae port of the palette kitty uses
+# (config/kitty/themes/bearded-hc-midnightvoid.conf).
+# Alpha colours from bearded-theme-hc-midnightvoid.json are flattened onto
+# editor.background #151f27, as in the kitty port.
+
+[meta]
+version = 1
+name = "Bearded HC Midnight Void"
+description = "High-contrast blue-black base with pastel accents."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#151f27"            # editor.background
+foreground = "#c3d2de"            # editor.foreground
+secondary_background = "#111920"  # sideBar.background
+border = "#273948"                # editorWidget.border
+accent = "#7fd7f5"                # terminal.ansiBlue
+accent_foreground = "#151f27"
+
+[colors.accents]
+blue = "#7fd7f5"
+green = "#AFEA7B"
+magenta = "#e4a3df"
+orange = "#F5DF76"
+purple = "#e4a3df"
+red = "#fd604f"
+yellow = "#F5DF76"
+cyan = "#22D3B1"
+
+[colors.text]
+muted = "#6c7983"        # descriptionForeground #c3d2de80
+placeholder = "#506d85"  # input.placeholderForeground
+danger = "#fd604f"
+success = "#AFEA7B"
+selection = { background = "#515e68", foreground = "#c3d2de" }
+
+[colors.text.links]
+default = "#dbefff"      # textLink.foreground
+
+[colors.input]
+border = "#334655"       # input.border
+border_focus = "#395469" # focusBorder
+border_error = "#fd604f"
+
+[colors.list.item.hover]
+foreground = "#c3d2de"
+secondary_foreground = "#c3d2de"
+
+[colors.list.item.selection]
+background = "#21313e"   # list.activeSelectionBackground #30465973
+foreground = "#c3d2de"
+secondary_background = "#1d2b36"
+secondary_foreground = "#c3d2de"
+
+[colors.grid.item]
+background = "#1e2c38"   # editorWidget.background
