@@ -29,6 +29,14 @@ in this context; its digest is all that comes back.
   fixes. Default implementation shape stays: a planning session writes
   the spec; short bounded main-agent sessions implement it slice by
   slice.
+- A `--rw` brief is a spec whose frontmatter names `files-allowed` and
+  `tests` (`/spec-contract` writes one). It opens with the module map
+  (`docs/maps/<module>-map.md`) when one exists. Worker sensors rerun
+  the tests and check the file list, so read their `WORKER-SENSORS:`
+  line before the worker's own report.
+- One open worker per repo: dispatch the next slice only after the
+  last one is merged or rejected, because unreviewed slices stack
+  faster than they can be read.
 - Do not delegate what you can finish in fewer steps than the dispatch
   costs.
 
