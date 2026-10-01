@@ -104,7 +104,8 @@ in_module() { grep -qxF "$1" <<<"$MODULE_FILES"; }
            /^export / { depth = 0; on = 1 }
            on { print; depth += gsub(/\{/, "{") - gsub(/\}/, "}"); if (depth <= 0) on = 0 }' "$dts"
     else
-      src=$(ls "$f".ts "$f".tsx 2>/dev/null | head -1)
+      src=""
+      for candidate in "$f.ts" "$f.tsx"; do [ -f "$candidate" ] && { src="$candidate"; break; }; done
       grep -E '^export ' "$src" | sed 's/ *{ *$//' || echo "// no exports"
     fi
     echo '```'
