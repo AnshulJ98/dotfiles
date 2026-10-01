@@ -61,7 +61,7 @@ link() {
 }
 
 # 3. ~/ files (shell rcs, gitconfig, prompt) ---------------------------------
-for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .p10k.zsh; do
+for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .gitignore_global .p10k.zsh; do
   [ -e "$DOT/home/$f" ] && link "$DOT/home/$f" "$HOME/$f"
 done
 

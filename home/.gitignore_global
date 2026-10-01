@@ -1,0 +1,3 @@
+# dadbod-grip keeps connection URLs (passwords included), query history and
+# saved queries in .grip/ at the root of whatever git repo nvim was started in.
+.grip/
