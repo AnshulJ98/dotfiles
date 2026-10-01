@@ -44,6 +44,10 @@ vim.o.foldtext = ''
 -- Wrapped continuation lines are marked; 'breakindent' above aligns them.
 vim.o.showbreak = '↪ '
 
+-- Soft wrap breaks between words, as VS Code's wordWrap does, rather than at
+-- whichever character hits the window edge.
+vim.o.linebreak = true
+
 -- One statusline for the whole screen. With one per window, neo-tree, the
 -- terminal and the debugger panel each drew a line of junk, and the code
 -- window's own line truncated its path once the panel took 60 columns.
