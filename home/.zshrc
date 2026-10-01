@@ -116,6 +116,16 @@ alias vimpractice='VIM_PRACTICE=1 nvim'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias code='code-insiders'
+
+# yazi: `y` browses, and quitting with q leaves the shell in yazi's last
+# directory (Q quits without moving). Official wrapper from yazi's quick start.
+function y() {
+  local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+  command yazi "$@" --cwd-file="$tmp"
+  IFS= read -r -d '' cwd < "$tmp"
+  [ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
+  command rm -f -- "$tmp"
+}
 # === Load P10K ===
 source ~/.zsh/plugins/powerlevel10k/powerlevel10k.zsh-theme
 
@@ -141,3 +151,12 @@ alias claude-orch='claude --agent orchestrator'
 if command -v gh >/dev/null 2>&1; then
   export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token 2>/dev/null)"
 fi
+
+# >>> termium >>>
+case ":$PATH:" in *:"$HOME/.local/bin":*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
+# <<< termium <<<
+
+# zoxide: `z foo` jumps to the highest-ranked directory matching foo, `zi`
+# picks interactively with fzf. Its init must come last: it hooks chpwd and
+# wraps completion, so anything sourced after it can undo that.
+eval "$(zoxide init zsh)"

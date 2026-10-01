@@ -1,0 +1,47 @@
+#:schema https://yazi-rs.github.io/schemas/yazi.json
+
+[mgr]
+linemode = "size"
+
+# Yazi caches every preview image downscaled to these bounds, and kitty then
+# stretches it over the pane. The 600x900 default is smaller than a Retina
+# preview pane, which is what made previews look soft.
+[preview]
+max_width     = 2000
+max_height    = 2000
+image_filter  = "lanczos3"
+image_quality = 90
+
+# Preview panes cannot pan or zoom past the pane, so images open in mpv drawn
+# straight into kitty. Keys live in mpv-image.conf beside this file.
+[opener]
+image = [
+	{ run = 'mpv --vo=kitty --really-quiet --image-display-duration=inf --loop-playlist=inf --input-conf="$HOME/.config/yazi/mpv-image.conf" %s', block = true, desc = "View (zoom/pan)", for = "unix" },
+]
+
+[open]
+prepend_rules = [
+	# Homebrew's ffmpeg has no SVG decoder, so mpv cannot open one.
+	{ mime = "image/svg+xml", use = [ "open", "reveal" ] },
+	{ mime = "image/*", use = [ "image", "open", "reveal" ] },
+]
+
+[[plugin.prepend_fetchers]]
+url   = "*"
+run   = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url   = "*/"
+run   = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url   = "*"
+run   = "mactag"
+group = "mactag"
+
+[[plugin.prepend_fetchers]]
+url   = "*/"
+run   = "mactag"
+group = "mactag"
