@@ -1,275 +1,286 @@
-# Pi adjustments: plan
+# Pi adjustments plan (rev. 2026-09-30 b)
 
-Scope: items 2 to 9 of `operating-proposal-2026-09-26.md`. Item 1 (cost
-attribution) is skipped on your call; the cost is that item 6's saving and
-item 9's numbers rest on `/session` totals and the usage widget instead of
-per-run attribution. Every item names its interface, what it hides, its
-acceptance signal, and the decisions still open. Stand-in repo:
-`~/Dev/vscodext` (TypeScript 6.0.3 with the compiler API present,
-`test:core` runs under `node --test` without Electron, branch
-`feature/currency-lab`).
+Stand-in repo: `~/Dev/vscodext` (TS 6.0.3, `test:core` = `node --test src/core/*.test.ts`).
 
-Build order is by dependency, then by the day each is first used.
+| # | Item | Status |
+|---|---|---|
+| 0 | Opus 5.5 medium default; built-ins off | Done |
+| 1 | `cacheWarming: "idle"` | Done 09-30; idle check pending |
+| 2 | `review-branch.sh` | Skipped |
+| 3 | Interface digest | v0 shipped inside the `map` skill (`agents/skills/map/digest.sh`) |
+| 4 | Prompt edits | Done 09-30 (env.work, Long and Headless Runs); prompt-audit and before/after pending; A, B open |
+| 5 | Scout flags plus worker prompt | Done 09-30 |
+| 6 | `slice-loop` | Evaluating: hand-run first |
+| 7 | `worker-sensors.ts` | Done 09-30 (D1–D4 defaults); review pass 10-01 added token-scan bash blocks, pi path resolution, untracked hashing, test-weakening check; 80 table tests, 4 live runs |
+| 8 | Fragments and skills | Done 09-30 except `env.work.md` repo names (at work) |
+| 9 | Review trial | Evaluating: revised |
 
-## Sequence
+Remaining: 6 (hand-run first), 9, the #1 idle check, the #4 audit, decisions A–C.
 
-| Step | Item | Depends on | First use | Cost |
-|------|------|-----------|-----------|------|
-| 1 | #4 `cacheWarming: "idle"` | nothing | tonight | 1 line, 1 check at work |
-| 2 | #2 `review-branch.sh` | nothing | Saturday morning | 2 h |
-| 3 | #3 `interface-digest.sh` | nothing | Sunday morning | 2 h |
-| 4 | #9 resident-prompt measurement | nothing | Tuesday | 15 min |
-| 5 | #5 `scout --thinking`, `--rw` timeout | nothing | Tuesday | 30 min |
-| 6 | #6 `slice-loop` | #2, #5 | Tuesday | 2 h |
-| 7 | #7 `worker-sensors.ts` | #6 env contract | Wednesday | 4 h with tests |
-| 8 | #8 fragments and skills | #6, #7 real | Wednesday | 1 h |
+---
 
-Tonight: steps 1 to 3. Nothing else before Tuesday; the weekend is
-own-hands by design and needs only the two scripts.
+## 1. cacheWarming (approved)
 
-## #4 cacheWarming
+**Patch:** add `"cacheWarming": "idle"` to `config/pi/settings.json`. It is a global-only setting.
 
-Change: `"cacheWarming": "idle"` in `config/pi/settings.json`.
+**Cost model at 150k context on Opus 5.5:**
+- One refresh is a cache read: about $0.03.
+- One miss is a cache rewrite: about $0.75.
+- Warming pays if you come back within about two hours of idle.
 
-Hides nothing; it is a setting. Pi warms only when the model declares a
-`promptCache` lifetime and the estimated avoided miss is at least $0.05, so
-small sessions never warm.
+**Unverified:** whether pi caps idle warming. If `/session` shows no cap, a session left open overnight bills about $0.40/hour. Close sessions you're done with.
 
-Open check, work machine: the work models run through Bedrock. If
-`/session` reports the model as not eligible, add a `modelOverrides` entry
-with `promptCache: { "short": 300 }` for each Bedrock model in use. Without
-that entry the setting is inert there.
+**Check (personal machine):** grow a session past 100k, idle 6 minutes, send a message. No cache-miss notice should appear, and `/session` should show the warming decision.
 
-Signal: open an opus session at 100k+ context, wait past the lifetime, send
-a turn; no cache-miss notice. Same experiment before the change shows one.
+**Check (work):** same test on Bedrock. If `/session` reports the model ineligible, add a `modelOverrides` `promptCache` entry. Take the syntax from `docs/models.md` at apply time.
 
-## #2 review-branch.sh
+## 4. Prompt edits (approved)
 
-Interface: `scripts/review-branch.sh <base> <branch> [--module <path>]...
-[--test-cmd '<cmd with {file}>'] [--suite '<cmd>']`. Prints the five
-sections in order; exit code is the suite's exit code.
+**`env.work.md:7`.** Replace the `**CRITICAL**` / `MUST` line with:
 
-Hides: two temporary worktrees (`$TMPDIR/review-<hash>/{base,branch}`,
-removed on EXIT), `node_modules` symlinked from the main checkout into
-both, test-runner detection, declaration emit on both refs, cleanup.
+> Language runtimes and browser binaries run from `/opt/homebrew/`. macOS security policy blocks them under `~` and through symlinks from `~`.
 
-Sections:
+**`ops.md`.** New section:
 
-1. `git diff <base>...<branch> --stat`, then every changed path not under a
-   `--module` argument, one per line, headed `OUTSIDE MODULE`.
-2. Per changed test file (`*.test.*`, `*.spec.*`, `__tests__/`): the
-   branch's copy is placed into the base worktree so new tests run there
-   too. Verdict per file from the pair: base FAIL and branch PASS is
-   `PINNING`; PASS/PASS is `NOT-PINNING`; FAIL/FAIL is `BROKEN`; base PASS
-   and branch FAIL is `REGRESSION`.
-3. `tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir` in
-   each worktree, then `diff -ru`. A ref that fails to emit prints its
-   errors and marks the section `INCOMPLETE`; the script continues.
-4. Added lines from `git diff -U0` grepped for `: any`, `as any`, `<any>`,
-   `TODO|FIXME`; empty `catch` blocks found by a small awk over added
-   lines; `dependencies` and `devDependencies` keys compared between refs
-   via `jq` (raw diff fallback when `jq` is absent).
-5. `--suite` (default: `npm test`) in the branch worktree; exit code
-   printed on the last line and returned.
+```markdown
+## Long and Headless Runs
 
-Decisions taken: worktrees over checkout switching (never touches your
-working tree); symlinked `node_modules` with a printed warning when
-`package.json` or the lockfile differ between refs (section 4 flags that
-case anyway, and the operator installs in the worktree if needed);
-`--test-cmd` default by detection (`vitest` → `npx vitest run {file}`,
-`jest` → `npx jest {file}`, else `node --test {file}`).
+- Scoped to runs that change files or span many steps. Keep the task list in the spec or an existing `NOW.md`, never a new file, and tick items as they close.
+- End with three headings: **Blocked on me**, **Changed**, **Found**.
+  Mark anything you couldn't confirm, and say where you looked.
+```
 
-Open decision: none that changes direction.
+**Held for decision A:** the guide's stop rule, "keep going until done unless blocked or about to do something destructive." It contradicts the AutoApprove gate as written.
 
-Signal: throwaway branch on `~/Dev/vscodext` from `feature/currency-lab`
-containing (a) a new `src/core/*.test.ts` that fails on base, (b) an
-existing test edited to still pass, (c) one `as any`, (d) one new
-devDependency in `package.json`, (e) one changed exported signature in
-`src/core`. Expected output: (a) `PINNING`, (b) `NOT-PINNING`, (c) the line,
-(d) the key, (e) a `.d.ts` hunk, then the `test:core` exit code. Branch
-deleted after. Run with `--test-cmd 'node --test {file}' --suite 'pnpm run
-test:core'`.
+**Method:**
+1. Run `/doctor prompt-audit` on the generated `CLAUDE.md`. Fix findings in the fragments.
+2. Run three fixed prompts before and after: a review, a design question, a headless task.
 
-## #3 interface-digest.sh
+**Done when:** `build-agents.sh --check` and `verify.sh` pass, and the before/after shows no lost behavior.
 
-Interface: `scripts/interface-digest.sh <repo-dir> <out-dir>`. Writes
-`<out>/<repo>-interfaces.md` and `<out>/<repo>-graph.md`, prints line
-counts and every module with more than 10 exports.
+**Decisions:**
+- **A. AutoApprove gate.**
+  - Keep it as is: pauses on multi-step work. Costs "continue?" stops.
+  - Or narrow it to destructive actions and add the stop rule. Costs a review point on multi-file refactors.
+- **B. Prime Directives.** They repeat five Working Style rules. Cut the repeats after the before/after test, or keep them as deliberate emphasis. `prime-reminder.ts` points at that section.
 
-Hides: declaration emit, import resolution, graph construction, fan-in
-ranking, `.d.ts` parsing. Implementation is a bash wrapper plus one
-`scripts/lib/interface-digest.mjs` that loads the repo's own
-`node_modules/typescript` (rung 5: installed dependency; `madge` and
-`dependency-cruiser` are absent and nothing new is added).
+## 5. Scout flags (approved)
 
-Steps: (1) `tsc -p <repo>/tsconfig.json --declaration
---emitDeclarationOnly --outDir <out>/decl`; on error print the diagnostics
-and exit 1 without touching source. (2) `ts.createProgram` from the same
-tsconfig; per source file, collect `import` and `export ... from`
-specifiers, resolve with `ts.resolveModuleName`, keep in-project targets;
-adjacency plus fan-in counts; Kahn topological order with cycles reported
-and broken by fan-in; entry points are fan-in 0 files listed first. (3) Per
-module, exported declarations read from its `.d.ts` via
-`ts.createSourceFile`; signature text is `getText()` (no leading JSDoc);
-per-export fan-in counted from named import specifiers across the
-program, namespace and default imports counted once per module. Top 15 by
-fan-in with signatures, the rest by name. (4) Graph file: top 20 modules by
-fan-in, each with its direct importers.
+**Defect found:** `config/pi/bin/scout.prompt.md` says "NEVER edit, write, or create files", and `--rw` uses the same prompt. A `--rw` child therefore gets edit tools and a rule forbidding them.
 
-Decisions taken: compiler API over regex import scanning (aliases and
-re-exports resolve correctly; regex breaks on `paths`); plain `.mjs` with
-no build step; TypeScript 5 and 6 API surface only.
+**Changes to `config/pi/bin/scout`:**
+- **`--thinking LEVEL`:** accepts `low|medium|high|xhigh`; anything else exits 2. Defaults: read-only `low`, `--rw` `medium`.
+- **`--rw`:** default timeout 900 s, and uses a new `worker.prompt.md`.
+- **Both modes:** append "Mark anything you couldn't confirm, and say where you looked." to the task. Write `timeout=` to `.meta`.
+- **Usage header:** update lines 7–24 to match.
 
-Open decision: if a work repo runs TypeScript 7 (the Go compiler) without
-`lib/typescript.js`, the script reports that and stops; a regex fallback
-is a second implementation and is not built until that case is real.
+**New `config/pi/bin/worker.prompt.md`:**
 
-Signal: run on `~/Dev/vscodext`; both files exist; `extension.ts` appears
-as an entry point; `src/core` modules show fan-in from `participant` and
-`tools`; line counts printed; any module over 10 exports named. Second run
-on `~/Dev/tdb/testdata/typescript_app` as the trivial case.
+```markdown
+You implement one bounded spec.
 
-## #9 resident-prompt measurement
+- Edit only files the spec lists under files-allowed. If you need another,
+  stop and report it under Blocked on me.
+- Write the spec's failing test first, then make it pass.
+- Don't add dependencies, push, reset, or delete anything the spec doesn't name.
+- If the spec is ambiguous or a check can't run here, stop and say which.
+- End with: Blocked on me / Changed (file:line) / Found / Unconfirmed.
+```
 
-Not a script. Three `pi -p "reply with ok"` runs, then read
-`usage.input + usage.cacheWrite` from the first assistant message of each
-session file: (a) default profile, (b) `-t read,edit,write,bash,grep,find,
-ls`, (c) `-ne -ns -np`. The three numbers decide whether a work profile
-without web tools is worth a settings change. `AGENTS.md` alone is 17,236
-chars, about 4.3k tokens; the expectation is that package tool schemas
-exceed it.
+**Done when:**
+- `scout --thinking bogus x` exits 2.
+- `.meta` shows `thinking=medium` and `timeout=900` for `--rw`.
+- A toy `--rw` run in a scratch repo actually edits its file.
 
-Signal: three numbers in `docs/resident-prompt-2026-09-30.md`.
+---
 
-## #5 scout worker profile
+## 3. Interface digest (evaluating)
 
-Change to `config/pi/bin/scout`: `--thinking LEVEL` (default `low`,
-validated against `low|medium|high|xhigh`, exit 2 otherwise); `--rw`
-raises the default timeout to 900 unless `--timeout` is given; header
-comment documents the worker invocation `scout --rw --thinking medium
---brief spec.md "task"`. The `.meta` file already records `thinking`.
+**Ladder revision.** `tsc --declaration --emitDeclarationOnly` already emits every exported signature, and `/usr/bin/tsort` does topological order with cycle reports. v0 is about 30 lines of shell:
+- `.d.ts` emit
+- `rg` over relative imports for fan-in
+- `tsort` for reading order
 
-Hides nothing new; the profile (`-ne -nc -ns -np -t`, depth guard) is
-already the right one.
+The compiler-API version (v1) is built only if DCCA's path aliases or barrel files make `rg` miscount.
 
-Signal: `scout --thinking medium "say ok"` meta shows `thinking=medium`;
-`scout --thinking bogus "x"` exits 2; `scout --rw "x"` meta shows the 900
-timeout.
+**Use, on vscodext:**
 
-## #6 slice-loop
+```
+$ scripts/interface-digest.sh ~/Dev/vscodext docs/maps
+wrote docs/maps/vscodext-interfaces.md (4 modules, 0 cycles)
+```
 
-Interface: `bin/slice-loop <specs-dir> <base-ref>`. Runs in the repo root.
-Zero model tokens outside the child.
+```markdown
+# vscodext interfaces (2026-09-30, HEAD 3f2a1c0)
 
-Spec file: `specs/NN-<slice>.md` with frontmatter `module`, `files-allowed`
-(globs), `tests` (command), `timeout` (seconds, optional); body is the
-contract before/after. The `spec` skill (#8) emits this shape.
+## Reading order (leaves first)
+core/classify → tools/depReport → participant/currency → extension
 
-Per spec, in filename order:
+## Fan-in
+| module               | in | imported by                     |
+|----------------------|----|---------------------------------|
+| tools/depReport      | 2  | extension, participant/currency |
+| core/classify        | 1  | tools/depReport                 |
+| participant/currency | 1  | extension                       |
+| extension            | 0  | entry                           |
 
-- Skip if `git branch --merged <base>` contains `slice/<slice>` or
-  `specs/<slice>.rejected` exists.
-- Halt with `review pending: <slice>` if `specs/<slice>.returned` exists.
-- Else: `git worktree add .worktrees/<slice> -b slice/<slice> <base>` (or
-  reuse the worktree on a rerun), `cd` there, export `PI_WORKER_SPEC` and
-  `PI_WORKER_BASE`, run `scout --rw --thinking medium --brief <spec>
-  --timeout <t> "<body's task line>"`, then `review-branch.sh <base>
-  slice/<slice> --module <module> --suite '<tests>' >
-  docs/reviews/<slice>.md`, append one line to `run-history.jsonl` with
-  the child's session cost read from its session file, touch
-  `specs/<slice>.returned`, halt.
+## core/classify
+export type Currency = 'current' | 'minor-behind' | 'major-behind' | 'unknown';
+export declare function parseFloor(range: string): Semver | undefined;
+export declare function classify(declared: string, latest: string | undefined): Currency;
+export declare function buildReport(packageJsonText: string,
+  versions?: Readonly<Record<string, string>>, nodeLatestLts?: string): CurrencyReport;
 
-Operator actions between runs: merge (the loop derives "reviewed" from
-the merge), or `touch specs/<slice>.rejected` and delete the branch, or
-append the defect list to the spec and `rm specs/<slice>.returned` for a
-rerun on the same branch. No manual `.reviewed` marker; merged or rejected
-are the only terminal states, so habit cannot fake a review.
+## tools/depReport
+export declare const DEP_REPORT_TOOL = "currency-lab_depReport";
+export declare class DepReportTool implements vscode.LanguageModelTool<DepReportInput> { … }
+…
+```
 
-Lock: `specs/.lock` with the pid; a second loop on the same repo exits 2.
-One loop per thread is the §1 cap enforced.
+**Then, by hand:**
+1. Read the file in its stated order.
+2. Write `docs/maps/vscodext-map.md` in ten lines of your own words. For example: "classify is pure: package.json text in, CurrencyReport out, no vscode import. depReport is the only vscode tool and the only caller of buildReport."
+3. That map opens every worker brief for the module.
 
-Hides: worktree lifecycle, scout invocation, review invocation, cost
-extraction, state derivation.
+**Value:** zero on vscodext (475 lines; read the five files). It pays on DCCA, where you can't read everything.
 
-Open decisions: worktree versus in-place (worktree taken; your checkout
-stays clean and the review script already uses worktrees); whether the
-task line is the spec's first body line or a frontmatter `task` field
-(frontmatter, explicit).
+**Trial:** one run on DCCA at work. Keep it if the map takes 30 minutes or less, against the morning it replaces.
 
-Signal: two toy specs on `~/Dev/vscodext`. Run 1 dispatches slice 1,
-writes `docs/reviews/01-....md`, halts. Run 2 halts with `review pending`.
-After a merge, run 3 dispatches slice 2. A second concurrent invocation
-exits 2. `run-history.jsonl` gains two lines with cost.
+## 6. slice-loop (evaluating)
 
-## #7 worker-sensors.ts
+**Example spec** (illustrative), `specs/01-tilde-floor.md`:
 
-Interface: `config/pi/extensions/worker-sensors.ts`, loaded only into
-`--rw` children via scout's `-e` slot. Reads `PI_WORKER_SPEC` and
-`PI_WORKER_BASE`; absent either, the extension does nothing and says so
-once.
+```markdown
+---
+module: src/core
+files-allowed: [src/core/classify.ts, src/core/classify.test.ts]
+tests: node --test src/core/classify.test.ts && pnpm check-types
+timeout: 900
+---
+parseFloor must treat `~1.2` as 1.2.0. Add the failing test first.
+```
 
-Handlers:
+**Simulation:**
 
-- `tool_call` on `edit` and `write`: block with a one-line reason when the
-  target is outside `files-allowed` (falling back to `.agent-allowlist`
-  directory globs for new files); when the target is `package.json` and
-  the `dependencies` or `devDependencies` keys or versions change; when
-  the new text matches `:\s*any\b`, `as any\b`, or `<any>`; when `git diff
-  --numstat <base>` plus this edit's added lines would exceed 400.
-- `agent_before_settle`: run the spec's `tests` command; check `git diff
-  --name-only <base>` against `files-allowed`; check the line cap. On
-  failure, append the failure text as a message and return `continue:
-  true` once (counter in extension state); on the second failure, record
-  `FAIL` with `appendEntry` and settle. On success record `PASS`.
-- `agent_end`: print `WORKER-SENSORS: PASS|FAIL <reasons>` to stdout so
-  `slice-loop` and the review file carry it without model prose.
+```
+$ slice-loop specs main
+[01-tilde-floor] precheck: tree clean
+[01-tilde-floor] worktree .worktrees/01-tilde-floor on slice/01-tilde-floor
+[01-tilde-floor] worker sonnet-5-5 medium 900s … 212s, $0.41, WORKER-SENSORS: PASS
+[01-tilde-floor] packet docs/reviews/01-tilde-floor/ (report.md patch.diff tests.txt usage.json)
+[01-tilde-floor] returned; halting for review
 
-Backstop: `bash` bypasses `tool_call`, so the settle check is the
-authority; the `tool_call` guards are early feedback.
+$ slice-loop specs main
+[01-tilde-floor] review pending (specs/01-tilde-floor.returned); halting
 
-Hides: spec parsing, git queries, JSON comparison, the retry counter.
-Pure functions (`isPathAllowed`, `dependencyKeysChanged`, `findAnyInText`,
-`wouldExceedLineCap`) are table-tested under `node --test` beside
-`headless-close.test.ts`; handlers stay thin.
+# you review, then one of:
+$ git merge --no-ff slice/01-tilde-floor && rm specs/01-tilde-floor.returned  # accept
+$ echo "reason" > specs/01-tilde-floor.rejected                                # drop
+$ cat defects.md >> specs/01-tilde-floor.md && rm specs/01-tilde-floor.returned # rework
 
-Open decisions: whether `.agent-allowlist` is required or optional
-(optional; absent means `files-allowed` is the only rule); whether the
-settle retry is one or zero (one; a zero-retry worker wastes the run on a
-formatting-only failure).
+$ slice-loop specs main
+[01-tilde-floor] merged; skip
+[02-engine-lts] precheck: tree dirty (src/core/classify.ts); exit 2
+```
 
-Signal: table tests green; a `scout --rw` run on the stand-in with a spec
-allowing only `src/core/**` and a task that writes `as any` into
-`src/tools/x.ts` shows two blocks in the child transcript and `FAIL` at
-the end; a compliant task shows `PASS`.
+**Hand equivalent per slice** (six commands):
 
-## #8 fragments and skills
+```
+git worktree add .worktrees/01 -b slice/01 main && cd .worktrees/01
+PI_WORKER_SPEC=$PWD/../../specs/01.md scout --rw --brief ../../specs/01.md "Implement the spec."
+node --test src/core/classify.test.ts && pnpm check-types
+git diff main... > ../../docs/reviews/01.diff
+cd - && git merge --no-ff slice/01 && git worktree remove .worktrees/01
+```
 
-- `agents-md/dispatch-gate.md` (shared, resident): no dispatch on a thread
-  until the previous return is merged or rejected; worker prompts open
-  with the module's ten-line map; "read the repo" and "look at this and
-  tell me what is wrong" are banned prompt forms; Opus for plan and grill
-  only, session closes when the slice list exists. About 400 tokens
-  resident, paid on every turn; it must bind every session that could
-  dispatch.
-- `review-protocol.md` as a skill, not a fragment: five steps, prose never
-  read. Loaded only in review sessions, zero resident cost.
-- Skill `map`: runs `interface-digest.sh`, prints the entry point and the
-  top 5 by fan-in, then asks for your ten lines and writes exactly what
-  you type into `docs/map/<repo>.md`. Refuses to draft the lines.
-- Skill `spec`: emits the `slice-loop` spec shape with frontmatter and the
-  300-word return cap.
-- `env.work.md` gains the DCCA and Detect repo names and test commands
-  only.
+**What the script adds over the hand version:**
+- **The gate:** it refuses a new dispatch while one is unreviewed. This is the rule broken at work, and the only part a fragment can't enforce, because the fragment binds Opus, not you.
+- Cost per slice in `usage.json`.
+- The clean-tree precheck.
 
-Signal: `build-agents.sh --check` passes; the generated `AGENTS.md` diff
-contains only the new fragment; `verify.sh` passes; resident delta
-reported in tokens.
+**What it costs:**
+- About 120 lines of bash to maintain.
+- A queue that invites writing specs ahead of comprehension.
+- With `review-branch.sh` skipped, the packet loses the PINNING check (does the new test fail on base).
 
-## Decisions you own before tonight's build
+**Verdict: don't build it yet.** Run the first three slices by hand. Script it on the third run only if the commands were identical and you dispatched before reviewing at least once. Otherwise the hand version is the tool.
 
-1. `review-branch.sh` section 2 runner default when detection fails:
-   `node --test {file}` (taken unless you object).
-2. `slice-loop` terminal states: merged or `.rejected` only, no manual
-   reviewed marker (taken unless you object).
-3. `review-protocol` as a skill rather than a resident fragment (taken;
-   reverse if you want it binding in every session at 400 tokens a turn).
+## 7. worker-sensors.ts (evaluating; definition)
+
+**Purpose:** limits a `--rw` worker can't argue past. Loaded only by `scout --rw` via `-e`. Inert unless `PI_WORKER_SPEC` is set.
+
+**Input:** spec frontmatter: `files-allowed` (globs, matched with `node:path` `matchesGlob`, which works on Node 24.12), `tests`, and `max-lines` (default 400).
+
+| ID | Event | Trigger | Action |
+|---|---|---|---|
+| S1 | `tool_call` edit/write | path outside `files-allowed` | block: "<path> is outside files-allowed; report it under Blocked on me" |
+| S2 | `tool_call` edit/write on `package.json` | dependency keys change | block |
+| S3 | `tool_call` bash | token scan per segment, through `git -C`/`command`/`sh -c`/`eval`/`$(...)`: git push/pull/merge/rebase/reset/clean/stash/checkout/switch/restore, `commit --amend`, recursive `rm`, `find -delete`, package add/remove/update, `npx --yes`/`dlx`/`bunx` | block |
+| C1 | `agent_before_settle` | `tests` exits non-zero | fail |
+| C2 | `agent_before_settle` | `git diff --name-only $PI_WORKER_BASE` lists a file outside `files-allowed` (catches bash writes that skip S1) | fail |
+| C3 | `agent_before_settle` | added lines over `max-lines` | fail |
+
+**Settle outcomes:**
+- **PASS:** all C checks pass.
+- **First failure:** append a `custom_message` with the reason and the last 40 lines of test output, and return `continue: true`. This happens once.
+- **Second failure:** FAIL.
+- **CANNOT-RUN:** the tests command exits 127, or its stderr names a missing binary or refused connection. No retry, because more model turns can't fix a missing service.
+- **Timeout:** the settle check has a 300 s limit and counts as CANNOT-RUN when it expires.
+
+**Report:** `agent_end` prints `WORKER-SENSORS: PASS|FAIL|CANNOT-RUN <reasons>`, and writes JSON to `$PI_WORKER_REPORT` when that is set.
+
+**Gaps (accepted):**
+- Bash can still write files; C2 catches it after the fact.
+- The S3 regex is a speed bump, not a sandbox.
+
+**Tests:** pure helpers, table-driven under `node --test`:
+- `isAllowed(path, globs)`
+- `depsChanged(before, after)`
+- `isForbiddenBash(cmd)`
+- `classifyFailure(exit, stderr)`
+- `parseFrontmatter(text)`
+
+**Decisions to settle before building:**
+- **D1.** No `any` sensor. `pnpm check-types` plus lint in the spec's `tests` covers it with no regex false positives. *Default: no sensor.*
+- **D2.** `max-lines` default 400 (from the handoff). *Default: 400.*
+- **D3.** One retry. *Default: 1.*
+- **D4.** Build it with or without `slice-loop`. It works under hand dispatch too, since only `PI_WORKER_SPEC` is needed. *Default: build it before `slice-loop`; it is the higher-value half.*
+
+## 8. Fragments and skills (evaluating; shrunk)
+
+**The ladder removed two of the four artifacts:**
+- `config/pi/prompts/spec-contract.md` already defines Scope / Files / Acceptance / Edge cases. Add the worker frontmatter to it instead of creating a `spec` skill.
+- `config/pi/prompts/review.md` (`/review`) already does a two-pass sweep. It becomes the review protocol (see #9) instead of a `review-protocol` skill.
+
+**What remains:**
+- **Three bullets in `persona-pi.md` Delegation**, instead of a new `dispatch-gate.md` fragment (about 60 resident tokens):
+  - One open worker per repo. The next slice goes out only after the last is merged or rejected.
+  - A worker brief opens with the module map, then the spec.
+  - A planning session ends when the slice list exists. Implementation runs in new processes.
+- **Skill `map`** (depends on #3). It runs the digest, shows it, and writes your ten lines verbatim to `docs/maps/<module>-map.md`. It refuses to draft the lines, because the map is only worth something if you wrote it. About 30 resident tokens for the description.
+- **`env.work.md`:** DCCA and Detect repo names and test commands. Written at work.
+
+## 9. Review trial (revised)
+
+**Corrections:**
+- `pi-review` 1.2.1 does not review a diff in a fresh session. It branches the *current conversation* (user and assistant text, tool calls stripped) and asks for a P0–P3 maintainer review.
+- It also registers `/review`, which collides with the existing `config/pi/prompts/review.md`.
+
+**Plan:**
+- **Slices:** run the existing `/review main...slice/01` in a fresh Opus 5.5 session at medium.
+  - The worker's narrative never enters context, so the review can't anchor on its claims.
+  - Fix two things in `review.md`:
+    - its stale model line ("fable-5 xhigh at home; opus-4-6 at work")
+    - its `CRITICAL` label, renamed to P0–P3 or kept, your pick
+- **Your own main-session work:** this is the one place `pi-review`'s conversation branching adds something. Trial it as `pi -e npm:pi-review` for a week, with `thinkingLevel: "medium"` in `~/.pi/agent/pi-review.json`, after renaming or dropping the local `/review` collision.
+
+**Keep rule:** keep either one only if it finds a real defect you missed in its first five uses.
+
+---
+
+## Decisions you own
+
+- **A.** AutoApprove gate: narrow it, or keep it.
+- **B.** Prime Directives repeats: cut after testing, or keep.
+- **C.** `review.md` severity labels: P0–P3, or CRITICAL–LOW.
+- **D1–D4.** Sensors; defaults stated above.
