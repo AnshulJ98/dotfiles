@@ -41,7 +41,7 @@ Build detail: `pi-adjustments-plan.md`.
 - **Virtual models.** Every switch loses the cache.
 - **Classifier routing (Jev).** It is unattended judgment.
 - **MCP.** Tool-schema and result bloat. Its one real use is OAuth'd hosted services, and CLIs and skills cover the rest.
-- **Codemode.** Claude already makes parallel tool calls, and bash already composes. Without MCP, little is left for it to do.
+- **Codemode.** Claude already makes parallel tool calls, and bash already composes. Without MCP, little is left for it to do. Measured 2026-10-01 on vscodext (4-file `src/` survey, Opus 5.5 medium, `-nc`): offered codemode, the model ignored it and used bash twice ($0.087 against $0.058 without it; the tool description adds about 3.1k tokens to every request). Told to use it, one script did the work in one call at $0.057, the same as bash. Revisit only with MCP servers or a classifier model (`models.classify()`), the two things bash cannot reach.
 
 ## Axis 2: workflow
 
