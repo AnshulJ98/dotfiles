@@ -51,6 +51,8 @@ brew "cowsay"
 brew "d2"
 # Isolated development environments using Docker
 brew "docker-compose"
+# Embeddable SQL OLAP Database Management System
+brew "duckdb"
 # CLI for FastAPI framework
 brew "fastapi"
 # Like neofetch, but much faster because written mostly in C
@@ -79,6 +81,8 @@ brew "gotop"
 brew "hblock"
 # Improved top (interactive process viewer)
 brew "htop"
+# Run and Test HTTP Requests with plain text and curl
+brew "hurl"
 # Generic library support script
 brew "libtool"
 # Tools and libraries to manipulate images in select formats
@@ -167,6 +171,8 @@ brew "xcodegen"
 brew "yazi"
 # General-purpose lossless data-compression library
 brew "zlib"
+# Friendly and fast tool for sending HTTP requests
+brew "xh"
 # Fish-like fast/unobtrusive autosuggestions for zsh
 brew "zsh-autosuggestions"
 # CLI app to manage your Apple Notes and Apple reminders
@@ -216,6 +222,8 @@ cask "claude"
 cask "claude-code@latest"
 # OpenAI's coding agent that runs in your terminal
 cask "codex"
+# Open source IDE for exploring and testing APIs
+cask "bruno"
 # Menu bar usage monitor for Codex and Claude
 cask "codexbar"
 # Voice and text chat software
