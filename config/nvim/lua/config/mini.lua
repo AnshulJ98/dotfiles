@@ -41,6 +41,23 @@ require('mini.ai').setup {
 
 require('mini.surround').setup()
 
+-- Scroll only: kitty's cursor_trail already animates the cursor. Scrolls of up
+-- to 3 lines (one wheel notch at 'mousescroll' ver:3, `j`/`k` against
+-- 'scrolloff') stay instant. Steps are capped at 10 ms, under the 30 ms macOS
+-- key repeat, so a held key never scrolls from a half-finished view (`:h
+-- MiniAnimate.config.scroll`); long jumps still take 150 ms in total.
+local animate = require 'mini.animate'
+animate.setup {
+  cursor = { enable = false },
+  scroll = {
+    timing = function(_, n) return math.min(150 / n, 10) end,
+    subscroll = animate.gen_subscroll.equal { predicate = function(total_scroll) return total_scroll > 3 end },
+  },
+  resize = { enable = false },
+  open = { enable = false },
+  close = { enable = false },
+}
+
 local statusline = require 'mini.statusline'
 statusline.setup { use_icons = true }
 

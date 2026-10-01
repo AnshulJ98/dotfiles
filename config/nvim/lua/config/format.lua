@@ -25,6 +25,7 @@ require('conform').setup {
     lua = { 'stylua' },
     sh = { 'shfmt' },
     bash = { 'shfmt' },
+    hurl = { 'hurlfmt' },
   },
   formatters = {
     shfmt = { prepend_args = { '-i', '2' } },

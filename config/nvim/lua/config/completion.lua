@@ -10,6 +10,10 @@ require('blink.cmp').setup {
 
   sources = {
     default = { 'lsp', 'path', 'snippets' },
+    -- Tables and columns of the buffer's connection (b:db), set by
+    -- vim-dadbod-ui query buffers and the grip query pad (config.dadbod).
+    per_filetype = { sql = { inherit_defaults = true, 'dadbod_grip' } },
+    providers = { dadbod_grip = { name = 'Grip SQL', module = 'dadbod-grip.completion.blink' } },
   },
 
   snippets = { preset = 'default' },

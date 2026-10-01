@@ -21,6 +21,10 @@
       "rev": "619363c30309d29ffa631e67c8183f2a72caa373",
       "src": "https://github.com/stevearc/conform.nvim"
     },
+    "dadbod-grip.nvim": {
+      "rev": "d3b03fc157f90fe18d112578c2453bc5430b9252",
+      "src": "https://github.com/joryeugene/dadbod-grip.nvim"
+    },
     "dropbar.nvim": {
       "rev": "f7c6fa21e2a7c32576e7a1791774a3736987f467",
       "src": "https://github.com/Bekaboo/dropbar.nvim"
@@ -40,6 +44,10 @@
     "guess-indent.nvim": {
       "rev": "84a4987ff36798c2fc1169cbaff67960aed9776f",
       "src": "https://github.com/NMAC427/guess-indent.nvim"
+    },
+    "hurl.nvim": {
+      "rev": "a18d062ef577938bd67fb706c6c26b6cccc12401",
+      "src": "https://github.com/jellydn/hurl.nvim"
     },
     "indent-blankline.nvim": {
       "rev": "d28a3f70721c79e3c5f6693057ae929f3d9c0a03",
@@ -142,6 +150,14 @@
     "vim-be-good": {
       "rev": "0ae3de14eb8efc6effe7704b5e46495e91931cc5",
       "src": "https://github.com/ThePrimeagen/vim-be-good"
+    },
+    "vim-dadbod": {
+      "rev": "6d1d41da4873a445c5605f2005ad2c68c99d8770",
+      "src": "https://github.com/tpope/vim-dadbod"
+    },
+    "vim-dadbod-ui": {
+      "rev": "afd07819d8efcefc3317205b855ad4e3513b0011",
+      "src": "https://github.com/kristijanhusak/vim-dadbod-ui"
     },
     "which-key.nvim": {
       "rev": "3aab2147e74890957785941f0c1ad87d0a44c15a",

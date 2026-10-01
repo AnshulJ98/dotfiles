@@ -152,6 +152,7 @@ for _, name in ipairs {
   'fillchars',
   'foldtext',
   'showbreak',
+  'linebreak',
   'laststatus',
   'splitkeep',
   'title',

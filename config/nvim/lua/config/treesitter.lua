@@ -1,7 +1,23 @@
 vim.pack.add { { src = 'https://github.com/nvim-treesitter/nvim-treesitter', version = 'main' } }
 
-local parsers =
-  { 'diff', 'javascript', 'json', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'python', 'query', 'tsx', 'typescript', 'vim', 'vimdoc', 'yaml' }
+local parsers = {
+  'diff',
+  'hurl',
+  'javascript',
+  'json',
+  'lua',
+  'luadoc',
+  'markdown',
+  'markdown_inline',
+  'python',
+  'query',
+  'sql',
+  'tsx',
+  'typescript',
+  'vim',
+  'vimdoc',
+  'yaml',
+}
 require('nvim-treesitter').install(parsers)
 
 -- Folds come from the language server when it offers folding ranges, as VS
