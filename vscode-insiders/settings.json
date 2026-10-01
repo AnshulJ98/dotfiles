@@ -148,7 +148,7 @@
   "terminal.integrated.gpuAcceleration": "off",
   "window.autoDetectColorScheme": true,
   "workbench.layoutControl.enabled": false,
-  "workbench.colorTheme": "Gruvbox Dark Hard",
+  "workbench.colorTheme": "Bearded Theme HC Midnight Void",
   "aws.telemetry": false,
   "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
   "editor.aiStats.enabled": false,
