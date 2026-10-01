@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.85.1",
+  "lastChangelogVersion": "0.99.1",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-fable-5-1",
   "defaultThinkingLevel": "low",
@@ -9,11 +9,9 @@
   "quietStartup": true,
   "editorPaddingX": 2,
   "enabledModels": [
-    "anthropic/claude-opus-5",
+    "anthropic/claude-opus-5-5",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-fable-5-1",
-    "anthropic/claude-opus-4-8",
-    "anthropic/claude-opus-4-6",
     "openai-codex/gpt-5.5",
     "opencode-go/kimi-k3",
     "opencode-go/glm-5.3",

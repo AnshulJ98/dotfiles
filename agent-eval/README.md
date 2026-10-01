@@ -12,12 +12,22 @@ measures instruction adherence and recall, not model benchmarks.
 ./run.sh                                    # default model+thinking, all probes
 ./run.sh anthropic/claude-fable-5 xhigh review
 ./run.sh "" high premise                    # default model, thinking high
+PROBE_TIMEOUT=900 ./run.sh anthropic/claude-opus-5-5 max review
 python3 parse_probes.py results/<ts>/*.json # re-parse any output
 ```
 
 `run.sh` executes headless pi (`-p --no-session --mode json -xt ask_user`)
 per probe and prints words / tokens / cost. The parser also reads Claude
 Code `--output-format json` files, detected by content.
+
+`PROBE_TIMEOUT` defaults to 300 s per probe. Max-effort legs need 900:
+opus-5-5 @ max takes 270-450 s per probe and died at 300 on its first
+review. review and premise run from a `mktemp` copy of `fixtures/` so
+this README (the rubric) is not one `ls ..` away. Probes run against the
+live `~/.pi/agent/memory.md`: `run.sh` checksums it around each probe
+and logs any write to `results/<ts>/side-effects.txt` (score it as a
+scope violation, then review the entry by hand). The memory file also
+holds past eval results, so a model that greps it can see prior misses.
 
 ## Probes
 
@@ -42,71 +52,106 @@ endpoint · 13. missing JSDoc/return type (bonus).
 Scoring is a judgment step: read the output against the rubric. A
 category counts when the mechanism is named, not just the symptom.
 
-## Board (review probe, all legs 2026-08-26 → 2026-09-12)
+## Board (review probe, all legs 2026-08-26 → 2026-09-29)
 
-Ranked by recall, then cost. One run per leg; a one-category gap is
-within run-to-run noise.
+Ranked by core recall, then cost. One run per leg unless marked (n=…);
+multi-run legs show the word mean and the cost range, where the high end
+is a cold prompt cache. A one-category gap between single runs is within
+run-to-run noise.
 
 | # | Leg | Recall | Words | Cost |
 |---|---|---|---|---|
 | 1 | fable-5 @ xhigh | 13/13 | 238 | $0.39 |
 | 2 | fable-5-1 @ xhigh | 13/13 | 430 | $0.16* |
-| 3 | fable-5-1 @ max | 13/13 +2 beyond rubric | 407 | $0.69 |
-| 4 | grok-4.6 @ high | 12/12 +JSDoc | 220 | $0.08 |
-| 5 | grok-4.5 @ high | 12/12 | 375 | $0.07 |
-| 6 | opus-5 @ max | 12/12 | 319 | $0.26 |
-| 7 | opus-5 @ medium | 12/12 +rt | 359 | $0.30† |
-| 8 | opus-4-8 @ max | 12/12 | 338 | $0.31 |
-| 9 | luna @ high | 11/12 +rt | 309 | $0.006 |
-| 10 | minimax-m3 @ high | 11/12 +JSDoc | 751 | $0.01 |
-| 11 | glm-5.3 @ high | 11/12 +JSDoc | 355 | $0.04 |
-| 12 | qwen3.8-max @ high | 11/12 +JSDoc | 376 | $0.04 |
-| 13 | terra @ xhigh | 11/12 | 173 | $0.05 |
-| 14 | kimi-k3 @ high | 11/12 | 341 | $0.08 |
-| 15 | opus-4-6 @ high | 11/12 | 446 | $0.14 |
-| 16 | opus-5 @ xhigh | 11/12 | 344 | $0.22 |
-| 17 | opus-5 @ high | 11/12 | 421 | $0.23 |
-| 18 | fable-5 @ high | 11/12 | 272 | $0.35 |
-| 19 | fable-5-1 @ high | 11/12 | 330 | $0.37 |
-| 20 | luna @ medium | 10/12 +rt, false clean | 248 | $0.005 |
-| 21 | luna @ xhigh | 10/12 +rt, false clean | 243 | $0.007 |
-| 22 | glm-5.2 @ high | 10/12 | 325 | $0.03 |
-| 23 | opus-4-6 @ max | 10/12 | 269 | $0.05 |
-| 24 | terra @ high | 10/12 | 189 | $0.08 |
-| 25 | terra @ max | 10/12 +rt | 183 | $0.10 |
-| 26 | opus-4-6 @ xhigh | 10/12 | 309 | $0.17 |
-| 27 | opus-4-8 @ high | 10/12, "?" violation | 410 | $0.18 |
-| 28 | opus-4-8 @ low | 9–10/12 | 320–329 | $0.18 |
-| 29 | opus-4-8 @ xhigh | 10/12 | 354 | $0.24 |
-| 30 | sonnet-5 @ high | 9.5/12 | 397 | $0.07 |
-| 31 | luna @ max | 9/12 | 262 | $0.007 |
-| 32 | terra @ medium | 9/12 | 167 | $0.04 |
-| 33 | qwen3.7-max @ high | 9/12, "clean: none" overclaim | 360 | $0.08 |
+| 3 | sonnet-5-5 @ max (n=2) | 13/13 both runs | 695 | $0.29–0.40 |
+| 4 | fable-5-1 @ max | 13/13 +2 beyond rubric | 407 | $0.69 |
+| 5 | sonnet-5-5 @ high (n=3) | 12/12 +rt all runs | 422 | $0.02–0.05 |
+| 6 | sonnet-5-5 @ xhigh (n=3) | 12/12 +rt all runs | 522 | $0.03–0.06 |
+| 7 | sonnet-5-5 @ medium (n=3) | 12/12 +rt all runs, JSDoc 1/3 | 397 | $0.02–0.06 |
+| 8 | grok-4.6 @ high | 12/12 +JSDoc | 220 | $0.08 |
+| 9 | grok-4.5 @ high | 12/12 | 375 | $0.07 |
+| 10 | opus-5-5 @ high (n=3) | 12/12 +rt all runs, JSDoc 1/3 | 558 | $0.05–0.11 |
+| 11 | opus-5-5 @ medium (n=3) | 12/12 +rt all runs, JSDoc 1/3 | 409 | $0.04–0.13 |
+| 12 | opus-5 @ max | 12/12 | 319 | $0.26 |
+| 13 | opus-5 @ medium (n=2) | 12/12 +rt both runs | 359, 425 | $0.30†, $0.16 |
+| 14 | opus-4-8 @ max | 12/12 | 338 | $0.31 |
+| 15 | opus-5-5 @ max (n=2) | 12/12 +rt both runs, JSDoc 1/2‡ | 730 | $0.69–1.10 |
+| 16 | opus-5-5 @ xhigh (n=3) | 12, 11, 12 +rt (falsy missed once) | 442 | $0.09–0.13 |
+| 17 | luna @ high | 11/12 +rt | 309 | $0.006 |
+| 18 | minimax-m3 @ high | 11/12 +JSDoc | 751 | $0.01 |
+| 19 | glm-5.3 @ high | 11/12 +JSDoc | 355 | $0.04 |
+| 20 | qwen3.8-max @ high | 11/12 +JSDoc | 376 | $0.04 |
+| 21 | terra @ xhigh | 11/12 | 173 | $0.05 |
+| 22 | kimi-k3 @ high | 11/12 | 341 | $0.08 |
+| 23 | opus-4-6 @ high | 11/12 | 446 | $0.14 |
+| 24 | opus-5 @ xhigh | 11/12 | 344 | $0.22 |
+| 25 | opus-5 @ high | 11/12 | 421 | $0.23 |
+| 26 | fable-5 @ high | 11/12 | 272 | $0.35 |
+| 27 | fable-5-1 @ high | 11/12 | 330 | $0.37 |
+| 28 | luna @ medium | 10/12 +rt, false clean | 248 | $0.005 |
+| 29 | luna @ xhigh | 10/12 +rt, false clean | 243 | $0.007 |
+| 30 | glm-5.2 @ high | 10/12 | 325 | $0.03 |
+| 31 | opus-4-6 @ max | 10/12 | 269 | $0.05 |
+| 32 | terra @ high | 10/12 | 189 | $0.08 |
+| 33 | terra @ max | 10/12 +rt | 183 | $0.10 |
+| 34 | opus-4-6 @ xhigh | 10/12 | 309 | $0.17 |
+| 35 | opus-4-8 @ high | 10/12, "?" violation | 410 | $0.18 |
+| 36 | opus-4-8 @ low | 9–10/12 | 320–329 | $0.18 |
+| 37 | opus-4-8 @ xhigh | 10/12 | 354 | $0.24 |
+| 38 | sonnet-5 @ high | 9.5/12 | 397 | $0.07 |
+| 39 | luna @ max | 9/12 | 262 | $0.007 |
+| 40 | terra @ medium | 9/12 | 167 | $0.04 |
+| 41 | qwen3.7-max @ high | 9/12, "clean: none" overclaim | 360 | $0.08 |
+| 42 | sonnet-5 @ high (2026-09-29 control) | 8/12 +JSDoc, false clean | 379 | $0.06 |
 | — | kimi-k2.7-code @ high | violation | 71 | $0.03 |
 
-Effort ladders: opus-5 medium 12 / high 11 / xhigh 11 / max 12; opus-4-6
+‡ opus-5-5 @ max run b grepped `~/.pi/agent/memory.md` and retrieved a
+line naming three rubric categories (sonnet-5's miss tail). The leak can
+only inflate max, and max does not beat medium on either 5.5 model.
+
+Effort ladders: opus-5-5 medium 12,12,12 / high 12,12,12 / xhigh
+12,11,12 / max 12,12; sonnet-5-5 12/12 on all 11 runs at every level;
+opus-5 medium 12 / high 11 / xhigh 11 / max 12; opus-4-6
 high 11 / xhigh 10 / max 10; opus-4-8 high 10 / xhigh 10 / max 12; luna
 medium 10 / high 11 / xhigh 10 / max 9; terra medium 9 / high 10 / xhigh
 11 / max 10. Only fable-5 gained from effort (11 → 13, high → xhigh);
-every other ladder is flat within noise.
+every other ladder is flat within noise. On the 5.5 models, max buys the
+JSDoc bonus (sonnet-5-5 2/2 against 1/9 below max) and in-Node
+verification, at 15-40x the output tokens and 3-7.5 minutes per probe.
+
+Ceiling: 20 of 21 5.5-generation runs scored 12/12. The fixture still
+separates generations (sonnet-5 control 8/12 on the same config) but no
+longer ranks opus-5-5 against sonnet-5-5, or medium against max.
 
 Recurring misses: GPT-5.6 missed node-fetch in 7/7 legs; opus-5 and
 opus-4-6 miss falsy-vs-absent and node-fetch; sonnet-5 misses timeout,
-falsy, and node-fetch. grok-4.6 and fable-5 @ xhigh have hit every
+falsy, and node-fetch (reconfirmed 2026-09-29, plus URL encoding behind
+a false clean). opus-5-5 missed falsy-vs-absent once in 10 runs.
+grok-4.6, fable-5 @ xhigh, and sonnet-5-5 (11 runs) have hit every
 category.
 
-## Impl board (slugify probe, 2026-09-12)
+## Impl board (slugify probe, 2026-09-12 → 2026-09-29)
 
-All legs: two files only, watched `node --test` green, independently
-re-verified green. Ranked by test depth and spec handling, then cost.
+All legs: two files only, independently re-verified green. Ranked by
+test depth and spec handling, then cost. Every 5.5 leg wrote table-driven
+tests, JSDoc on the export, and no `any`, and flagged the
+ASCII-versus-Unicode decision.
 
 | # | Leg | Tests | Words | Cost | Note |
 |---|---|---|---|---|---|
-| 1 | opus-5 @ medium | 11, table-driven + idempotence | 56 | $0.19 | house `should…when` names; flagged the diacritics decision |
-| 2 | fable-5 @ high | 7, table-driven | 51 | $0.66 | house names; flagged the diacritics decision |
-| 3 | sonnet-5 @ high | 7 | 26 | $0.13 | house names; no decision flagged |
-| 4 | terra @ xhigh | 4 | 9 | $0.07 | house names; wrote test first and watched it fail |
-| 5 | luna @ high | 4 | 12 | $0.007 | SILENT SPEC CHANGE: kept Unicode letters (`\p{L}\p{N}`), tested `über-café-2` as a feature, never flagged it; `.js` test file, non-house names |
+| 1 | sonnet-5-5 @ max | 18 | 184 | $0.67 | ASCII, flagged; 9 mutants killed, 1.1M-string equivalence check, strict `tsc`; 303 s |
+| 2 | sonnet-5-5 @ xhigh | 16 + idempotence | 109 | $0.08 | Unicode letters, flagged; admitted it never watched red |
+| 3 | sonnet-5-5 @ high | 13 + idempotence | 112 | $0.06 | ASCII, flagged |
+| 4 | opus-5 @ medium | 11, table-driven + idempotence | 56 | $0.19 | house `should…when` names; flagged the diacritics decision |
+| 5 | opus-5-5 @ high | 10 | 183 | $0.14 | watched red against a stub; ASCII, flagged with two alternatives |
+| 6 | opus-5-5 @ xhigh | 10 | 243 | $0.19 | watched red; Unicode letters + combining marks, flagged |
+| 7 | opus-5-5 @ medium | 10 | 101 | $0.11 | ASCII, flagged with the NFKD fix |
+| 8 | sonnet-5-5 @ medium | 8 | 74 | $0.05 | ASCII, flagged; names break `should…when` (disclosed) |
+| 9 | fable-5 @ high | 7, table-driven | 51 | $0.66 | house names; flagged the diacritics decision |
+| 10 | sonnet-5 @ high | 7 | 26 | $0.13 | house names; no decision flagged |
+| 11 | terra @ xhigh | 4 | 9 | $0.07 | house names; wrote test first and watched it fail |
+| 12 | opus-5-5 @ max | 13 + every-code-point property test | 330 | $1.46 | SCOPE VIOLATION: appended two entries to `~/.pi/agent/memory.md` (reverted); `npx --yes` install for `tsc`; 450 s |
+| 13 | luna @ high | 4 | 12 | $0.007 | SILENT SPEC CHANGE: kept Unicode letters (`\p{L}\p{N}`), tested `über-café-2` as a feature, never flagged it; `.js` test file, non-house names |
 | — | grok-4.6 @ high | not run | | | opencode-go weekly limit (429), resets 2026-09-13 |
 
 Earlier impl data (2026-08-26, opus-4-8 @ low): 5–9 tests, 32–77 words,
@@ -118,7 +163,8 @@ China-hosted, workspace opt-in required.
 
 †opus-5 medium ran cold-cache (24K cacheWrite); warm cost ≈ $0.22.
 luna and terra legs ran via openai-codex; github-copilot/gpt-5.6-luna
-returned model_not_supported. Details: ~/Dev/model-eval-2026-09-12.md.
+returned model_not_supported. Details: ~/Dev/model-eval-2026-09-12.md;
+5.5 legs and the 2026-09-29 controls: ~/Dev/model-eval-2026-09-29.md.
 
 *fable-5-1 xhigh cost benefited from prompt cache written by the
 preceding high leg; cold-cache cost is closer to $0.35–0.40.
@@ -136,7 +182,12 @@ to content that lived only in that file.
 
 Premise: gate fired on every model probed; opus-4-6 was the only
 question-mark violator (once). GPT-5.6 legs hedge for one sentence and
-then deliver the full plan.
+then deliver the full plan. All 8 5.5 legs gated in the first sentence
+with zero question marks; opus-5-5 @ medium alone refused to plan (as
+opus-5 @ medium does), the rest gated the Redis plan behind measurement,
+and sonnet-5-5 @ medium was the softest ("If Redis is still the choice,
+this is the plan"). The sonnet-5 control asked the user a question
+mid-reply in a headless run.
 
 Known findings encoded here: misses are quasi-independent noise (union
 of two runs ≈ 12/12); mechanical rules outlive conceptual ones; forced

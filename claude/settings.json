@@ -147,7 +147,7 @@
       "Bash(wget * | bash)"
     ]
   },
-  "model": "fable[1m]",
+  "model": "opus",
   "skillOverrides": {
     "grill-me": "off"
   },
