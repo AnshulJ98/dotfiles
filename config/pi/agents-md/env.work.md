@@ -4,7 +4,7 @@
 
 ## Language Runtimes and Browsers — /opt/homebrew/ Only
 
-**CRITICAL**: Language runtimes and browser binaries MUST run from `/opt/homebrew/`. Paths under `~` and symlinks from `~` are blocked by macOS security policy for those.
+Language runtimes and browser binaries run from `/opt/homebrew/`. macOS security policy blocks them under `~` and through symlinks from `~`.
 
 - Playwright: `PLAYWRIGHT_BROWSERS_PATH=/opt/homebrew/var/playwright`
 - Node/npm/npx, Python/uvx: resolve to `/opt/homebrew/bin/`
