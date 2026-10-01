@@ -5,7 +5,7 @@
 #
 # Usage:
 #   scout [--brief FILE] [--fork] [--ctx] [--rw] [--model PROVIDER/ID]
-#         [--timeout SECONDS] "task"
+#         [--thinking LEVEL] [--timeout SECONDS] "task"
 #
 #   --brief FILE   Inject FILE as context (the parent writes what the scout
 #                  needs to know; this is the normal way to pass context).
@@ -14,19 +14,22 @@
 #                  see the conversation verbatim. Never the default.
 #   --ctx          Keep AGENTS.md/CLAUDE.md discovery in the child (default
 #                  off; the brief is the intended channel).
-#   --rw           Allow edit/write in the child. Use sparingly, and only
-#                  against a bounded spec with explicit file assignment.
-#                  Never for open-ended "fix it" tasks.
-#   --model        Default anthropic/claude-sonnet-5 at low thinking.
-#                  On the work laptop, edit MODEL/THINKING below by hand to
-#                  amazon-bedrock/openai.gpt-5.6-luna at medium. Hardcoded on
-#                  purpose: a per-machine switch is config for one line.
-#   --timeout      Default 300. Exit 124 on expiry.
+#   --rw           Worker mode: edit/write allowed, worker.prompt.md replaces
+#                  the scout prompt, and extensions/worker-sensors.ts loads
+#                  with PI_WORKER_SPEC set to the brief. Requires --brief
+#                  whose frontmatter has files-allowed; the sensors enforce it.
+#   --model        Default anthropic/claude-sonnet-5. On the work laptop, edit
+#                  MODEL below by hand. Hardcoded on purpose: a per-machine
+#                  switch is config for one line.
+#   --thinking     low|medium|high|xhigh. Default low; medium with --rw.
+#                  max is refused: it drifts out of scope.
+#   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
+#                  scout prints the CANNOT-RUN verdict the sensors never got to.
 #
 # Exit codes: 0 ok, 2 usage or recursion refused, 124 timeout, else pi's.
 set -euo pipefail
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 if [ "${PI_SCOUT_DEPTH:-0}" != "0" ]; then
   echo "scout: refusing to nest — already inside a scout (PI_SCOUT_DEPTH=$PI_SCOUT_DEPTH)" >&2
@@ -35,6 +38,8 @@ fi
 
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 PROMPT="$DIR/scout.prompt.md"
+SENSORS="$DIR/../extensions/worker-sensors.ts"
+UNCONFIRMED="Mark anything you couldn't confirm, and say where you looked."
 SHIM="$HOME/.pi/agent/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts"
 # Under the sessions tree so pi-usage-widget (recursive walk) counts scout
 # spend in today/all-time; /resume lists only sessions/<cwd>/, so no leak.
@@ -44,8 +49,9 @@ SESSIONS="$SCOUT_ROOT/$$"
 RUNNING="$SCOUT_ROOT/.running"
 DONE="$SCOUT_ROOT/.done"
 MODEL="anthropic/claude-sonnet-5"   # work: amazon-bedrock/openai.gpt-5.6-luna
-THINKING="low"                     # work: medium
-TIMEOUT=300
+THINKING=""
+TIMEOUT=""
+RW=0
 TOOLS="read,grep,find,ls,bash"
 CTX=(-nc)
 BRIEF=()
@@ -54,11 +60,17 @@ FORK=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --brief)   [ -r "${2:-}" ] || { echo "scout: --brief needs a readable file" >&2; exit 2; }
-               BRIEF=("@$2"); shift 2 ;;
+               BRIEF_FILE="$2"; BRIEF=("@$2"); shift 2 ;;
     --fork)    FORK=(fork); shift ;;
     --ctx)     CTX=(); shift ;;
-    --rw)      TOOLS="$TOOLS,edit,write"; shift ;;
+    --rw)      RW=1; shift ;;
     --model)   MODEL="${2:?scout: --model needs a value}"; shift 2 ;;
+    --thinking)
+               case "${2:-}" in
+                 low|medium|high|xhigh) THINKING="$2" ;;
+                 *) echo "scout: --thinking must be low|medium|high|xhigh, got '${2:-}'" >&2; exit 2 ;;
+               esac
+               shift 2 ;;
     --timeout) TIMEOUT="${2:?scout: --timeout needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     --)        shift; break ;;
@@ -67,7 +79,28 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ $# -ge 1 ] || { usage >&2; exit 2; }
-TASK="$*"
+TASK="$*
+
+$UNCONFIRMED"
+
+WORKER=()
+if [ "$RW" = 1 ]; then
+  [ -n "${BRIEF_FILE:-}" ] || { echo "scout: --rw needs --brief FILE (a spec with files-allowed and tests)" >&2; exit 2; }
+  [ -r "$SENSORS" ] || { echo "scout: sensors missing: $SENSORS" >&2; exit 2; }
+  # Same parser the sensors use, so a bad spec fails here, not after a wasted run.
+  SPEC_ERROR="$(node --input-type=module -e '
+    import { readFileSync } from "node:fs";
+    const { parseSpec } = await import(process.argv[1]);
+    const parsed = parseSpec(readFileSync(process.argv[2], "utf8"));
+    if (typeof parsed === "string") console.log(parsed);' "$SENSORS" "$BRIEF_FILE" 2>&1)" || true
+  [ -z "$SPEC_ERROR" ] || { echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2; exit 2; }
+  TOOLS="$TOOLS,edit,write"
+  PROMPT="$DIR/worker.prompt.md"
+  WORKER=(-e "$SENSORS")
+  export PI_WORKER_SPEC="$(cd "$(dirname "$BRIEF_FILE")" && pwd)/$(basename "$BRIEF_FILE")"
+  : "${THINKING:=medium}" "${TIMEOUT:=900}"
+fi
+: "${THINKING:=low}" "${TIMEOUT:=300}"
 
 [ -r "$PROMPT" ] || { echo "scout: prompt file missing: $PROMPT" >&2; exit 2; }
 
@@ -97,8 +130,8 @@ mkdir -p "$SESSIONS" "$RUNNING" "$DONE"
 META="$RUNNING/$$.meta"
 OUT="$RUNNING/$$.out"
 FIRST_LINE="${TASK%%$'\n'*}"
-printf 'pid=%s\nmodel=%s\nthinking=%s\nstarted=%s\nsession=%s\ntask=%s\n' \
-  "$$" "$MODEL" "$THINKING" "$(( $(date +%s) * 1000 ))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" > "$META"
+printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\n' \
+  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(( $(date +%s) * 1000 ))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" > "$META"
 finish() {
   local rc=$?
   mv -f "$OUT" "$DONE/$$.out" 2>/dev/null || : > "$DONE/$$.out"
@@ -109,7 +142,7 @@ finish() {
 trap finish EXIT
 
 set +e
-PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${CTX[@]}" -ns -np \
+PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np \
   -t "$TOOLS" "${SESSION[@]}" \
   --model "$MODEL" --thinking "$THINKING" \
   --system-prompt "$(cat "$PROMPT")" \
@@ -118,5 +151,6 @@ rc=${PIPESTATUS[0]}
 set -e
 if [ $rc -eq 124 ]; then
   echo "scout: timed out after ${TIMEOUT}s" >&2
+  [ "$RW" = 1 ] && echo "WORKER-SENSORS: CANNOT-RUN scout timed out after ${TIMEOUT}s; settle checks never ran" | tee -a "$OUT"
 fi
 exit $rc
