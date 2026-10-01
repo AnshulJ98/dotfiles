@@ -10,3 +10,16 @@
 	smudge = git-lfs smudge -- %f
 [core]
 	excludesfile = ~/.gitignore_global
+[merge]
+	tool = codediff
+[mergetool]
+	prompt = false
+	keepBackup = false
+[mergetool "codediff"]
+	cmd = nvim \"$MERGED\" -c \"execute 'CodeDiff --exit-on-close merge' fnameescape(expand('%'))\"
+[diff]
+	tool = codediff
+[difftool]
+	prompt = false
+[difftool "codediff"]
+	cmd = nvim \"$LOCAL\" \"$REMOTE\" -c \"execute 'CodeDiff --exit-on-close file' fnameescape(argv(0)) fnameescape(argv(1))\"
