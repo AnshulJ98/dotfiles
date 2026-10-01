@@ -1,10 +1,11 @@
 {
-  "lastChangelogVersion": "0.99.1",
+  "lastChangelogVersion": "0.99.2",
   "defaultProvider": "anthropic",
-  "defaultModel": "claude-fable-5-1",
-  "defaultThinkingLevel": "low",
+  "defaultModel": "claude-opus-5-5",
+  "defaultThinkingLevel": "medium",
   "hideThinkingBlock": false,
   "showCacheMissNotices": true,
+  "cacheWarming": "idle",
   "theme": "bearded-hc-midnightvoid",
   "quietStartup": true,
   "editorPaddingX": 2,
@@ -33,7 +34,11 @@
     "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts",
     "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts",
     "~/Dev/dotfiles/config/pi/extensions/headless-close.ts",
-    "~/Dev/dotfiles/config/pi/extensions/scout.ts"
+    "~/Dev/dotfiles/config/pi/extensions/scout.ts",
+    "-builtin:mcp",
+    "-builtin:codemode",
+    "-builtin:tool-search",
+    "-builtin:llama.cpp"
   ],
   "enableSkillCommands": true,
   "packages": [
