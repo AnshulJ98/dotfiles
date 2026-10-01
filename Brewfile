@@ -107,6 +107,8 @@ brew "luarocks"
 brew "node"
 # Fast, flexible, config-based cli for linting Markdown/CommonMark files
 brew "markdownlint-cli2"
+# Media player based on MPlayer and mplayer2
+brew "mpv"
 # Ncurses-based client for the Music Player Daemon
 brew "ncmpcpp"
 # Fast, highly customisable system info script
@@ -159,6 +161,8 @@ brew "sevenzip"
 brew "shntool"
 # Multi-modal AI tool to extract and summarize content
 brew "summarize"
+# Manipulate and query tags on macOS files
+brew "tag"
 # Tool Command Language
 brew "tcl-tk"
 # Parser generator tool
@@ -167,12 +171,14 @@ brew "tree-sitter-cli"
 brew "uv"
 # Generate your Xcode project from a spec file and your folder structure
 brew "xcodegen"
+# Friendly and fast tool for sending HTTP requests
+brew "xh"
 # Blazing fast terminal file manager written in Rust, based on async I/O
 brew "yazi"
 # General-purpose lossless data-compression library
 brew "zlib"
-# Friendly and fast tool for sending HTTP requests
-brew "xh"
+# Shell extension to navigate your filesystem faster
+brew "zoxide"
 # Fish-like fast/unobtrusive autosuggestions for zsh
 brew "zsh-autosuggestions"
 # CLI app to manage your Apple Notes and Apple reminders
@@ -216,14 +222,14 @@ cask "altserver"
 cask "android-platform-tools"
 # Display management tool
 cask "betterdisplay"
+# Open source IDE for exploring and testing APIs
+cask "bruno"
 # Anthropic's official Claude AI desktop app
 cask "claude"
 # Terminal-based AI coding assistant
 cask "claude-code@latest"
 # OpenAI's coding agent that runs in your terminal
 cask "codex"
-# Open source IDE for exploring and testing APIs
-cask "bruno"
 # Menu bar usage monitor for Codex and Claude
 cask "codexbar"
 # Voice and text chat software

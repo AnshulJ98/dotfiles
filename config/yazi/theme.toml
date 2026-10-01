@@ -1,0 +1,81 @@
+#:schema https://yazi-rs.github.io/schemas/theme.json
+
+# Bearded HC Midnight Void, matching nvim and kitty. The defaults name ANSI
+# colours, which kitty already maps to the Bearded palette; only the entries
+# that used "gray" (ANSI white here, so bright bars and borders) or reversed
+# video need hex values.
+
+[mgr]
+cwd           = { fg = "#7fd7f5" }
+border_symbol = "│"
+border_style  = { fg = "#395469" }
+syntect_theme = "~/.config/yazi/bearded-hc-midnightvoid.tmTheme"
+
+[tabs]
+active   = { fg = "#c3d2de", bg = "#253039", bold = true }
+inactive = { fg = "#436179", bg = "#111920" }
+
+[mode]
+normal_main = { fg = "#111920", bg = "#7fd7f5", bold = true }
+normal_alt  = { fg = "#7fd7f5", bg = "#1e2c38" }
+select_main = { fg = "#111920", bg = "#e4a3df", bold = true }
+select_alt  = { fg = "#e4a3df", bg = "#1e2c38" }
+unset_main  = { fg = "#111920", bg = "#fd604f", bold = true }
+unset_alt   = { fg = "#fd604f", bg = "#1e2c38" }
+
+# nvim's CursorLine and Visual backgrounds, so file colours survive the hover.
+[indicator]
+parent  = { bg = "#1e2c38" }
+current = { bg = "#253039", bold = true }
+
+[status]
+progress_normal = { fg = "#afea7b", bg = "#1e2c38" }
+progress_error  = { fg = "#fd604f", bg = "#1e2c38" }
+
+[which]
+border          = { fg = "#436179" }
+cand            = { fg = "#7fd7f5" }
+rest            = { fg = "#436179" }
+desc            = { fg = "#e4a3df" }
+separator_style = { fg = "#436179" }
+
+[confirm]
+border = { fg = "#436179" }
+title  = { fg = "#dbefff" }
+
+[spot]
+border = { fg = "#436179" }
+title  = { fg = "#dbefff" }
+
+[pick]
+border = { fg = "#436179" }
+
+[input]
+border = { fg = "#436179" }
+
+[cmp]
+border = { fg = "#436179" }
+
+[tasks]
+border = { fg = "#436179" }
+
+[help]
+border = { fg = "#436179" }
+
+# Same letters and colours as the neo-tree git column; staged edits are green
+# as in `git status`.
+[git]
+untracked      = { fg = "#ffaa7d" }
+unstaged       = { fg = "#7fd7f5" }
+staged         = { fg = "#afea7b" }
+added          = { fg = "#afea7b" }
+deleted        = { fg = "#fd604f" }
+updated        = { fg = "#fd604f", bold = true }
+ignored        = { fg = "#436179" }
+untracked_sign = "U"
+unstaged_sign  = "M"
+staged_sign    = "M"
+added_sign     = "A"
+deleted_sign   = "D"
+updated_sign   = "!"
+ignored_sign   = ""

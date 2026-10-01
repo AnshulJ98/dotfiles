@@ -87,6 +87,7 @@ link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
+link "$DOT/config/yazi"            "$HOME/.config/yazi"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
 bash "$DOT/config/imagemagick/check.sh" || warn "ImageMagick cannot decode SVG — see config/imagemagick/delegates.xml"
 
@@ -132,6 +133,11 @@ if command -v nvim >/dev/null 2>&1; then
   # Tool list comes from mason-tool-installer in config/nvim/lua/config/lsp.lua.
   nvim --headless "+MasonToolsInstallSync" "+qa" || warn "Mason install partial — run :Mason interactively"
   ok "nvim bootstrapped"
+fi
+
+# package.toml pins each yazi plugin by rev and hash; plugins/ is gitignored.
+if command -v ya >/dev/null 2>&1; then
+  if ya pkg install; then ok "yazi plugins installed"; else warn "yazi plugin install failed — run: ya pkg install"; fi
 fi
 
 cat <<'EOF'

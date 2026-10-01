@@ -15,6 +15,9 @@ bun.lock
 yarn.lock
 pnpm-lock.yaml
 
+# Restored from config/yazi/package.toml by `ya pkg install`
+config/yazi/plugins/
+
 # Runtime state / caches / logs (always machine-local)
 *.log
 logs/
@@ -41,3 +44,6 @@ ide/
 
 # agent-eval probe outputs
 agent-eval/results/
+
+# Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
+claude/skills/synced/
