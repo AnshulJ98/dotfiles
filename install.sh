@@ -15,6 +15,8 @@ PI_VARIANT="home"
 for arg in "$@"; do
   if [ "$arg" = "--work" ]; then PI_VARIANT="work"; fi
 done
+# Read by the Brewfile to pick per-machine casks. brew strips env vars without the HOMEBREW_ prefix.
+if [ "$PI_VARIANT" = "work" ]; then export HOMEBREW_DOTFILES_WORK=1; fi
 TS="$(date +%s)"
 VSC_USER="$HOME/Library/Application Support/Code - Insiders/User"
 
@@ -89,6 +91,22 @@ link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+# Vicinae rewrites settings.json from its GUI, so only base.json and themes are
+# symlinked; settings.json is seeded once to import base.json. Home only (see Brewfile).
+if [ "$PI_VARIANT" != "work" ]; then
+  link "$DOT/config/vicinae/base.json" "$HOME/.config/vicinae/base.json"
+  for theme in "$DOT"/config/vicinae/themes/*.toml; do
+    link "$theme" "$HOME/.local/share/vicinae/themes/$(basename "$theme")"
+  done
+  VICINAE_SETTINGS="$HOME/.config/vicinae/settings.json"
+  if [ ! -f "$VICINAE_SETTINGS" ]; then
+    printf '{\n  "imports": ["base.json"]\n}\n' > "$VICINAE_SETTINGS"
+    ok "seeded: $VICINAE_SETTINGS"
+  elif ! grep -q '"base.json"' "$VICINAE_SETTINGS"; then
+    warn "$VICINAE_SETTINGS does not import base.json — add \"imports\": [\"base.json\"]"
+  fi
+  bash "$DOT/config/vicinae/install-raycast-extensions.sh" || warn "Vicinae Raycast extensions partially installed: re-run config/vicinae/install-raycast-extensions.sh"
+fi
 bash "$DOT/config/imagemagick/check.sh" || warn "ImageMagick cannot decode SVG — see config/imagemagick/delegates.xml"
 
 

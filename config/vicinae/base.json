@@ -1,0 +1,33 @@
+// Dotfiles-managed Vicinae settings, imported by ~/.config/vicinae/settings.json.
+// Vicinae rewrites settings.json from its GUI, so anything set there overrides this file.
+// Defaults: `vicinae config default`.
+{
+	"$schema": "https://vicinae.com/schemas/config.json",
+
+	// Raycast parity: the window dismisses on click-away and reopens at root search.
+	"close_on_focus_loss": true,
+	"pop_to_root_on_close": true,
+
+	// Raycast's hotkey; Vicinae replaces Raycast.
+	"global_shortcuts": {
+		"toggle": "alt+space"
+	},
+
+	// Same family as kitty (config/kitty/kitty.conf font_family). Size stays on the
+	// platform default: kitty's 18pt would overflow the 770x480 launcher layout.
+	"font": {
+		"normal": {
+			"family": "Iosevka Term"
+		}
+	},
+
+	// Raycast pins one theme regardless of system appearance; this pins the kitty palette.
+	"theme": {
+		"light": { "name": "bearded-hc-midnightvoid" },
+		"dark": { "name": "bearded-hc-midnightvoid" }
+	},
+
+	"telemetry": {
+		"system_info": false
+	}
+}
