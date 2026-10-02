@@ -1,6 +1,6 @@
 ---
 name: pdf-images
-description: Use this skill whenever the user wants to do anything with PDF files. This includes reading/extracting text/tables from PDFs, combining/merging/splitting PDFs, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, OCR on scanned PDFs, and image processing.
+description: Extracts text, tables, and images from PDFs, merges and splits them, and OCRs scanned pages with local CLI tools (pdftotext, qpdf, tesseract, pypdf). Use whenever a task involves a .pdf file.
 ---
 
 # PDF Operations
@@ -12,7 +12,7 @@ description: Use this skill whenever the user wants to do anything with PDF file
 - `tesseract` — OCR for scanned PDFs (installed)
 - `imagemagick` — image extraction and processing (installed)
 - `poppler` — PDF rendering utilities (pdftotext, pdfimages, pdfinfo)
-- Python with `pypdf2` / `reportlab` via `uvx` for complex operations
+- Python with `pypdf` via `uvx` for complex operations (PyPDF2 is deprecated; its code now lives in `pypdf`)
 
 ## Text Extraction
 
@@ -62,12 +62,10 @@ pdfimages -png document.pdf extracted-images/img
 ## Python Operations (for complex tasks)
 
 ```bash
-uvx --with pypdf2 python3 -c "
-import PyPDF2
-with open('doc.pdf', 'rb') as f:
-    reader = PyPDF2.PdfReader(f)
-    for page in reader.pages:
-        print(page.extract_text())
+uvx --with pypdf python3 -c "
+from pypdf import PdfReader
+for page in PdfReader('doc.pdf').pages:
+    print(page.extract_text())
 "
 ```
 
