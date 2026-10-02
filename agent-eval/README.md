@@ -19,15 +19,54 @@ python3 parse_probes.py results/<ts>/*.json # re-parse any output
 `run.sh` executes headless pi (`-p --no-session --mode json -xt ask_user`)
 per probe and prints words / tokens / cost. The parser also reads Claude
 Code `--output-format json` files, detected by content.
+`run.sh` uses the active Pi config; use `run-upstream.sh` below to evaluate
+with this checkout's Pi setup.
 
 `PROBE_TIMEOUT` defaults to 300 s per probe. Max-effort legs need 900:
 opus-5-5 @ max takes 270-450 s per probe and died at 300 on its first
 review. review and premise run from a `mktemp` copy of `fixtures/` so
 this README (the rubric) is not one `ls ..` away. Probes run against the
-live `~/.pi/agent/memory.md`: `run.sh` checksums it around each probe
-and logs any write to `results/<ts>/side-effects.txt` (score it as a
+live `~/.pi/agent/memory.md` when present: `run.sh` checksums it around each
+probe and logs any write to `results/<ts>/side-effects.txt` (score it as a
 scope violation, then review the entry by hand). The memory file also
 holds past eval results, so a model that greps it can see prior misses.
+
+### Running with this repo's Pi setup
+
+Use `run-upstream.sh` to run with the Pi settings, work instructions,
+extensions, prompts, themes, and skills from this checkout. It keeps that
+setup in `~/.cache/agent-eval/anshul-dotfiles-pi/` and copies your Pi auth
+there; it does not replace your everyday `~/.pi/agent` config. On first run it
+installs the packages declared in `config/pi/settings.json`. The wrapper adds
+the selected OpenAI model IDs to the isolated `enabledModels` list; `run.sh`
+still receives the model explicitly. Use the same config and thinking level
+when comparing models.
+
+To run the full probe battery for each selected OpenAI model at medium:
+
+```sh
+cd /path/to/dotfiles/agent-eval
+for model in \
+  openai/gpt-5.6-luna openai/gpt-5.6-sol openai/gpt-5.6-terra \
+  openai/gpt-6-luna openai/gpt-6-sol openai/gpt-6.1-sol; do
+  ./run-upstream.sh "$model" medium
+done
+```
+
+The first invocation prepares the isolated setup; use `./run-upstream.sh
+--setup-only` to prepare it without running probes. To run one probe, append
+its name, for example: `./run-upstream.sh openai/gpt-6-luna medium review`.
+Each invocation prints an output directory under `results/`; those raw result
+files are ignored by Git.
+
+### Recording and contributing results
+
+Read each generated `.txt` reply and score it against the relevant rubric in
+this README. Record the model, thinking level, score, words, cost, and any
+notable behavior in the matching board. Keep the raw output locally for review;
+commit the board update, not the ignored `results/` files. For a contribution,
+create a topic branch, commit the README change, push that branch to your fork,
+and open a pull request against the upstream branch used for the eval.
 
 ## Probes
 
