@@ -39,8 +39,16 @@ setup in `~/.cache/agent-eval/anshul-dotfiles-pi/` and copies your Pi auth
 there; it does not replace your everyday `~/.pi/agent` config. On first run it
 installs the packages declared in `config/pi/settings.json`. The wrapper adds
 the selected OpenAI model IDs to the isolated `enabledModels` list; `run.sh`
-still receives the model explicitly. Use the same config and thinking level
-when comparing models.
+still receives the model explicitly. It prepends the isolated `~/.local/bin`
+to `PATH`, so the optional RTK binary can be found. To activate RTK on Linux,
+install it into that isolated home with the [official installer](https://github.com/rtk-ai/rtk):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh \
+  | RTK_INSTALL_DIR="$HOME/.cache/agent-eval/anshul-dotfiles-pi/home/.local/bin" sh
+```
+
+Use the same config, RTK state, and thinking level when comparing models.
 
 To run the full probe battery for each selected OpenAI model at medium:
 

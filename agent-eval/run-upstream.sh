@@ -9,6 +9,7 @@ EVAL_HOME="${AGENT_EVAL_HOME:-$USER_HOME/.cache/agent-eval/anshul-dotfiles-pi/ho
 AGENT_DIR="$EVAL_HOME/.pi/agent"
 SOURCE_HOME_PI="$USER_HOME/.pi/agent"
 SETUP_MARKER="$AGENT_DIR/.eval-package-fingerprint"
+export PATH="$EVAL_HOME/.local/bin:$PATH"
 
 mkdir -p "$AGENT_DIR" "$AGENT_DIR/skills-local" "$EVAL_HOME/.agents"
 chmod 700 "$EVAL_HOME" "$EVAL_HOME/.pi" "$AGENT_DIR"
