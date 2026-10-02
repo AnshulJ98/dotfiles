@@ -81,11 +81,12 @@ for model in \
 done
 ```
 
-The work instructions include a macOS-only `/opt/homebrew/` runtime rule.
-On Linux, Astra refused to execute implementation tests because that Node
-path was unavailable; other models used Node from `PATH`. The wrapper keeps
-this instruction intact. Compare max under the same condition, or establish
-a new baseline if adapting the runtime instructions for Linux.
+The work runtime instructions now distinguish platforms: macOS retains the
+`/opt/homebrew/` policy, while Linux uses installed runtimes from `PATH` after
+checking their location and version. The original 2026-10-02 tables below
+predate this correction: Astra refused implementation tests under the old rule.
+Rerun medium/xhigh implementation probes before comparing them with max under
+the corrected instructions. The scout's Anthropic default is still unchanged.
 
 ### Recording and contributing results
 
@@ -376,3 +377,12 @@ max to 900 seconds per probe and prints progress. If portability or scout
 provider settings are changed, rerun medium/xhigh as a new baseline; do not
 combine them with this table as one condition. No max probes have been run
 as part of this contribution.
+
+### Runtime portability correction (2026-10-02)
+
+Updated `config/pi/agents-md/env.work.md` and regenerated `AGENTS.work.md`.
+macOS keeps the Homebrew runtime/browser policy; Linux resolves installed
+runtimes from PATH and checks Node location/version before testing. The
+wrapper copies the corrected instructions on the next invocation. The tables
+above remain historical results from the original runtime rule. No model
+probes were rerun for this correction.
