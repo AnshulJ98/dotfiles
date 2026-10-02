@@ -250,13 +250,10 @@ cask "ngrok"
 cask "obsidian"
 # Administration and development platform for PostgreSQL
 cask "pgadmin4"
-# Launcher. Home runs Vicinae; the work Mac keeps Raycast, installed back when it had
-# admin rights, because a new cask in /Applications and its Accessibility grant both need admin.
-if ENV["HOMEBREW_DOTFILES_WORK"]
-  cask "raycast"
-else
-  cask "vicinae"
-end
+# Native launcher with Raycast extension compatibility (replaced Raycast at home)
+cask "vicinae"
+# The work Mac keeps Raycast alongside Vicinae.
+cask "raycast" if ENV["HOMEBREW_DOTFILES_WORK"]
 # System monitor for the menu bar
 cask "stats"
 # JDK from the Eclipse Foundation (Adoptium)
