@@ -46,6 +46,7 @@ models = settings.setdefault("enabledModels", [])
 for model in (
     "openai/gpt-5.6-luna", "openai/gpt-5.6-sol", "openai/gpt-5.6-terra",
     "openai/gpt-6-luna", "openai/gpt-6-sol", "openai/gpt-6.1-sol",
+    "openai/gpt-6-astra",
 ):
     if model not in models:
         models.append(model)

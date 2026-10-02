@@ -19,10 +19,27 @@ PROBES=("${@:-review premise impl}")
 [ ${#PROBES[@]} -eq 1 ] && read -r -a PROBES <<< "${PROBES[0]}"
 
 # max-effort legs can think past 300s on the 14-line review fixture.
-PROBE_TIMEOUT="${PROBE_TIMEOUT:-300}"
+if [ "$THINKING" = max ]; then
+  PROBE_TIMEOUT="${PROBE_TIMEOUT:-900}"
+else
+  PROBE_TIMEOUT="${PROBE_TIMEOUT:-300}"
+fi
 
 RUN_DIR="results/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$RUN_DIR"
+python3 - "$RUN_DIR/run.json" "$MODEL" "$THINKING" "$PROBE_TIMEOUT" "${PROBES[@]}" <<'PYMETA'
+import json
+import sys
+from pathlib import Path
+
+path, model, thinking, timeout, *probes = sys.argv[1:]
+Path(path).write_text(json.dumps({
+    "model": model or "default", "thinking": thinking or "default",
+    "probe_timeout_seconds": timeout, "probes": probes,
+}, indent=2) + "\n")
+PYMETA
+printf 'Running %s @ %s; timeout %s s/probe; outputs: %s\n' \
+  "${MODEL:-default}" "${THINKING:-default}" "$PROBE_TIMEOUT" "$PWD/$RUN_DIR"
 
 PI_ARGS=(-p --no-session --mode json -xt ask_user)
 [ -n "$MODEL" ] && PI_ARGS+=(--model "$MODEL")
@@ -70,6 +87,7 @@ PY
 }
 
 for probe in "${PROBES[@]}"; do
+  printf 'Starting %s…\n' "$probe"
   prompt="$(cat "prompts/$probe.txt")"
   out="$PWD/$RUN_DIR/$probe.json"
   memory_before="$(memory_checksum)"
@@ -95,5 +113,9 @@ for probe in "${PROBES[@]}"; do
   fi
 done
 
-python3 parse_probes.py "$RUN_DIR"/*.json
+probe_outputs=()
+for probe in "${PROBES[@]}"; do
+  probe_outputs+=("$RUN_DIR/$probe.json")
+done
+python3 parse_probes.py "${probe_outputs[@]}"
 echo "outputs: $RUN_DIR"
