@@ -4,9 +4,9 @@ argument-hint: "[paste the brainstorm, or leave empty]"
 ---
 # Spec Contract
 
-Paste this at the end of a brainstorm (GPT think-deeper, or a planning
-session); paste its output into pi verbatim as the task, or save it as
-`specs/NN-<slice>.md` and dispatch it with `scout --rw --brief`.
+Use at the end of a brainstorm or planning session, in pi or pasted
+into another chat. Save the output as `specs/NN-<slice>.md` and dispatch
+it with `scout --rw --brief`, or paste it into pi as the task.
 
 ---
 
@@ -42,8 +42,9 @@ Then exactly these sections and nothing else:
 The frontmatter is what the worker sensors enforce: edits outside
 files-allowed are blocked, and `tests` is rerun before the worker may
 finish; a test file that loses cases or assertions fails the check.
-Run the `tests` command once by hand before dispatch; a command
-that cannot run here sends the worker into a rabbit hole. Sections 2-5
-are what the worker consumes; section 1 pre-answers the premise gate;
-section 6 routes remaining judgment back to a human instead of letting
-the executor guess.
+If you can run shell commands here, run the `tests` command once before
+printing the spec and say whether it starts; a command that cannot run
+sends the worker into a rabbit hole. Sections 2-5 are what the worker
+consumes; section 1 settles the premise up front; section 6 routes
+remaining judgment back to a human instead of letting the executor
+guess.

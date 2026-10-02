@@ -21,17 +21,15 @@ build() {
   } > "$out"
 }
 
-# Fragment manifests. ORDER IS LOAD-BEARING (Lost-in-the-Middle: models
-# weight the extremes of the prompt; the middle decays). persona leads
-# (primacy: identity + dispatch contracts); standards/ops sit mid;
-# ladder.md is concatenated LAST in every variant (recency: the Solution
-# Ladder + Prime Directives get the final-word slot).
+# Fragment manifests. persona leads (identity, reply shape, dispatch
+# contracts); standards/ops sit mid; ladder.md is concatenated last in
+# every variant.
 # Variants differ ONLY by fragment selection/swap — never by in-fragment
 # conditionals. Batch fragment edits: every edit cache-misses all surfaces
 # on their next session.
-PI_HOME=(persona-core.md persona-pi.md standards.md ops.md discipline.md ladder.md)
-PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md discipline.md ladder.md)
-CLAUDE=(persona-core.md claude-delta.md standards.md ops.md discipline.md ladder.md)
+PI_HOME=(persona-core.md persona-pi.md standards.md ops.md ladder.md)
+PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md)
+CLAUDE=(persona-core.md claude-delta.md standards.md ops.md ladder.md)
 
 emit() {
   build "$1/AGENTS.md"      "${PI_HOME[@]}"

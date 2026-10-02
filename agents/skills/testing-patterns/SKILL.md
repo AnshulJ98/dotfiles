@@ -1,6 +1,6 @@
 ---
 name: testing-patterns
-description: THE testing skill. Built on Gary Bernhardt's functional core / imperative shell, with Michael Feathers' seams and dependency-breaking as the practical toolkit. Use when deciding how to test any code, adding tests to existing/legacy code, breaking dependencies for testability, or understanding unfamiliar code through characterization tests.
+description: Chooses how to test code by its kind, using Gary Bernhardt's functional core / imperative shell and Michael Feathers' seams and dependency-breaking techniques. Use when deciding how to test any code, adding tests to existing or legacy code, breaking dependencies for testability, or pinning down unfamiliar code with characterization tests.
 ---
 
 # Testing Patterns
@@ -14,7 +14,7 @@ Split code into two layers with different testing strategies:
 
 | Layer | What it is | How you test it |
 |-------|-----------|-----------------|
-| **Functional core** | Pure logic — parsers, state machines, validators, transformations, business rules. No I/O. Same input -> same output. | Test-first. Table-driven. **Zero mocks.** Red-green-refactor. Many fast tests. |
+| **Functional core** | Pure logic — parsers, state machines, validators, transformations, business rules. No I/O. Same input -> same output. | Table-driven. **Zero mocks.** Many fast tests. |
 | **Imperative shell** | I/O coordination — network, filesystem, process spawning, DB, stdout. Thin. No branching logic worth speaking of. | Integration tests against **real** dependencies. Few tests. |
 
 The shell calls the core; the core never calls the shell. Push decisions inward
@@ -56,11 +56,13 @@ integration test against a real (or fake-at-boundary) gateway.
 
 - **The interface is the test surface.** Tests cross the same seam callers do.
   Don't reach past the public interface to test internals.
-- **Prefer fakes over mocks (GOOS style).** A working in-memory fake exercises
-  real behavior; a mock hard-codes an interaction and rots when the design moves.
-- **Test sandwich.** Run tests BEFORE (baseline) and AFTER every change. Baseline
-  fails -> HALT and report; you don't build on a red bar. After fails -> you
-  broke something; fix before continuing.
+- **Prefer the highest-fidelity double.** Real implementation first, then a
+  working in-memory fake, and a mock last (*Software Engineering at Google*,
+  ch. 13). A fake exercises real behavior; a mock hard-codes an interaction
+  and rots when the design moves.
+- **Bug fixes get a test that fails without the fix.** Write it first when
+  the cause is unknown; it is how you find it. A failure in code you didn't
+  touch: confirm it fails without your change, then report it.
 
 ## Clean Tests
 

@@ -9,12 +9,12 @@ Two modes: **analyze** a live choice (Goal-Options-Plan), then **record** the ou
 
 ## Analyze: Goal → Options → Plan
 
-Use when comparing approaches with real tradeoffs. Minimum three options — binary choices hide better alternatives.
+Use when comparing approaches with real tradeoffs; an obvious pick gets one paragraph, not this template. Consider at least three options, counting "keep the current setup" when it is viable: binary choices hide better alternatives. An option that fails a hard constraint gets one line saying which, then leaves the table.
 
 1. **Goal** — one sentence. The outcome being optimized.
 2. **Constraints** — split hard (non-negotiable) from soft (preference).
 3. **Options** — three or more, each with pros/cons and a risk level.
-4. **Comparison** — weighted criteria table (below).
+4. **Comparison** — criteria table, scored 1-5 and weighted (below).
 5. **Recommendation** — one direct statement plus the top 2-3 reasons.
 6. **Rejected** — why each other option lost.
 
@@ -31,15 +31,16 @@ Goal: pick a store for ephemeral job state + rate-limit counters, ~50k ops/sec, 
 
 | Criterion | Weight | Redis | Memcached | Postgres (unlogged) |
 |---|---|---|---|---|
-| Latency | 30% | high | high | med |
-| Data structures (counters, sorted sets) | 25% | high | none | med |
-| Ops familiarity | 20% | high | med | high |
-| Persistence option | 15% | med | none | high |
-| Memory efficiency | 10% | med | high | low |
+| Latency | 30% | 5 | 5 | 3 |
+| Data structures (sorted sets for sliding windows) | 25% | 5 | 1 | 3 |
+| Ops familiarity | 20% | 5 | 3 | 5 |
+| Persistence option | 15% | 3 | 1 | 5 |
+| Memory efficiency | 10% | 3 | 5 | 1 |
+| **Weighted score** | | **4.5** | **3.0** | **3.5** |
 | Risk | — | low | low | med |
 
-Recommendation: Redis — native atomic counters and TTLs cover both workloads in one store; team runs it already.
-Rejected: Memcached (no counters/sorted sets, forces app-side logic); Postgres (latency and lock contention at 50k ops/sec, wrong tool for ephemeral state).
+Recommendation: Redis — atomic counters, TTLs, and sorted sets cover both workloads in one store; team runs it already.
+Rejected: Memcached (has `incr`/`decr` and TTLs, but no sorted sets, so sliding-window rate limits move into app code, and nothing survives a restart); Postgres (latency and lock contention at 50k ops/sec, wrong tool for ephemeral state).
 
 ## Record: ADR
 

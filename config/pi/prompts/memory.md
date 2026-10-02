@@ -3,43 +3,36 @@ description: "Read or write persistent agent memory"
 argument-hint: "[query | write]"
 ---
 
-Memory file: `~/.pi/agent/memory.md`
+Memory file: `~/.pi/agent/memory.md`. List its scopes with
+`grep -n '^## ' ~/.pi/agent/memory.md`.
 
 ## Reading
 
-If a query was given (`$@`), grep the memory file case-insensitively:
+Grep case-insensitively for the query ($@), or for keywords from the
+current task when there is none:
 
 ```bash
-grep -iE "<term1|term2>" ~/.pi/agent/memory.md
+grep -inE "<term1|term2>" ~/.pi/agent/memory.md
 ```
 
-If no query was given, derive keywords from the current task.
+Summarize only what bears on the task. If nothing matches, say so.
 
-Summarize only what bears on the task. If nothing matches, say so plainly. Do not invent memories.
-
-Memory is a snapshot, not ground truth. Before acting on a recalled fact that names a file, symbol, or flag, verify it against the current code.
+Memory is a snapshot, not ground truth. Before acting on a recalled fact
+that names a file, symbol, or flag, check it against the current code.
 
 ## Writing
 
-Append directly — no proposal step:
+Write without asking first. Insert the bullet at the end of its scope's
+section with the edit tool; `echo >>` would put it under whichever header
+is last in the file. The scope is the project name for project facts,
+`pi` or `dotfiles` for tooling, and `profile` for facts about the user.
+Create a new `## <scope>` header only when none fits.
 
-```bash
-echo "- [type] content" >> ~/.pi/agent/memory.md
-```
+Format: `- [type] content`, where type is one of `fact`, `gotcha`,
+`decision`, `convention`, `correction`, or `preference`.
 
-If the target scope header (`## {scope}`) doesn't exist yet, create it first.
-
-### Scope derivation
-
-Project name from cwd → project scope. Dev tooling / config work → `tooling/`. Cross-project knowledge → `global/`.
-
-### Entity types
-
-`project` · `decision` · `bugfix` · `gotcha` · `preference` · `learning` · `tool`
-
-### Never write
-
-- Facts already in the codebase — use `read` + `grep`
-- Transient session context (task lists, intermediate findings)
-- Speculative or unverified information
-- Duplicates — extend the existing bullet instead of adding a new one
+Don't write:
+- Facts the codebase already states; read and grep find those.
+- Transient session context (task lists, intermediate findings).
+- Speculation or anything unverified.
+- Duplicates; extend the existing bullet instead.

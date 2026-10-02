@@ -146,7 +146,7 @@ which decisions meet the ADR bar (hard to reverse, surprising without
 context, the result of a real trade-off). Then wait for my approval.
 
 On approval, and only then: write the Terms into `CONTEXT.md`, and record
-each ADR-bar decision with `/decisions`. Approval is not "go"; implementation
+each ADR-bar decision with the decisions skill (`/skill:decisions`). Approval is not "go"; implementation
 waits for that word.
 
 ## The map

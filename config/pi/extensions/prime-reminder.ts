@@ -10,7 +10,7 @@
  *
  * 2. Every compaction (native threshold, overflow, cap-after-settle) arms a
  *    one-shot reminder injected on the NEXT turn — a brief pointer back to
- *    the Prime Directives / Solution Ladder, not a re-injection of the rules.
+ *    the rules, not a re-injection of them.
  *    Sessions that never compact never pay a token.
  *
  * compact-cap.ts signals via Symbol.for keys whether a compaction is its own
@@ -20,10 +20,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const REMINDER =
-  "Post-compaction reminder: your core instructions survived intact and still bind — " +
-  "the Prime Directives and Solution Ladder sit at the END of your system prompt. " +
-  "Re-adhere before acting: open with the finding, hold question scope, climb the " +
-  "ladder before writing code, delegate per the dispatch policy.";
+  "Post-compaction reminder: your core instructions survived intact and still bind. " +
+  "Re-adhere before acting: lead with the answer, keep every change inside the " +
+  "request, take the first option in Before Writing Code that holds, and delegate " +
+  "per the dispatch rule.";
 
 const RESUME =
   "A task was likely in progress when this compaction interrupted the run: resume it " +

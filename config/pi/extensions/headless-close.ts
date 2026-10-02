@@ -1,7 +1,7 @@
 /**
  * Headless close enforcement.
  *
- * `ops.md` and `ladder.md` both state that a headless (`-p`) reply must never
+ * `ops.md` states that a headless (`-p`) reply must never
  * end on a question: the agent states the decision needed and the default it
  * took. Measured adherence on this repository's own prompt is 70% (3 of 10
  * premise-probe runs closed with a question mark). Restating the rule a third
