@@ -27,6 +27,16 @@
 		"dark": { "name": "bearded-hc-midnightvoid" }
 	},
 
+	// Vicinae scans /Applications, /System/Applications and ~/Applications only. The work Mac installs
+	// casks without admin under the Homebrew prefix; a missing directory is skipped, so home is unaffected.
+	"providers": {
+		"applications": {
+			"preferences": {
+				"paths": ["/opt/homebrew/personal_programs/Applications"]
+			}
+		}
+	},
+
 	"telemetry": {
 		"system_info": false
 	}
