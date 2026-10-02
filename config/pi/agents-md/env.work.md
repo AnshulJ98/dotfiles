@@ -2,18 +2,29 @@
 
 # Work Environment
 
-## Language Runtimes and Browsers — /opt/homebrew/ Only
+## Language Runtimes and Browsers
 
-Language runtimes and browser binaries run from `/opt/homebrew/`. macOS security policy blocks them under `~` and through symlinks from `~`.
+Check the operating system before choosing runtime and browser paths.
+
+On macOS, language runtimes and browser binaries run from `/opt/homebrew/`.
+The work machine's security policy blocks them under `~` and through symlinks
+from `~`.
 
 - Playwright: `PLAYWRIGHT_BROWSERS_PATH=/opt/homebrew/var/playwright`
 - Node/npm/npx, Python/uvx: resolve to `/opt/homebrew/bin/`
+- Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work on macOS.
+- Exception: project virtualenvs and skill venvs are allowed — e.g.
+  `~/.agents/skills/pdf-images/.venv/bin/python` (see PDF rule).
 
-This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`, `bash`, `find`, `sed`) resolve from `PATH` as normal; there is no `/opt/homebrew/bin/ls`, and `/opt/homebrew/bin/bash` is never required. Bash scripts under `~` such as `~/.pi/agent/bin/scout` are read by the shell, not executed as binaries, and run fine.
+On Linux, resolve installed runtimes from `PATH`; the macOS `/opt/homebrew/`
+restriction does not apply. Before running Node tests, check `command -v node`
+and `node --version`, then use that installed Node. Resolve other runtimes the
+same way. Use the project's configured Playwright browser location or its
+installed default; do not set the macOS browser path on Linux.
 
-Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
-
-Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/skills/pdf-images/.venv/bin/python` (see PDF rule).
+This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`,
+`bash`, `find`, `sed`) resolve from `PATH` as normal. Bash scripts under `~`
+such as `~/.pi/agent/bin/scout` are read by the shell and run normally.
 
 ## Obsidian Knowledge Vault
 
