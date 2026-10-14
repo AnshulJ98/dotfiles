@@ -6,9 +6,13 @@
 # Usage:
 #   scout [--brief FILE] [--fork] [--ctx] [--rw] [--model PROVIDER/ID]
 #         [--thinking LEVEL] [--timeout SECONDS] "task"
+#   scout --rw --spec - ["task"] <<'EOF' ... EOF
 #
 #   --brief FILE   Inject FILE as context (the parent writes what the scout
 #                  needs to know; this is the normal way to pass context).
+#   --spec -       Worker mode with the spec read from stdin, so no spec file
+#                  touches the repo. Stored under the run's session dir.
+#                  Implies --rw; the task defaults to "Implement the spec.".
 #   --fork         Child starts from a COPY of the parent session. Re-bills
 #                  the whole parent context; opt in only when the child must
 #                  see the conversation verbatim. Never the default.
@@ -17,11 +21,14 @@
 #   --rw           Worker mode: edit/write allowed, worker.prompt.md replaces
 #                  the scout prompt, and extensions/worker-sensors.ts loads
 #                  with PI_WORKER_SPEC set to the brief. Requires --brief
-#                  whose frontmatter has files-allowed; the sensors enforce it.
-#   --model        Default anthropic/claude-sonnet-5. On the work laptop, edit
-#                  MODEL below by hand. Hardcoded on purpose: a per-machine
-#                  switch is config for one line.
-#   --thinking     low|medium|high|xhigh. Default low; medium with --rw.
+#                  (or --spec -) whose frontmatter has files-allowed; the
+#                  sensors enforce it. The WORKER-SENSORS verdict is the first
+#                  line of the digest (pi -p sends extension stdout to stderr,
+#                  so scout reads it from PI_WORKER_REPORT instead).
+#   --model        Default MODEL below (WORKER_MODEL with --rw). On the work
+#                  laptop, edit them by hand. Hardcoded on purpose: a
+#                  per-machine switch is config for one line.
+#   --thinking     low|medium|high|xhigh. Default low; high with --rw.
 #                  max is refused: it drifts out of scope.
 #   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
 #                  scout prints the CANNOT-RUN verdict the sensors never got to.
@@ -48,7 +55,9 @@ SCOUT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/sessions/scout"
 SESSIONS="$SCOUT_ROOT/$$"
 RUNNING="$SCOUT_ROOT/.running"
 DONE="$SCOUT_ROOT/.done"
-MODEL="anthropic/claude-sonnet-5"   # work: amazon-bedrock/openai.gpt-5.6-luna
+MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/openai.gpt-5.6-luna
+WORKER_MODEL="anthropic/claude-sonnet-5-5" # --rw; tested too: github-copilot/kimi-k3
+MODEL_SET=0
 THINKING=""
 TIMEOUT=""
 RW=0
@@ -59,50 +68,120 @@ FORK=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --brief)   [ -r "${2:-}" ] || { echo "scout: --brief needs a readable file" >&2; exit 2; }
-               BRIEF_FILE="$2"; BRIEF=("@$2"); shift 2 ;;
-    --fork)    FORK=(fork); shift ;;
-    --ctx)     CTX=(); shift ;;
-    --rw)      RW=1; shift ;;
-    --model)   MODEL="${2:?scout: --model needs a value}"; shift 2 ;;
-    --thinking)
-               case "${2:-}" in
-                 low|medium|high|xhigh) THINKING="$2" ;;
-                 *) echo "scout: --thinking must be low|medium|high|xhigh, got '${2:-}'" >&2; exit 2 ;;
-               esac
-               shift 2 ;;
-    --timeout) TIMEOUT="${2:?scout: --timeout needs a value}"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
-    --)        shift; break ;;
-    -*)        echo "scout: unknown flag $1" >&2; usage >&2; exit 2 ;;
-    *)         break ;;
+  --brief)
+    [ -r "${2:-}" ] || {
+      echo "scout: --brief needs a readable file" >&2
+      exit 2
+    }
+    BRIEF_FILE="$2"
+    BRIEF=("@$2")
+    shift 2
+    ;;
+  --spec)
+    [ "${2:-}" = "-" ] || {
+      echo "scout: --spec takes - (the spec on stdin)" >&2
+      exit 2
+    }
+    mkdir -p "$SESSIONS"
+    cat >"$SESSIONS/spec.md"
+    BRIEF_FILE="$SESSIONS/spec.md"
+    BRIEF=("@$BRIEF_FILE")
+    RW=1
+    shift 2
+    ;;
+  --fork)
+    FORK=(fork)
+    shift
+    ;;
+  --ctx)
+    CTX=()
+    shift
+    ;;
+  --rw)
+    RW=1
+    shift
+    ;;
+  --model)
+    MODEL="${2:?scout: --model needs a value}"
+    MODEL_SET=1
+    shift 2
+    ;;
+  --thinking)
+    case "${2:-}" in
+    low | medium | high | xhigh) THINKING="$2" ;;
+    *)
+      echo "scout: --thinking must be low|medium|high|xhigh, got '${2:-}'" >&2
+      exit 2
+      ;;
+    esac
+    shift 2
+    ;;
+  --timeout)
+    TIMEOUT="${2:?scout: --timeout needs a value}"
+    shift 2
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  --)
+    shift
+    break
+    ;;
+  -*)
+    echo "scout: unknown flag $1" >&2
+    usage >&2
+    exit 2
+    ;;
+  *) break ;;
   esac
 done
-[ $# -ge 1 ] || { usage >&2; exit 2; }
+if [ $# -lt 1 ]; then
+  if [ "$RW" = 1 ] && [ -n "${BRIEF_FILE:-}" ]; then
+    set -- "Implement the spec."
+  else
+    usage >&2
+    exit 2
+  fi
+fi
 TASK="$*
 
 $UNCONFIRMED"
 
 WORKER=()
 if [ "$RW" = 1 ]; then
-  [ -n "${BRIEF_FILE:-}" ] || { echo "scout: --rw needs --brief FILE (a spec with files-allowed and tests)" >&2; exit 2; }
-  [ -r "$SENSORS" ] || { echo "scout: sensors missing: $SENSORS" >&2; exit 2; }
+  [ -n "${BRIEF_FILE:-}" ] || {
+    echo "scout: --rw needs --brief FILE or --spec - (a spec with files-allowed and tests)" >&2
+    exit 2
+  }
+  [ "$MODEL_SET" = 1 ] || MODEL="$WORKER_MODEL"
+  [ -r "$SENSORS" ] || {
+    echo "scout: sensors missing: $SENSORS" >&2
+    exit 2
+  }
   # Same parser the sensors use, so a bad spec fails here, not after a wasted run.
   SPEC_ERROR="$(node --input-type=module -e '
     import { readFileSync } from "node:fs";
     const { parseSpec } = await import(process.argv[1]);
     const parsed = parseSpec(readFileSync(process.argv[2], "utf8"));
     if (typeof parsed === "string") console.log(parsed);' "$SENSORS" "$BRIEF_FILE" 2>&1)" || true
-  [ -z "$SPEC_ERROR" ] || { echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2; exit 2; }
+  [ -z "$SPEC_ERROR" ] || {
+    echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2
+    exit 2
+  }
   TOOLS="$TOOLS,edit,write"
   PROMPT="$DIR/worker.prompt.md"
   WORKER=(-e "$SENSORS")
   export PI_WORKER_SPEC="$(cd "$(dirname "$BRIEF_FILE")" && pwd)/$(basename "$BRIEF_FILE")"
-  : "${THINKING:=medium}" "${TIMEOUT:=900}"
+  export PI_WORKER_REPORT="$SESSIONS/verdict.json"
+  : "${THINKING:=high}" "${TIMEOUT:=900}"
 fi
 : "${THINKING:=low}" "${TIMEOUT:=300}"
 
-[ -r "$PROMPT" ] || { echo "scout: prompt file missing: $PROMPT" >&2; exit 2; }
+[ -r "$PROMPT" ] || {
+  echo "scout: prompt file missing: $PROMPT" >&2
+  exit 2
+}
 
 # The OAuth compatibility shim is installed on some machines only; load it
 # when present, otherwise pi's native auth (API key or auth.json) is used.
@@ -111,7 +190,10 @@ EXT=()
 
 SESSION=()
 if [ ${#FORK[@]} -gt 0 ]; then
-  [ -r "${PI_SESSION_FILE:-}" ] || { echo "scout: --fork needs PI_SESSION_FILE (run from inside a pi session)" >&2; exit 2; }
+  [ -r "${PI_SESSION_FILE:-}" ] || {
+    echo "scout: --fork needs PI_SESSION_FILE (run from inside a pi session)" >&2
+    exit 2
+  }
   mkdir -p "$SESSIONS"
   COPY="$SESSIONS/fork.jsonl"
   cp "$PI_SESSION_FILE" "$COPY"
@@ -131,26 +213,49 @@ META="$RUNNING/$$.meta"
 OUT="$RUNNING/$$.out"
 FIRST_LINE="${TASK%%$'\n'*}"
 printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\n' \
-  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(( $(date +%s) * 1000 ))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" > "$META"
+  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(($(date +%s) * 1000))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" >"$META"
 finish() {
   local rc=$?
-  mv -f "$OUT" "$DONE/$$.out" 2>/dev/null || : > "$DONE/$$.out"
-  { cat "$META"; printf 'rc=%s\nfinished=%s\n' "$rc" "$(( $(date +%s) * 1000 ))"; } > "$DONE/$$.meta.tmp"
+  mv -f "$OUT" "$DONE/$$.out" 2>/dev/null || : >"$DONE/$$.out"
+  {
+    cat "$META"
+    printf 'rc=%s\nfinished=%s\n' "$rc" "$(($(date +%s) * 1000))"
+  } >"$DONE/$$.meta.tmp"
   mv -f "$DONE/$$.meta.tmp" "$DONE/$$.meta"
   rm -f "$META"
 }
 trap finish EXIT
 
+# stderr is kept so a failed run leaves a reason in the digest instead of
+# an empty one. In -p mode pi also sends extension stdout there, so the
+# sensors' verdict line lands in this file; the digest gets it from the
+# JSON report instead.
+ERR="$SESSIONS/stderr.log"
 set +e
 PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np \
   -t "$TOOLS" "${SESSION[@]}" \
   --model "$MODEL" --thinking "$THINKING" \
   --system-prompt "$(cat "$PROMPT")" \
-  "${BRIEF[@]}" "$TASK" | tee "$OUT"
+  "${BRIEF[@]}" "$TASK" 2>"$ERR" | tee "$OUT"
 rc=${PIPESTATUS[0]}
 set -e
+[ -s "$ERR" ] && grep -v '^WORKER-SENSORS:' "$ERR" >&2 || true
 if [ $rc -eq 124 ]; then
   echo "scout: timed out after ${TIMEOUT}s" >&2
-  [ "$RW" = 1 ] && echo "WORKER-SENSORS: CANNOT-RUN scout timed out after ${TIMEOUT}s; settle checks never ran" | tee -a "$OUT"
+elif [ $rc -ne 0 ] && [ ! -s "$OUT" ]; then
+  { echo "scout: pi exited $rc with no digest. Last stderr lines:"; tail -n 20 "$ERR"; } | tee -a "$OUT"
+fi
+if [ "$RW" = 1 ]; then
+  if [ $rc -eq 124 ]; then
+    VERDICT="WORKER-SENSORS: CANNOT-RUN scout timed out after ${TIMEOUT}s; settle checks never ran"
+  elif [ -s "$PI_WORKER_REPORT" ]; then
+    VERDICT="$(node -e '
+      const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+      console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"
+  else
+    VERDICT="WORKER-SENSORS: CANNOT-RUN no verdict written (pi exited $rc)"
+  fi
+  { echo "$VERDICT"; echo; cat "$OUT"; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+  echo "$VERDICT"
 fi
 exit $rc

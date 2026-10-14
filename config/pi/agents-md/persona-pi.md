@@ -20,16 +20,18 @@ out of this context; only its digest comes back.
   dispatch for a single named file, however unfamiliar, or for a
   directory one `ls` covers; the scout's floor is two or more files
   whose contents you would otherwise have to read.
-- Pass context with `--brief FILE` (write the file first). `--fork`
-  re-bills this whole conversation into the child; use it only when the
-  child must see the conversation verbatim.
+- Pass context in the task string. `--brief FILE` is for a file that
+  already exists; never write one for it. `--fork` re-bills this whole
+  conversation into the child; use it only when the child must see the
+  conversation verbatim.
 - Parallel: at most two, `&` then `wait`, in one bash call.
-- `--rw` runs a worker that may edit files. Its brief is a spec from
-  `/spec-contract` (frontmatter `files-allowed` and `tests`; the wrapper
-  exits 2 without one), opening with `docs/maps/<module>-map.md` when
-  that exists. Use it for bounded slices only; open-ended fixes stay in
-  this session. Read the `WORKER-SENSORS:` line before the worker's own
-  report, because the sensors rerun the tests and check the file list.
+- `--rw --spec -` runs a worker that may edit files, with the spec on
+  stdin: a `/plan` whose closing block names `files-allowed` and
+  `tests` (the wrapper exits 2 without them), plus the module's map when
+  one was saved. Use it for bounded slices only; open-ended fixes stay in
+  this session. The digest's first line is `WORKER-SENSORS:`; read it
+  before the worker's own report, because the sensors rerun the tests
+  and check the file list.
 - One open worker per repo: dispatch the next slice only after the last
   one is merged or rejected, because unreviewed slices stack faster than
   they can be read.

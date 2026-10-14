@@ -1,5 +1,5 @@
 ---
-description: Diagnosis loop for hard bugs — tight feedback loop, reproduce, ranked hypotheses, instrument, fix, regression test
+description: Diagnosis loop for hard bugs — tight feedback loop, reproduce, ranked hypotheses, instrument, prove the cause; ends in a plan block for "go" or "dispatch"
 argument-hint: "[bug | failing test | regression description]"
 ---
 Diagnose this. No fixes until the cause is proven: $@
@@ -21,11 +21,22 @@ Diagnose this. No fixes until the cause is proven: $@
 4. **Instrument.** Each probe tests one prediction; change one variable
    at a time. Tag every debug log with one unique prefix such as
    `[DEBUG-a4f2]` so cleanup is a single grep.
-5. **Fix the root cause.** A guard around broken state means you have
-   not found it yet.
-6. **Lock it in.** Turn the minimized repro into a regression test that
-   runs the real bug path, not a mock of it. If no test can reach that
-   path, say so; that is a finding. Rerun the original loop, run the
-   broader suite, and remove every `[DEBUG-` line.
+5. **Prove the cause.** One probe whose outcome only the winning
+   hypothesis predicts. A guard around broken state means you have not
+   found it yet. Remove every `[DEBUG-` line.
 
-End with cause, fix, and evidence, one line each.
+Then stop. End with cause and evidence, one line each, and the fix as
+a `/plan` would give it: the steps, with the first one turning the
+minimized repro into a regression test on the real bug path (if no
+test can reach it, say so; that is a finding), the branch
+`bugfix/<name>`, and the closing block:
+
+```
+---
+files-allowed: [<every file the fix touches, relative to the git root>]
+tests: <the red loop from step 1, plus the broader suite>
+---
+```
+
+"go", "dispatch" and "rework" then mean what they mean in `/plan`,
+including the review against this plan after a dispatch.

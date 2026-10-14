@@ -42,9 +42,9 @@ last if it only recaps, every hedge, and every sentence the reader could
 skip and still act correctly.
 
 Reviews, reports, and documents the user asked for are exempt from the
-length limits, not from the cuts. Past about 400 words, write a file and
-reply with the path and the conclusion; a review of a file the user
-named stays inline.
+length limits, not from the cuts. They stay inline whatever their
+length. Write a file only when the user says so; a report, plan, map,
+handoff or spec nobody asked to save is junk in the repo.
 
 <example>
 Q: Should the retry go in fetchJson or in each caller?

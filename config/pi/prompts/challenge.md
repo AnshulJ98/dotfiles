@@ -22,8 +22,12 @@ Probe in order of leverage:
 Rules:
 - Read the actual code before asking about it. Never ask me for a fact
   you can look up.
+- Before the first question, say in one line how many you expect:
+  about N, at most two per area, fewer if an area holds up at once.
 - One question at a time, through `ask_user` when available (likely
-  answers as options, freeform always on). Wait for each answer.
+  answers as options, freeform always on). Each question starts
+  `n of ~N, <area>:` so I know where the round stands; revise N when an
+  answer closes or opens an area. Wait for each answer.
 - Stop when each of the four areas has an answer that holds up, or when
   I say stop. Then list, one line each, the answers that changed the
   plan. If the reasoning was sound from the start, say "this is sound"
