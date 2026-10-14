@@ -26,6 +26,7 @@ require('conform').setup {
     sh = { 'shfmt' },
     bash = { 'shfmt' },
     hurl = { 'hurlfmt' },
+    toml = { 'taplo' },
   },
   formatters = {
     shfmt = { prepend_args = { '-i', '2' } },

@@ -49,6 +49,8 @@
     "notificationCenterHeader.background": "#161f27e6",
     "menu.background": "#161f27e6",
     "quickInput.background": "#161f27e6",
+    "minimap.background": "#161f27bf",
+    "editor.lineHighlightBorder": "#00000000",
   },
   "window.titleBarStyle": "custom",
   "git.autofetch": true,
