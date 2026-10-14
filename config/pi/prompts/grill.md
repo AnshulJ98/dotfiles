@@ -1,5 +1,5 @@
 ---
-description: Grilling session that lands in a file I fill in — one wave of questions with your recommended answer on each, blanks accept the recommendation
+description: Grilling session in chat — one wave of questions with your recommended answer on each; I answer by number, the rest take the recommendation
 argument-hint: "[plan | feature | design to grill] or [<effort> <topic> to grill one topic off a map]"
 ---
 <what-to-do>
@@ -10,8 +10,8 @@ surface the ones I have not noticed I am making: $@
 Walk down each branch of the design tree, resolving dependencies between
 decisions one by one. For each question, give your recommended answer.
 
-The questions go in a file I fill in, not into chat. Write one wave, stop,
-and wait for me to answer.
+The questions go in chat, never in a file. Write one wave, stop, and wait
+for my answers.
 
 If a question can be answered by exploring the codebase or fetching a fact,
 do that instead of asking me.
@@ -25,7 +25,7 @@ Do not implement. No code until I say go.
 ## Find the decisions I did not bring
 
 Walk these axes once before sorting, as a discovery checklist, not as a
-structure for the file: contract and interface, data shape, failure modes,
+structure for the wave: contract and interface, data shape, failure modes,
 edge cases, migration, naming, verification. A question earns its place by
 being load-bearing (something downstream depends on the answer), not by
 covering an axis.
@@ -74,17 +74,17 @@ cost six. Ignore that pressure. Every Context line either cites `file:line`
 or a fetched source, or says plainly that nothing settles the question. Never
 ask me for a fact you could have looked up.
 
-## The file
+## The wave
 
-Write `.grill/<topic>.md`. If the repo does not ignore `.grill/`, add it to
-`.git/info/exclude`.
+Print it in chat in this shape. Write nothing to disk unless I say
+"save"; then it goes to `.grill/<topic>.md`, added to `.git/info/exclude`.
 
 ````markdown
 # Grill: <topic> — wave <n>
 
-Leave an answer blank to accept the recommendation. Save the file, then tell
-me to re-read it. Questions marked "I need this from you" have no default and
-will stop the wave if left blank.
+Answer by number: `3: LCS`, `7: no, only on the admin path`. Anything not
+mentioned takes the recommendation. Questions marked "I need this from you"
+have no default and stop the wave if unanswered.
 
 **Scope:** <one line; what is not in scope, named>
 **Branches seen:** <name>, <name>, <name>
@@ -99,20 +99,17 @@ will stop the wave if left blank.
 code does not settle it.
 **Recommendation:** <pick> — <why, one line>
 **Alternatives:** <B> (costs: …) | <C> (costs: …)
-**Answer:**
 
 ## Q7. <question>
 **Applies if:** Q3 = <branch>, which is what I recommend. Skip this one if
 you take <other branch>.
 **Context:** …
 **Recommendation:** …
-**Answer:**
 
 ## Q9. <question>
 **Context:** …
 **Recommendation:** none — I need this from you, because <the change is
 irreversible or destructive / only you hold the number>.
-**Answer:**
 
 ---
 **Assumed defaults (not asked):** <decision> = <value>. …
@@ -123,13 +120,12 @@ irreversible or destructive / only you hold the number>.
 
 ## Reading the answers back
 
-Re-read from disk. Never answer from your memory of what you wrote, and never
-rewrite the file — the answers in it are mine, and a rewrite eats them. Wave
-`n+1` appends a new section to the same file, with a revised chart.
+My reply is the answer sheet. Wave `n+1` is a new message with a revised
+chart.
 
-- Blank means the recommendation stands.
-- Blank on a question you marked "I need this from you" stops the wave. Name
-  the ones you are missing and wait.
+- A number I did not mention means the recommendation stands.
+- No answer on a question you marked "I need this from you" stops the
+  wave. Name the ones you are missing and wait.
 - A guarded question whose branch I did not take is discarded, even if I
   filled it in.
 - "Skip this" or "not relevant" is a scope cut, not an answer. It goes under
@@ -139,20 +135,24 @@ rewrite the file — the answers in it are mine, and a rewrite eats them. Wave
 
 ## The spec
 
-Once no branch is left open, write `.grill/<topic>.spec.md`: the goal, every
-decision with the answer as you understood it, the assumed defaults, the open
-risks, a Terms section listing every glossary entry to add or change, and
-which decisions meet the ADR bar (hard to reverse, surprising without
-context, the result of a real trade-off). Then wait for my approval.
+Once no branch is left open, print the spec: the goal, every decision with
+the answer as you understood it, the assumed defaults, the open risks, a
+Terms section listing every glossary entry to add or change, and which
+decisions meet the ADR bar (hard to reverse, surprising without context,
+the result of a real trade-off). Then wait for my approval. "save" writes
+it to `.grill/<topic>.spec.md`; nothing else does.
 
-On approval, and only then: write the Terms into `CONTEXT.md`, and record
-each ADR-bar decision with the decisions skill (`/skill:decisions`). Approval is not "go"; implementation
-waits for that word.
+On approval, and only if I ask for it: write the Terms into `CONTEXT.md`,
+and record each ADR-bar decision with the decisions skill
+(`/skill:decisions`). Approval is not "go"; implementation waits for that
+word.
 
 ## The map
 
-For an effort the chart says is too big for one grill. Write
-`.grill/<effort>.map.md` and stop; charting is the whole session.
+For an effort the chart says is too big for one grill. Print the map and
+stop; charting is the whole session. The map is the one grill artifact
+that crosses sessions, so offer "save" once: it goes to
+`.grill/<effort>.map.md`.
 
 ````markdown
 # Map: <effort>
@@ -162,7 +162,7 @@ For an effort the chart says is too big for one grill. Write
 is finding its way to. One or two lines.>
 
 ## Decisions so far
-- <topic>: <one-line gist> (see `.grill/<effort>-<topic>.spec.md`)
+- <topic>: <one-line gist>, <date>
 
 ## Open topics
 - <topic> — <the question it resolves>. Blocks: <topic>. Blocked by: <topic>.
@@ -176,10 +176,10 @@ is finding its way to. One or two lines.>
 <ruled out, with the reason and date>
 ````
 
-Working a map: invoked as `<effort> <topic>`, read the map, grill that one
-topic as an ordinary `.grill/<effort>-<topic>.md`, write its spec, append one
-line to Decisions so far, unblock what it unblocks, graduate any fog the
-answers made sharp into new open topics. One topic per session. The map is
-the only thing that crosses sessions.
+Working a map: invoked as `<effort> <topic>`, read the map (the saved
+file, or the text I paste), grill that one topic as an ordinary wave,
+print its spec, then print the map with one line added to Decisions so
+far, what it unblocks unblocked, and any fog the answers made sharp
+graduated into new open topics. One topic per session.
 
 </supporting-info>

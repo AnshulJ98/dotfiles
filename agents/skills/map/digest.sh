@@ -2,7 +2,7 @@
 # digest.sh — mechanical input for a module map: reading order, fan-in, and
 # exported signatures for one TypeScript module. Zero model tokens.
 #
-# Usage: digest.sh <repo> <module-dir> <out.md>
+# Usage: digest.sh <repo> <module-dir> <out.md | ->   (- prints to stdout)
 #   module-dir is relative to repo, e.g. src/core
 #
 # Signatures come from the repo's own tsc (--emitDeclarationOnly); when that
@@ -19,8 +19,12 @@ set -euo pipefail
 REPO="$(cd "$1" && pwd)"
 MODULE="${2%/}"
 OUT="$3"
-case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
-mkdir -p "$(dirname "$OUT")"
+if [ "$OUT" = "-" ]; then
+  OUT=/dev/stdout
+else
+  case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
+  mkdir -p "$(dirname "$OUT")"
+fi
 cd "$REPO"
 [ -d "$MODULE" ] || { echo "digest: no directory $MODULE in $REPO" >&2; exit 2; }
 
@@ -110,5 +114,39 @@ in_module() { grep -qxF "$1" <<<"$MODULE_FILES"; }
     fi
     echo '```'
   done
+  echo
+  echo "## Internals"
+  echo
+  echo "_Top-level functions and consts the module does not export: candidates for where to start reading, not a judgment of what matters. Calls are in-module call sites; a function called once can still carry everything, so length is listed too._"
+  echo
+  echo "| internal | file | calls | lines |"
+  echo "|---|---|---|---|"
+  source_files "$MODULE" | node -e '
+const fs = require("fs");
+const files = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+const texts = files.map((f) => fs.readFileSync(f, "utf8"));
+const decl = /^(?:async\s+)?function\s*\*?\s*(\w+)|^const\s+(\w+)\s*=/;
+const rows = [];
+files.forEach((file, i) => {
+  const lines = texts[i].split("\n");
+  lines.forEach((line, n) => {
+    const m = decl.exec(line);
+    if (!m) return;
+    const name = m[1] ?? m[2];
+    let len = 1;
+    if (/\{\s*$/.test(line)) {
+      const end = lines.findIndex((l, k) => k > n && /^\};?\s*$/.test(l));
+      len = (end === -1 ? lines.length : end + 1) - n;
+    }
+    const call = new RegExp("(^|[^.\\w$])" + name + "\\s*\\(", "g");
+    let calls = 0;
+    texts.forEach((t) => { calls += (t.match(call) ?? []).length; });
+    if (m[1]) calls -= 1; // the declaration itself matches
+    rows.push({ name, file: file.replace(/\.(ts|tsx)$/, ""), calls, len });
+  });
+});
+rows.sort((a, b) => b.calls - a.calls || b.len - a.len);
+for (const r of rows) console.log(`| ${r.name} | ${r.file} | ${r.calls} | ${r.len} |`);
+if (rows.length === 0) console.log("| (none) | | | |");'
 } > "$OUT"
-echo "wrote $OUT ($(wc -l <<<"$MODULE_FILES" | tr -d ' ') files, $(grep -c . "$TMP/cycles" || true) cycle lines)"
+[ "$OUT" = /dev/stdout ] || echo "wrote $OUT ($(wc -l <<<"$MODULE_FILES" | tr -d ' ') files, $(grep -c . "$TMP/cycles" || true) cycle lines)"

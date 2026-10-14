@@ -1,13 +1,14 @@
 ---
-description: Distill this session into handoff notes at the repo root (HANDOFF.md)
+description: Distill this session into handoff notes, printed; "save" writes HANDOFF.md
 argument-hint: "[what the next session will focus on]"
 ---
 Write handoff notes for the next session, which may run in pi or Claude
 Code. Focus for the next session, if given: $@
 
-Write `HANDOFF.md` at the repo root (`git rev-parse --show-toplevel`, or
-the cwd outside a repo), overwriting any previous one. If the repo does
-not already ignore it, add `HANDOFF.md` to `.git/info/exclude`.
+Print them in chat; I paste them into the next session. Write nothing
+unless I say "save"; then they go to `HANDOFF.md` at the repo root
+(`git rev-parse --show-toplevel`, or the cwd outside a repo), overwriting
+any previous one and added to `.git/info/exclude` if not already ignored.
 
 ```
 # Session Handoff
@@ -36,6 +37,4 @@ Rules:
 - Replace secrets, tokens, and credentials with `<REDACTED>`.
 - If the session produced a durable fact (a decision with its reason, a
   gotcha, a corrected preference), draft one memory bullet for it in the
-  format `/memory` uses.
-
-Show me the notes and any memory bullet before writing either.
+  format `/memory` uses, and ask before adding it.

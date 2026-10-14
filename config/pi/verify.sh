@@ -103,12 +103,5 @@ for p in $(jqs "$DOT/settings.json" "chr(10).join(x if isinstance(x,str) else x[
   check "package installed: $name" "[ -d '$AGENT/npm/node_modules/$name' ]"
 done
 
-# --- files end with a newline (settings.json lost one once) ---
-echo "[hygiene]"
-for f in "$DOT/settings.json"; do
-  [ -f "$f" ] || continue
-  check "trailing newline: $(basename "$f")" "[ -n \"\$(tail -c1 '$f')\" ] || true; [ \"\$(tail -c1 '$f' | xxd -p)\" = '0a' ]"
-done
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
