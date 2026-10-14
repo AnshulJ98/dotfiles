@@ -18,11 +18,15 @@ image_quality = 90
 image = [
 	{ run = 'mpv --vo=kitty --really-quiet --image-display-duration=inf --loop-playlist=inf --input-conf="$HOME/.config/yazi/mpv-image.conf" %s', block = true, desc = "View (zoom/pan)", for = "unix" },
 ]
+# Homebrew's ffmpeg has no SVG decoder, so rsvg-convert rasterises the first
+# selected SVG at 2000px wide and pipes the PNG into the same mpv viewer.
+svg = [
+	{ run = 'rsvg-convert -w 2000 %s1 | mpv --vo=kitty --really-quiet --image-display-duration=inf --input-conf="$HOME/.config/yazi/mpv-image.conf" -', block = true, desc = "View (zoom/pan)", for = "unix" },
+]
 
 [open]
 prepend_rules = [
-	# Homebrew's ffmpeg has no SVG decoder, so mpv cannot open one.
-	{ mime = "image/svg+xml", use = [ "open", "reveal" ] },
+	{ mime = "image/svg+xml", use = [ "svg", "open", "reveal" ] },
 	{ mime = "image/*", use = [ "image", "open", "reveal" ] },
 ]
 

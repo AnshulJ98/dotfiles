@@ -206,6 +206,7 @@ require('mason-tool-installer').setup {
     'prettierd',
     'ruff',
     'shfmt',
+    'taplo',
     'shellcheck',
     'markdownlint',
     'js-debug-adapter',
