@@ -1,0 +1,8 @@
+Home "~"
+Dev "~/Dev"
+dotfiles "~/Dev/dotfiles"
+Downloads "${user.downloads}"
+Documents "${user.documents}"
+Desktop "${user.desktop}"
+Library "${user.library}"
+Applications "${all.applications}"

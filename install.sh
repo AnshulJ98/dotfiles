@@ -91,6 +91,17 @@ link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+# Marta's folder also holds plugin state, so link its files, not the folder.
+# conf.marco can't hold comments (Marco rejects // and /* */ and falls back to
+# defaults). Its F11 runs a kitty gadget because environment.terminal only
+# accepts Terminal or iTerm.
+MARTA="$HOME/Library/Application Support/org.yanex.marta"
+link "$DOT/config/marta/conf.marco"      "$MARTA/conf.marco"
+link "$DOT/config/marta/favorites.marco" "$MARTA/favorites.marco"
+for theme in "$DOT"/config/marta/Themes/*; do
+  link "$theme" "$MARTA/Themes/$(basename "$theme")"
+done
+link "/Applications/Marta.app/Contents/Resources/launcher" "$HOME/.local/bin/marta"
 # Vicinae rewrites settings.json from its GUI, so only base.json and themes are
 # symlinked; settings.json is seeded once to import base.json.
 link "$DOT/config/vicinae/base.json" "$HOME/.config/vicinae/base.json"

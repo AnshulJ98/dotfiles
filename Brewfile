@@ -244,6 +244,8 @@ cask "kitty"
 cask "mac-mouse-fix"
 # Clipboard manager
 cask "maccy"
+# Keyboard-driven two-pane file manager
+cask "marta"
 # Reverse proxy, secure introspectable tunnels to localhost
 cask "ngrok"
 # Knowledge base that works on top of a local folder of plain text Markdown files

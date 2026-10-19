@@ -250,7 +250,8 @@ fix. Then list the clean categories in one line.
 For runs that change files or span many steps:
 
 - Keep the task list in the spec or an existing `NOW.md`, never a new
-  file, and tick items as they close.
+  file, and tick items as they close. The one exception is the root
+  `AUTO.md` of an auto run; after a compaction, re-read it first.
 - End with three headings: **Blocked on me**, **Changed**, **Found**.
   One line per item; leave out an empty heading. Mark anything you
   couldn't confirm and say where you looked.

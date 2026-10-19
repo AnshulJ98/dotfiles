@@ -64,10 +64,8 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 │   ├── compact-cap.ts       # flat ~210k compaction safety-net, mid-run capable (/compact-cap command)
 │   ├── prime-reminder.ts    # post-compaction reminder + manual-compact auto-resume
 │   ├── headless-close.ts    # -p runs may not end on a question (enforced, not asked)
-│   ├── headless-close.test.ts  # 11 table tests: node --test headless-close.test.ts
 │   ├── scout.ts             # scout visibility: footer status while running, chat entry on exit (zero tokens)
-│   ├── worker-sensors.ts    # scout --rw only (loaded with -e, not from settings): files-allowed, bash blocks, settle checks
-│   └── worker-sensors.test.ts  # table tests: node --test worker-sensors.test.ts
+│   └── worker-sensors.ts    # scout --rw only (loaded with -e, not from settings): files-allowed, bash blocks, settle checks
 └── DESIGN.md                # this file
 ```
 Resource dirs (`prompts`, `extensions`) are referenced by absolute path in `settings.json`; each extension is listed individually in `extensions`, so a new file needs a settings entry and no `install.sh` change. Symlinks (`settings.json`, the AGENTS variant, `agents/`, `themes/`) are installed by `./install.sh [--work]` at the repo root. Skills are auto-discovered from `~/.agents/skills` only — the `config/pi/skills` directory referenced here until 2026-09-16 never existed.
