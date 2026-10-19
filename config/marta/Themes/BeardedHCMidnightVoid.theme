@@ -1,0 +1,134 @@
+name "BeardedHCMidnightVoid"
+
+base {
+    appearance "dark"
+    background #151f27
+    separator #1e2c38
+    text #c3d2de
+}
+
+actionBar {
+    separator #1e2c38
+
+    button {
+        background #111920
+        hotkey #7fd7f5
+        text #546c7e
+    }
+}
+
+asyncProgressBar {
+    border #395469
+    progress #7fd7f5
+    itemProgress #afea7b
+}
+
+breadcrumbs {
+    color1 #151f27
+    color2 #1e2c38
+    color3 #253039
+    separator #436179
+    text #c3d2de
+}
+
+files {
+    background {
+        alternate #151f27
+        current #253039
+        currentSelected #253039
+        selected #1e2c38
+    }
+
+    dragDropSelection {
+        color #7fd7f5
+        width 1
+    }
+
+    text {
+        current #dbefff
+        currentSelected #e4a3df
+        hidden #546c7e
+        matched #f5df76
+        selected #e4a3df
+
+        highlighting1 #7fd7f5
+        highlighting2 #afea7b
+        highlighting3 #e4a3df
+        highlighting4 #f5df76
+    }
+}
+
+searchBar {
+    query {
+        border #395469
+        placeholder #546c7e
+    }
+
+    results {
+        highlighting #7fd7f5
+        selection #253039
+        subtitle #546c7e
+    }
+
+    rowSeparator {
+        color #1e2c38
+        show true
+    }
+}
+
+statusBar {
+    background #111920
+    border #1e2c38
+    text #c3d2de
+    quickSelectNoResultsHighlighting #fd604f
+}
+
+tableHeader {
+    separator #1e2c38
+    text #546c7e
+
+    pressed {
+        background #1e2c38
+    }
+}
+
+tabs {
+    active {
+        text #c3d2de
+    }
+
+    inactive {
+        background #111920
+        text #436179
+    }
+}
+
+terminal {
+    caret {
+        background #f5df76
+        text #151f27
+    }
+}
+
+textEditor {
+    error #fd604f
+    warning #402f0d
+    keyword #f5df76
+    comment #436179
+    identifier #ec7886
+
+    literal {
+        string #afea7b
+        number #ffaa7d
+        color #ffaa7d
+    }
+
+    gutter {
+        background #151f27
+        text #384753
+    }
+}
+
+titleBar {
+    text #c3d2de
+}

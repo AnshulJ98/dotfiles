@@ -7,6 +7,9 @@ argument-hint: "[plan | feature | design to grill] or [<effort> <topic> to grill
 Interrogate every load-bearing decision in this until it is settled, and
 surface the ones I have not noticed I am making: $@
 
+If nothing follows the colon, grill the most recent view or plan in
+this conversation.
+
 Walk down each branch of the design tree, resolving dependencies between
 decisions one by one. For each question, give your recommended answer.
 

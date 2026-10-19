@@ -1,0 +1,26 @@
+background #151f27
+caret #f5df76
+caretText #151f27
+foreground #c3d2de
+name "BeardedHCMidnightVoid"
+selectedText #c3d2de
+selection #515e68
+
+ansiColors [
+    #151f27
+    #fd604f
+    #afea7b
+    #f5df76
+    #7fd7f5
+    #e4a3df
+    #22d3b1
+    #c3d2de
+    #546c7e
+    #ff5e4d
+    #aeff66
+    #ffe66c
+    #75dcff
+    #f691ee
+    #00f5c6
+    #ffffff
+]

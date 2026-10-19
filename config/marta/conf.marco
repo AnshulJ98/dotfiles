@@ -1,0 +1,61 @@
+environment {
+    terminal "Terminal"
+    textEditor "Visual Studio Code - Insiders"
+}
+
+behavior {
+    theme "BeardedHCMidnightVoid"
+
+    layout {
+        alwaysShowTabBar false
+        showActionBar true
+    }
+
+    setCurrentPathAsWindowTitle true
+
+    actions {
+        core.trash.confirm false
+    }
+
+    table {
+        iconSize 16
+        verticalPadding 4
+    }
+}
+
+etty {
+    theme "BeardedHCMidnightVoid"
+
+    fonts {
+        normal [ "Iosevka Term" 15 ]
+    }
+}
+
+fonts {
+    actionBar [ "Default" 12 ]
+    breadcrumbs [ "Iosevka Term" 14 ]
+    virtualTabs [ "Default Bold" 13 ]
+    files [ "Iosevka Term" 15 ]
+    statusBar [ "Iosevka Term" 13 ]
+    tableHeader [ "Default" 12 ]
+    tabs [ "Default" 13 ]
+    preferences [ "Iosevka Term" 14 ]
+}
+
+gadgets [
+    {
+        id "gadget.action.kitty.here"
+        name "Open kitty Here"
+        type "executable"
+
+        executable "/usr/bin/open"
+        args [ "-a" "kitty" "${active.folder.path}" ]
+    }
+]
+
+keyBindings {
+    "Left" { id "core.go.up" }
+    "Right" { id "core.open.directory" }
+
+    "F11" "gadget.action.kitty.here"
+}
