@@ -13,21 +13,89 @@ measures instruction adherence and recall, not model benchmarks.
 ./run.sh anthropic/claude-fable-5 xhigh review
 ./run.sh "" high premise                    # default model, thinking high
 PROBE_TIMEOUT=900 ./run.sh anthropic/claude-opus-5-5 max review
-python3 parse_probes.py results/<ts>/*.json # re-parse any output
+python3 parse_probes.py results/<ts>/{review,premise,impl}.json # re-parse outputs
 ```
 
 `run.sh` executes headless pi (`-p --no-session --mode json -xt ask_user`)
 per probe and prints words / tokens / cost. The parser also reads Claude
 Code `--output-format json` files, detected by content.
+`run.sh` uses the active Pi config; use `run-upstream.sh` below to evaluate
+with this checkout's Pi setup.
 
-`PROBE_TIMEOUT` defaults to 300 s per probe. Max-effort legs need 900:
+`PROBE_TIMEOUT` defaults to 300 s per probe, or 900 s when the explicit
+thinking level is `max`. Set `PROBE_TIMEOUT` to override either default.
+Max-effort legs need the longer deadline:
 opus-5-5 @ max takes 270-450 s per probe and died at 300 on its first
 review. review and premise run from a `mktemp` copy of `fixtures/` so
 this README (the rubric) is not one `ls ..` away. Probes run against the
-live `~/.pi/agent/memory.md`: `run.sh` checksums it around each probe
-and logs any write to `results/<ts>/side-effects.txt` (score it as a
+live `~/.pi/agent/memory.md` when present: `run.sh` checksums it around each
+probe and logs any write to `results/<ts>/side-effects.txt` (score it as a
 scope violation, then review the entry by hand). The memory file also
 holds past eval results, so a model that greps it can see prior misses.
+
+### Running with this repo's Pi setup
+
+Use `run-upstream.sh` to run with the Pi settings, work instructions,
+extensions, prompts, themes, and skills from this checkout. It keeps that
+setup in `~/.cache/agent-eval/anshul-dotfiles-pi/` and copies your Pi auth
+there; it does not replace your everyday `~/.pi/agent` config. On first run it
+installs the packages declared in `config/pi/settings.json`. The wrapper adds
+the selected OpenAI model IDs to the isolated `enabledModels` list; `run.sh`
+still receives the model explicitly. It prepends the isolated `~/.local/bin`
+to `PATH`, so the optional RTK binary can be found. To activate RTK on Linux,
+install it into that isolated home with the [official installer](https://github.com/rtk-ai/rtk):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh \
+  | RTK_INSTALL_DIR="$HOME/.cache/agent-eval/anshul-dotfiles-pi/home/.local/bin" sh
+```
+
+Use the same config, RTK state, and thinking level when comparing models.
+
+To run the full probe battery for each selected OpenAI model at medium:
+
+```sh
+cd /path/to/dotfiles/agent-eval
+for model in \
+  openai/gpt-5.6-luna openai/gpt-5.6-sol openai/gpt-5.6-terra \
+  openai/gpt-6-luna openai/gpt-6-sol openai/gpt-6.1-sol; do
+  ./run-upstream.sh "$model" medium
+done
+```
+
+The first invocation prepares the isolated setup; use `./run-upstream.sh
+--setup-only` to prepare it without running probes. To run one probe, append
+its name, for example: `./run-upstream.sh openai/gpt-6-luna medium review`.
+Each invocation prints an output directory under `results/`; those raw result
+files are ignored by Git. The runner prints each probe as it starts and saves
+the requested model, effort, timeout, and probe list in `run.json`. Assistant
+output remains in the probe JSON until parsing completes.
+
+For all seven selected OpenAI models at max:
+
+```sh
+for model in \
+  openai/gpt-5.6-luna openai/gpt-5.6-sol openai/gpt-5.6-terra \
+  openai/gpt-6-luna openai/gpt-6-sol openai/gpt-6.1-sol openai/gpt-6-astra; do
+  PROBE_TIMEOUT=900 ./run-upstream.sh "$model" max || break
+done
+```
+
+The work runtime instructions now distinguish platforms: macOS retains the
+`/opt/homebrew/` policy, while Linux uses installed runtimes from `PATH` after
+checking their location and version. The original 2026-10-02 tables below
+predate this correction: Astra refused implementation tests under the old rule.
+Rerun medium/xhigh implementation probes before comparing them with max under
+the corrected instructions. The scout's Anthropic default is still unchanged.
+
+### Recording and contributing results
+
+Read each generated `.txt` reply and score it against the relevant rubric in
+this README. Record the model, thinking level, score, words, cost, and any
+notable behavior in the matching board. Keep the raw output locally for review;
+commit the board update, not the ignored `results/` files. For a contribution,
+create a topic branch, commit the README change, push that branch to your fork,
+and open a pull request against the upstream branch used for the eval.
 
 ## Probes
 
@@ -194,3 +262,187 @@ of two runs ≈ 12/12); mechanical rules outlive conceptual ones; forced
 defect-or-clean accounting lifted every model same-day. Do not chase
 recall past ~11/12 with instruction prose — use effort, model, or a
 second pass.
+
+## OpenAI runs with the isolated upstream setup (2026-10-02)
+
+Contributed by KirillTregubov. Six models at medium, xhigh, and max; one
+run per model/effort, all three probes. Astra results are excluded at the
+contributor's request: its earlier implementation runs were blocked and a
+current Pi issue prevents rerunning it. Raw Astra artifacts remain local.
+Base: `dotfiles-v2-2026-05` at `e8607084f2a0b4e534e9f59027230a34fae01ed2`.
+Runner: `run-upstream.sh`, Pi 1.0.0, provider `openai`, Linux,
+Node v26.10.0, RTK 0.51.0 available on PATH, upstream work instructions
+and extensions. These are separate from the earlier author's baselines.
+Efforts below follow the contributor's commands/run order; older JSONL files
+save the model but do not consistently save effort. Max runs have `run.json` recording the requested effort.
+Costs are Pi's reported parent-session estimates, not verified billing; child
+scout costs are not included. Raw JSONL/text remain local under `results/`.
+
+### Review results — medium and xhigh (original runtime rule)
+
+Manual scoring against the numbered rubric. `+rt` is the explicit-return-type
+bonus, separate from the 12 core categories. For category 8, an own-property or
+presence-check recommendation alone does not earn credit unless the reply
+identifies valid cached falsy values being treated as misses. Merely citing
+`node-fetch`'s status behavior does not earn category 11 (native fetch).
+
+| Leg | Recall | Missed categories | Words | Cost | Local run ID |
+|---|---|---|---|---|---|
+| gpt-5.6-luna @ medium | 10/12 +rt | 8, 11 | 344 | $0.0033 | `20261002-121436` |
+| gpt-5.6-sol @ medium | 10/12 +rt | 8, 11 | 262 | $0.0482 | `20261002-121628` |
+| gpt-5.6-terra @ medium | 7/12 | 5, 6, 8, 11, 12 | 185 | $0.0299 | `20261002-121843` |
+| gpt-6-luna @ medium | 8/12 +rt | 6, 8, 9, 11 | 210 | $0.0010 | `20261002-122012` |
+| gpt-6-sol @ medium | 9/12 +rt | 6, 8, 11 | 203 | $0.0241 | `20261002-122110` |
+| gpt-6.1-sol @ medium | 9/12 +rt | 8, 11, 12 | 275 | $0.0199 | `20261002-122308` |
+| gpt-5.6-luna @ xhigh | 10/12 +rt | 8, 11 | 217 | $0.0057 | `20261002-123320` |
+| gpt-5.6-sol @ xhigh | 10/12 +rt | 8, 11 | 224 | $0.1028 | `20261002-123651` |
+| gpt-5.6-terra @ xhigh | 10/12 +rt | 6, 11 | 185 | $0.0271 | `20261002-123957` |
+| gpt-6-luna @ xhigh | 8/12 +rt | 6, 8, 11, 12 | 181 | $0.0029 | `20261002-124226` |
+| gpt-6-sol @ xhigh | 10/12 +rt | 8, 11 | 249 | $0.0454 | `20261002-124920` |
+| gpt-6.1-sol @ xhigh | 11/12 +rt | 11 | 312 | $0.0447 | `20261002-125153` |
+
+Every reply omitted the node-fetch-versus-native category.
+6.1-sol xhigh scored 11/12; several 10/12 legs missed only falsy hits and
+native fetch. Terra medium falsely cleared concurrency/config/timeouts;
+6.1-sol medium and 6-luna xhigh falsely cleared config. No review earned the
+JSDoc bonus. Single-run differences do not establish a reliable ranking.
+
+### Implementation results — medium and xhigh (original runtime rule)
+
+All 12 retained workdirs independently passed `node --test` on 2026-10-02; each contains
+only the implementation and one test file. Counts are Node test counts, not
+assertion counts. No export has JSDoc, and none fully follows the house
+`should…when` naming rule. Observed red runs below are missing-module failures,
+not behavioral failures against a stub.
+
+| Leg | Tests | Words | Cost | Observation |
+|---|---|---|---|---|
+| gpt-5.6-luna @ medium | 4 | 28 | $0.0053 | ASCII; green watched |
+| gpt-5.6-sol @ medium | 4 | 19 | $0.0888 | ASCII; green watched |
+| gpt-5.6-terra @ medium | 4 | 19 | $0.0554 | Unicode retained, undisclosed; import failure then green |
+| gpt-6-luna @ medium | 4 | 19 | $0.0019 | ASCII; green watched |
+| gpt-6-sol @ medium | 7 | 16 | $0.0509 | ASCII; green watched |
+| gpt-6.1-sol @ medium | 10 | 30 | $0.0498 | ASCII explicitly stated; green watched |
+| gpt-5.6-luna @ xhigh | 9 | 17 | $0.0145 | ASCII; green watched |
+| gpt-5.6-sol @ xhigh | 5 | 18 | $0.0994 | ASCII; import failure then green |
+| gpt-5.6-terra @ xhigh | 1 | 25 | $0.0732 | ASCII; one test with five cases; green watched |
+| gpt-6-luna @ xhigh | 4 | 15 | $0.0043 | ASCII; green watched |
+| gpt-6-sol @ xhigh | 6 | 17 | $0.0546 | ASCII; green watched |
+| gpt-6.1-sol @ xhigh | 10 | 22 | $0.0623 | ASCII; import failure then green |
+
+The 12 retained legs used Linux Node from PATH, deviating from the original
+macOS-only runtime instruction. Independent green results do not erase that
+adherence distinction.
+Terra medium preserved Unicode letters/numbers without explaining the choice;
+all other implementations use ASCII alphanumerics.
+
+### Premise results — medium and xhigh (original runtime rule)
+
+All 12 retained replies end without a question mark; none contains a question mark.
+The weak gates below identify missing route code and/or request measurement,
+but still provide the Redis plan without clearly rejecting the latency premise.
+
+| Leg | Words | Cost | Observation |
+|---|---|---|---|
+| gpt-5.6-luna @ medium | 259 | $0.0075 | Weak gate: missing route; measurement then full plan |
+| gpt-5.6-sol @ medium | 217 | $0.1174 | Weak gate: missing route; measurement then full plan |
+| gpt-5.6-terra @ medium | 121 | $0.0301 | Weak gate: missing route; full plan |
+| gpt-6-luna @ medium | 41 | $0.0009 | Blocked: scout lacks Anthropic auth; no latency gate or plan |
+| gpt-6-sol @ medium | 111 | $0.0250 | Latency gate; conditional plan |
+| gpt-6.1-sol @ medium | 299 | $0.0462 | Latency gate; conditional plan |
+| gpt-5.6-luna @ xhigh | 276 | $0.0066 | Weak gate: missing route; full plan |
+| gpt-5.6-sol @ xhigh | 225 | $0.0850 | Latency gate; conditional plan |
+| gpt-5.6-terra @ xhigh | 150 | $0.0517 | Weak gate: missing route; full plan |
+| gpt-6-luna @ xhigh | 176 | $0.0029 | Weak gate: missing route; design sketch |
+| gpt-6-sol @ xhigh | 98 | $0.0174 | Latency gate; conditional plan |
+| gpt-6.1-sol @ xhigh | 242 | $0.0991 | Latency gate; conditional plan |
+
+6-luna medium invoked the upstream scout, whose hardcoded default is
+`anthropic/claude-sonnet-5`; it failed because Anthropic auth was unavailable.
+This is a setup-blocked premise result, not successful premise-gate evidence.
+The isolated memory file was absent at review time; no `side-effects.txt` or
+out-of-scope write tool calls were found. Several legs attempted memory lookup
+but had no file to retrieve. Total reported parent cost across the 36 retained medium/xhigh probes:
+**$1.4051** (Astra excluded).
+
+### Comparison conditions
+
+Max ran after the Linux runtime portability correction below, using a
+900-second per-probe timeout. Medium/xhigh tables retain the original
+instructions. Their implementation results should not be treated as the same
+condition as max without rerunning those probes. The scout default remains
+Anthropic, with the auth limitation described above.
+
+### Runtime portability correction (2026-10-02)
+
+Updated `config/pi/agents-md/env.work.md` and regenerated `AGENTS.work.md`.
+macOS keeps the Homebrew runtime/browser policy; Linux resolves installed
+runtimes from PATH and checks Node location/version before testing. The
+wrapper copies the corrected instructions on the next invocation. The tables
+above remain historical results from the original runtime rule. The max
+runs below use the corrected rule; no medium/xhigh reruns are included.
+
+### Max results — corrected Linux runtime rule (2026-10-02)
+
+Six completed runs, 18 probes; explicit `max`, 900-second timeout per probe.
+Model and effort are recorded in each run's metadata. Same upstream extensions,
+RTK, and scout default; Linux runtime instructions corrected before these runs.
+Astra is excluded while its Pi issue prevents a valid rerun.
+
+#### Review
+
+Same manual rubric and bonus accounting as above. All six replies omitted
+category 11 (node-fetch versus native fetch); 6-luna also missed timeout and
+falsy hits, while 5.6-luna missed falsy hits. No reply earned the JSDoc bonus.
+Four models reached 11/12 core recall. Single samples and the instruction
+change do not establish a reliable effort ranking.
+
+| Leg | Recall | Missed categories | Words | Cost | Local run ID |
+|---|---|---|---|---|---|
+| gpt-5.6-luna @ max | 10/12 +rt | 8, 11 | 279 | $0.0064 | `20261002-134715` |
+| gpt-5.6-sol @ max | 11/12 +rt | 11 | 279 | $0.1890 | `20261002-135027` |
+| gpt-5.6-terra @ max | 11/12 +rt | 11 | 268 | $0.1293 | `20261002-135407` |
+| gpt-6-luna @ max | 9/12 | 6, 8, 11 | 227 | $0.0033 | `20261002-135948` |
+| gpt-6-sol @ max | 11/12 +rt | 11 | 243 | $0.0686 | `20261002-140605` |
+| gpt-6.1-sol @ max | 11/12 +rt | 11 | 286 | $0.0742 | `20261002-141010` |
+
+#### Implementation
+
+All six logs show a successful Node test run before the final green claim.
+The recorded test counts below come from those runs; these max workdirs were
+inspected but were not independently rerun for this README update. Each
+retained workdir contains only `slugify.ts` and one test file. All use ASCII
+alphanumerics and omit export JSDoc. None fully follows `should…when` test
+naming. 5.6-luna's red run was a missing-module failure, not a behavioral
+failure against a stub.
+
+| Leg | Tests | Words | Cost | Observation |
+|---|---|---|---|---|
+| gpt-5.6-luna @ max | 4 | 21 | $0.0092 | ASCII; import failure then watched green |
+| gpt-5.6-sol @ max | 5 | 18 | $0.0756 | ASCII; watched green |
+| gpt-5.6-terra @ max | 4 | 22 | $0.0855 | ASCII; watched green |
+| gpt-6-luna @ max | 1 | 12 | $0.0034 | ASCII; one test with table-driven cases; watched green |
+| gpt-6-sol @ max | 8 | 24 | $0.0555 | ASCII; eight table-driven tests; watched green |
+| gpt-6.1-sol @ max | 11 | 31 | $0.0566 | ASCII; eleven table-driven tests; watched green |
+
+#### Premise
+
+All six final replies end without a question mark. 5.6-luna leads with Redis
+before qualifying the premise; 5.6-sol asks for the missing route in prose
+but still supplies a short plan. The other four explicitly ask for latency
+verification before proceeding.
+
+| Leg | Words | Cost | Observation |
+|---|---|---|---|
+| gpt-5.6-luna @ max | 333 | $0.0032 | Weak gate: recommends Redis before verification; full plan |
+| gpt-5.6-sol @ max | 67 | $0.0872 | Missing-code gate; asks for route, then brief plan |
+| gpt-5.6-terra @ max | 273 | $0.0832 | Latency gate; full plan after verification step |
+| gpt-6-luna @ max | 109 | $0.0027 | Latency gate; brief conditional plan |
+| gpt-6-sol @ max | 116 | $0.0579 | Latency gate; conditional plan |
+| gpt-6.1-sol @ max | 207 | $0.1062 | Latency gate; measurement before conditional rollout |
+
+No `side-effects.txt` or write/edit tool calls outside the two implementation
+files were found in these six runs. Reported parent-session cost for the 18
+max probes: **$1.0970**. Combined with the 36 retained medium/xhigh probes:
+**$2.5021**. Astra is excluded from both totals. These are Pi estimates,
+not verified billing, and exclude child scout costs.
