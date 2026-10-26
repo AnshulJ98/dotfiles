@@ -4,7 +4,9 @@
  * Inert unless PI_WORKER_SPEC names a spec file; `scout --rw` sets it to the
  * brief and loads this file with `-e`. The spec frontmatter supplies
  * `files-allowed` (globs relative to the repo root), `tests` (a shell
- * command), and an optional `max-lines` (default 400, from the handoff).
+ * command), an optional `max-lines` (default 400, from the handoff), and an
+ * optional `allowed-commands` list of command prefixes exempt from the cloud
+ * block (`cdk deploy MyStack-dev`), each given a purpose by /plan.
  *
  * Two layers. `tool_call` blocks edit/write outside files-allowed and a
  * short list of destructive bash. That layer is a speed bump: bash can still
@@ -18,8 +20,8 @@
  *
  * Known gaps: the settle diff cannot see gitignored paths (`dist/`,
  * `node_modules/`, `.env`) or anything outside the repo, a symlink inside
- * the repo can redirect a write outside it, and a push that slips the token
- * scan leaves no trace in the tree.
+ * the repo can redirect a write outside it, and a push or deploy that slips
+ * the token scan (`npm run deploy`, a script) leaves no trace in the tree.
  *
  * `**` in files-allowed does not match dotfiles (node:path matchesGlob);
  * list them explicitly.
@@ -45,6 +47,7 @@ export interface WorkerSpec {
   filesAllowed: string[];
   tests: string;
   maxLines: number;
+  allowedCommands: string[];
 }
 
 export interface CheckFailure {
@@ -111,10 +114,14 @@ export function parseSpec(text: string): WorkerSpec | string {
   if (!Array.isArray(filesAllowed) || filesAllowed.length === 0) return "spec frontmatter needs a non-empty files-allowed list";
   const tests = fields.get("tests");
   if (typeof tests !== "string" || tests === "") return "spec frontmatter needs a tests command";
+  // A /tmp script vanishes or changes between runs, so the settle check cannot be reproduced
+  if (TEMP_PATH.test(tests)) return "spec tests must not run anything under /tmp or $TMPDIR; commit the script or use a single command";
   const rawMax = fields.get("max-lines");
   const maxLines = rawMax === undefined ? DEFAULT_MAX_LINES : Number(rawMax);
   if (!Number.isInteger(maxLines) || maxLines <= 0) return `spec max-lines must be a positive integer, got ${String(rawMax)}`;
-  return { filesAllowed, tests, maxLines };
+  const allowed = fields.get("allowed-commands") ?? [];
+  if (!Array.isArray(allowed)) return "spec allowed-commands must be a list of command prefixes";
+  return { filesAllowed, tests, maxLines, allowedCommands: allowed };
 }
 
 /** True when a repo-relative path matches one of the spec's globs. */
@@ -141,6 +148,10 @@ const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", 
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const PACKAGE_CHANGES = new Set(["add", "remove", "rm", "uninstall", "un", "update", "up", "upgrade", "dlx"]);
 const PACKAGE_INSTALLS = new Set(["install", "i"]);
+const TEMP_PATH = /(^|[\s'"=:])(\/private)?\/tmp\/|\/var\/folders\/|\$\{?TMPDIR\b/;
+const CDK_CHANGES = new Set(["deploy", "destroy", "bootstrap"]);
+// aws <service> <operation>: create-*, put-*, update-*, delete-*, terminate-*, invoke, deploy
+const AWS_CHANGE = /^(put|delete|create|update|terminate|invoke)(-|$)|^deploy$/;
 
 /**
  * Split a shell command into words per simple command. Quotes and escapes
@@ -165,6 +176,15 @@ function gitReason(args: readonly string[]): string | undefined {
   return undefined;
 }
 
+function cloudReason(word: string, rest: readonly string[]): string | undefined {
+  if (word === "cdk" && rest.some((a) => CDK_CHANGES.has(a))) return "cdk deploy/destroy/bootstrap changes the cloud account";
+  if (word === "aws") {
+    const op = rest.find((a) => AWS_CHANGE.test(a));
+    if (op) return `aws ${op} changes the cloud account`;
+  }
+  return undefined;
+}
+
 function wordReason(word: string, rest: readonly string[]): string | undefined {
   if (word === "git") return gitReason(rest);
   if (word === "rm" && rest.some((a) => a === "--recursive" || /^-[a-zA-Z]*[rR]/.test(a))) return "recursive rm is not allowed in a worker";
@@ -184,12 +204,21 @@ function wordReason(word: string, rest: readonly string[]): string | undefined {
  * The reason a worker bash command is refused, or undefined when it may run.
  * Every word of every segment is checked as a potential command, which
  * catches wrappers (`command`, `env`, `xargs`, `sh -c`) without listing them.
+ * Cloud-changing commands are refused unless they start with one of the
+ * spec's allowed-commands prefixes (compared word by word).
  */
-export function forbiddenBash(command: string): string | undefined {
+export function forbiddenBash(command: string, allowedCommands: readonly string[] = []): string | undefined {
+  const allowed = allowedCommands.map((prefix) => shellSegments(prefix)[0] ?? []).filter((words) => words.length > 0);
   for (const words of shellSegments(command)) {
     for (let i = 0; i < words.length; i += 1) {
-      const reason = wordReason(words[i], words.slice(i + 1));
+      const rest = words.slice(i + 1);
+      const reason = wordReason(words[i], rest);
       if (reason) return reason;
+      const cloud = cloudReason(words[i], rest);
+      const from = words.slice(i);
+      if (cloud && !allowed.some((prefix) => prefix.every((word, k) => from[k] === word))) {
+        return `${cloud}; list it under allowed-commands in the spec if the task needs it`;
+      }
     }
   }
   return undefined;
@@ -423,7 +452,7 @@ export default function (pi: ExtensionAPI) {
     if (setupError || !spec || !snap) return { block: true, reason: setupError ?? "worker-sensors not armed" };
     const input = event.input as Record<string, unknown>;
     if (event.toolName === "bash") {
-      const reason = forbiddenBash(String(input.command ?? ""));
+      const reason = forbiddenBash(String(input.command ?? ""), spec.allowedCommands);
       return reason ? { block: true, reason: `Blocked: ${reason}.` } : undefined;
     }
     const target = repoRelative(String(input.path ?? ""), process.cwd(), snap.root);

@@ -52,8 +52,17 @@ Close with this block; it is the worker's spec if the plan is dispatched:
 ---
 files-allowed: [<every file the steps touch, relative to the git root>]
 tests: <one command that proves the plan and exits non-zero on failure>
+allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]
 ---
 ```
+
+`tests` is a committed script or a single command, never a path under
+`/tmp` (scout refuses it). Run it once on the base before printing the
+plan and say whether it starts. Omit `allowed-commands` unless a step
+must deploy or change cloud resources; then list each prefix with a
+one-line purpose under Plan. Workers are blocked from `cdk
+deploy|destroy|bootstrap` and `aws` create/put/update/delete/terminate/
+invoke calls not listed there.
 
 Stop and wait.
 
@@ -136,4 +145,4 @@ following `review.md` from the prompts directory in
 your own findings). Report per Long Runs with cost per slice, ending
 with `git switch <base> && git merge --no-ff auto/<effort>`. Delete
 `AUTO.md` and its exclude line, then stop. Run that merge only if I
-granted it.
+granted it; after it succeeds, `git branch -d auto/<effort>`.

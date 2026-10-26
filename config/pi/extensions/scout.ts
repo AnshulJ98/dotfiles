@@ -5,7 +5,7 @@
  * Contract with bin/scout (the wrapper owns the spawn; this file only reads
  * what it leaves behind under <sessions>/scout/):
  *   .running/<pid>.meta   key=value: pid model thinking started session task
- *   .running/<pid>.out    digest so far (tee'd stdout)
+ *   .running/<pid>.out    digest so far (the child's stdout)
  *   .done/<pid>.meta      the same keys plus rc finished, written last
  *   .done/<pid>.out       final digest
  *   <pid>/*.jsonl         the child's own session file(s); cost comes from here
@@ -21,7 +21,7 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -113,7 +113,28 @@ function listMetaFiles(dir: string): string[] {
   }
 }
 
-function readRunning(): ScoutMeta[] {
+/**
+ * The wrapper's EXIT trap did not run (SIGKILL, often pi killing the bash tool's process group): finish the run on
+ * its behalf, so it still gets a chat entry with its cost instead of vanishing.
+ */
+function reapKilled(path: string, fields: Record<string, string>, now: number): void {
+  const name = path.slice(RUNNING_DIR.length + 1);
+  try {
+    renameSync(path.replace(/\.meta$/, ".out"), join(DONE_DIR, name.replace(/\.meta$/, ".out")));
+  } catch {
+    // No digest yet.
+  }
+  try {
+    const meta = Object.entries({ ...fields, rc: "137", finished: String(now) }).map(([k, v]) => `${k}=${v}\n`);
+    writeFileSync(join(DONE_DIR, `${name}.tmp`), meta.join(""));
+    renameSync(join(DONE_DIR, `${name}.tmp`), join(DONE_DIR, name));
+  } catch {
+    // .done missing; nothing to report into.
+  }
+  removeQuietly(path);
+}
+
+function readRunning(now: number): ScoutMeta[] {
   const scouts: ScoutMeta[] = [];
   for (const name of listMetaFiles(RUNNING_DIR)) {
     const path = join(RUNNING_DIR, name);
@@ -121,9 +142,7 @@ function readRunning(): ScoutMeta[] {
     const meta = fields && toMeta(fields);
     if (!meta) continue;
     if (!isAlive(meta.pid)) {
-      // The wrapper's EXIT trap did not run (SIGKILL); reap so no phantom scout lingers.
-      removeQuietly(path);
-      removeQuietly(path.replace(/\.meta$/, ".out"));
+      reapKilled(path, fields, now);
       continue;
     }
     scouts.push(meta);
@@ -189,6 +208,8 @@ function outcome(rc: number): string {
       return "done";
     case 124:
       return "timeout";
+    case 137:
+      return "killed";
     case 2:
       return "usage error";
     default:
@@ -258,10 +279,10 @@ export default function (pi: ExtensionAPI) {
   const tick = (ctx: ExtensionContext) => {
     const now = Date.now();
     const sessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    const scouts = readRunning(now);
     for (const entry of takeDone(sessionFile, now)) {
       pi.appendEntry<ScoutEntry>("scout", entry);
     }
-    const scouts = readRunning();
     if (scouts.length === 0) {
       if (shown) ctx.ui.setStatus("scout", undefined);
       shown = false;

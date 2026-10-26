@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "1.3.0",
+  "lastChangelogVersion": "1.4.0",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "medium",
@@ -35,6 +35,12 @@
     "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts",
     "~/Dev/dotfiles/config/pi/extensions/headless-close.ts",
     "~/Dev/dotfiles/config/pi/extensions/scout.ts",
+    "~/Dev/dotfiles/config/pi/extensions/polish-chrome.ts",
+    "~/Dev/dotfiles/config/pi/extensions/context-bar.ts",
+    "~/Dev/dotfiles/config/pi/extensions/heads-up.ts",
+    "~/Dev/dotfiles/config/pi/extensions/background.ts",
+    "~/Dev/dotfiles/config/pi/extensions/stream-watchdog.ts",
+    "~/Dev/dotfiles/config/pi/extensions/bedrock-reasoning.ts",
     "-builtin:mcp",
     "-builtin:codemode",
     "-builtin:tool-search",
@@ -47,6 +53,7 @@
     "npm:@upstash/context7-pi",
     "npm:pi-ask-user",
     "npm:pi-usage-widget",
-    "npm:@gotgenes/pi-anthropic-auth"
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:pi-tidy"
   ]
 }

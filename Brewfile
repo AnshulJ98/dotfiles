@@ -93,6 +93,8 @@ brew "iniparser"
 brew "jq"
 # Simple terminal UI for git commands
 brew "lazygit"
+# Syntax-highlighting pager for git, used by lazygit's diff renderers
+brew "git-delta"
 # Portable Foreign Function Interface library
 brew "libffi"
 # Library to render SVG files using Cairo

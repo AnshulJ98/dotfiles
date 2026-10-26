@@ -21,8 +21,14 @@ module: <directory the slice lives in>
 files-allowed: [<every file the slice may create or change; globs allowed>]
 tests: <one shell command that passes only when the slice is done>
 max-lines: <added-line cap; omit for 400>
+allowed-commands: [<cloud-changing command prefixes the slice needs; omit for none>]
 ---
 ```
+
+`tests` is a committed script or a single command, never a path under
+`/tmp`. Each `allowed-commands` entry gets a one-line purpose under
+Scope; without an entry, `cdk deploy|destroy|bootstrap` and `aws`
+create/put/update/delete/terminate/invoke calls are blocked.
 
 Then exactly these sections and nothing else:
 

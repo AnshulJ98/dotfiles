@@ -33,7 +33,7 @@ vim.o.splitright = true
 vim.o.splitbelow = true
 
 vim.o.list = true
-vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
+vim.opt.listchars = { tab = '╎ ', trail = '·', nbsp = '␣' }
 -- No `~` filler past the end of a buffer (code windows and the dap-view panel)
 -- and no `-` filler after a closed fold's text.
 vim.opt.fillchars:append { eob = ' ', fold = ' ' }
