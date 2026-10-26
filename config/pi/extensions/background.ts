@@ -477,7 +477,8 @@ export default function (pi: ExtensionAPI) {
 		const d = (message.details ?? {}) as { headline?: string; last?: string; error?: boolean };
 		const head = theme.fg(d.error ? "error" : "success", "● ") + theme.fg("toolTitle", `Background ${d.headline ?? ""}`);
 		const body = expanded ? String(message.content) : (d.last ?? "");
-		return new Text(`${head}\n${theme.fg("dim", `  └ ${body.replace(/\n/g, "\n    ")}`)}`, 0, 0);
+		// One column in, so the ● lines up with polish-chrome's ❯/● markers
+		return new Text(`${head}\n${theme.fg("dim", `  └ ${body.replace(/\n/g, "\n    ")}`)}`, 1, 0);
 	});
 	const row = (theme: any, text: string, context: any) => {
 		const color = context.isError ? "error" : context.executionStarted && context.isPartial ? "accent" : "success";

@@ -42,8 +42,3 @@ For runs that change files or span many steps:
 - End with three headings: **Blocked on me**, **Changed**, **Found**.
   One line per item; leave out an empty heading. Mark anything you
   couldn't confirm and say where you looked.
-
-## Binary Files
-
-Read at most one binary file (image, screenshot, diagram) per turn.
-Reading several at once has crashed conversations.

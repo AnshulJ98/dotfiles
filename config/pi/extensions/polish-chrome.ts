@@ -1,5 +1,6 @@
 // Based on pi-polish 0.1.3 extensions/chrome.ts (github.com/Pringled/pi-extensions, MIT,
-// Copyright (c) 2026 Thomas van Dongen). Copied unchanged; re-copy to pick up upstream fixes.
+// Copyright (c) 2026 Thomas van Dongen). One local change: the ❯/● markers sit in column 1 with text
+// in column 3, the gutter pi's own tool rows and notices use (upstream: column 0, text in 2).
 import { AssistantMessageComponent, CustomEditor, type ExtensionAPI, UserMessageComponent } from "@earendil-works/pi-coding-agent";
 import { Markdown, MouseRegion, Spacer, Text } from "@earendil-works/pi-tui";
 
@@ -10,13 +11,14 @@ const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 // ✱ rather than ✳, which Windows Terminal draws as a green emoji
 const SPINNER = ["·", "✢", "✱", "✶", "✻", "✽", "✻", "✶", "✱", "✢"].map((f) => `${ORANGE}${f}${RESET}`);
-const LEADING_ESCAPES = /^((?:\x1b\[[0-9;]*m|\x1b\][^\x07]*\x07)*) {2}/;
+const PAD = 3;
+const LEADING_ESCAPES = new RegExp(`^((?:\\x1b\\[[0-9;]*m|\\x1b\\][^\\x07]*\\x07)*) {${PAD}}`);
 const OSC133_START = "\x1b]133;A\x07";
 const OSC133_END = "\x1b]133;B\x07\x1b]133;C\x07";
 const patched = Symbol.for("pi-polish.patched");
 
 function markFirstLine(line: string, marker: string): string {
-	return line.replace(LEADING_ESCAPES, (_m, esc: string) => `${esc}${marker} `);
+	return line.replace(LEADING_ESCAPES, (_m, esc: string) => `${esc} ${marker} `);
 }
 
 function patchOnce(proto: any, method: string, wrap: (original: (...args: any[]) => any) => (...args: any[]) => any) {
@@ -30,8 +32,8 @@ export default function (pi: ExtensionAPI) {
 	try {
 		patchOnce(AssistantMessageComponent.prototype, "updateContent", (original) =>
 			function (this: any, message: any, ...rest: any[]) {
-				// Two columns of padding so reply text lines up behind the ● marker, like tool rows
-				this.outputPad = Math.max(this.outputPad ?? 1, 2);
+				// Padding so reply text lines up behind the ● marker, like tool rows
+				this.outputPad = Math.max(this.outputPad ?? 1, PAD);
 				original.call(this, message, ...rest);
 				// Hidden thinking draws nothing instead of a "Thinking..." line plus spacers. Its rows stay in place,
 				// so extensions that read pi's layout, like pi-stereo-view, still match it
@@ -60,7 +62,7 @@ export default function (pi: ExtensionAPI) {
 		// Past prompts: one highlighted line with the ❯ marker instead of a padded three-line box
 		patchOnce(UserMessageComponent.prototype, "rebuild", (original) =>
 			function (this: any) {
-				this.outputPad = Math.max(this.outputPad ?? 1, 2);
+				this.outputPad = Math.max(this.outputPad ?? 1, PAD);
 				return original.call(this);
 			},
 		);
@@ -153,7 +155,7 @@ export default function (pi: ExtensionAPI) {
 	});
 	pi.on("session_shutdown", async () => clearInterval(timer));
 
-	// ❯ before the input: two columns of editor padding, with the marker drawn into the first content line
+	// ❯ before the input: editor padding, with the marker drawn into the first content line
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		const previous = ctx.ui.getEditorComponent();
@@ -162,7 +164,7 @@ export default function (pi: ExtensionAPI) {
 			const render = editor.render.bind(editor);
 			editor.render = (width: number) => {
 				// Set on every render because pi may apply its own editor padding setting after creation
-				editor.paddingX = 2;
+				editor.paddingX = PAD;
 				const lines: string[] = render(width);
 				if (lines.length > 1) lines[1] = markFirstLine(lines[1], PROMPT);
 				return lines;
