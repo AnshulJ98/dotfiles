@@ -40,6 +40,8 @@ const DEFAULT_THRESHOLD = 210_000;
 // qwen3.7-max via opencode-go) it is blind. Per-provider guarantee, not absolute.
 const FIRING = Symbol.for("pi.compact-cap.firing");
 const INTERRUPTED = Symbol.for("pi.compact-cap.interrupted");
+// THRESHOLD: the live cap in tokens, 0 when off; read by context-bar.ts.
+const THRESHOLD = Symbol.for("pi.compact-cap.threshold");
 
 export default function (pi: ExtensionAPI) {
   if (DEFAULT_THRESHOLD <= 0) return; // hard-disabled via constant
@@ -47,6 +49,7 @@ export default function (pi: ExtensionAPI) {
 
   let enabled = true;
   let threshold = DEFAULT_THRESHOLD;
+  Object.defineProperty(globalThis, THRESHOLD, { get: () => (enabled ? threshold : 0), configurable: true });
   let compacting = false; // guard against re-entrant compaction
   let failureCooldownUntil = 0; // after a failed mid-run compaction, back off
 

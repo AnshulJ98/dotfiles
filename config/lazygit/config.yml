@@ -1,0 +1,23 @@
+# Bearded HC Midnight Void, matching nvim, kitty and yazi.
+gui:
+  theme:
+    activeBorderColor: ['#7fd7f5', bold]
+    inactiveBorderColor: ['#436179']
+    searchingActiveBorderColor: ['#F5DF76', bold]
+    optionsTextColor: ['#7fd7f5']
+    selectedLineBgColor: ['#253039']
+    inactiveViewSelectedLineBgColor: ['#1e2c38']
+    cherryPickedCommitFgColor: ['#e4a3df']
+    cherryPickedCommitBgColor: ['#253039']
+    unstagedChangesColor: ['#fd604f']
+    defaultFgColor: ['#c3d2de']
+git:
+  # `|` cycles the renderers; `+` / `_` change screen mode (full screen for the diff).
+  # Delta styles live in the [delta "bearded-hc-midnightvoid"] feature in ~/.gitconfig.
+  diffRenderers:
+    - name: delta side-by-side
+      command: delta --paging=never --features=bearded-hc-midnightvoid --side-by-side --width={{width}}
+    - name: delta inline
+      command: delta --paging=never --features=bearded-hc-midnightvoid --width={{width}}
+    - name: git
+      type: rawGit

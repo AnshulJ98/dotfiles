@@ -21,5 +21,26 @@
 	tool = codediff
 [difftool]
 	prompt = false
+[delta "bearded-hc-midnightvoid"]
+	# Used by lazygit's diffRenderers. Diff backgrounds are nvim's: DiffAdd/DiffDelete
+	# at 10% over #151f27, emphasis at 20%. The syntax theme is config/yazi's tmTheme,
+	# registered with bat by install.sh.
+	line-numbers = true
+	syntax-theme = bearded-hc-midnightvoid
+	file-style = bold "#7fd7f5"
+	file-decoration-style = "#395469" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#395469" ol
+	plus-style = syntax "#24332f"
+	plus-emph-style = syntax "#344838"
+	minus-style = syntax "#2c262b"
+	minus-emph-style = syntax "#432c2f"
+	plus-empty-line-marker-style = normal "#24332f"
+	minus-empty-line-marker-style = normal "#2c262b"
+	line-numbers-left-style = "#436179"
+	line-numbers-right-style = "#436179"
+	line-numbers-minus-style = "#fd604f"
+	line-numbers-plus-style = "#afea7b"
+	line-numbers-zero-style = "#436179"
 [difftool "codediff"]
 	cmd = nvim \"$LOCAL\" \"$REMOTE\" -c \"execute 'CodeDiff --exit-on-close file' fnameescape(argv(0)) fnameescape(argv(1))\"

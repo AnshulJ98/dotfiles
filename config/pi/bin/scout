@@ -33,7 +33,14 @@
 #   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
 #                  scout prints the CANNOT-RUN verdict the sensors never got to.
 #
-# Exit codes: 0 ok, 2 usage or recursion refused, 124 timeout, else pi's.
+# Stall guard: the child loads extensions/stream-watchdog.ts (aborts a silent
+# model stream, resumes once). As an outer layer, scout kills a child whose
+# session file has not changed for SCOUT_STALE_SECS (600; 900 with --rw or
+# xhigh) while no tool call is running, and exits 124.
+#
+# Exit codes: 0 ok, 2 usage or recursion refused, 124 timeout or stall,
+# 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
+# A SIGKILL skips everything; extensions/scout.ts finishes that run instead.
 set -euo pipefail
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
@@ -55,7 +62,7 @@ SCOUT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/sessions/scout"
 SESSIONS="$SCOUT_ROOT/$$"
 RUNNING="$SCOUT_ROOT/.running"
 DONE="$SCOUT_ROOT/.done"
-MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/openai.gpt-5.6-luna
+MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
 WORKER_MODEL="anthropic/claude-sonnet-5-5" # --rw; tested too: github-copilot/kimi-k3
 MODEL_SET=0
 THINKING=""
@@ -82,9 +89,11 @@ while [ $# -gt 0 ]; do
       echo "scout: --spec takes - (the spec on stdin)" >&2
       exit 2
     }
-    mkdir -p "$SESSIONS"
-    cat >"$SESSIONS/spec.md"
-    BRIEF_FILE="$SESSIONS/spec.md"
+    # Held outside the sessions tree until it validates, so a refused spec leaves no run folder
+    SPEC_TMP="$(mktemp "${TMPDIR:-/tmp}/scout-spec.XXXXXX")"
+    trap 'rm -f "$SPEC_TMP"' EXIT
+    cat >"$SPEC_TMP"
+    BRIEF_FILE="$SPEC_TMP"
     BRIEF=("@$BRIEF_FILE")
     RW=1
     shift 2
@@ -166,9 +175,16 @@ if [ "$RW" = 1 ]; then
     const parsed = parseSpec(readFileSync(process.argv[2], "utf8"));
     if (typeof parsed === "string") console.log(parsed);' "$SENSORS" "$BRIEF_FILE" 2>&1)" || true
   [ -z "$SPEC_ERROR" ] || {
+    [ -n "${SPEC_TMP:-}" ] && BRIEF_FILE="spec on stdin"
     echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2
     exit 2
   }
+  if [ -n "${SPEC_TMP:-}" ]; then
+    mkdir -p "$SESSIONS"
+    mv "$SPEC_TMP" "$SESSIONS/spec.md"
+    BRIEF_FILE="$SESSIONS/spec.md"
+    BRIEF=("@$BRIEF_FILE")
+  fi
   TOOLS="$TOOLS,edit,write"
   PROMPT="$DIR/worker.prompt.md"
   WORKER=(-e "$SENSORS")
@@ -187,6 +203,10 @@ fi
 # when present, otherwise pi's native auth (API key or auth.json) is used.
 EXT=()
 [ -f "$SHIM" ] && EXT=(-e "$SHIM")
+for ext in stream-watchdog bedrock-reasoning; do
+  [ -f "$DIR/../extensions/$ext.ts" ] && EXT+=(-e "$DIR/../extensions/$ext.ts")
+done
+if [ "$RW" = 1 ] || [ "$THINKING" = xhigh ]; then STALE_SECS="${SCOUT_STALE_SECS:-900}"; else STALE_SECS="${SCOUT_STALE_SECS:-600}"; fi
 
 SESSION=()
 if [ ${#FORK[@]} -gt 0 ]; then
@@ -231,31 +251,88 @@ trap finish EXIT
 # sensors' verdict line lands in this file; the digest gets it from the
 # JSON report instead.
 ERR="$SESSIONS/stderr.log"
-set +e
-PI_SCOUT_DEPTH=1 timeout "$TIMEOUT" pi -p -ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np \
-  -t "$TOOLS" "${SESSION[@]}" \
-  --model "$MODEL" --thinking "$THINKING" \
-  --system-prompt "$(cat "$PROMPT")" \
-  "${BRIEF[@]}" "$TASK" 2>"$ERR" | tee "$OUT"
-rc=${PIPESTATUS[0]}
-set -e
-[ -s "$ERR" ] && grep -v '^WORKER-SENSORS:' "$ERR" >&2 || true
-if [ $rc -eq 124 ]; then
-  echo "scout: timed out after ${TIMEOUT}s" >&2
-elif [ $rc -ne 0 ] && [ ! -s "$OUT" ]; then
-  { echo "scout: pi exited $rc with no digest. Last stderr lines:"; tail -n 20 "$ERR"; } | tee -a "$OUT"
-fi
-if [ "$RW" = 1 ]; then
-  if [ $rc -eq 124 ]; then
-    VERDICT="WORKER-SENSORS: CANNOT-RUN scout timed out after ${TIMEOUT}s; settle checks never ran"
-  elif [ -s "$PI_WORKER_REPORT" ]; then
+STALLED="$SESSIONS/stalled"
+
+# Outer stall guard: the newest session file is the child's heartbeat. A
+# trailing assistant tool call means a tool is running, which may be silent.
+watch_stall() {
+  local child=$1 start file last age
+  start=$(date +%s)
+  while sleep "${SCOUT_POLL_SECS:-15}" && kill -0 "$child" 2>/dev/null; do
+    file=$(ls -t "$SESSIONS"/*.jsonl 2>/dev/null | head -n 1)
+    last=$start
+    if [ -n "$file" ]; then
+      tail -n 1 "$file" | grep -q '"role":"assistant".*"type":"toolCall"' && continue
+      last=$(date -r "$file" +%s)
+      [ "$last" -gt "$start" ] || last=$start
+    fi
+    age=$(($(date +%s) - last))
+    if [ "$age" -ge "$STALE_SECS" ]; then
+      echo "$age" >"$STALLED"
+      kill -TERM "$child" 2>/dev/null # timeout passes it on to pi
+      sleep 10
+      pkill -KILL -P "$child" 2>/dev/null
+      kill -KILL "$child" 2>/dev/null
+      return
+    fi
+  done
+}
+
+# The verdict, digest and stderr summary for every exit except SIGKILL. With
+# --rw, verdict.json is written here when the sensors did not get to it.
+conclude() {
+  local rc=$1 reason=""
+  [ -n "${MONITOR:-}" ] && kill "$MONITOR" 2>/dev/null
+  [ -s "$ERR" ] && grep -v '^WORKER-SENSORS:' "$ERR" >&2
+  if [ -s "$STALLED" ]; then
+    reason="model stream stalled (no session activity for $(cat "$STALLED")s)"
+    echo "scout: $reason" >&2
+  elif [ "$rc" -eq 124 ]; then
+    reason="scout timed out after ${TIMEOUT}s; settle checks never ran"
+    echo "scout: timed out after ${TIMEOUT}s" >&2
+  elif [ "$rc" -ne 0 ] && [ ! -s "$OUT" ]; then
+    { echo "scout: pi exited $rc with no digest. Last stderr lines:"; tail -n 20 "$ERR"; } >>"$OUT"
+  fi
+  if [ "$RW" = 1 ]; then
+    [ -n "$reason" ] || [ -s "$PI_WORKER_REPORT" ] || reason="no verdict written (pi exited $rc)"
+    [ -z "$reason" ] || printf '{"verdict":"CANNOT-RUN","reasons":["%s"],"retriesUsed":0}\n' "$reason" >"$PI_WORKER_REPORT"
     VERDICT="$(node -e '
       const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
       console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"
-  else
-    VERDICT="WORKER-SENSORS: CANNOT-RUN no verdict written (pi exited $rc)"
+    { echo "$VERDICT"; echo; cat "$OUT"; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
   fi
-  { echo "$VERDICT"; echo; cat "$OUT"; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
-  echo "$VERDICT"
-fi
+  cat "$OUT"
+}
+
+on_signal() {
+  trap - TERM INT HUP
+  kill -TERM "$CHILD" 2>/dev/null
+  wait "$CHILD" 2>/dev/null
+  conclude 143 || true
+  exit 143
+}
+
+set +e
+# pi writes to a file, not through tee: a reader that quits early (| head) used
+# to break the pipe and kill the worker with EPIPE mid-run.
+# --foreground keeps pi in scout's process group: when the parent's bash tool
+# kills that group, pi dies with it instead of running on, unseen, until its
+# own timeout.
+PI_SCOUT_DEPTH=1 timeout --foreground "$TIMEOUT" pi -p -ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np \
+  -t "$TOOLS" "${SESSION[@]}" \
+  --model "$MODEL" --thinking "$THINKING" \
+  --system-prompt "$(cat "$PROMPT")" \
+  "${BRIEF[@]}" "$TASK" 2>"$ERR" >"$OUT" </dev/null &
+CHILD=$!
+# Detached from stdout: its pending sleep must not hold the caller's pipe open
+watch_stall "$CHILD" >/dev/null 2>&1 &
+MONITOR=$!
+# Set after the launch so the child keeps the default SIGPIPE; scout's own
+# late writes to a closed reader then fail instead of skipping the EXIT trap.
+trap '' PIPE
+trap on_signal TERM INT HUP
+wait "$CHILD"
+rc=$?
+[ -s "$STALLED" ] && rc=124
+conclude "$rc"
 exit $rc

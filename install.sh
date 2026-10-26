@@ -91,6 +91,14 @@ link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+# lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
+# folder also holds state.yml, so link the file.
+link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+# delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
+link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
+if command -v bat >/dev/null 2>&1; then
+  bat cache --build >/dev/null || warn "bat cache build failed — run: bat cache --build"
+fi
 # Marta's folder also holds plugin state, so link its files, not the folder.
 # conf.marco can't hold comments (Marco rejects // and /* */ and falls back to
 # defaults). Its F11 runs a kitty gadget because environment.terminal only
