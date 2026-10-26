@@ -250,11 +250,6 @@ For runs that change files or span many steps:
   One line per item; leave out an empty heading. Mark anything you
   couldn't confirm and say where you looked.
 
-## Binary Files
-
-Read at most one binary file (image, screenshot, diagram) per turn.
-Reading several at once has crashed conversations.
-
 ---
 
 # Work Environment
@@ -271,6 +266,11 @@ This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`, `bash
 Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
 
 Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/skills/pdf-images/.venv/bin/python` (see PDF rule).
+
+## Binary Files
+
+Read at most one binary file (image, screenshot, diagram) per turn.
+Reading several at once has crashed conversations on Bedrock.
 
 ## Obsidian Knowledge Vault
 

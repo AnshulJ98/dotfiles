@@ -49,7 +49,7 @@
     "mdHeading": "yellow",
     "mdLink": "blue",
     "mdLinkUrl": "fgDim",
-    "mdCode": "purple",
+    "mdCode": "fgSoft",
     "mdCodeBlock": "green",
     "mdCodeBlockBorder": "fgDim",
     "mdQuote": "pink",

@@ -15,6 +15,11 @@ Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
 
 Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/skills/pdf-images/.venv/bin/python` (see PDF rule).
 
+## Binary Files
+
+Read at most one binary file (image, screenshot, diagram) per turn.
+Reading several at once has crashed conversations on Bedrock.
+
 ## Obsidian Knowledge Vault
 
 Document-level knowledge at `~/Documents/NotesVault`. Full rules: the `vault` skill, hosted locally on the work machine (not in this repo).

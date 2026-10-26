@@ -250,11 +250,6 @@ For runs that change files or span many steps:
   One line per item; leave out an empty heading. Mark anything you
   couldn't confirm and say where you looked.
 
-## Binary Files
-
-Read at most one binary file (image, screenshot, diagram) per turn.
-Reading several at once has crashed conversations.
-
 
 # Before Writing Code
 
