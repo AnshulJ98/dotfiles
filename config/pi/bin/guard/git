@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# git guard for scout children. bin/scout puts this directory first on PATH, so
+# every `git` a scout (or anything it spawns) runs lands here, however the call
+# is spelled: sh -c, $g, $(echo git), a python subprocess.
+#
+# Refuses history, stash, remote and tree-switching commands when the call
+# targets the scout's own repo (PI_SCOUT_GIT_DIR, set by bin/scout). Read mode
+# (PI_SCOUT_MODE=read) also refuses commit and add. A call aimed at another
+# repo (a temp test repo) passes.
+#
+# A tripwire, not a sandbox: an absolute /usr/bin/git, or an alias set with
+# `git -c alias.x=stash x`, still gets through.
+#
+# Not `set -u`: empty arrays are unbound on macOS's bash 3.2.
+
+if [ -z "${PI_SCOUT_REAL_GIT:-}" ]; then
+  echo "scout git guard: PI_SCOUT_REAL_GIT is not set; refusing to guess which git to run" >&2
+  exit 1
+fi
+if [ "$PI_SCOUT_REAL_GIT" -ef "${BASH_SOURCE[0]}" ]; then
+  echo "scout git guard: PI_SCOUT_REAL_GIT is this guard ($PI_SCOUT_REAL_GIT); refusing to run itself" >&2
+  exit 1
+fi
+
+original=("$@")
+
+# Global options, up to the subcommand. These take a separate value; the
+# --opt=value forms and every other leading dash option take none.
+gopts=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -C | -c | --git-dir | --work-tree | --namespace | --config-env | --attr-source)
+    gopts+=("$1")
+    shift
+    if [ $# -gt 0 ]; then
+      gopts+=("$1")
+      shift
+    fi
+    ;;
+  -*)
+    gopts+=("$1")
+    shift
+    ;;
+  *) break ;;
+  esac
+done
+sub="${1:-}"
+[ $# -gt 0 ] && shift
+# $@ is now the subcommand's own arguments
+
+block=0
+case "$sub" in
+push | pull | merge | rebase | reset | clean | stash | checkout | switch | restore) block=1 ;;
+commit)
+  [ "${PI_SCOUT_MODE:-}" = read ] && block=1
+  for arg in "$@"; do
+    [ "$arg" = -- ] && break
+    # git accepts any unambiguous prefix of --amend
+    case "$arg" in --am | --ame | --amen | --amend) block=1 ;; esac
+  done
+  ;;
+add) [ "${PI_SCOUT_MODE:-}" = read ] && block=1 ;;
+esac
+
+if [ "$block" = 1 ] && [ -n "${PI_SCOUT_GIT_DIR:-}" ]; then
+  target="$("$PI_SCOUT_REAL_GIT" ${gopts[@]+"${gopts[@]}"} rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  # Compare physical paths: /tmp and /private/tmp must not tell two repos apart
+  canon() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"; }
+  if [ -n "$target" ] && [ "$(canon "$target")" = "$(canon "$PI_SCOUT_GIT_DIR")" ]; then
+    echo "scout git guard: git $sub ... belongs to the operator" >&2
+    exit 1
+  fi
+fi
+
+exec "$PI_SCOUT_REAL_GIT" ${original[@]+"${original[@]}"}

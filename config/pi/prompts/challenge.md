@@ -13,7 +13,8 @@ Probe in order of leverage:
 - **Premise**: is the stated problem the real one? Ask why until the
   root motivation shows.
 - **Choices**: why this pattern or technology, which trade-offs were
-  skipped, which alternative was never considered?
+  skipped, which alternative was never considered, does each piece sit
+  in the tool that owns its job (the Design rule)?
 - **Scope**: why is each piece in, what was left out, and on what
   evidence?
 - **Hidden complexity**: what breaks at scale, under concurrency, on

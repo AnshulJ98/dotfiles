@@ -17,10 +17,6 @@
  * cap instead of ballooning 20-50k while the run finishes. The agent_settled
  * path covers growth that lands on a run's final message; nothing to resume.
  *
- * Skipped in pi-subagents children (PI_SUBAGENT_CHILD=1): children inherit
- * settings.json extensions, and compacting a child session wastes an LLM
- * summarization call on a context that is about to be discarded.
- *
  * DEFAULT_THRESHOLD below is the authoritative setting — this file is tracked
  * in dotfiles; edit the constant to retune permanently (0 disables entirely).
  * In-session, session-scoped only (resets on restart):
@@ -42,7 +38,6 @@ const DEFAULT_THRESHOLD = 210_000;
 
 export default function (pi: ExtensionAPI) {
   if (DEFAULT_THRESHOLD <= 0) return; // hard-disabled via constant
-  if (process.env.PI_SUBAGENT_CHILD === "1") return; // never run in subagent children
 
   let enabled = true;
   let threshold = DEFAULT_THRESHOLD;
@@ -53,6 +48,7 @@ export default function (pi: ExtensionAPI) {
   interface CapCtx {
     getContextUsage(): { tokens?: number | null } | undefined;
     compact(options?: { onComplete?: () => void; onError?: (e: Error) => void }): void;
+    ui: { notify(message: string, type: "info" | "warning" | "error"): void };
   }
 
   const overBudget = (ctx: CapCtx) => {
@@ -74,9 +70,9 @@ export default function (pi: ExtensionAPI) {
       compacting = false;
       setCapFiring(false, false);
     };
-    const notify = (msg: string, type: string) => {
+    const notify = (msg: string, type: "info" | "warning" | "error") => {
       try {
-        (ctx as unknown as { ui: { notify(m: string, t: string): void } }).ui.notify(msg, type);
+        ctx.ui.notify(msg, type);
       } catch {
         // stale ctx after session switch/reload — nothing to notify
       }
@@ -116,7 +112,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("turn_end", async (_event, ctx) => {
     if (process.env.PI_COMPACT_CAP_DEBUG === "1") {
       const u = ctx.getContextUsage();
-      (ctx as unknown as { ui: { notify(m: string, t: string): void } }).ui.notify(
+      ctx.ui.notify(
         `compact-cap turn_end: tokens=${String(u?.tokens)} threshold=${threshold} enabled=${String(enabled)} compacting=${String(compacting)}`,
         "info",
       );

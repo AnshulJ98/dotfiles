@@ -34,7 +34,7 @@ test can reach it, say so; that is a finding), the branch
 ```
 ---
 files-allowed: [<every file the fix touches, relative to the git root>]
-tests: <the red loop from step 1, plus the broader suite>
+tests: <the red loop from step 1, plus the broader suite, type check and lint>
 ---
 ```
 

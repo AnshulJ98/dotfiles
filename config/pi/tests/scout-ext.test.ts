@@ -23,6 +23,8 @@ register(
 test("a scout killed with SIGKILL still gets a chat entry with its cost", async () => {
 	const root = mkdtempSync(join(tmpdir(), "scout-ext-"));
 	process.env.PI_CODING_AGENT_DIR = root;
+	// Workers run the tests with PI_SCOUT_DEPTH=1, and the extension skips loading inside a scout
+	delete process.env.PI_SCOUT_DEPTH;
 	const scoutRoot = join(root, "sessions", "scout");
 	const pid = spawnSync("true").pid; // exited, so its pid reads as dead
 	const started = Date.now() - 5_000;
