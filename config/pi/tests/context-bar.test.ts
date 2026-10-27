@@ -1,16 +1,13 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // extensions/context-bar.ts imports pi packages at runtime; they resolve from the installed pi release.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { register } from "node:module";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { piPackage } from "./pi-package.ts";
 
-const agentDir = join(homedir(), ".pi", "agent");
-const version = readFileSync(join(agentDir, "install", "current-version"), "utf8").trim().replace(/^v/, "");
-const piModules = pathToFileURL(join(agentDir, "install", "releases", version, "node_modules", "x.js")).href;
+const piModules = pathToFileURL(join(piPackage(), "package.json")).href;
 register(
 	`data:text/javascript,${encodeURIComponent(`
 		export async function resolve(specifier, context, next) {

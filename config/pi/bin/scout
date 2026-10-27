@@ -172,7 +172,9 @@ if [ "$RW" = 1 ]; then
     exit 2
   }
   # Same parser the sensors use, so a bad spec fails here, not after a wasted run.
-  SPEC_ERROR="$(node --input-type=module -e '
+  # --no-warnings: stderr is read as the spec error, and a package.json without
+  # "type" above this file (~/package.json on the work laptop) makes node warn.
+  SPEC_ERROR="$(node --no-warnings --input-type=module -e '
     import { readFileSync } from "node:fs";
     const { parseSpec } = await import(process.argv[1]);
     const parsed = parseSpec(readFileSync(process.argv[2], "utf8"));
