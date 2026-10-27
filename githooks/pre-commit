@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
+if command -v auto-guard >/dev/null 2>&1; then auto-guard pre-commit "$@" || exit 1; fi # dotfiles-hook
 # Golden test: generated AGENTS/CLAUDE outputs must match their fragments.
 exec config/pi/build-agents.sh --check
