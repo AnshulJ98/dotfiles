@@ -156,6 +156,9 @@ fi
 case ":$PATH:" in *:"$HOME/.local/bin":*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 # <<< termium <<<
 
+# worktrunk: lets `wt switch` cd into the worktree it opens.
+command -v wt >/dev/null && eval "$(wt config shell init zsh)"
+
 # zoxide: `z foo` jumps to the highest-ranked directory matching foo, `zi`
 # picks interactively with fzf. Its init must come last: it hooks chpwd and
 # wraps completion, so anything sourced after it can undo that.
