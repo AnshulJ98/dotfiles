@@ -13,8 +13,7 @@ const GUARD = join(GUARD_DIR, "git");
 const REAL_GIT = (process.env.PATH ?? "")
 	.split(delimiter)
 	.map((dir) => join(dir, "git"))
-	.find((path) => existsSync(path) && realpathSync(path) !== realpathSync(GUARD));
-assert.ok(REAL_GIT, "no git on PATH besides the guard");
+	.find((path) => existsSync(path) && realpathSync(path) !== realpathSync(GUARD)) ?? assert.fail("no git on PATH besides the guard");
 const MESSAGE = /scout git guard: git \S+ \.\.\. belongs to the operator/;
 
 const baseEnv = (): NodeJS.ProcessEnv => ({
