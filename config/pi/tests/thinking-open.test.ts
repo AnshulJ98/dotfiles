@@ -19,7 +19,7 @@ register(
 		}`)}`,
 );
 
-const { runsBeforeText } = await import("../extensions/thinking-open.ts");
+const { runsBeforeText, runsToOpen, THOUGHT_OPEN } = await import("../extensions/thinking-open.ts");
 
 const think = (thinking: string) => ({ type: "thinking", thinking });
 const text = (t: string) => ({ type: "text", text: t });
@@ -37,4 +37,25 @@ test("only thinking runs that reply text follows are opened", () => {
 		["blank reply text does not count", [think("a"), text("  ")], []],
 	];
 	for (const [name, content, want] of rows) assert.deepEqual(runsBeforeText(content), want, name);
+});
+
+test("a tool-only step opens all its runs; a step with reply text opens the runs before it", () => {
+	const rows: Array<[string, Array<{ type?: string; text?: string; thinking?: string }>, { runs: number[]; carrier: boolean }]> = [
+		["thinking then a tool call", [think("plan"), call], { runs: [0], carrier: true }],
+		["two runs around a call", [think("a"), call, think("b"), call], { runs: [0, 1], carrier: true }],
+		["blank thinking before a call", [think(" "), call], { runs: [], carrier: false }],
+		["reply text makes it a boundary", [think("a"), text("x"), call], { runs: [0], carrier: false }],
+		["thinking only, still streaming", [think("a")], { runs: [], carrier: false }],
+	];
+	for (const [name, content, want] of rows) assert.deepEqual(runsToOpen(content), want, name);
+	// pi-tidy draws a step cut off at the length limit itself, unfolded
+	assert.deepEqual(runsToOpen([think("plan"), call], "length"), { runs: [], carrier: false });
+});
+
+test("pi-tidy still reads the thought-open marker this extension sets", () => {
+	// Fails when pi-tidy renames its private marker; then carrier steps silently stay folded
+	const source = readFileSync(join(agentDir, "npm", "node_modules", "pi-tidy", "tool-group-view.ts"), "utf8");
+	assert.equal(THOUGHT_OPEN.description, "pi-toolbox:thought-open");
+	assert.match(source, /Symbol\.for\("pi-toolbox:thought-open"\)/);
+	assert.match(source, /\[THOUGHT_OPEN\] === true && component\.thinkingVisibilityOverrides\?\.get\?\.\(0\) === false/);
 });

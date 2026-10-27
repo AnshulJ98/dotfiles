@@ -151,6 +151,12 @@ test("background: health failure wakes at once, once per failure streak", () => 
 	assert.deepEqual(bgRun(6, { out: true }, { healthy }), ["2m health check failed", "5m health check failed"]);
 });
 
+test("background: a health failure still wakes after the idle wakes are used up", () => {
+	// Idle wakes at 5m, 20m, 65m use all three; the health check fails at 80m (tick 960)
+	const healthy = (i: number) => (i === 960 ? false : undefined);
+	assert.deepEqual(bgRun(90, {}, { healthy }).at(-1), "80m health check failed");
+});
+
 test("background: declared heartbeat decides both ways", () => {
 	assert.deepEqual(bgRun(30, {}, { heartbeatAgeMs: () => 1_000 }), []);
 	assert.deepEqual(bgRun(6, { cpu: 2, out: true }, { heartbeatAgeMs: (now) => now }), ["5m no heartbeat for 5m"]);

@@ -100,6 +100,8 @@ check "install.sh no longer links the subagent config" \
 echo "[packages]"
 for p in $(jqs "$DOT/settings.json" "chr(10).join(x if isinstance(x,str) else x['source'] for x in d['packages'])"); do
   name="${p#npm:}"
+  # A pinned spec (name@1.2.3, @scope/name@1.2.3) installs under the bare name
+  name=$(printf '%s' "$name" | sed -E 's/(.)@[^@/]+$/\1/')
   check "package installed: $name" "[ -d '$AGENT/npm/node_modules/$name' ]"
 done
 

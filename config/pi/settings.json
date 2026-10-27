@@ -63,6 +63,6 @@
     "npm:pi-ask-user",
     "npm:pi-usage-widget",
     "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-tidy"
+    "npm:pi-tidy@0.4.12"
   ]
 }

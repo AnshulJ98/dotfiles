@@ -133,12 +133,13 @@ function minutes(ms: number): string {
 /**
  * Whether a background job deserves one wake. Never kills: the model decides.
  * Each repeat waits three times longer (5m, 15m, 45m), up to maxWakes per job.
+ * A failing health check is a declared signal, so it wakes even past the cap.
  */
 export function backgroundVerdict(track: Track, state: BackgroundState, input: BackgroundInput): BackgroundResult {
 	const healthState = input.healthy === undefined ? state : { ...state, unhealthy: !input.healthy };
-	if (state.wakes >= input.maxWakes) return { state: healthState };
 	const wake = (alert: string): BackgroundResult => ({ state: { ...healthState, wakes: state.wakes + 1, lastWakeAt: input.now }, alert });
 	if (input.healthy === false && !state.unhealthy) return wake("health check failed");
+	if (state.wakes >= input.maxWakes) return { state: healthState };
 	const scale = 3 ** state.wakes;
 	const idleLimit = input.idleMs * scale;
 	const sinceWake = state.lastWakeAt > 0 ? input.now - state.lastWakeAt : Number.POSITIVE_INFINITY;
