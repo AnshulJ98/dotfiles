@@ -1,0 +1,9 @@
+# worktrunk user config; install.sh links it to ~/.config/worktrunk/config.toml.
+# worktree-path is wt's default (../<repo>.<branch>), spelled out. post-start runs
+# config/git/bin/worktree-setup; git's post-checkout stub runs it too, first one wins.
+# No include list: `wt step copy-ignored` copies every gitignored file except the excludes.
+worktree-path = "{{ repo_path }}/../{{ repo }}.{{ branch | sanitize }}"
+post-start = "worktree-setup hook post-start"
+
+[step.copy-ignored]
+exclude = ["dist/", "build/", "coverage/", ".next/", ".turbo/", ".cache/"]

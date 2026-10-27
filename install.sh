@@ -97,6 +97,9 @@ link "$DOT/config/git/template"    "$HOME/.config/git/template"
 link "$DOT/config/husky/init.sh"   "$HOME/.config/husky/init.sh"
 link "$DOT/config/git/bin/auto-guard"       "$HOME/.local/bin/auto-guard"
 link "$DOT/config/git/bin/git-hooks-install" "$HOME/.local/bin/git-hooks-install"
+# worktrunk config; worktree-setup is its post-start hook and the post-checkout stub's target.
+link "$DOT/config/worktrunk/config.toml"     "$HOME/.config/worktrunk/config.toml"
+link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
