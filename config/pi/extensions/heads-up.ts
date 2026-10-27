@@ -21,6 +21,8 @@ import { Text } from "@earendil-works/pi-tui";
 const PROMPT = `[Heads-up mode] Look back at the last task in this conversation. Is there one thing the user should know but could easily have missed? For example a tradeoff or assumption made without saying so, something that wasn't verified, a result that looks off, or a change beyond what they asked for. Leave out anything the last reply already says clearly, and anything minor. If there is such a thing, describe it in one or two plain sentences, at most 40 words, without markdown. Otherwise reply with exactly: NONE`;
 // A quick question doesn't need a second look, only real work does
 const MIN_TOOL_CALLS = 3;
+// The note is optional, and a Bedrock stream has no timeout of its own
+const TIMEOUT_MS = 60_000;
 
 interface HeadsUpEntry {
 	note: string | null;
@@ -57,6 +59,8 @@ export default function (pi: ExtensionAPI) {
 
 		const controller = new AbortController();
 		pending = controller;
+		const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+		timer.unref();
 		const ask: AgentMessage = { role: "user", content: [{ type: "text", text: PROMPT }], timestamp: Date.now() };
 		try {
 			// The conversation exactly as pi sends it, so the request reuses pi's prompt cache
@@ -79,6 +83,7 @@ export default function (pi: ExtensionAPI) {
 		} catch {
 			// The note is optional, so failures stay quiet
 		} finally {
+			clearTimeout(timer);
 			if (pending === controller) pending = undefined;
 		}
 	});

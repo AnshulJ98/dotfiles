@@ -14,8 +14,7 @@
  *    Sessions that never compact never pay a token.
  *
  * compact-cap.ts signals via Symbol.for keys whether a compaction is its own
- * firing and whether that firing interrupted a run. Skipped in pi-subagents
- * children.
+ * firing and whether that firing interrupted a run.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { capFiring } from "../lib/compact-cap-state.ts";
@@ -24,7 +23,7 @@ const REMINDER =
   "Post-compaction reminder: your core instructions survived intact and still bind. " +
   "Re-adhere before acting: lead with the answer, keep every change inside the " +
   "request, take the first option in Before Writing Code that holds, and delegate " +
-  "per the dispatch rule.";
+  "per the dispatch rule. If the repo root has an AUTO.md, re-read it before anything else.";
 
 const RESUME =
   "A task was likely in progress when this compaction interrupted the run: resume it " +
@@ -33,8 +32,6 @@ const RESUME =
   "(ask_user) to resume — if input is genuinely required, state what is needed and stop.";
 
 export default function (pi: ExtensionAPI) {
-  if (process.env.PI_SUBAGENT_CHILD === "1") return; // children are short-lived; not worth the tokens
-
   if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
     pi.on("session_start", async (_event, ctx) => {
       ctx.ui.notify("prime-reminder: loaded, handlers registered", "info");

@@ -26,6 +26,7 @@ if "$DOT/build-agents.sh" --check >/dev/null 2>&1; then
 else
   bad "generated agent files are stale — run config/pi/build-agents.sh"
 fi
+check "build-agents.sh refuses an unknown flag" "'$DOT/build-agents.sh' --chek >/dev/null 2>&1; [ \$? -eq 2 ]"
 
 # --- every enabled model must resolve, and none may be proven dead ---
 # pi itself prints `Warning: No models match pattern "<p>"` on stderr for each

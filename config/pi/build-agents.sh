@@ -37,7 +37,8 @@ emit() {
   build "$1/CLAUDE.md"      "${CLAUDE[@]}"
 }
 
-if [[ "${1:-}" == "--check" ]]; then
+case "${1:-}" in
+--check)
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   emit "$tmp"
@@ -49,7 +50,13 @@ if [[ "${1:-}" == "--check" ]]; then
     echo "DRIFT: generated files do not match fragments — run build-agents.sh" >&2
     exit 1
   fi
-else
+  ;;
+"")
   emit .
   echo "Wrote AGENTS.md ($(wc -l <AGENTS.md | tr -d ' ') lines), AGENTS.work.md ($(wc -l <AGENTS.work.md | tr -d ' ') lines), CLAUDE.md ($(wc -l <CLAUDE.md | tr -d ' ') lines)"
-fi
+  ;;
+*)
+  echo "usage: build-agents.sh [--check]" >&2
+  exit 2
+  ;;
+esac
