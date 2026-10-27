@@ -4,7 +4,7 @@ argument-hint: "[plan | feature | design to grill] or [<effort> <topic> to grill
 ---
 <what-to-do>
 
-Interrogate every load-bearing decision in this until it is settled, and
+Interrogate each decision in this that later work depends on until it is settled, and
 surface the ones I have not noticed I am making: $@
 
 If nothing follows the colon, grill the most recent view or plan in
@@ -29,9 +29,8 @@ Do not implement. No code until I say go.
 
 Walk these axes once before sorting, as a discovery checklist, not as a
 structure for the wave: contract and interface, data shape, failure modes,
-edge cases, migration, naming, verification. A question earns its place by
-being load-bearing (something downstream depends on the answer), not by
-covering an axis.
+edge cases, migration, naming, verification. A question earns its place
+when later work depends on its answer, not by covering an axis.
 
 ## Glossary
 
