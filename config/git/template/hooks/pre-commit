@@ -1,0 +1,2 @@
+#!/bin/sh
+if command -v auto-guard >/dev/null 2>&1; then auto-guard pre-commit "$@" || exit 1; fi # dotfiles-hook
