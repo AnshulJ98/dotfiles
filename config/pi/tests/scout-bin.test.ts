@@ -2,7 +2,7 @@
 // Drives bin/scout with a fake `pi` on PATH: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -71,6 +71,18 @@ test("a refused spec leaves no run folder behind", async () => {
 	assert.equal(run.code, 2);
 	const runs = existsSync(scoutRoot) ? readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)) : [];
 	assert.deepEqual(runs, []);
+});
+
+test("a package.json without a type above scout does not refuse the spec", () => {
+	// The work laptop has ~/package.json = {}: node warned MODULE_TYPELESS_PACKAGE_JSON while
+	// loading worker-sensors.ts for the spec check, and scout read the warning as the spec error.
+	const { env } = sandbox();
+	const home = mkdtempSync(join(tmpdir(), "scout-typeless-"));
+	writeFileSync(join(home, "package.json"), "{}\n");
+	for (const dir of ["bin", "extensions"]) cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), { recursive: true });
+	const run = spawnSync(join(home, "bin", "scout"), ["--spec", "-"], { env: { ...env, FAKE_PI: "env" }, input: SPEC, encoding: "utf8" });
+	assert.doesNotMatch(run.stderr, /spec on stdin/);
+	assert.match(run.stdout, /^mode=rw$/m);
 });
 
 test("a read scout runs with the git guard first on PATH and PI_SCOUT_MODE=read", async () => {

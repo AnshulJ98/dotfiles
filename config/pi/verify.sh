@@ -75,9 +75,9 @@ if [ -f "$SHIM" ]; then
 fi
 # Extensions patch these prototypes and skip silently when a method is gone,
 # so a pi upgrade would turn them into no-ops.
-PI_REL="$AGENT/install/releases/$(cat "$AGENT/install/current-version" 2>/dev/null)/node_modules/@earendil-works"
+PI_PKG="$(node --no-warnings --input-type=module -e "import { piPackage } from '$DOT/tests/pi-package.ts'; console.log(piPackage())" 2>/dev/null)"
 proto_fn() { # package class method
-  (cd "$PI_REL/pi-coding-agent" && node --input-type=module -e \
+  (cd "$PI_PKG" && node --input-type=module -e \
     "const m = await import('$1'); process.exit(typeof m['$2']?.prototype?.['$3'] === 'function' ? 0 : 1)")
 }
 check "AssistantMessageComponent.prototype.updateContent is a function (polish-chrome)" \
