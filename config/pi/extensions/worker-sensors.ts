@@ -33,7 +33,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
 
@@ -245,6 +245,23 @@ export function testWeakening(before: string | undefined, after: string | undefi
   return undefined;
 }
 
+/**
+ * Lines of `after` that `before` lacks, counted with repeats: what a diff shows as added, minus moved lines.
+ * Untracked files have no git base to diff against. Binary text (a NUL byte) counts zero, as git numstat does.
+ */
+export function addedLines(before: string, after: string): number {
+  if (after.includes("\0")) return 0;
+  const left = new Map<string, number>();
+  for (const line of before.split("\n")) left.set(line, (left.get(line) ?? 0) + 1);
+  let added = 0;
+  for (const line of after.split("\n")) {
+    const n = left.get(line) ?? 0;
+    if (n > 0) left.set(line, n - 1);
+    else added += 1;
+  }
+  return added;
+}
+
 function dependencyMap(json: unknown): Map<string, string> {
   const out = new Map<string, string>();
   if (typeof json !== "object" || json === null) return out;
@@ -337,7 +354,12 @@ interface Snapshot {
   base: string;
   /** Untracked files at load, by content hash; `git stash create` leaves them out. */
   untrackedAtStart: Map<string, string>;
+  /** Their text, to count lines added to them later; absent once UNTRACKED_TEXT_BUDGET bytes are kept. */
+  untrackedText: Map<string, string>;
 }
+
+// Untracked build output or a stray dump can be large; past this budget a touched file counts all its lines instead.
+const UNTRACKED_TEXT_BUDGET = 8_000_000;
 
 function contentHash(path: string): string {
   return existsSync(path) ? createHash("sha1").update(readFileSync(path)).digest("hex") : "";
@@ -383,7 +405,17 @@ function takeSnapshot(cwd: string): Snapshot {
   const root = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
   const stash = git(root, ["stash", "create"]).trim();
   const base = stash || git(root, ["rev-parse", "HEAD"]).trim();
-  return { root, base, untrackedAtStart: hashUntracked(root) };
+  const untrackedAtStart = hashUntracked(root);
+  const untrackedText = new Map<string, string>();
+  let budget = UNTRACKED_TEXT_BUDGET;
+  for (const file of untrackedAtStart.keys()) {
+    const path = resolve(root, file);
+    const size = existsSync(path) ? statSync(path).size : Infinity;
+    if (size > budget) continue;
+    budget -= size;
+    untrackedText.set(file, readFileSync(path, "utf8"));
+  }
+  return { root, base, untrackedAtStart, untrackedText };
 }
 
 async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: CheckFailure[]; testOutput: string }> {
@@ -405,8 +437,12 @@ async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: 
     changed.set(file, added === "-" ? 0 : Number(added));
   }
   for (const file of newFiles) changed.set(file, countLines(resolve(snap.root, file)));
-  // A pre-existing untracked file has no base to diff, so its edit counts as zero lines.
-  for (const file of touchedUntracked) changed.set(file, 0);
+  // A pre-existing untracked file has no git base; diff against its text at load, or count every line when too big to keep.
+  for (const file of touchedUntracked) {
+    const before = snap.untrackedText.get(file);
+    const path = resolve(snap.root, file);
+    changed.set(file, before === undefined ? countLines(path) : addedLines(before, readIfPresent(path) ?? ""));
+  }
 
   const outside = [...changed.keys()].filter((f) => !isAllowed(f, spec.filesAllowed));
   if (outside.length) failures.push({ kind: "fail", reason: `files outside files-allowed: ${outside.join(", ")}` });

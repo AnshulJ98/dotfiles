@@ -295,7 +295,9 @@ conclude() {
   fi
   if [ "$RW" = 1 ]; then
     [ -n "$reason" ] || [ -s "$PI_WORKER_REPORT" ] || reason="no verdict written (pi exited $rc)"
-    [ -z "$reason" ] || printf '{"verdict":"CANNOT-RUN","reasons":["%s"],"retriesUsed":0}\n' "$reason" >"$PI_WORKER_REPORT"
+    [ -z "$reason" ] || node -e '
+      const report = { verdict: "CANNOT-RUN", reasons: [process.argv[2]], retriesUsed: 0 };
+      require("node:fs").writeFileSync(process.argv[1], JSON.stringify(report) + "\n");' "$PI_WORKER_REPORT" "$reason"
     VERDICT="$(node -e '
       const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
       console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"

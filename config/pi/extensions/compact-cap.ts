@@ -29,19 +29,16 @@
  *   /compact-cap 150k      set threshold (also accepts raw 150000)
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { publishThreshold, setCapFiring } from "../lib/compact-cap-state.ts";
 
 const DEFAULT_THRESHOLD = 210_000;
 
-// Handshake keys shared with prime-reminder.ts (Symbol.for = cross-file safe).
-// FIRING: a cap compaction is in flight. INTERRUPTED: it aborted a running
-// agent (turn_end path), so prime-reminder must auto-resume the task.
+// Shared state (lib/compact-cap-state.ts): the live threshold for context-bar.ts;
+// "firing" and "interrupted" for prime-reminder.ts, which auto-resumes a task the
+// cap aborted (turn_end path).
 // Caveat: the cap is only as good as getContextUsage(), which reflects the
 // provider's usage accounting — on models with junk telemetry (e.g.
 // qwen3.7-max via opencode-go) it is blind. Per-provider guarantee, not absolute.
-const FIRING = Symbol.for("pi.compact-cap.firing");
-const INTERRUPTED = Symbol.for("pi.compact-cap.interrupted");
-// THRESHOLD: the live cap in tokens, 0 when off; read by context-bar.ts.
-const THRESHOLD = Symbol.for("pi.compact-cap.threshold");
 
 export default function (pi: ExtensionAPI) {
   if (DEFAULT_THRESHOLD <= 0) return; // hard-disabled via constant
@@ -49,7 +46,7 @@ export default function (pi: ExtensionAPI) {
 
   let enabled = true;
   let threshold = DEFAULT_THRESHOLD;
-  Object.defineProperty(globalThis, THRESHOLD, { get: () => (enabled ? threshold : 0), configurable: true });
+  publishThreshold(() => (enabled ? threshold : 0));
   let compacting = false; // guard against re-entrant compaction
   let failureCooldownUntil = 0; // after a failed mid-run compaction, back off
 
@@ -66,9 +63,7 @@ export default function (pi: ExtensionAPI) {
 
   const fire = (ctx: CapCtx, interruptsRun: boolean) => {
     compacting = true;
-    const g = globalThis as Record<symbol, unknown>;
-    g[FIRING] = true;
-    g[INTERRUPTED] = interruptsRun;
+    setCapFiring(true, interruptsRun);
     // On SUCCESS the resume of an interrupted run is prime-reminder's job:
     // session_compact (emitted before compact() resolves, symbols still set)
     // triggers its deferred pi.sendUserMessage. On FAILURE session_compact
@@ -77,8 +72,7 @@ export default function (pi: ExtensionAPI) {
     // task would silently die, a worse outcome than no cap at all.
     const clear = () => {
       compacting = false;
-      g[FIRING] = false;
-      g[INTERRUPTED] = false;
+      setCapFiring(false, false);
     };
     const notify = (msg: string, type: string) => {
       try {

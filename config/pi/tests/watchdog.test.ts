@@ -183,6 +183,10 @@ const EXEMPT: Array<[string, boolean]> = [
 	["sleep 20", false],
 	["npm test", false],
 	["sshfs-helper --version", false],
+	// pi-rtk-optimizer rewrites the command before background.ts's operations run it
+	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk docker logs -f web", true],
+	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; timeout 30 rtk make test", true],
+	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk git status", false],
 ];
 for (const [command, want] of EXEMPT) {
 	test(`isExempt: ${command}`, () => assert.equal(isExempt(command), want));

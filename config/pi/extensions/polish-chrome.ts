@@ -1,8 +1,10 @@
 // Based on pi-polish 0.1.3 extensions/chrome.ts (github.com/Pringled/pi-extensions, MIT,
-// Copyright (c) 2026 Thomas van Dongen). One local change: the ❯/● markers sit in column 1 with text
-// in column 3, the gutter pi's own tool rows and notices use (upstream: column 0, text in 2).
+// Copyright (c) 2026 Thomas van Dongen). Local changes: the ❯/● markers sit in column 1 with text
+// in column 3, the gutter pi's own tool rows and notices use (upstream: column 0, text in 2). The "Waiting for your
+// answer" phase keys on pi-ask-user's ask_user (upstream: questionnaire).
+// Cut: upstream's blanking of hidden-thinking rows; pi-minimalist owns thinking rows.
 import { AssistantMessageComponent, CustomEditor, type ExtensionAPI, UserMessageComponent } from "@earendil-works/pi-coding-agent";
-import { Markdown, MouseRegion, Spacer, Text } from "@earendil-works/pi-tui";
+import { Markdown } from "@earendil-works/pi-tui";
 
 const PROMPT = "❯";
 const REPLY = "●";
@@ -35,15 +37,6 @@ export default function (pi: ExtensionAPI) {
 				// Padding so reply text lines up behind the ● marker, like tool rows
 				this.outputPad = Math.max(this.outputPad ?? 1, PAD);
 				original.call(this, message, ...rest);
-				// Hidden thinking draws nothing instead of a "Thinking..." line plus spacers. Its rows stay in place,
-				// so extensions that read pi's layout, like pi-stereo-view, still match it
-				// A block collapsed by clicking it while thinking is shown keeps its line, so it can be clicked open again
-				const children: any[] = this.hideThinkingBlock ? (this.contentContainer?.children ?? []) : [];
-				children.forEach((child, i) => {
-					if (!(child instanceof MouseRegion) || !((child as any).child instanceof Text)) return;
-					const spacer = [children[i + 1], children[i - 1]].find((c) => c instanceof Spacer);
-					for (const row of [child, spacer]) if (row) row.render = () => [];
-				});
 				// Text blocks are the Markdown children without a default style; thinking blocks carry one
 				for (const child of this.contentContainer?.children ?? []) {
 					if (!(child instanceof Markdown) || (child as any).defaultTextStyle !== undefined || (child as any)[patched]) continue;
@@ -109,7 +102,7 @@ export default function (pi: ExtensionAPI) {
 				return `Searching for ${String(args?.pattern ?? "").slice(0, 40)}`;
 			case "bg_run":
 				return "Starting a background job";
-			case "questionnaire":
+			case "ask_user":
 				return "Waiting for your answer";
 			default:
 				return `Running ${name}`;

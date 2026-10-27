@@ -4,12 +4,9 @@
   "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "medium",
   "hideThinkingBlock": false,
-  "tidy": {
-    "toolColors": {},
-    "thinkingColor": "muted",
-    "diffLines": 10,
-    "writeLines": 4,
-    "splitDiffMinWidth": 180
+  "minimalist": {
+    "keepActiveThinkingExpanded": true,
+    "excludeTools": ["edit", "write"]
   },
   "showCacheMissNotices": true,
   "cacheWarming": "idle",
@@ -48,7 +45,7 @@
     "~/Dev/dotfiles/config/pi/extensions/background.ts",
     "~/Dev/dotfiles/config/pi/extensions/stream-watchdog.ts",
     "~/Dev/dotfiles/config/pi/extensions/bedrock-reasoning.ts",
-    "~/Dev/dotfiles/config/pi/extensions/thinking-open.ts",
+    "~/Dev/dotfiles/config/pi/extensions/split-diff.ts",
     "~/Dev/dotfiles/config/pi/extensions/kitty-links.ts",
     "-builtin:mcp",
     "-builtin:codemode",
@@ -63,6 +60,7 @@
     "npm:pi-ask-user",
     "npm:pi-usage-widget",
     "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-tidy@0.4.12"
+    "npm:pi-minimalist@0.3.1",
+    { "source": "npm:pi-tidy@0.4.12", "extensions": [] }
   ]
 }
