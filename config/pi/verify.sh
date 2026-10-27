@@ -146,6 +146,21 @@ for p in $(jqs "$DOT/settings.json" "chr(10).join(x if isinstance(x,str) else x[
   check "package installed: $name" "[ -d '$AGENT/npm/node_modules/$name' ]"
 done
 
+# --- git hooks: auto-guard reaches new repos (templateDir), husky repos and this one ---
+echo "[git]"
+GITT="$DOT/../git/template"
+check "init.templateDir is ~/.config/git/template" "[ \"\$(git config --global --path init.templateDir)\" = \"$HOME/.config/git/template\" ]"
+check "~/.config/git/template resolves to config/git/template" "[ \"\$(readlink -f '$HOME/.config/git/template')\" = \"\$(readlink -f '$GITT')\" ]"
+for stub in "$GITT"/hooks/*; do
+  check "template hook ${stub##*/} is executable and has # dotfiles-hook" "[ -x '$stub' ] && grep -qF '# dotfiles-hook' '$stub'"
+done
+check "auto-guard on PATH" "command -v auto-guard"
+check "git-hooks-install on PATH" "command -v git-hooks-install"
+check "~/.config/husky/init.sh resolves to config/husky/init.sh" "[ \"\$(readlink -f '$HOME/.config/husky/init.sh')\" = \"\$(readlink -f '$DOT/../husky/init.sh')\" ]"
+for h in pre-commit pre-merge-commit pre-push; do
+  check "githooks/$h has # dotfiles-hook" "grep -qF '# dotfiles-hook' '$DOT/../../githooks/$h'"
+done
+
 # --- the node tests; run here in review, never by workers ---
 echo "[tests]"
 check "node tests pass" "node --test '$DOT'/tests/*.test.ts"

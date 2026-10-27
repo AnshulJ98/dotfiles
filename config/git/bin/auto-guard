@@ -1,0 +1,44 @@
+#!/bin/sh
+# usage: auto-guard <hook>
+#
+# Called by the git hooks pre-commit, pre-merge-commit and pre-push (the stubs in
+# config/git/template/hooks, or the line git-hooks-install inserts into an existing hook).
+# While an auto run is in progress, a root AUTO.md exists, and this refuses:
+#   pre-commit, pre-merge-commit  on the default branch
+#   pre-push                      on any branch
+# With no AUTO.md, or any other hook or branch, it exits 0 and prints nothing.
+#
+# Default branch: the target of refs/remotes/origin/HEAD minus "origin/"; without it,
+# master if that branch exists, else main.
+#
+# A tripwire, not a sandbox: `git commit --no-verify`, fast-forward merges (no merge
+# commit, so no hook) and `git update-ref` all get past it.
+#
+# Never reads stdin: pre-push's ref list belongs to the hook body that follows.
+
+hook="${1:-}"
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$top/AUTO.md" ] || exit 0
+
+refuse() {
+  printf 'auto-guard: AUTO.md is present (an auto run is in progress); %s refused %s\n' "$hook" "$1" >&2
+  exit 1
+}
+
+case "$hook" in
+  pre-push)
+    refuse "on any branch"
+    ;;
+  pre-commit|pre-merge-commit)
+    current=$(git symbolic-ref -q --short HEAD) || current=
+    [ -n "$current" ] || exit 0
+    default=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || default=
+    default=${default#origin/}
+    if [ -z "$default" ]; then
+      if git show-ref --verify --quiet refs/heads/master; then default=master; else default=main; fi
+    fi
+    [ "$current" = "$default" ] && refuse "on the default branch $default"
+    ;;
+esac
+exit 0
