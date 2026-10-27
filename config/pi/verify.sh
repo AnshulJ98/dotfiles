@@ -105,5 +105,9 @@ for p in $(jqs "$DOT/settings.json" "chr(10).join(x if isinstance(x,str) else x[
   check "package installed: $name" "[ -d '$AGENT/npm/node_modules/$name' ]"
 done
 
+# --- the node tests; run here in review, never by workers ---
+echo "[tests]"
+check "node tests pass" "node --test '$DOT'/tests/*.test.ts"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
