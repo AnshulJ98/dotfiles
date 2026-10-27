@@ -91,6 +91,12 @@ link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+# Git hooks guarding auto runs: home/.gitconfig's init.templateDir points at the template,
+# husky repos source the init.sh. Existing repos need: git-hooks-install <repo>...
+link "$DOT/config/git/template"    "$HOME/.config/git/template"
+link "$DOT/config/husky/init.sh"   "$HOME/.config/husky/init.sh"
+link "$DOT/config/git/bin/auto-guard"       "$HOME/.local/bin/auto-guard"
+link "$DOT/config/git/bin/git-hooks-install" "$HOME/.local/bin/git-hooks-install"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
