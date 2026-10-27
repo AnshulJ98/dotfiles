@@ -35,7 +35,7 @@ The script must be executable and self-contained (rebuild if needed). Use `exit 
 
 ## Worktrees — multiple branches checked out at once
 
-One repo, many working directories sharing the same object store. Beats stash-juggling or a second clone: review a PR, run a long build, or hotfix `main` without disturbing your in-progress branch.
+Branches first: one checkout and `git switch` cover most work. Reach for a worktree only when two trees must be live at once (a long build or review while you keep editing). One repo, many working directories sharing the same object store; beats stash-juggling or a second clone.
 
 ```bash
 git worktree add ../proj-hotfix main        # existing branch in a new dir
@@ -46,6 +46,15 @@ git worktree prune                          # clean stale admin files
 ```
 
 A branch can only be checked out in one worktree at a time. Deleting a worktree's directory by hand leaves dangling metadata — use `git worktree remove` (or `prune`).
+
+With worktrunk (`wt`):
+
+```bash
+wt switch -c feature/x         # branch + worktree at ../<repo>.feature-x; post-checkout reflinks main's gitignored files and installs if the lockfile differs
+worktree-setup sync            # after editing env files in main: main wins, prints what it replaced
+wt step prune --dry-run        # merged worktrees older than a day
+wt remove                      # current worktree; deletes its branch if merged; never --force
+```
 
 ## Fixup + autosquash — amend earlier commits cleanly
 

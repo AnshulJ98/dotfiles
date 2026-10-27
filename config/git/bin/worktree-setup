@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# usage: worktree-setup                              set up the current linked worktree
+#        worktree-setup sync                         push main's env-type files to every worktree
+#        worktree-setup hook post-checkout <prev> <new> <flag>
+#        worktree-setup hook post-start
+#        worktree-setup hook post-merge
+#
+# Makes a new linked worktree ready to run:
+#   1. `wt step copy-ignored` reflinks main's gitignored files in (node_modules, env files,
+#      certs), minus the excludes in config/worktrunk/config.toml.
+#   2. For each tracked root lockfile that differs from main's: pnpm-lock.yaml ->
+#      `pnpm install --frozen-lockfile --prefer-offline`, package-lock.json -> `npm ci
+#      --prefer-offline`; yarn.lock and bun.lock/bun.lockb print the command. WT_NO_INSTALL=1
+#      skips this. A failed install prints the command and carries on.
+#
+# Triggers: git's post-checkout (acts only on a new linked worktree: null <prev>) and
+# worktrunk's post-start hook. Both fire for `wt switch -c`, so a trigger runs setup once:
+# the first makes <git-dir>/worktree-setup.done, the second finds it and stays silent. A
+# plain `worktree-setup` ignores the marker (a manual rerun).
+#
+# post-merge: in the main checkout, when `wt step prune --dry-run` lists a worktree, print it.
+#
+# sync: copies gitignored .env .env.* .envrc .npmrc *.pem *.crt *.key (any depth, not under
+# node_modules) from main into every other worktree where missing or different. Main wins;
+# no backup; each change is printed. Works from any worktree.
+#
+# Exit 0 on every path except a usage error (2): a hook must never fail a checkout or merge.
+set -u
+
+say() { printf 'worktree-setup: %s\n' "$*"; }
+
+usage() {
+  cat >&2 <<'EOF'
+usage: worktree-setup
+       worktree-setup sync
+       worktree-setup hook post-checkout <prev> <new> <flag>
+       worktree-setup hook post-start
+       worktree-setup hook post-merge
+EOF
+  exit 2
+}
+
+LOCKFILES=(pnpm-lock.yaml package-lock.json yarn.lock bun.lock bun.lockb)
+SYNC_SPECS=(':(glob)**/.env' ':(glob)**/.env.*' ':(glob)**/.envrc' ':(glob)**/.npmrc'
+            ':(glob)**/*.pem' ':(glob)**/*.crt' ':(glob)**/*.key' ':(exclude,glob)**/node_modules/**')
+
+# Succeeds in a linked worktree: git-dir differs from git-common-dir.
+is_linked() {
+  local gd cdir
+  gd="$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 1
+  cdir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ "$gd" != "$cdir" ]
+}
+
+# The main worktree: the first entry of the porcelain list. Sets MAIN, MAIN_BARE.
+find_main() {
+  MAIN="" MAIN_BARE=0
+  local line seen=0
+  while IFS= read -r line; do
+    if [ -z "$line" ]; then [ "$seen" -eq 1 ] && break; continue; fi
+    case "$line" in
+      "worktree "*) [ "$seen" -eq 0 ] && { MAIN="${line#worktree }"; seen=1; } ;;
+      bare) MAIN_BARE=1 ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+  [ -n "$MAIN" ]
+}
+
+try_install() { # dir, command words...
+  local dir="$1"; shift
+  if ! (cd "$dir" && "$@"); then
+    say "$* failed; run it by hand in $dir"
+  fi
+}
+
+setup() {
+  local top lf
+  if ! is_linked; then
+    say "not a linked worktree; nothing to do"
+    return 0
+  fi
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+
+  if command -v wt >/dev/null 2>&1; then
+    wt step copy-ignored || say "wt step copy-ignored failed; run it by hand in $top"
+  else
+    say "wt not found; gitignored files not copied (brew install worktrunk)"
+  fi
+
+  [ "${WT_NO_INSTALL:-}" = "1" ] && return 0
+  find_main || return 0
+  for lf in "${LOCKFILES[@]}"; do
+    git -C "$top" ls-files --error-unmatch -- "$lf" >/dev/null 2>&1 || continue
+    ! cmp -s "$top/$lf" "$MAIN/$lf" || continue
+    case "$lf" in
+      pnpm-lock.yaml)    try_install "$top" pnpm install --frozen-lockfile --prefer-offline ;;
+      package-lock.json) try_install "$top" npm ci --prefer-offline ;;
+      yarn.lock)         say "lockfile differs from main; run: yarn install --frozen-lockfile" ;;
+      bun.lock|bun.lockb) say "lockfile differs from main; run: bun install --frozen-lockfile" ;;
+    esac
+  done
+  return 0
+}
+
+# Setup for a trigger: only the first trigger in a worktree runs it.
+setup_once() {
+  local gd
+  gd="$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 0
+  mkdir "$gd/worktree-setup.done" 2>/dev/null || return 0
+  setup
+}
+
+post_merge() {
+  local out
+  command -v wt >/dev/null 2>&1 || return 0
+  is_linked && return 0
+  out="$(wt step prune --dry-run --format json 2>/dev/null)" || return 0
+  printf '%s\n' "$out" | grep -Eq '"kind"[[:space:]]*:[[:space:]]*"worktree"' || return 0
+  say "finished worktrees, remove with wt step prune:"
+  wt step prune --dry-run 2>&1
+  return 0
+}
+
+sync_env() {
+  local -a files wts
+  local line path="" bare=0 prunable=0 first=1 f target kind src
+  find_main || { say "no worktrees found"; return 0; }
+  if [ "$MAIN_BARE" -eq 1 ]; then
+    say "main is a bare repository; nothing to sync from"
+    return 0
+  fi
+
+  while IFS= read -r -d '' f; do files+=("$f"); done \
+    < <(git -C "$MAIN" ls-files -z -o -i --exclude-standard -- "${SYNC_SPECS[@]}" 2>/dev/null)
+  [ "${#files[@]}" -gt 0 ] || return 0
+
+  # Other worktrees: skip main itself (the first entry), bare and prunable ones.
+  while IFS= read -r line; do
+    if [ -n "$line" ]; then
+      case "$line" in
+        "worktree "*) path="${line#worktree }" ;;
+        bare) bare=1 ;;
+        prunable*) prunable=1 ;;
+      esac
+      continue
+    fi
+    if [ -n "$path" ]; then
+      if [ "$first" -eq 1 ]; then first=0
+      elif [ "$bare" -eq 0 ] && [ "$prunable" -eq 0 ] && [ -d "$path" ]; then wts+=("$path"); fi
+    fi
+    path="" bare=0 prunable=0
+  done < <(git worktree list --porcelain 2>/dev/null; echo)
+
+  for target in "${wts[@]+"${wts[@]}"}"; do
+    for f in "${files[@]}"; do
+      src="$MAIN/$f"
+      [ -f "$src" ] || continue
+      if [ ! -e "$target/$f" ]; then
+        kind="added"
+      elif ! cmp -s "$src" "$target/$f"; then
+        kind="replaced"
+      else
+        continue
+      fi
+      # A file the worktree's branch tracks is the branch's business, not an env file.
+      git -C "$target" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 && continue
+      mkdir -p "$(dirname "$target/$f")" && cp -p "$src" "$target/$f" \
+        && printf '%s: %s %s\n' "$target" "$kind" "$f"
+    done
+  done
+  return 0
+}
+
+case "${1:-}" in
+  "")
+    [ "$#" -eq 0 ] || usage
+    setup
+    ;;
+  sync)
+    [ "$#" -eq 1 ] || usage
+    sync_env
+    ;;
+  hook)
+    case "${2:-}" in
+      post-checkout)
+        [ "$#" -eq 5 ] || usage
+        case "$3" in ""|*[!0]*) exit 0 ;; esac
+        is_linked || exit 0
+        setup_once
+        ;;
+      post-start)
+        [ "$#" -eq 2 ] || usage
+        setup_once
+        ;;
+      post-merge)
+        post_merge
+        ;;
+      *) usage ;;
+    esac
+    ;;
+  *) usage ;;
+esac
+exit 0

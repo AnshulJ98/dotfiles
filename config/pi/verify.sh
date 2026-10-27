@@ -156,6 +156,10 @@ for stub in "$GITT"/hooks/*; do
 done
 check "auto-guard on PATH" "command -v auto-guard"
 check "git-hooks-install on PATH" "command -v git-hooks-install"
+check "wt on PATH" "command -v wt"
+check "worktree-setup on PATH" "command -v worktree-setup"
+check "~/.config/worktrunk/config.toml resolves to config/worktrunk/config.toml" "[ \"\$(readlink -f '$HOME/.config/worktrunk/config.toml')\" = \"\$(readlink -f '$DOT/../worktrunk/config.toml')\" ]"
+check ".zshrc has the wt shell integration line" "grep -qF 'wt config shell init zsh' '$DOT/../../home/.zshrc'"
 check "~/.config/husky/init.sh resolves to config/husky/init.sh" "[ \"\$(readlink -f '$HOME/.config/husky/init.sh')\" = \"\$(readlink -f '$DOT/../husky/init.sh')\" ]"
 for h in pre-commit pre-merge-commit pre-push; do
   check "githooks/$h has # dotfiles-hook" "grep -qF '# dotfiles-hook' '$DOT/../../githooks/$h'"
