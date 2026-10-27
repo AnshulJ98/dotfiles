@@ -84,7 +84,8 @@ Stop and wait.
   fix by hand.
 
 In a slice loop, after a ship on a branch, ask one question with
-`ask_user`: merge `--no-ff` to master, delete the branch, plan slice
+`ask_user`: merge `--no-ff` to master, delete the branch (and
+`wt remove` its worktree if it has one; never `--force`), plan slice
 n+1? On yes, do all three in one turn; the next plan starts from the
 slice list, with the merged slices ticked. A bare "ok" or "yes" while
 a plan waits: ask which of the three I mean. Anything else puts the
