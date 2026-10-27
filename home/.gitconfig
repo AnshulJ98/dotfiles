@@ -1,3 +1,6 @@
+[init]
+	# Hooks for new repos; existing repos: config/git/bin/git-hooks-install <repo>...
+	templateDir = ~/.config/git/template
 [user]
 	name = Anshul Joshi
 	email = joshianshul98@gmail.com

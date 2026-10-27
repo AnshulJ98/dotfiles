@@ -42,7 +42,9 @@ Write about 300 words, skipping any section with nothing to say:
    and why one wins.
 4. **Plan**: ordered steps, each `<step> (files) → check: <command or
    observation that proves it>`. Say why a step must follow the one
-   before only when it isn't obvious. A one-step plan is fine.
+   before only when it isn't obvious. A one-step plan is fine. Each
+   step's work sits where the Design rule in AGENTS.md puts it (the tool
+   that owns the job).
 5. **Risks**: what could break and how far. Skip if nothing beyond the
    obvious.
 
@@ -51,7 +53,7 @@ Close with this block; it is the worker's spec if the plan is dispatched:
 ```
 ---
 files-allowed: [<every file the steps touch, relative to the git root>]
-tests: <one command that proves the plan and exits non-zero on failure>
+tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
 allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]
 ---
 ```
@@ -84,7 +86,8 @@ Stop and wait.
   fix by hand.
 
 In a slice loop, after a ship on a branch, ask one question with
-`ask_user`: merge `--no-ff` to master, delete the branch, plan slice
+`ask_user`: merge `--no-ff` to master, delete the branch (and
+`wt remove` its worktree if it has one; never `--force`), plan slice
 n+1? On yes, do all three in one turn; the next plan starts from the
 slice list, with the merged slices ticked. A bare "ok" or "yes" while
 a plan waits: ask which of the three I mean. Anything else puts the

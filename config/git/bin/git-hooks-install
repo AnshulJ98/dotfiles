@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# usage: git-hooks-install [--dry-run] <repo>...
+#
+# Puts the auto-guard hooks into existing repos. New repos get them from
+# init.templateDir (config/git/template). The stubs are read from ../template/hooks next
+# to this script's real path (it is symlinked into ~/.local/bin); each stub's
+# `# dotfiles-hook` line is the unit installed, so new stubs need no change here.
+#
+# Per repo, per stub, in the repo's shared hooks dir (worktrees share it):
+#   hook absent                     copy the stub (installed)
+#   hook has `# dotfiles-hook`      leave it (present)
+#   hook is a sh/bash script        insert the marked line after the shebang (inserted into)
+#   any other interpreter           leave it, report it (skipped)
+# A repo with core.hooksPath set (husky) is skipped: it gets the guard from
+# ~/.config/husky/init.sh. --dry-run prints the same lines prefixed `would:`, writes nothing.
+#
+# Exit 2 on a usage error, otherwise 0: the report is the result.
+set -u
+
+MARK='# dotfiles-hook'
+
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+STUBS="$(cd -P "$(dirname "$src")/../template/hooks" && pwd)" || exit 2
+
+dry=0
+repos=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) dry=1 ;;
+    -h|--help) sed -n '2,3p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "git-hooks-install: unknown option $arg" >&2; exit 2 ;;
+    *) repos+=("$arg") ;;
+  esac
+done
+if [ "${#repos[@]}" -eq 0 ]; then
+  echo "usage: git-hooks-install [--dry-run] <repo>..." >&2
+  exit 2
+fi
+
+say() { # repo message
+  if [ "$dry" -eq 1 ]; then printf 'would: %s: %s\n' "$1" "$2"; else printf '%s: %s\n' "$1" "$2"; fi
+}
+
+sh_shebang='^#![[:space:]]*((/usr/bin/env[[:space:]]+(-S[[:space:]]+)?)|(/[^[:space:]]*/))(sh|bash)([[:space:]].*)?$'
+
+for repo in "${repos[@]}"; do
+  common="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common=""
+  if [ -z "$common" ]; then
+    say "$repo" "not a git repo"
+    continue
+  fi
+  hp="$(git -C "$repo" config core.hooksPath 2>/dev/null)" || hp=""
+  if [ -n "$hp" ]; then
+    say "$repo" "skipped: core.hooksPath=$hp; husky repos get the guard from ~/.config/husky/init.sh"
+    continue
+  fi
+  hooks="$common/hooks"
+  [ "$dry" -eq 1 ] || mkdir -p "$hooks"
+
+  for stub in "$STUBS"/*; do
+    [ -f "$stub" ] || continue
+    name="$(basename "$stub")"
+    target="$hooks/$name"
+    mline="$(grep -F "$MARK" "$stub" | head -n1)"
+    if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+      say "$repo" "installed $name"
+      if [ "$dry" -eq 0 ]; then cp "$stub" "$target" && chmod 755 "$target"; fi
+    elif grep -qF "$MARK" "$target" 2>/dev/null; then
+      say "$repo" "present $name"
+    else
+      first="$(head -n1 "$target" 2>/dev/null | tr -d '\r')"
+      if [[ "$first" =~ $sh_shebang ]]; then
+        say "$repo" "inserted into $name"
+        if [ "$dry" -eq 0 ]; then
+          tmp="$(mktemp)"
+          { printf '%s\n' "$first"; printf '%s\n' "$mline"; tail -n +2 "$target"; } > "$tmp"
+          cat "$tmp" > "$target"   # in place: keeps the mode
+          rm -f "$tmp"
+        fi
+      else
+        say "$repo" "skipped $name: not a sh/bash hook (${first:-no shebang})"
+      fi
+    fi
+  done
+done
+exit 0

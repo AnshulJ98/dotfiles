@@ -3,6 +3,12 @@
 
 ## Design
 
+- Put each job in the tool that owns it (git hook, CLI, script): one job
+  per module, few links between modules, the simplest form that works.
+  Then it runs the same way every time, under any harness. A harness
+  extension needs a reason: the job lives inside the harness (stream,
+  compaction, rendering, in-loop retry), or no tool can see it. Use a
+  skill with snippets when an agent needs the steps.
 - Give a module a small interface that hides a lot of work. It leaks
   when callers must pass config shaped like its internals, catch errors
   that name its internals, or call its methods in a set order.

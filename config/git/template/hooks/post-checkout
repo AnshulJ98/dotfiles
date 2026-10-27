@@ -1,0 +1,2 @@
+#!/bin/sh
+if command -v worktree-setup >/dev/null 2>&1; then worktree-setup hook post-checkout "$@"; fi # dotfiles-hook

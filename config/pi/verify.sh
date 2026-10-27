@@ -26,27 +26,68 @@ if "$DOT/build-agents.sh" --check >/dev/null 2>&1; then
 else
   bad "generated agent files are stale — run config/pi/build-agents.sh"
 fi
+check "build-agents.sh refuses an unknown flag" "'$DOT/build-agents.sh' --chek >/dev/null 2>&1; [ \$? -eq 2 ]"
 
-# --- no enabled model may be one we have verified cannot run ---
-# `pi models` prints ranges ("opus-4-5 through opus-5"), so it cannot be
-# substring-matched. Instead assert against models proven dead by a live call:
+# --- every enabled model must resolve, and none may be proven dead ---
+# pi itself prints `Warning: No models match pattern "<p>"` on stderr for each
+# enabledModels entry that matches nothing, so --list-models is the check.
+# DEAD_MODELS lists models a live call refused, with the quote:
 #   openai-codex/gpt-5.4-mini  "not supported when using Codex with a ChatGPT account"
-#   github-copilot/*           pi drives Copilot via the Responses API; this
-#                              account has no model on it (model_not_supported)
+#   openai-codex/gpt-5.6-sol   same refusal, live call 10-27
 echo "[models]"
 enabled="$(jqs "$DOT/settings.json" "' '.join(d['enabledModels'])")"
-DEAD_MODELS="openai-codex/gpt-5.4-mini"
-DEAD_PROVIDERS="github-copilot"
+DEAD_MODELS="openai-codex/gpt-5.4-mini openai-codex/gpt-5.6-sol"
 for m in $enabled; do
   dead=0
   for d in $DEAD_MODELS; do [ "$m" = "$d" ] && dead=1; done
-  for p in $DEAD_PROVIDERS; do [ "${m%%/*}" = "$p" ] && dead=1; done
   if [ "$dead" -eq 1 ]; then
     bad "enabledModels lists $m, which is verified non-functional"
   else
     ok "model $m"
   fi
 done
+# Run from $HOME so no project .pi/ settings are mixed in.
+if listing="$(cd "$HOME" && timeout 60 pi --list-models 2>&1)"; then
+  nomatch="$(printf '%s\n' "$listing" | sed -n 's/^Warning: No models match pattern "\(.*\)"$/\1/p')"
+  if [ -n "$nomatch" ]; then
+    while IFS= read -r p; do
+      bad "enabledModels pattern $p matches no available model"
+    done <<< "$nomatch"
+  else
+    ok "every enabledModels pattern matches a model"
+  fi
+else
+  bad "pi --list-models ran"
+fi
+
+# --- tools and pi internals the config depends on ---
+echo "[tools]"
+check "timeout on PATH is GNU (scout uses --foreground)" "timeout --version 2>/dev/null | grep -q 'GNU coreutils'"
+# OAuth shim: loaded by bin/scout only when present (work machines may lack it).
+# claude-opus-5-5 needs Claude Code >= 2.1.280; claude-fable-5-1 needs >= 2.1.251.
+# Upgrades of the package have reverted a hand patch before.
+CC_FLOOR="2.1.280"
+SHIM="$AGENT/npm/node_modules/@gotgenes/pi-anthropic-auth/src/claude-code-version.ts"
+if [ -f "$SHIM" ]; then
+  ccv="${PI_ANTHROPIC_AUTH_CLAUDE_CODE_VERSION:-$(sed -n 's/^export const CLAUDE_CODE_VERSION = "\([0-9][0-9.]*\)";.*/\1/p' "$SHIM")}"
+  check "anthropic auth shim Claude Code version ${ccv:-<not found>} >= $CC_FLOOR" \
+    "[ -n '$ccv' ] && [ \"\$(printf '%s\n%s\n' '$ccv' '$CC_FLOOR' | sort -V | head -1)\" = '$CC_FLOOR' ]"
+fi
+# Extensions patch these prototypes and skip silently when a method is gone,
+# so a pi upgrade would turn them into no-ops.
+PI_REL="$AGENT/install/releases/$(cat "$AGENT/install/current-version" 2>/dev/null)/node_modules/@earendil-works"
+proto_fn() { # package class method
+  (cd "$PI_REL/pi-coding-agent" && node --input-type=module -e \
+    "const m = await import('$1'); process.exit(typeof m['$2']?.prototype?.['$3'] === 'function' ? 0 : 1)")
+}
+check "AssistantMessageComponent.prototype.updateContent is a function (polish-chrome)" \
+  "proto_fn @earendil-works/pi-coding-agent AssistantMessageComponent updateContent"
+check "UserMessageComponent.prototype.rebuild is a function (polish-chrome)" \
+  "proto_fn @earendil-works/pi-coding-agent UserMessageComponent rebuild"
+check "UserMessageComponent.prototype.render is a function (polish-chrome)" \
+  "proto_fn @earendil-works/pi-coding-agent UserMessageComponent render"
+check "TuiAltScreen.prototype.handleSelectionMouseEvent is a function (kitty-links)" \
+  "proto_fn @earendil-works/pi-tui TuiAltScreen handleSelectionMouseEvent"
 
 # --- scout wrapper: the delegation rule in AGENTS.md names it by path ---
 echo "[scout]"
@@ -104,6 +145,29 @@ for p in $(jqs "$DOT/settings.json" "chr(10).join(x if isinstance(x,str) else x[
   name=$(printf '%s' "$name" | sed -E 's/(.)@[^@/]+$/\1/')
   check "package installed: $name" "[ -d '$AGENT/npm/node_modules/$name' ]"
 done
+
+# --- git hooks: auto-guard reaches new repos (templateDir), husky repos and this one ---
+echo "[git]"
+GITT="$DOT/../git/template"
+check "init.templateDir is ~/.config/git/template" "[ \"\$(git config --global --path init.templateDir)\" = \"$HOME/.config/git/template\" ]"
+check "~/.config/git/template resolves to config/git/template" "[ \"\$(readlink -f '$HOME/.config/git/template')\" = \"\$(readlink -f '$GITT')\" ]"
+for stub in "$GITT"/hooks/*; do
+  check "template hook ${stub##*/} is executable and has # dotfiles-hook" "[ -x '$stub' ] && grep -qF '# dotfiles-hook' '$stub'"
+done
+check "auto-guard on PATH" "command -v auto-guard"
+check "git-hooks-install on PATH" "command -v git-hooks-install"
+check "wt on PATH" "command -v wt"
+check "worktree-setup on PATH" "command -v worktree-setup"
+check "~/.config/worktrunk/config.toml resolves to config/worktrunk/config.toml" "[ \"\$(readlink -f '$HOME/.config/worktrunk/config.toml')\" = \"\$(readlink -f '$DOT/../worktrunk/config.toml')\" ]"
+check ".zshrc has the wt shell integration line" "grep -qF 'wt config shell init zsh' '$DOT/../../home/.zshrc'"
+check "~/.config/husky/init.sh resolves to config/husky/init.sh" "[ \"\$(readlink -f '$HOME/.config/husky/init.sh')\" = \"\$(readlink -f '$DOT/../husky/init.sh')\" ]"
+for h in pre-commit pre-merge-commit pre-push; do
+  check "githooks/$h has # dotfiles-hook" "grep -qF '# dotfiles-hook' '$DOT/../../githooks/$h'"
+done
+
+# --- the node tests; run here in review, never by workers ---
+echo "[tests]"
+check "node tests pass" "node --test '$DOT'/tests/*.test.ts"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
