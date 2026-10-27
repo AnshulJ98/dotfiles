@@ -16,8 +16,8 @@
  *   name is cut before the cost, and the cache hit goes before the context.
  * - The cost total includes heads-up side requests (heads-up.ts entries).
  * - Shows the last request's cache-hit share, which pi's default footer had.
- * - Renders extension statuses (ctx.ui.setStatus, e.g. scout) on a second
- *   line; upstream dropped them.
+ * - Renders extension statuses (ctx.ui.setStatus, e.g. scout) on a line of
+ *   their own under the footer; upstream dropped them.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

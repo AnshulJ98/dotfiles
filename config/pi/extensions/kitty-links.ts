@@ -14,6 +14,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { TuiAltScreen } from "@earendil-works/pi-tui";
 
 const WRAPPED = Symbol.for("kitty-links.wrapped");
+const KITTY_TIMEOUT_MS = 3000;
 
 type Open = ((url: string) => void) & { [WRAPPED]?: true };
 
@@ -37,8 +38,18 @@ function viaKitty(fallback: (url: string) => void): Open {
 			fallback(url);
 		};
 		const child = spawn("kitty", args, { stdio: "ignore", detached: true });
-		child.on("error", fail);
+		// A socket that accepts but never answers would leave the click dead
+		const timer = setTimeout(() => {
+			child.kill();
+			fail();
+		}, KITTY_TIMEOUT_MS);
+		timer.unref();
+		child.on("error", () => {
+			clearTimeout(timer);
+			fail();
+		});
 		child.on("exit", (code) => {
+			clearTimeout(timer);
 			if (code !== 0) fail();
 		});
 		child.unref();
