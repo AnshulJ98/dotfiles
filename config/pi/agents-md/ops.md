@@ -23,6 +23,8 @@ with a named defect or "clean":
 - Cache and state: key collisions, falsy versus missing, plain objects
   used as maps (`__proto__`).
 - Interface shape.
+- Design: each job sits in the tool that owns it; coupling between
+  modules; anything simpler that works.
 - Concurrency: duplicate in-flight requests, stampedes, retries, backoff.
 - Input: validation and encoding at every boundary (injection, path
   traversal).

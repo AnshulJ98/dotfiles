@@ -29,8 +29,9 @@ Do not implement. No code until I say go.
 
 Walk these axes once before sorting, as a discovery checklist, not as a
 structure for the wave: contract and interface, data shape, failure modes,
-edge cases, migration, naming, verification. A question earns its place
-when later work depends on its answer, not by covering an axis.
+edge cases, migration, naming, verification, placement (which tool owns
+each job, per the Design rule). A question earns its place when later
+work depends on its answer, not by covering an axis.
 
 ## Glossary
 
