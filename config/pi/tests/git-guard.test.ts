@@ -70,6 +70,7 @@ both("other", "--git-dir G/.git checkout x", true);
 both("guarded", "-c core.pager=cat stash", true);
 both("guarded", "-c user.name=x -C . checkout -b x", true);
 both("guarded", "--no-pager stash", true);
+both("guarded", "--attr-source HEAD stash", true);
 both("guarded", "-C O stash", false);
 both("guarded", "-C O checkout -b x", false);
 both("other", "checkout -b x", false);

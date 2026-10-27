@@ -96,7 +96,7 @@ function makeMain(): string {
 	const repo = join(tmp("wts-"), "main");
 	mkdirSync(repo);
 	mustGit(repo, {}, "init", "-q", `--template=${TEMPLATE}`);
-	put(repo, ".gitignore", ".env*\n.envrc\n.npmrc\n*.pem\n*.key\nnode_modules/\ndist/\n");
+	put(repo, ".gitignore", ".env*\n.envrc\n.npmrc\n*.pem\n*.key\nnode_modules/\ndist/\n.venv/\n");
 	put(repo, "package-lock.json", "lock main\n");
 	put(repo, "a.txt", "a\n");
 	mustGit(repo, {}, "add", ".gitignore", "package-lock.json", "a.txt");
@@ -289,6 +289,8 @@ test("sync", async (t) => {
 		put(main, "certs/ca.pem", "PEM\n", 0o600);
 		put(main, ".npmrc", "registry=x\n");
 		put(main, "node_modules/x/.env", "NM=1\n");
+		// inside an ignored directory: a dependency's file, not an env file
+		put(main, ".venv/lib/certifi/cacert.pem", "CA\n");
 		const a = sibling(main, "tree-a");
 		const b = sibling(main, "tree-b");
 		mustGit(main, o, "worktree", "add", "-q", "-b", "a", a);
@@ -318,6 +320,7 @@ test("sync", async (t) => {
 		assert.equal(readFileSync(join(a, "certs/ca.pem"), "utf8"), "PEM\n");
 		assert.equal(statSync(join(a, "certs/ca.pem")).mode & 0o777, 0o600);
 		assert.ok(!existsSync(join(a, "node_modules/x/.env")));
+		assert.ok(!existsSync(join(a, ".venv")));
 		assert.ok(!existsSync(join(a, ".env.example")));
 		assert.equal(readFileSync(join(main, ".env"), "utf8"), "SECRET=new\n");
 	});
