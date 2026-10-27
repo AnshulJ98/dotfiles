@@ -2,17 +2,14 @@
 // Drives pi's real edit renderers (from the installed release) so a change to the
 // `preview` field or the box's [header, spacer, body] layout fails here.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { register } from "node:module";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { piPackage } from "./pi-package.ts";
 
-const agentDir = join(homedir(), ".pi", "agent");
-const version = readFileSync(join(agentDir, "install", "current-version"), "utf8").trim().replace(/^v/, "");
-const piRoot = join(agentDir, "install", "releases", version, "node_modules");
-const piModules = pathToFileURL(join(piRoot, "x.js")).href;
+const piRoot = piPackage();
+const piModules = pathToFileURL(join(piRoot, "package.json")).href;
 register(
 	`data:text/javascript,${encodeURIComponent(`
 		export async function resolve(specifier, context, next) {
@@ -21,7 +18,7 @@ register(
 		}`)}`,
 );
 
-const dist = join(piRoot, "@earendil-works", "pi-coding-agent", "dist");
+const dist = join(piRoot, "dist");
 const { initTheme, theme } = await import(pathToFileURL(join(dist, "modes/interactive/theme/theme.js")).href);
 const { editRenderers } = await import(pathToFileURL(join(dist, "core/tools/renderers/edit.js")).href);
 const { COLLAPSED_LINES, MIN_WIDTH, patchBox } = await import("../extensions/split-diff.ts");

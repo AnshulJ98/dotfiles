@@ -42,6 +42,10 @@ ide/
 *_ecdsa
 .pi-subagents/
 
+# pi's managed-install launcher, written into ~/.pi/agent/bin (a link to config/pi/bin).
+# Copied to a machine without that install, it shadows the real pi on PATH.
+config/pi/bin/pi
+
 # agent-eval probe outputs
 agent-eval/results/
 
