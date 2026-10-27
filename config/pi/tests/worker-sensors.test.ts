@@ -37,18 +37,19 @@ const CLOUD: Array<[string, string[], boolean]> = [
 	["cdk deploy MyStack-prod", ["cdk deploy MyStack-dev"], true],
 	["cdk deploy MyStack-dev2", ["cdk deploy MyStack-dev"], true],
 	["cdk deploy MyStack-dev && aws lambda invoke --function-name f o", ["cdk deploy MyStack-dev"], true],
-	["git push", ["git push"], true],
+	["git push", ["git push"], false], // git is guarded by bin/guard/git; see tests/git-guard.test.ts
 ];
 
+// The git rows below are not blocked here: bin/guard/git owns them (tests/git-guard.test.ts).
 const LOCAL: Array<[string, boolean]> = [
 	["git status", false],
 	["git diff --stat", false],
-	["git -C repo reset --hard", true],
-	["git -c core.pager=cat stash", true],
+	["git -C repo reset --hard", false],
+	["git -c core.pager=cat stash", false],
 	["git commit -m wip", false],
-	["git commit --amend --no-edit", true],
-	["/usr/bin/git checkout main", true],
-	["sh -c 'git push origin main'", true],
+	["git commit --amend --no-edit", false],
+	["/usr/bin/git checkout main", false],
+	["sh -c 'git push origin main'", false],
 	["rm file.txt", false],
 	["rm -rf build", true],
 	["rm --recursive dist", true],
@@ -164,6 +165,7 @@ const FAILURES: Array<[string, number | null, string, boolean, "fail" | "cannot-
 	["timeout", null, "", true, "cannot-run"],
 	["not executable", 126, "", false, "cannot-run"],
 	["command not found", 127, "", false, "cannot-run"],
+	["skipped (77)", 77, "", false, "cannot-run"],
 	["network down", 1, "Error: connect ECONNREFUSED 127.0.0.1:5432", false, "cannot-run"],
 ];
 for (const [name, code, output, timedOut, want] of FAILURES) {
@@ -184,6 +186,35 @@ for (const [tests, ok] of TEMP_TESTS) {
 		assert.equal(typeof parseSpec(spec("", tests)) !== "string", ok);
 	});
 }
+
+test("sensors arm in a repo with intent-to-add entries, and the entry's existing lines are not blamed", async () => {
+	const repo = mkdtempSync(join(tmpdir(), "ws-repo-"));
+	const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
+	git("init", "-q");
+	writeFileSync(join(repo, "tracked.md"), "a\n");
+	git("add", ".");
+	git("commit", "-qm", "init");
+	writeFileSync(join(repo, "new.md"), "one\n");
+	git("add", "-N", "new.md");
+	const specFile = join(mkdtempSync(join(tmpdir(), "ws-spec-")), "spec.md");
+	writeFileSync(specFile, "---\nfiles-allowed: [\"**\"]\ntests: \"true\"\nmax-lines: 1\n---\nbody\n");
+
+	const handlers = new Map<string, (event: unknown) => Promise<unknown>>();
+	const pi = { on: (name: string, handler: (event: unknown) => Promise<unknown>) => handlers.set(name, handler) };
+	const cwd = process.cwd();
+	process.env.PI_WORKER_SPEC = specFile;
+	process.chdir(repo);
+	try {
+		workerSensors(pi as unknown as Parameters<typeof workerSensors>[0]);
+		assert.equal(await handlers.get("tool_call")?.({ toolName: "bash", input: { command: "true" } }), undefined);
+		appendFileSync(join(repo, "new.md"), "two\n");
+		assert.equal(await handlers.get("agent_before_settle")?.({ outcome: "completed" }), undefined);
+		assert.match(execFileSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" }), /^ A new\.md$/m);
+	} finally {
+		process.chdir(cwd);
+		delete process.env.PI_WORKER_SPEC;
+	}
+});
 
 test("settle check: lines added to a file that was already untracked count toward max-lines", async () => {
 	const repo = mkdtempSync(join(tmpdir(), "ws-repo-"));

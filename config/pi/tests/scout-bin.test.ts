@@ -10,7 +10,7 @@ import { test } from "node:test";
 const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
 const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\nDo it.\n";
 
-// FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep
+// FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git)
 const FAKE_PI = `#!/usr/bin/env bash
 dir=""
 while [ $# -gt 0 ]; do [ "$1" = "--session-dir" ] && dir="$2"; shift; done
@@ -19,6 +19,7 @@ case "$FAKE_PI" in
 ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
+env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 esac
 `;
 
@@ -70,6 +71,31 @@ test("a refused spec leaves no run folder behind", async () => {
 	assert.equal(run.code, 2);
 	const runs = existsSync(scoutRoot) ? readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)) : [];
 	assert.deepEqual(runs, []);
+});
+
+test("a read scout runs with the git guard first on PATH and PI_SCOUT_MODE=read", async () => {
+	const { env } = sandbox();
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "env" });
+	assert.equal(run.code, 0);
+	assert.match(run.stdout, /^mode=read$/m);
+	assert.match(run.stdout, /^git=.*\/guard\/git$/m);
+	assert.match(run.stdout, /^real=\/.*\/git$/m);
+	assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
+});
+
+test("a worker runs with the git guard first on PATH and PI_SCOUT_MODE=rw", async () => {
+	const { env } = sandbox();
+	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
+	assert.match(run.stdout, /^mode=rw$/m);
+	assert.match(run.stdout, /^git=.*\/guard\/git$/m);
+});
+
+test("scout started with the guard already on PATH still hands the guard the real git", async () => {
+	const { env } = sandbox();
+	const guard = resolve(import.meta.dirname, "../bin/guard");
+	const run = await runScout(["look around"], { ...env, PATH: `${guard}:${env.PATH}`, FAKE_PI: "env" });
+	assert.match(run.stdout, /^real=\/.*\/git$/m);
+	assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
 });
 
 test("a worker that writes no verdict still gets verdict.json", async () => {

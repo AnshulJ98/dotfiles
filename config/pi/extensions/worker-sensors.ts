@@ -8,15 +8,19 @@
  * optional `allowed-commands` list of command prefixes exempt from the cloud
  * block (`cdk deploy MyStack-dev`), each given a purpose by /plan.
  *
- * Two layers. `tool_call` blocks edit/write outside files-allowed and a
- * short list of destructive bash. That layer is a speed bump: bash can still
- * write files, and a command built from variables (`g=git; $g push`) slips
- * past the token scan. The settle check is the authority: before the run
- * settles it reruns the tests and diffs the tree against a snapshot taken at
- * load, so bash writes, dependency changes, size overruns, and weakened
- * tests are all caught there. A failed check earns one continuation; a check
- * that cannot run (missing binary or service, timeout) stops at once,
- * because more model turns cannot fix the environment.
+ * Three layers. Git is guarded by bin/guard/git, a wrapper first on PATH for
+ * every scout child, so history, stash, remote and tree-switching commands
+ * are refused on the worker's own repo whatever the spelling (`sh -c`,
+ * `g=git; $g push`). `tool_call` blocks edit/write outside files-allowed and
+ * a short list of destructive bash (recursive delete, find -delete, package
+ * changes, cloud calls); that scan is a tripwire, not a sandbox: bash can
+ * still write files, and a command built from variables slips past it. The
+ * settle check is the authority: before the run settles it reruns the tests
+ * and diffs the tree against a snapshot taken at load, so bash writes,
+ * dependency changes, size overruns, and weakened tests are all caught there.
+ * A failed check earns one continuation; a check that cannot run (missing
+ * binary or service, exit 77, timeout) stops at once, because more model
+ * turns cannot fix the environment.
  *
  * Known gaps: the settle diff cannot see gitignored paths (`dist/`,
  * `node_modules/`, `.env`) or anything outside the repo, a symlink inside
@@ -26,15 +30,16 @@
  * `**` in files-allowed does not match dotfiles (node:path matchesGlob);
  * list them explicitly.
  *
- * The verdict line `WORKER-SENSORS: PASS|FAIL|CANNOT-RUN <reasons>` goes to
- * stdout, which scout tees into the digest; PI_WORKER_REPORT, when set,
- * receives the same verdict as JSON.
+ * The verdict is written as JSON to PI_WORKER_REPORT (verdict.json), and
+ * `WORKER-SENSORS: PASS|FAIL|CANNOT-RUN <reasons>` also goes to stdout. scout
+ * reads the report, puts the verdict line first in the digest, and writes
+ * CANNOT-RUN itself when no report exists.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
 
 const DEFAULT_MAX_LINES = 400;
@@ -143,8 +148,6 @@ export function repoRelative(input: string, cwd: string, root: string, home: str
   return relative(root, resolve(cwd, path));
 }
 
-const GIT_BLOCKED = new Set(["push", "pull", "merge", "rebase", "reset", "clean", "stash", "checkout", "switch", "restore"]);
-const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const PACKAGE_CHANGES = new Set(["add", "remove", "rm", "uninstall", "un", "update", "up", "upgrade", "dlx"]);
 const PACKAGE_INSTALLS = new Set(["install", "i"]);
@@ -166,16 +169,6 @@ function shellSegments(command: string): string[][] {
     .filter((words) => words.length > 0);
 }
 
-function gitReason(args: readonly string[]): string | undefined {
-  let i = 0;
-  while (i < args.length && args[i].startsWith("-")) i += GIT_OPTIONS_WITH_VALUE.has(args[i]) ? 2 : 1;
-  const sub = args[i];
-  if (sub === undefined) return undefined;
-  if (GIT_BLOCKED.has(sub)) return `git ${sub} touches history, the stash, or the remote, which belong to the operator`;
-  if (sub === "commit" && args.includes("--amend")) return "git commit --amend rewrites the operator's commit";
-  return undefined;
-}
-
 function cloudReason(word: string, rest: readonly string[]): string | undefined {
   if (word === "cdk" && rest.some((a) => CDK_CHANGES.has(a))) return "cdk deploy/destroy/bootstrap changes the cloud account";
   if (word === "aws") {
@@ -186,7 +179,6 @@ function cloudReason(word: string, rest: readonly string[]): string | undefined 
 }
 
 function wordReason(word: string, rest: readonly string[]): string | undefined {
-  if (word === "git") return gitReason(rest);
   if (word === "rm" && rest.some((a) => a === "--recursive" || /^-[a-zA-Z]*[rR]/.test(a))) return "recursive rm is not allowed in a worker";
   if (word === "find" && rest.includes("-delete")) return "find -delete is not allowed in a worker";
   if (word === "bunx" || (word === "npx" && rest.some((a) => a === "-y" || a === "--yes"))) return "fetching packages needs the operator";
@@ -298,7 +290,7 @@ export function depsChanged(before: string | undefined, after: string): string[]
 
 /** Whether a failing tests command means "the code is wrong" or "this machine can't run it". */
 export function classifyFailure(exitCode: number | null, output: string, timedOut: boolean): CheckFailure["kind"] {
-  if (timedOut || exitCode === 126 || exitCode === 127) return "cannot-run";
+  if (timedOut || exitCode === 126 || exitCode === 127 || exitCode === 77) return "cannot-run";
   if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|command not found/.test(output)) return "cannot-run";
   return "fail";
 }
@@ -352,7 +344,7 @@ function tail(text: string, lines: number): string {
 interface Snapshot {
   root: string;
   base: string;
-  /** Untracked files at load, by content hash; `git stash create` leaves them out. */
+  /** Untracked files at load, by content hash; the snapshot commit leaves them out. */
   untrackedAtStart: Map<string, string>;
   /** Their text, to count lines added to them later; absent once UNTRACKED_TEXT_BUDGET bytes are kept. */
   untrackedText: Map<string, string>;
@@ -400,11 +392,32 @@ function listUntracked(root: string): string[] {
   return git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
 }
 
+/**
+ * A commit of the tracked files as they are on disk, built in a throwaway copy of the index so the real one is
+ * untouched. Not `git stash create`: it fails on intent-to-add entries (`git add -N`), and bin/guard/git refuses stash.
+ */
+function worktreeCommit(root: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "worker-sensors-"));
+  try {
+    const index = join(dir, "index");
+    const realIndex = resolve(root, git(root, ["rev-parse", "--git-path", "index"]).trim());
+    const env = { ...process.env, GIT_INDEX_FILE: index };
+    const run = (args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    if (existsSync(realIndex)) copyFileSync(realIndex, index);
+    else run(["read-tree", "HEAD"]);
+    run(["add", "-u"]);
+    const tree = run(["write-tree"]).trim();
+    const who = ["-c", "user.name=worker-sensors", "-c", "user.email=worker-sensors@localhost"];
+    return run([...who, "commit-tree", tree, "-p", "HEAD", "-m", "worker-sensors snapshot"]).trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Snapshot the tree as the worker found it, so pre-existing dirt is never blamed on the worker. */
 function takeSnapshot(cwd: string): Snapshot {
   const root = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
-  const stash = git(root, ["stash", "create"]).trim();
-  const base = stash || git(root, ["rev-parse", "HEAD"]).trim();
+  const base = worktreeCommit(root);
   const untrackedAtStart = hashUntracked(root);
   const untrackedText = new Map<string, string>();
   let budget = UNTRACKED_TEXT_BUDGET;

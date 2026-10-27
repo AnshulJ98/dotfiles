@@ -33,6 +33,9 @@
 #   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
 #                  scout prints the CANNOT-RUN verdict the sensors never got to.
 #
+# Git guard: bin/guard/git is first on the child's PATH (see its header);
+# PI_SCOUT_MODE=read|rw tells it which rules apply. A tripwire, not a sandbox.
+#
 # Stall guard: the child loads extensions/stream-watchdog.ts (aborts a silent
 # model stream, resumes once). As an outer layer, scout kills a child whose
 # session file has not changed for SCOUT_STALE_SECS (600; 900 with --rw or
@@ -198,6 +201,24 @@ fi
   echo "scout: prompt file missing: $PROMPT" >&2
   exit 2
 }
+
+# Every git the child runs goes through bin/guard/git (first on PATH): it
+# refuses history, stash, remote and tree-switching commands on this repo, and
+# in read mode commit and add. PI_SCOUT_REAL_GIT is the git it hands the rest to.
+[ -x "$DIR/guard/git" ] || {
+  echo "scout: git guard missing or not executable: $DIR/guard/git" >&2
+  exit 2
+}
+# The guard may already be on PATH (tests the sensors run spawn scout); never hand it itself
+PI_SCOUT_REAL_GIT="" PI_SCOUT_GIT_DIR=""
+while IFS= read -r g; do
+  [ "$g" -ef "$DIR/guard/git" ] || { PI_SCOUT_REAL_GIT="$g"; break; }
+done < <(type -ap git)
+[ -n "$PI_SCOUT_REAL_GIT" ] &&
+  PI_SCOUT_GIT_DIR="$("$PI_SCOUT_REAL_GIT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ "$RW" = 1 ]; then PI_SCOUT_MODE=rw; else PI_SCOUT_MODE=read; fi
+export PI_SCOUT_REAL_GIT PI_SCOUT_GIT_DIR PI_SCOUT_MODE
+export PATH="$DIR/guard:$PATH"
 
 # The OAuth compatibility shim is installed on some machines only; load it
 # when present, otherwise pi's native auth (API key or auth.json) is used.
