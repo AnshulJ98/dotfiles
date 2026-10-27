@@ -18,6 +18,7 @@
  * children.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { capFiring } from "../lib/compact-cap-state.ts";
 
 const REMINDER =
   "Post-compaction reminder: your core instructions survived intact and still bind. " +
@@ -30,11 +31,6 @@ const RESUME =
   "from where it left off using the compaction summary above. If nothing was actually " +
   "in progress, say you are ready and stop. Do not ask interactive questions " +
   "(ask_user) to resume — if input is genuinely required, state what is needed and stop.";
-
-// Shared with compact-cap.ts. FIRING: cap compaction in flight. INTERRUPTED:
-// it fired mid-run (turn_end path) and aborted an active task — resume it.
-const FIRING = Symbol.for("pi.compact-cap.firing");
-const INTERRUPTED = Symbol.for("pi.compact-cap.interrupted");
 
 export default function (pi: ExtensionAPI) {
   if (process.env.PI_SUBAGENT_CHILD === "1") return; // children are short-lived; not worth the tokens
@@ -49,9 +45,9 @@ export default function (pi: ExtensionAPI) {
   let resumeScheduled = false; // dedup: one resume per compaction cycle
 
   pi.on("session_compact", async (event, ctx) => {
-    const g = globalThis as Record<symbol, unknown>;
-    const fromCap = Boolean(g[FIRING]);
-    const capInterrupted = Boolean(g[INTERRUPTED]);
+    // compact-cap's state: a cap compaction is in flight, and whether it fired
+    // mid-run (turn_end path) and aborted an active task — resume it.
+    const { firing: fromCap, interrupted: capInterrupted } = capFiring();
     if (process.env.PI_PRIME_REMINDER_DEBUG === "1") {
       ctx.ui.notify(
         `prime-reminder: session_compact reason=${event.reason} willRetry=${String(event.willRetry)} fromCap=${String(fromCap)} interrupted=${String(capInterrupted)}`,
@@ -62,7 +58,7 @@ export default function (pi: ExtensionAPI) {
     // or the user's manual re-prompt) gets the pointer injected. Fail-open.
     pending = true;
     // Resume whenever a RUNNING task was aborted: manual /compact mid-task,
-    // or compact-cap's turn_end firing (INTERRUPTED symbol). Sends from
+    // or compact-cap's turn_end firing (capFiring().interrupted). Sends from
     // inside THIS handler race the compaction's agent-disconnect window
     // (session_compact is emitted before reconnect) and get eaten; deferring
     // 1500ms clears both that window and the aborted run's unwind. The send

@@ -244,8 +244,10 @@ export default function (pi: ExtensionAPI) {
 	const ops = createLocalBashOperations();
 	let next = 1;
 
+	// Steered, not a follow-up: a running turn sees the message before its next model call, instead of finishing (often
+	// after reading the exit with bg_status) and then taking a second turn just to repeat it. Idle, it starts a turn.
 	const wake = (content: string, details: { headline: string; last: string; error: boolean }, triggerTurn = true) =>
-		pi.sendMessage({ customType: "background-job", content, display: true, details }, { triggerTurn, deliverAs: "followUp" });
+		pi.sendMessage({ customType: "background-job", content, display: true, details }, { triggerTurn, deliverAs: "steer" });
 
 	// Jobs started in the same turn usually belong together, like several benchmarks to compare. While some of them
 	// still run, a successful one's result is added to the conversation without waking Pi, so it answers once at the
@@ -267,7 +269,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		wake(`${content}\n(Still running from the same turn: ${others.map((other) => other.id).join(", ")}; you'll be woken when they finish.)`, details, false);
 		if (holds.has(job.group)) return;
-		holds.set(job.group, setTimeout(() => {
+		const hold = setTimeout(() => {
 			holds.delete(job.group);
 			const still = runningInGroup(job);
 			if (still.length === 0) return;
@@ -276,7 +278,10 @@ export default function (pi: ExtensionAPI) {
 				last: "",
 				error: false,
 			});
-		}, GROUP_HOLD_MS));
+		}, GROUP_HOLD_MS);
+		// The jobs it waits on keep pi alive themselves; the hold alone must not keep a -p run from exiting
+		hold.unref();
+		holds.set(job.group, hold);
 	};
 
 	// Wakes the agent with output lines matching pattern, batched per second and capped per job

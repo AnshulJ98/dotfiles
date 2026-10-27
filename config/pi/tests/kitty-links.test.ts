@@ -37,6 +37,8 @@ test("only file links inside kitty are handed to kitty", () => {
 });
 
 test("the TUI's opener is wrapped on the first mouse event and web links still reach it", () => {
+	// The wrap below only matters while pi opens clicked links through this instance field
+	assert.match(String((TuiAltScreen.prototype as unknown as Record<string, unknown>).handleSelectionMouseEvent), /this\.openUrl\(/);
 	kittyLinks({} as never);
 	const opened: string[] = [];
 	const tui = Object.create(TuiAltScreen.prototype) as { openUrl: (url: string) => void; handleSelectionMouseEvent(event: unknown): void };

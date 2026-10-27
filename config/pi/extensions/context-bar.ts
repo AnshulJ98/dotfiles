@@ -6,7 +6,7 @@
  * Copyright (c) Thomas van Dongen). Changes from upstream:
  * - The bar fills against compact-cap's live threshold, not the model window: with
  *   a 1M window the upstream bar sits at 0 cells until ~60k and compaction fires
- *   at 21%. compact-cap.ts publishes it under Symbol.for("pi.compact-cap.threshold");
+ *   at 21%. compact-cap.ts publishes it through lib/compact-cap-state.ts;
  *   0 (off) or missing falls back to the model window.
  * - The cwd folder name precedes the branch.
  * - cwd and branch sit flush left, the rest flush right with the cost last.
@@ -23,15 +23,10 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { basename } from "node:path";
+import { capThreshold } from "../lib/compact-cap-state.ts";
 
 const BAR_WIDTH = 10;
 const MIN_BAR_WIDTH = 4;
-const CAP = Symbol.for("pi.compact-cap.threshold");
-
-function compactCap(): number {
-	const value = (globalThis as Record<symbol, unknown>)[CAP];
-	return typeof value === "number" && value > 0 ? value : 0;
-}
 
 function fmtTokens(n: number): string {
 	if (n < 1000) return `${n}`;
@@ -68,7 +63,7 @@ export default function (pi: ExtensionAPI) {
 					const contextUsage = ctx.getContextUsage();
 					const used = contextUsage?.tokens ?? 0;
 					const contextWindow = contextUsage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
-					const cap = compactCap();
+					const cap = capThreshold();
 					const limit = cap > 0 && contextWindow > 0 ? Math.min(contextWindow, cap) : cap > 0 ? cap : contextWindow;
 					const pctUsed = limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
 					const barColor = pctUsed >= 80 ? "error" : pctUsed >= 50 ? "warning" : "success";
