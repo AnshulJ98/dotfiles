@@ -36,15 +36,25 @@
 # Git guard: bin/guard/git is first on the child's PATH (see its header);
 # PI_SCOUT_MODE=read|rw tells it which rules apply. A tripwire, not a sandbox.
 #
+# Fan-out: at most two scouts live at once, and one open worker per repo
+# (.running/<pid>.meta, dead pids ignored). A third is refused with exit 75.
+#
 # Stall guard: the child loads extensions/stream-watchdog.ts (aborts a silent
 # model stream, resumes once). As an outer layer, scout kills a child whose
 # session file has not changed for SCOUT_STALE_SECS (600; 900 with --rw or
 # xhigh) while no tool call is running, and exits 124.
 #
-# Exit codes: 0 ok, 2 usage or recursion refused, 124 timeout or stall,
-# 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
+# Exit codes: 0 ok, 2 usage or recursion refused, 75 fan-out refused,
+# 124 timeout or stall, 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
 # A SIGKILL skips everything; extensions/scout.ts finishes that run instead.
 set -euo pipefail
+
+# Empty arrays (EXT, WORKER, BRIEF) are unbound under set -u before bash 4.4;
+# /bin/bash on macOS is 3.2. Homebrew bash (5.x) is the one on PATH at home and at work.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "scout: needs bash 4.4+, running under $BASH_VERSION (brew install bash)" >&2
+  exit 2
+fi
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
@@ -160,6 +170,44 @@ TASK="$*
 
 $UNCONFIRMED"
 
+# Every git the child runs goes through bin/guard/git (first on PATH): it
+# refuses history, stash, remote and tree-switching commands on this repo, and
+# in read mode commit and add. PI_SCOUT_REAL_GIT is the git it hands the rest to.
+[ -x "$DIR/guard/git" ] || {
+  echo "scout: git guard missing or not executable: $DIR/guard/git" >&2
+  exit 2
+}
+# The guard may already be on PATH (tests the sensors run spawn scout); never hand it itself
+PI_SCOUT_REAL_GIT="" PI_SCOUT_GIT_DIR=""
+while IFS= read -r g; do
+  [ "$g" -ef "$DIR/guard/git" ] || { PI_SCOUT_REAL_GIT="$g"; break; }
+done < <(type -ap git)
+[ -n "$PI_SCOUT_REAL_GIT" ] &&
+  PI_SCOUT_GIT_DIR="$("$PI_SCOUT_REAL_GIT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ "$RW" = 1 ]; then PI_SCOUT_MODE=rw; else PI_SCOUT_MODE=read; fi
+export PI_SCOUT_REAL_GIT PI_SCOUT_GIT_DIR PI_SCOUT_MODE
+export PATH="$DIR/guard:$PATH"
+
+# Fan-out cap, checked before anything lands in the sessions tree. A meta whose
+# pid is dead is a SIGKILLed run the extension has not swept yet; it does not count.
+meta_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+LIVE=0 OPEN_WORKER=""
+for m in "$RUNNING"/*.meta; do
+  [ -f "$m" ] || continue
+  kill -0 "$(meta_field "$m" pid)" 2>/dev/null || continue
+  LIVE=$((LIVE + 1))
+  [ "$(meta_field "$m" mode)" = rw ] && [ -n "$PI_SCOUT_GIT_DIR" ] &&
+    [ "$(meta_field "$m" repo)" = "$PI_SCOUT_GIT_DIR" ] && OPEN_WORKER="$(meta_field "$m" pid)"
+done
+if [ "$LIVE" -ge 2 ]; then
+  echo "scout: refusing — $LIVE scouts are already live (cap 2); wait for one to finish" >&2
+  exit 75
+fi
+if [ "$RW" = 1 ] && [ -n "$OPEN_WORKER" ]; then
+  echo "scout: refusing — worker $OPEN_WORKER is open on this repo; merge or reject it first" >&2
+  exit 75
+fi
+
 WORKER=()
 if [ "$RW" = 1 ]; then
   [ -n "${BRIEF_FILE:-}" ] || {
@@ -204,24 +252,6 @@ fi
   exit 2
 }
 
-# Every git the child runs goes through bin/guard/git (first on PATH): it
-# refuses history, stash, remote and tree-switching commands on this repo, and
-# in read mode commit and add. PI_SCOUT_REAL_GIT is the git it hands the rest to.
-[ -x "$DIR/guard/git" ] || {
-  echo "scout: git guard missing or not executable: $DIR/guard/git" >&2
-  exit 2
-}
-# The guard may already be on PATH (tests the sensors run spawn scout); never hand it itself
-PI_SCOUT_REAL_GIT="" PI_SCOUT_GIT_DIR=""
-while IFS= read -r g; do
-  [ "$g" -ef "$DIR/guard/git" ] || { PI_SCOUT_REAL_GIT="$g"; break; }
-done < <(type -ap git)
-[ -n "$PI_SCOUT_REAL_GIT" ] &&
-  PI_SCOUT_GIT_DIR="$("$PI_SCOUT_REAL_GIT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
-if [ "$RW" = 1 ]; then PI_SCOUT_MODE=rw; else PI_SCOUT_MODE=read; fi
-export PI_SCOUT_REAL_GIT PI_SCOUT_GIT_DIR PI_SCOUT_MODE
-export PATH="$DIR/guard:$PATH"
-
 # The OAuth compatibility shim is installed on some machines only; load it
 # when present, otherwise pi's native auth (API key or auth.json) is used.
 EXT=()
@@ -246,8 +276,8 @@ else
 fi
 
 # Handoff to the scout extension (extensions/scout.ts). While running:
-# .running/<pid>.meta (model, effort, start, parent session, task) drives the
-# footer status. On exit the digest and meta move to .done/<pid>.*, and the
+# .running/<pid>.meta (model, effort, start, parent session, task, mode, repo)
+# drives the footer status and the fan-out cap above. On exit the digest and meta move to .done/<pid>.*, and the
 # extension turns them into a chat entry for the parent session. The EXIT
 # trap covers normal exit, timeout (124) and SIGINT/SIGTERM; only SIGKILL
 # skips it, which the extension detects by a dead pid.
@@ -255,8 +285,9 @@ mkdir -p "$SESSIONS" "$RUNNING" "$DONE"
 META="$RUNNING/$$.meta"
 OUT="$RUNNING/$$.out"
 FIRST_LINE="${TASK%%$'\n'*}"
-printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\n' \
-  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(($(date +%s) * 1000))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" >"$META"
+printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\nmode=%s\nrepo=%s\n' \
+  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(($(date +%s) * 1000))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" \
+  "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
 finish() {
   local rc=$?
   mv -f "$OUT" "$DONE/$$.out" 2>/dev/null || : >"$DONE/$$.out"
@@ -275,6 +306,9 @@ trap finish EXIT
 # JSON report instead.
 ERR="$SESSIONS/stderr.log"
 STALLED="$SESSIONS/stalled"
+# The run folder is keyed by pid; after a pid wraps, a finished run's verdict and
+# stall marker would pass as this run's.
+rm -f "$STALLED" "$SESSIONS/verdict.json"
 
 # Outer stall guard: the newest session file is the child's heartbeat. A
 # trailing assistant tool call means a tool is running, which may be silent.
@@ -324,7 +358,9 @@ conclude() {
     VERDICT="$(node -e '
       const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
       console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"
-    { echo "$VERDICT"; echo; cat "$OUT"; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+    # The sensors' own verdict line can land in the digest too (a non -p pi, or
+    # the model quoting it); the one from the report is the only one kept.
+    { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
   fi
   cat "$OUT"
 }
