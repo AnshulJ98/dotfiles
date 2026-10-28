@@ -24,7 +24,7 @@
     "keepRecentTokens": 16000
   },
   "prompts": ["~/Dev/dotfiles/config/pi/prompts"],
-  "skills": ["~/.pi/agent/skills-local"],
+  "skills": ["~/.pi/agent/skills-local", "-~/.agents/skills/d2-diagrams"],
   "extensions": [
     "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",
     "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts",
@@ -38,6 +38,7 @@
     "~/Dev/dotfiles/config/pi/extensions/bedrock-reasoning.ts",
     "~/Dev/dotfiles/config/pi/extensions/split-diff.ts",
     "~/Dev/dotfiles/config/pi/extensions/kitty-links.ts",
+    "~/Dev/dotfiles/config/pi/extensions/docs.ts",
     "-builtin:mcp",
     "-builtin:codemode",
     "-builtin:tool-search",
@@ -47,8 +48,7 @@
   "packages": [
     "npm:pi-rtk-optimizer",
     "npm:pi-web-access",
-    "npm:@upstash/context7-pi",
-    "npm:pi-ask-user",
+    { "source": "npm:pi-ask-user", "skills": [] },
     "npm:pi-usage-widget",
     "npm:@gotgenes/pi-anthropic-auth",
     "npm:pi-minimalist@0.3.1",

@@ -499,9 +499,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_run",
 		label: "Background",
-		description:
-			"Start a shell command in the background and return immediately with a job id. Output goes to a log file. " +
-			"When the command exits you automatically receive a message with its exit code and the last log lines, so do not poll or sleep waiting for it.",
+		description: "Start a shell command in the background and return immediately with a job id. Output goes to a log file.",
 		promptSnippet: "Run long shell commands (downloads, builds, long test suites) in the background",
 		promptGuidelines: [
 			"Use bg_run instead of bash for anything that may take longer than about 2 minutes: large downloads and installs, builds, full test suites, training, benchmarks, servers and watchers. Keep bash for quick commands whose output you need now.",
