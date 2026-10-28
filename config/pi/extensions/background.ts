@@ -189,10 +189,18 @@ function watchPrefix(watch: Watched): string {
 }
 
 
+/** The last `lines` lines as a terminal shows them: `\r\n` ends a line, `\r` redraws collapse to their final text. */
+export function lastLines(text: string, lines: number): string {
+	const shown = text.split("\n").map((segment) => {
+		const line = segment.endsWith("\r") ? segment.slice(0, -1) : segment;
+		return line.slice(line.lastIndexOf("\r") + 1);
+	});
+	return shown.join("\n").trimEnd().split("\n").slice(-lines).join("\n") || "(no output)";
+}
+
 function tail(path: string, lines: number): string {
 	try {
-		const text = readFileSync(path).subarray(-TAIL_BYTES).toString("utf8");
-		return text.trimEnd().split("\n").slice(-lines).join("\n") || "(no output)";
+		return lastLines(readFileSync(path).subarray(-TAIL_BYTES).toString("utf8"), lines);
 	} catch {
 		return "(no output)";
 	}

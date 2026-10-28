@@ -17,7 +17,7 @@ register(
 		}`)}`,
 );
 
-const { default: background } = await import("../extensions/background.ts");
+const { default: background, lastLines } = await import("../extensions/background.ts");
 
 interface Sent {
 	content: string;
@@ -54,4 +54,20 @@ test("a job's exit is steered into a running turn and wakes an idle one", async 
 	assert.match(content, /Background job finished: bg1 \[exit 0,/);
 	assert.deepEqual(options, { triggerTurn: true, deliverAs: "steer" });
 	await pi.shutdown();
+});
+
+test("lastLines shows the last lines as a terminal would", () => {
+	const cases: Array<[string, number, string]> = [
+		["one\ntwo\n", 5, "one\ntwo"],
+		["a\rb\rc\n", 5, "c"],
+		["x\r\ny\r\n", 5, "x\ny"],
+		["one\ntwo\nthree\n", 2, "two\nthree"],
+		["", 5, "(no output)"],
+		["one\ntwo\n\n", 5, "one\ntwo"],
+		["one\n\ntwo\n", 5, "one\n\ntwo"],
+		["start\n10%\r20%\r\ndone\n", 5, "start\n20%\ndone"],
+		["start\n10%\r", 5, "start\n10%"],
+		["10%\r20%\r", 5, "20%"],
+	];
+	for (const [text, lines, expected] of cases) assert.equal(lastLines(text, lines), expected, JSON.stringify(text));
 });

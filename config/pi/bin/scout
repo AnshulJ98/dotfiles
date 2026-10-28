@@ -188,6 +188,13 @@ if [ "$RW" = 1 ]; then PI_SCOUT_MODE=rw; else PI_SCOUT_MODE=read; fi
 export PI_SCOUT_REAL_GIT PI_SCOUT_GIT_DIR PI_SCOUT_MODE
 export PATH="$DIR/guard:$PATH"
 
+# Usage errors come before the fan-out cap: verify.sh probes them (`scout --rw x`
+# must exit 2) and runs inside workers, where this repo's worker is the open one.
+if [ "$RW" = 1 ] && [ -z "${BRIEF_FILE:-}" ]; then
+  echo "scout: --rw needs --brief FILE or --spec - (a spec with files-allowed and tests)" >&2
+  exit 2
+fi
+
 # Fan-out cap, checked before anything lands in the sessions tree. A meta whose
 # pid is dead is a SIGKILLed run the extension has not swept yet; it does not count.
 meta_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
@@ -210,10 +217,6 @@ fi
 
 WORKER=()
 if [ "$RW" = 1 ]; then
-  [ -n "${BRIEF_FILE:-}" ] || {
-    echo "scout: --rw needs --brief FILE or --spec - (a spec with files-allowed and tests)" >&2
-    exit 2
-  }
   [ "$MODEL_SET" = 1 ] || MODEL="$WORKER_MODEL"
   [ -r "$SENSORS" ] || {
     echo "scout: sensors missing: $SENSORS" >&2
