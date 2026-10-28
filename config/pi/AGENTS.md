@@ -217,8 +217,8 @@ narrowest type the caller needs.
 - Never speculate about code you have not opened. Read it first, and
   follow the conventions you find.
 - A recommendation that depends on a version (which library, which
-  release, which API) rests on a verified current fact: context7, the
-  lockfile, a release date. If training data is the only source, say so
+  release, which API) rests on a verified current fact: a live docs
+  lookup (`docs`), the lockfile, a release date. If training data is the only source, say so
   once.
 - Headless (`-p`) runs can't ask: state the decision needed and the
   default you took. The last sentence is never a question.

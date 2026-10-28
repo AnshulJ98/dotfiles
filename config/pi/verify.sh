@@ -132,6 +132,10 @@ check "install.sh creates skills-local" \
   "grep -q 'skills-local' '$DOT/../../install.sh'"
 check "install.sh links verify.sh's settings target" \
   "grep -q 'config/pi/settings.json' '$DOT/../../install.sh'"
+check "install.sh links web-search.json" \
+  "grep -q 'config/pi/web-search.json' '$DOT/../../install.sh'"
+check "~/.pi/agent/web-search.json resolves to config/pi/web-search.json" \
+  "[ \"\$(readlink -f '$AGENT/web-search.json')\" = \"\$(readlink -f '$DOT/web-search.json')\" ]"
 check "install.sh links config/pi/bin (scout)" \
   "grep -q 'config/pi/bin\"' '$DOT/../../install.sh'"
 check "install.sh no longer links the subagent config" \
