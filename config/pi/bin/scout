@@ -214,6 +214,12 @@ if [ "$RW" = 1 ] && [ -n "$OPEN_WORKER" ]; then
   echo "scout: refusing — worker $OPEN_WORKER is open on this repo; merge or reject it first" >&2
   exit 75
 fi
+# Claim the slot now, so a scout started during the spec parse below sees this one as live. The
+# full meta overwrites it before pi starts; until then any exit removes it.
+mkdir -p "$RUNNING"
+META="$RUNNING/$$.meta"
+printf 'pid=%s\nstarted=%s\nmode=%s\nrepo=%s\n' "$$" "$(($(date +%s) * 1000))" "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
+trap 'rm -f "$META"' EXIT
 
 WORKER=()
 if [ "$RW" = 1 ]; then
@@ -284,8 +290,7 @@ fi
 # extension turns them into a chat entry for the parent session. The EXIT
 # trap covers normal exit, timeout (124) and SIGINT/SIGTERM; only SIGKILL
 # skips it, which the extension detects by a dead pid.
-mkdir -p "$SESSIONS" "$RUNNING" "$DONE"
-META="$RUNNING/$$.meta"
+mkdir -p "$SESSIONS" "$DONE"
 OUT="$RUNNING/$$.out"
 FIRST_LINE="${TASK%%$'\n'*}"
 printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\nmode=%s\nrepo=%s\n' \
