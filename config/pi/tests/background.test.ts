@@ -25,23 +25,31 @@ interface Sent {
 }
 type Execute = (id: string, params: Record<string, unknown>, signal: undefined, onUpdate: undefined, ctx: unknown) => Promise<unknown>;
 
-function load() {
+function load(mode: "print" | "tui" = "print") {
 	const tools = new Map<string, Execute>();
 	const handlers = new Map<string, Array<() => Promise<void>>>();
 	let onSent: (sent: Sent) => void = () => {};
+	// After session_shutdown the runtime is gone: pi's real API throws on any use, as on /reload.
+	let stale = false;
+	const live = <T>(value: T): T => {
+		if (stale) throw new Error("This extension ctx is stale after session replacement or reload.");
+		return value;
+	};
+	const ui = { setWidget: () => live(undefined) };
 	const pi = {
 		on: (event: string, handler: () => Promise<void>) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
 		registerTool: (tool: { name: string; execute: Execute }) => tools.set(tool.name, tool.execute),
 		registerMessageRenderer: () => {},
-		getSettings: () => ({}),
+		getSettings: () => live({}),
 		sendMessage: (message: { content: string }, options: Sent["options"]) => onSent({ content: message.content, options }),
 	};
 	background(pi as never);
 	return {
-		run: (name: string, params: Record<string, unknown>) => tools.get(name)!("call", params, undefined, undefined, { cwd: tmpdir(), mode: "print" }),
+		run: (name: string, params: Record<string, unknown>) => tools.get(name)!("call", params, undefined, undefined, { cwd: tmpdir(), mode, ui }),
 		next: () => new Promise<Sent>((resolve) => (onSent = resolve)),
 		shutdown: async () => {
 			for (const handler of handlers.get("session_shutdown") ?? []) await handler();
+			stale = true;
 		},
 	};
 }
@@ -54,6 +62,23 @@ test("a job's exit is steered into a running turn and wakes an idle one", async 
 	assert.match(content, /Background job finished: bg1 \[exit 0,/);
 	assert.deepEqual(options, { triggerTurn: true, deliverAs: "steer" });
 	await pi.shutdown();
+});
+
+test("a job aborted by session shutdown (/reload) does not touch the stale runtime", async () => {
+	const errors: unknown[] = [];
+	const catchIt = (err: unknown) => errors.push(err);
+	process.on("unhandledRejection", catchIt);
+	process.on("uncaughtException", catchIt);
+	try {
+		const pi = load("tui");
+		await pi.run("bg_run", { command: "sleep 30" });
+		await pi.shutdown();
+		await new Promise((resolve) => setTimeout(resolve, 500));
+	} finally {
+		process.off("unhandledRejection", catchIt);
+		process.off("uncaughtException", catchIt);
+	}
+	assert.deepEqual(errors.map(String), []);
 });
 
 test("lastLines shows the last lines as a terminal would", () => {

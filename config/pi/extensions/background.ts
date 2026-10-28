@@ -646,6 +646,9 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
+		// The aborted jobs settle after the runtime is gone (/reload, session switch), and pi throws on
+		// any later use of it: no widget left to update.
+		ui = undefined;
 		if (sampler) clearInterval(sampler);
 		sampler = undefined;
 		for (const timer of holds.values()) clearTimeout(timer);
