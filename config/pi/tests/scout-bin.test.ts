@@ -157,6 +157,14 @@ test("a second worker on the same repo is refused with exit 75; another repo or 
 	assert.equal(run.code, 0, "a worker on another repo is fine");
 });
 
+test("usage errors come before the fan-out cap (verify.sh probes them from inside a worker)", async () => {
+	const { env, scoutRoot } = sandbox();
+	runningMeta(scoutRoot, { pid: process.pid, mode: "rw", repo: gitCommonDir(process.cwd()) });
+	runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
+	assert.equal((await runScout(["--rw", "x"], env)).code, 2);
+	assert.equal((await runScout(["--thinking", "max", "x"], env)).code, 2);
+});
+
 test("a worker's digest carries exactly one WORKER-SENSORS line, the one from the report", async () => {
 	const { env } = sandbox();
 	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
