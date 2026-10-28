@@ -10,7 +10,8 @@ import { test } from "node:test";
 const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
 const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\nDo it.\n";
 
-// FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git)
+// FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
+// verdict (prints a sensors verdict line of its own, as a non -p pi would)
 const FAKE_PI = `#!/usr/bin/env bash
 dir=""
 while [ $# -gt 0 ]; do [ "$1" = "--session-dir" ] && dir="$2"; shift; done
@@ -20,8 +21,21 @@ ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
+verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
 esac
 `;
+
+/** A .running meta as scout writes it; pid defaults to one that is alive for the test's lifetime. */
+function runningMeta(scoutRoot: string, fields: { pid?: number; mode: "read" | "rw"; repo?: string }): void {
+	const pid = fields.pid ?? process.pid;
+	mkdirSync(join(scoutRoot, ".running"), { recursive: true });
+	const lines = { pid, model: "m/x", thinking: "low", timeout: 300, started: Date.now(), session: "", task: "t", mode: fields.mode, repo: fields.repo ?? "" };
+	writeFileSync(join(scoutRoot, ".running", `${pid}.meta`), Object.entries(lines).map(([k, v]) => `${k}=${v}\n`).join(""));
+}
+
+function gitCommonDir(cwd: string): string {
+	return spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, encoding: "utf8" }).stdout.trim();
+}
 
 function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	const root = mkdtempSync(join(tmpdir(), "scout-bin-"));
@@ -108,6 +122,62 @@ test("scout started with the guard already on PATH still hands the guard the rea
 	const run = await runScout(["look around"], { ...env, PATH: `${guard}:${env.PATH}`, FAKE_PI: "env" });
 	assert.match(run.stdout, /^real=\/.*\/git$/m);
 	assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
+});
+
+test("the running meta records mode and repo for the fan-out cap", async () => {
+	const { env, scoutRoot } = sandbox();
+	await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
+	const meta = doneMeta(scoutRoot);
+	assert.match(meta, /^mode=rw$/m);
+	assert.match(meta, new RegExp(`^repo=${gitCommonDir(process.cwd())}$`, "m"));
+});
+
+test("a third scout is refused with exit 75 while two are live; dead pids do not count", async () => {
+	const { env, scoutRoot } = sandbox();
+	runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
+	runningMeta(scoutRoot, { pid: 2 ** 22 - 1, mode: "read" }); // no such process
+	let run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 0, "one live scout should not block");
+	runningMeta(scoutRoot, { pid: process.ppid, mode: "rw", repo: "/elsewhere/.git" });
+	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 75);
+	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)).length, 1, "a refused scout leaves no run folder");
+});
+
+test("a second worker on the same repo is refused with exit 75; another repo or a read scout is not", async () => {
+	const { env, scoutRoot } = sandbox();
+	const repo = gitCommonDir(process.cwd());
+	runningMeta(scoutRoot, { pid: process.pid, mode: "rw", repo });
+	let run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+	assert.equal(run.code, 75);
+	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 0, "a read scout beside an open worker is fine");
+	writeFileSync(join(scoutRoot, ".running", `${process.pid}.meta`), `pid=${process.pid}\nstarted=1\nmode=rw\nrepo=/elsewhere/.git\n`);
+	run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+	assert.equal(run.code, 0, "a worker on another repo is fine");
+});
+
+test("a worker's digest carries exactly one WORKER-SENSORS line, the one from the report", async () => {
+	const { env } = sandbox();
+	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
+	assert.equal(run.code, 0);
+	const lines = run.stdout.split("\n");
+	assert.match(lines[0], /^WORKER-SENSORS: CANNOT-RUN no verdict written/);
+	assert.equal(lines.filter((l) => l.startsWith("WORKER-SENSORS:")).length, 1);
+	assert.ok(lines.includes("report body"));
+});
+
+test("scout refuses a bash older than 4.4 instead of dying on an empty array", { skip: !existsSync("/bin/bash") }, () => {
+	const { env } = sandbox();
+	const version = spawnSync("/bin/bash", ["-c", "echo ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"], { encoding: "utf8" }).stdout.trim();
+	const run = spawnSync("/bin/bash", [SCOUT, "look around"], { env: { ...env, FAKE_PI: "env" }, encoding: "utf8" });
+	if (Number.parseFloat(version) >= 4.4) {
+		assert.equal(run.status, 0, run.stderr);
+	} else {
+		assert.equal(run.status, 2);
+		assert.match(run.stderr, /needs bash 4\.4\+/);
+		assert.doesNotMatch(run.stderr, /unbound variable/);
+	}
 });
 
 test("a worker that writes no verdict still gets verdict.json", async () => {
