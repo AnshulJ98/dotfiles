@@ -255,7 +255,7 @@ function makeResolver(repo, known) {
         best = { pre, targets, mid: spec.slice(pre.length, spec.length - suf.length) };
       }
     }
-    return best ? best.targets.map((t) => posix.join(alias.root, String(t).replace("*", best.mid))) : [];
+    return best ? best.targets.map((t) => posix.join(alias.root, String(t).replace("*", () => best.mid))) : [];
   }
 
   function relative(p) {
@@ -615,13 +615,17 @@ async function diffMap(repo, base) {
   for (const s of signals) process.on(s, onSignal);
   try {
     const detailOf = (files) => files.filter((f) => touched.has(f));
-    const [now, was] = await Promise.all([
+    // Both sides settle before cleanup, so tar is never still writing into tmp when it is removed.
+    const sides = await Promise.allSettled([
       analyze(repo, nowFiles, detailOf(nowFiles)),
       extract(repo, sha, tmp).then(() => {
         const baseFiles = listFiles(tmp).files;
         return analyze(tmp, baseFiles, detailOf(baseFiles));
       }),
     ]);
+    const failed = sides.find((s) => s.status === "rejected");
+    if (failed) throw failed.reason;
+    const [now, was] = sides.map((s) => s.value);
     const rows = [...touched]
       .filter((f) => now.known.has(f) || was.known.has(f))
       .map((file) => ({ file, change: !was.known.has(file) ? "added" : !now.known.has(file) ? "deleted" : "modified" }));
