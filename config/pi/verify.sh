@@ -173,5 +173,42 @@ done
 echo "[tests]"
 check "node tests pass" "node --test '$DOT'/tests/*.test.ts"
 
+# --- strict type check of every extension, lib and test against the running pi ---
+# node --test strips types without checking them, so a wrong tool-result shape or a
+# renamed pi export only fails at runtime, inside pi. The tsconfig is built here:
+# the pi release path carries its version, and the file list is every .ts in the
+# config. tsc comes from TSC or ~/Dev/pi-lab (not installed everywhere): a missing
+# tsc is reported, not failed, so the rest of the signal stays usable.
+echo "[types]"
+TSC="${TSC:-$HOME/Dev/pi-lab/node_modules/typescript/bin/tsc}"
+if [ -x "$TSC" ] && [ -d "$PI_PKG" ]; then
+  NM="$(cd "$PI_PKG/../.." && pwd)"
+  TSCONFIG="$(mktemp "${TMPDIR:-/tmp}/pi-verify-tsconfig.XXXXXX")"
+  NFILES="$(python3 - "$TSCONFIG" "$NM" "$DOT" <<'PY'
+import glob, json, sys
+out, nm, dot = sys.argv[1:]
+files = sorted(f for pattern in ("extensions/*.ts", "lib/*.ts", "tests/*.ts", "../git/tests/*.ts") for f in glob.glob(f"{dot}/{pattern}"))
+json.dump({
+  "compilerOptions": {
+    "strict": True, "noEmit": True, "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler",
+    "skipLibCheck": True, "allowImportingTsExtensions": True, "types": ["node"], "typeRoots": [f"{nm}/@types"],
+    "paths": {"@earendil-works/*": [f"{nm}/@earendil-works/*"], "typebox": [f"{nm}/typebox"]},
+  },
+  "files": files,
+}, open(out, "w"))
+print(len(files))
+PY
+)"
+  if errors="$("$TSC" -p "$TSCONFIG" 2>&1)"; then
+    ok "tsc --strict passes on every extension, lib and test ($NFILES files)"
+  else
+    bad "tsc --strict: $(printf '%s\n' "$errors" | grep -c 'error TS') error(s)"
+    printf '%s\n' "$errors" | grep 'error TS' | sed 's/^/        /' | head -20
+  fi
+  rm -f "$TSCONFIG"
+else
+  printf '  skip  tsc not found at %s (set TSC=); type check not run\n' "${TSC/#$HOME/~}"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
