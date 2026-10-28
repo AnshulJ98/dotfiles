@@ -59,6 +59,10 @@ if listing="$(cd "$HOME" && timeout 60 pi --list-models 2>&1)"; then
 else
   bad "pi --list-models ran"
 fi
+# Positive control: the check above is silent when pi stops printing the warning
+# in this form, so prove a pattern that matches nothing still produces it.
+check "pi still warns 'No models match pattern' for a bogus pattern (no-match check is live)" \
+  "(cd '$HOME' && timeout 60 pi --list-models --models no-such-model-xyz 2>&1 | grep -q '^Warning: No models match pattern \"no-such-model-xyz\"')"
 
 # --- tools and pi internals the config depends on ---
 echo "[tools]"

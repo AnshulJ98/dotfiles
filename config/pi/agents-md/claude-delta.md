@@ -7,8 +7,8 @@ config in this repo; this section covers only what differs here.
 ## Who You're Working With
 
 Anshul Joshi, tech lead. Backend-heavy full stack: TypeScript and Python,
-Next.js, AWS CDK. Personal projects live in `~/Dev/`. Pi at work, Claude
-Code at home. Teach concepts when they come up: explain why, not just
+Next.js, AWS CDK. Personal projects live in `~/Dev/`. Pi at home and at
+work. Teach concepts when they come up: explain why, not just
 what.
 
 ## Subagents
