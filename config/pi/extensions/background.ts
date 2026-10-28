@@ -189,10 +189,18 @@ function watchPrefix(watch: Watched): string {
 }
 
 
+/** The last `lines` lines as a terminal shows them: `\r\n` ends a line, `\r` redraws collapse to their final text. */
+export function lastLines(text: string, lines: number): string {
+	const shown = text.split("\n").map((segment) => {
+		const line = segment.endsWith("\r") ? segment.slice(0, -1) : segment;
+		return line.slice(line.lastIndexOf("\r") + 1);
+	});
+	return shown.join("\n").trimEnd().split("\n").slice(-lines).join("\n") || "(no output)";
+}
+
 function tail(path: string, lines: number): string {
 	try {
-		const text = readFileSync(path).subarray(-TAIL_BYTES).toString("utf8");
-		return text.trimEnd().split("\n").slice(-lines).join("\n") || "(no output)";
+		return lastLines(readFileSync(path).subarray(-TAIL_BYTES).toString("utf8"), lines);
 	} catch {
 		return "(no output)";
 	}
@@ -499,9 +507,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_run",
 		label: "Background",
-		description:
-			"Start a shell command in the background and return immediately with a job id. Output goes to a log file. " +
-			"When the command exits you automatically receive a message with its exit code and the last log lines, so do not poll or sleep waiting for it.",
+		description: "Start a shell command in the background and return immediately with a job id. Output goes to a log file.",
 		promptSnippet: "Run long shell commands (downloads, builds, long test suites) in the background",
 		promptGuidelines: [
 			"Use bg_run instead of bash for anything that may take longer than about 2 minutes: large downloads and installs, builds, full test suites, training, benchmarks, servers and watchers. Keep bash for quick commands whose output you need now.",

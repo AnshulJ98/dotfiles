@@ -29,7 +29,11 @@ is last in the file. The scope is the project name for project facts,
 Create a new `## <scope>` header only when none fits.
 
 Format: `- [type] content`, where type is one of `fact`, `gotcha`,
-`decision`, `convention`, `correction`, or `preference`.
+`decision`, `convention`, `correction`, or `preference`. Replace
+secrets, tokens, and credentials with `<REDACTED>`.
+
+The file stays under 250 lines (`wc -l`). Past that, merge or drop the
+stalest bullets in the scope you are writing to before adding one.
 
 Don't write:
 - Facts the codebase already states; read and grep find those.

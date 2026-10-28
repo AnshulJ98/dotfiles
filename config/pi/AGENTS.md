@@ -103,8 +103,8 @@ out of this context; only its digest comes back.
   conversation verbatim.
 - Parallel: at most two, `&` then `wait`, in one bash call.
 - `--rw --spec -` runs a worker that may edit files, with the spec on
-  stdin: a `/plan` whose closing block names `files-allowed` and
-  `tests` (the wrapper exits 2 without them), plus the module's map when
+  stdin: the `/plan`'s `files-allowed`/`tests` block first (the wrapper
+  exits 2 without it), the plan after it, then the module's map when
   one was saved. Use it for bounded slices only; open-ended fixes stay in
   this session. The digest's first line is `WORKER-SENSORS:`; read it
   before the worker's own report, because the sensors rerun the tests
@@ -217,8 +217,8 @@ narrowest type the caller needs.
 - Never speculate about code you have not opened. Read it first, and
   follow the conventions you find.
 - A recommendation that depends on a version (which library, which
-  release, which API) rests on a verified current fact: context7, the
-  lockfile, a release date. If training data is the only source, say so
+  release, which API) rests on a verified current fact: a live docs
+  lookup (`docs`), the lockfile, a release date. If training data is the only source, say so
   once.
 - Headless (`-p`) runs can't ask: state the decision needed and the
   default you took. The last sentence is never a question.

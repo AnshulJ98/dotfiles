@@ -11,17 +11,16 @@ it with `scout --rw --brief`, or paste it into pi as the task.
 ---
 
 Compress this into an implementation spec. Start with this frontmatter,
-filled in, unfenced, as the first line of the spec. Keep every value on
-one line. `module` is for the reader; the sensors ignore it. `**` globs
-skip dotfiles, so list those by name:
+filled in, unfenced, as the first line of the spec (the same block
+`/plan` closes with). Keep every value on one line. `**` globs skip
+dotfiles, so list those by name:
 
 ```
 ---
-module: <directory the slice lives in>
-files-allowed: [<every file the slice may create or change; globs allowed>]
-tests: <one shell command that passes only when the slice is done>
-max-lines: <added-line cap; omit for 400>
-allowed-commands: [<cloud-changing command prefixes the slice needs; omit for none>]
+files-allowed: [<every file the steps touch, relative to the git root>]
+tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
+max-lines: <cap on added lines across all files; omit for 400>
+allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]
 ---
 ```
 
