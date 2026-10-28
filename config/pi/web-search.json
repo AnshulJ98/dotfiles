@@ -1,0 +1,13 @@
+{
+  "toolExposure": "deferred",
+  "maxInlineContentChars": 15000,
+  "tools": { "sourceCheck": { "enabled": false } },
+  "allowBrowserCookies": true,
+  "authFetch": {
+    "reddit": {
+      "hosts": ["reddit.com", "www.reddit.com", "old.reddit.com"],
+      "redirects": "same-origin",
+      "cache": "session"
+    }
+  }
+}
