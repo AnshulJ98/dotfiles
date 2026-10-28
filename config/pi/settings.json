@@ -39,6 +39,7 @@
     "~/Dev/dotfiles/config/pi/extensions/split-diff.ts",
     "~/Dev/dotfiles/config/pi/extensions/kitty-links.ts",
     "~/Dev/dotfiles/config/pi/extensions/docs.ts",
+    "~/Dev/dotfiles/config/pi/extensions/ask-user-args.ts",
     "-builtin:mcp",
     "-builtin:codemode",
     "-builtin:tool-search",
