@@ -3,13 +3,16 @@
 // TypeScript, JavaScript and Python. Zero model tokens.
 //
 // Usage: node map.mjs <repo> <module-dir>    module-dir is relative to repo; prints to stdout.
+//        node map.mjs <repo> --diff <base>   touched files by fan-in, edge, cycle and export changes
+//                                             between commit-ish <base> and the working tree.
 //
 // Edges come from ast-grep on PATH: static imports, re-exports, dynamic import(), require() and
 // Python import/from. Relative specifiers, tsconfig/jsconfig `paths` aliases and Python imports
 // from repo, repo/src and pyproject package-dir resolve; packages and built-ins are dropped.
 // Exit 2 on a bad argument.
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -17,6 +20,7 @@ const posix = path.posix;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__"]);
 const JS_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const LANGS = { ".ts": "TypeScript", ".tsx": "Tsx", ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript", ".py": "Python" };
+const langOf = (f) => LANGS[posix.extname(f)];
 const byPath = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const isPlainName = (s) => /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(s);
 const collapse = (s) => s.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim();
@@ -44,10 +48,14 @@ function isSource(rel) {
   return !(base.endsWith(".d.ts") || /\.(test|spec)\./.test(base) || base.endsWith("_test.py") || /^test_.*\.py$/.test(base));
 }
 
+function isGitRoot(dir) {
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir, encoding: "utf8" });
+  return top.status === 0 && fs.realpathSync(top.stdout.trim()) === fs.realpathSync(dir);
+}
+
 // Repo-relative source paths, git's view when repo is a work tree root, a walk otherwise.
 function listFiles(repo) {
-  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: repo, encoding: "utf8" });
-  const isGit = top.status === 0 && fs.realpathSync(top.stdout.trim()) === fs.realpathSync(repo);
+  const isGit = isGitRoot(repo);
   const files = [];
   if (isGit) {
     const ls = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
@@ -410,28 +418,22 @@ function readingOrder(files, deps) {
   return { order, cycles: comps.filter((c) => c.length > 1).sort((a, b) => byPath(a[0], b[0])) };
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  if (args.length !== 2) fail("usage: node map.mjs <repo> <module-dir>");
-  const repo = checkDir(path.resolve(args[0]));
-  const moduleDir = path.relative(repo, checkDir(path.resolve(repo, args[1]))).split(path.sep).join("/") || ".";
-  if (moduleDir === ".." || moduleDir.startsWith("../") || path.isAbsolute(moduleDir)) fail(`not inside ${repo}: ${args[1]}`);
-  if (spawnSync("ast-grep", ["--version"]).error) fail("ast-grep not found on PATH (brew install ast-grep)");
+const requireAstGrep = () => spawnSync("ast-grep", ["--version"]).error && fail("ast-grep not found on PATH (brew install ast-grep)");
 
-  const { files, sha } = listFiles(repo);
-  const inModule = (f) => moduleDir === "." || f.startsWith(`${moduleDir}/`);
-  const moduleFiles = files.filter(inModule);
-  const langOf = (f) => LANGS[posix.extname(f)];
+// One tree's analysis: repo-wide edges, fan-in and cycles over `files`; exports, internals and
+// call counts for `detailFiles` only (a subset of `files`).
+async function analyze(root, files, detailFiles = files) {
   const ofLang = (list, lang) => list.filter((f) => langOf(f) === lang);
   const langs = Object.keys(RULES);
   const [edgeMatches, detailMatches] = await Promise.all(
     ["edges", "detail"].map(async (kind) =>
-      (await Promise.all(langs.map((l) => scan(repo, l, RULES[l][kind], ofLang(kind === "edges" ? files : moduleFiles, l))))).flat(),
+      (await Promise.all(langs.map((l) => scan(root, l, RULES[l][kind], ofLang(kind === "edges" ? files : detailFiles, l))))).flat(),
     ),
   );
 
   // Edges: importer -> imported -> kinds. A file importing itself is not an edge.
-  const resolve = makeResolver(repo, new Set(files));
+  const known = new Set(files);
+  const resolve = makeResolver(root, known);
   const edges = new Map(files.map((f) => [f, new Map()]));
   for (const m of edgeMatches) {
     let targets;
@@ -481,10 +483,7 @@ async function main() {
     return [...direct, ...via.map(([imp, barrel]) => `${imp} (via ${barrel})`)];
   }
 
-  const deps = new Map(moduleFiles.map((f) => [f, [...edges.get(f).keys()].filter(inModule)]));
-  const { order, cycles } = readingOrder(moduleFiles, deps);
-
-  const byFile = new Map(moduleFiles.map((f) => [f, []]));
+  const byFile = new Map(detailFiles.map((f) => [f, []]));
   for (const m of detailMatches) byFile.get(m.file)?.push(m);
   const calls = { js: new Map(), py: new Map() };
   for (const m of detailMatches) {
@@ -492,7 +491,27 @@ async function main() {
     const family = calls[langOf(m.file) === "Python" ? "py" : "js"];
     if (name && isPlainName(name)) family.set(name, (family.get(name) ?? 0) + 1);
   }
+  const details = new Map(detailFiles.map((f) => [f, (langOf(f) === "Python" ? pyDetail : jsDetail)(byFile.get(f))]));
 
+  // Repo-wide cycles (components over every edge, not only a module's), computed on demand.
+  const cycles = () => components(files, new Map(files.map((f) => [f, [...edges.get(f).keys()]]))).filter((c) => c.length > 1);
+  return { known, edges, edgeCount, fanIn, details, calls, cycles };
+}
+
+async function moduleMap(repo, arg) {
+  const moduleDir = path.relative(repo, checkDir(path.resolve(repo, arg))).split(path.sep).join("/") || ".";
+  if (moduleDir === ".." || moduleDir.startsWith("../") || path.isAbsolute(moduleDir)) fail(`not inside ${repo}: ${arg}`);
+  requireAstGrep();
+
+  const { files, sha } = listFiles(repo);
+  const inModule = (f) => moduleDir === "." || f.startsWith(`${moduleDir}/`);
+  const moduleFiles = files.filter(inModule);
+  const analysis = await analyze(repo, files, moduleFiles);
+  const deps = new Map(moduleFiles.map((f) => [f, [...analysis.edges.get(f).keys()].filter(inModule)]));
+  return renderModule(moduleDir, sha, moduleFiles, readingOrder(moduleFiles, deps), analysis);
+}
+
+function renderModule(moduleDir, sha, moduleFiles, { order, cycles }, { edgeCount, fanIn, details, calls }) {
   const now = new Date();
   const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
   const out = [
@@ -514,7 +533,7 @@ async function main() {
   const internals = [];
   for (const f of order) {
     const isPy = langOf(f) === "Python";
-    const detail = (isPy ? pyDetail : jsDetail)(byFile.get(f));
+    const detail = details.get(f);
     const family = calls[isPy ? "py" : "js"];
     for (const d of detail.internals) internals.push({ ...d, file: f, calls: family.get(d.name) ?? 0 });
     const none = isPy ? "# no exports" : "// no exports";
@@ -533,6 +552,143 @@ async function main() {
   internals.sort((a, b) => b.calls - a.calls || b.lines - a.lines || byPath(a.file, b.file) || byPath(a.name, b.name));
   for (const r of internals) out.push(`| ${r.name} | ${r.file} | ${r.calls} | ${r.lines} |`);
   if (internals.length === 0) out.push("| (none) | | | |");
+  return out;
+}
+
+// --- diff mode ---
+
+// `git archive <sha> | tar -x` into dir. Waits for both sides, so nothing writes into dir once it
+// settles; when one side fails the other is stopped.
+async function extract(repo, sha, dir) {
+  const run = (cmd, args, opts) => {
+    const child = spawn(cmd, args, opts);
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    const done = new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(err.trim() || `${cmd} exited with ${code}`))));
+    });
+    return { child, done };
+  };
+  const archive = run("git", ["archive", "--format=tar", sha], { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
+  const tar = run("tar", ["-x", "-f", "-", "-C", dir], { stdio: ["pipe", "ignore", "pipe"] });
+  tar.child.stdin.on("error", () => {}); // EPIPE when tar stops early; its exit status says why
+  archive.child.stdout.pipe(tar.child.stdin);
+  const sides = [archive, tar];
+  const results = await Promise.allSettled(
+    sides.map(({ done }, i) =>
+      done.catch((err) => {
+        sides[1 - i].child.kill();
+        throw err;
+      }),
+    ),
+  );
+  const failed = results.find((r) => r.status === "rejected");
+  if (failed) throw failed.reason;
+}
+
+async function diffMap(repo, base) {
+  if (!isGitRoot(repo)) fail(`not a git work tree root: ${repo}`);
+  requireAstGrep();
+  const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
+  const rev = git("rev-parse", "--end-of-options", `${base}^{commit}`, "--");
+  const revs = (rev.stdout ?? "").split("\n").filter((l) => l && l !== "--end-of-options" && l !== "--");
+  if (rev.status !== 0 || revs.length !== 1) fail(rev.stderr?.trim() || `not a single commit: ${base}`);
+  const sha = revs[0];
+  const sources = (...args) => {
+    const r = git(...args);
+    if (r.status !== 0) throw new Error(r.stderr || `git ${args[0]} failed`);
+    return r.stdout.split("\0").filter((f) => f && isSource(f));
+  };
+  // Renames are a delete plus an add, so the old path is listed too.
+  const touched = new Set([
+    ...sources("diff", "--name-only", "-z", "--no-renames", "--diff-filter=ADMR", sha, "--"),
+    ...sources("ls-files", "--others", "--exclude-standard", "-z"),
+  ]);
+  const nowFiles = listFiles(repo).files;
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "map-base-"));
+  const cleanup = () => fs.rmSync(tmp, { recursive: true, force: true });
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+  const onSignal = (sig) => process.exit(128 + os.constants.signals[sig]);
+  process.on("exit", cleanup);
+  for (const s of signals) process.on(s, onSignal);
+  try {
+    const detailOf = (files) => files.filter((f) => touched.has(f));
+    const [now, was] = await Promise.all([
+      analyze(repo, nowFiles, detailOf(nowFiles)),
+      extract(repo, sha, tmp).then(() => {
+        const baseFiles = listFiles(tmp).files;
+        return analyze(tmp, baseFiles, detailOf(baseFiles));
+      }),
+    ]);
+    const rows = [...touched]
+      .filter((f) => now.known.has(f) || was.known.has(f))
+      .map((file) => ({ file, change: !was.known.has(file) ? "added" : !now.known.has(file) ? "deleted" : "modified" }));
+    return renderDiff(git("rev-parse", "--short", sha).stdout.trim(), rows, now, was);
+  } finally {
+    cleanup();
+    process.off("exit", cleanup);
+    for (const s of signals) process.off(s, onSignal);
+  }
+}
+
+function renderDiff(short, touched, now, was) {
+  const count = (change) => touched.filter((t) => t.change === change).length;
+  const rows = touched
+    .map((t) => ({ ...t, by: (t.change === "deleted" ? was : now).fanIn(t.file) }))
+    .sort((a, b) => b.by.length - a.by.length || byPath(a.file, b.file));
+  const out = [
+    `# diff map: ${short}..working tree`,
+    "",
+    `${touched.length} touched source files, ${count("added")} added, ${count("deleted")} deleted, ${count("modified")} modified. Fan-in is importers in the working tree (base for deleted files); 10+ is flagged.`,
+    "",
+    "## Touched files by fan-in (read in this order)",
+    "",
+    "| file | in | change | imported by |",
+    "|---|---|---|---|",
+    ...rows.map(({ file, change, by }) => `| ${file} | ${by.length}${by.length >= 10 ? " (!)" : ""} | ${change} | ${by.length ? by.join(", ") : "entry or unused"} |`),
+  ];
+  if (rows.length === 0) out.push("| (none) | | | |");
+
+  const edgeKeys = (a) => new Map([...a.edges].flatMap(([from, tos]) => [...tos.keys()].map((to) => [`${from}\0${to}`, [from, to]])));
+  const [edgesWas, edgesNow] = [edgeKeys(was), edgeKeys(now)];
+  const edgeLines = [
+    ...[...edgesNow].filter(([k]) => !edgesWas.has(k)).map(([, e]) => ["+", ...e]),
+    ...[...edgesWas].filter(([k]) => !edgesNow.has(k)).map(([, e]) => ["-", ...e]),
+  ]
+    .sort((a, b) => byPath(a[1], b[1]) || byPath(a[2], b[2]))
+    .map(([sign, from, to]) => `${sign} ${from} -> ${to}`);
+  out.push("", "## Import edges", "", ...(edgeLines.length ? edgeLines : ["(none)"]));
+
+  // A cycle is its member set: new when no base component has the same members, resolved the other way.
+  const cycleKeys = (a) => new Map(a.cycles().map((c) => [c.join("\0"), c]));
+  const [cyclesWas, cyclesNow] = [cycleKeys(was), cycleKeys(now)];
+  const only = (a, b) => [...a].filter(([k]) => !b.has(k)).sort((x, y) => byPath(x[0], y[0])).map(([, c]) => [...c, c[0]].join(" -> "));
+  const cycleLines = [...only(cyclesNow, cyclesWas).map((c) => `High: new cycle ${c}`), ...only(cyclesWas, cyclesNow).map((c) => `Resolved: ${c}`)];
+  out.push("", "## Cycles", "", ...(cycleLines.length ? cycleLines : ["(none)"]));
+
+  out.push("", "## Export changes");
+  const signed = (sign, headers) => [...new Set(headers)].flatMap((h) => h.split("\n").map((l) => `${sign} ${l}`));
+  let changed = 0;
+  for (const { file } of rows) {
+    const [before, after] = [was, now].map((a) => a.details.get(file)?.exports ?? []);
+    const added = after.filter((h) => !before.includes(h));
+    const removed = before.filter((h) => !after.includes(h));
+    if (added.length + removed.length === 0) continue;
+    changed++;
+    out.push("", `### ${file}`, "", ...signed("+", added), ...signed("-", removed));
+  }
+  if (changed === 0) out.push("", "(none)");
+  return out;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const diff = args[1] === "--diff";
+  if (args.length !== (diff ? 3 : 2)) fail("usage: node map.mjs <repo> <module-dir> | node map.mjs <repo> --diff <base>");
+  const repo = checkDir(path.resolve(args[0]));
+  const out = await (diff ? diffMap(repo, args[2]) : moduleMap(repo, args[1]));
   process.stdout.write(`${out.join("\n")}\n`);
 }
 
