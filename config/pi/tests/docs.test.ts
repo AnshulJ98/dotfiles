@@ -52,7 +52,7 @@ test("docs: a name resolves through search, then fetches the best match and list
 	const s = serve({ [SEARCH]: { status: 200, body: hits }, [CONTEXT]: { status: 200, body: "### safeParse\ncode" } });
 	try {
 		const text = await lookup("zod", "safeParse");
-		assert.equal(text, "Library: /colinhacks/zod\nOther matches: /websites/zod_dev (Zod), /llmstxt/zod_full (Zod), /llmstxt/zod (Zod)\n\n### safeParse\ncode");
+		assert.equal(text, "Library: /colinhacks/zod (Zod)\nOther matches: /websites/zod_dev (Zod), /llmstxt/zod_full (Zod), /llmstxt/zod (Zod)\n\n### safeParse\ncode");
 		assert.deepEqual(s.calls, [
 			`${SEARCH}?query=safeParse&libraryName=zod`,
 			`${CONTEXT}?query=safeParse&libraryId=%2Fcolinhacks%2Fzod`,
@@ -99,6 +99,16 @@ for (const f of failures) {
 		}
 	});
 }
+
+test("docs: the best match's title is shown, so a fuzzy match to another library is visible", async () => {
+	const fuzzy = JSON.stringify({ results: [{ id: "/overextended/ox_lib", title: "ox_lib" }] });
+	const s = serve({ [SEARCH]: { status: 200, body: fuzzy }, [CONTEXT]: { status: 200, body: "lua" } });
+	try {
+		assert.equal(await lookup("zzqx-nonexistent-lib", "x"), "Library: /overextended/ox_lib (ox_lib)\n\nlua");
+	} finally {
+		s.restore();
+	}
+});
 
 test("docs: registers one direct tool with a two-field schema", () => {
 	const tools: Array<{ name: string; parameters: { properties: Record<string, unknown> }; exposure?: string }> = [];
