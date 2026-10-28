@@ -73,8 +73,8 @@ with `DRAFTED BY AGENT, NOT REVIEWED`.
 
 - Edges come from ast-grep over every TS, TSX, JS, JSX, MJS, CJS and
   Python file in the repo (git's ignore rules apply at a work tree root;
-  tests, `.d.ts`, `node_modules`, `dist`, `build` and virtualenvs are
-  skipped). Followed: relative imports (static, side-effect, re-export,
+  tests, fixture dirs, `.d.ts`, `node_modules`, `dist`, `build` and
+  virtualenvs are skipped). Followed: relative imports (static, side-effect, re-export,
   dynamic `import()`, `require`; `./x.js` finds `x.ts`, `./dir` finds
   `dir/index`), aliases from the nearest tsconfig/jsconfig `paths` (one
   level of `extends`), barrels (importing a file that re-exports another
