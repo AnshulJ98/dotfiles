@@ -35,7 +35,7 @@ export async function searchLibrary(name: string, query: string, signal?: AbortS
 	} catch {
 		throw new Error(`Context7 search failed: HTTP ${response.status} non-JSON body ${text.slice(0, BODY_PREVIEW)}`);
 	}
-	const parsed = json as { results?: SearchHit[]; error?: string };
+	const parsed = (json ?? {}) as { results?: SearchHit[]; error?: string };
 	if (response.status === 404 && parsed.error === "no_libraries_found") return null;
 	if (!response.ok) throw new Error(`Context7 search failed: HTTP ${response.status} ${text.slice(0, BODY_PREVIEW)}`);
 	if (!Array.isArray(parsed.results)) throw new Error(`Context7 search failed: no results array in ${text.slice(0, BODY_PREVIEW)}`);

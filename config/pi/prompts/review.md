@@ -4,11 +4,13 @@ argument-hint: "[diff | paths]"
 ---
 Review the following; if nothing is specified, review `git diff`: $@
 
-When the review is a diff of a git repo, first run
-`node ~/.agents/skills/map/map.mjs <repo> --diff <base>`, with `<base>`
-the ref the diff is against (the `git merge-base` of the branch and its
-target when reviewing a branch). Read the touched files in its fan-in
-order, highest first. A `(!)` row or a `High: new cycle` line is
+When the review is a diff of the checked-out tree, first run
+`node ~/.agents/skills/map/map.mjs <repo> --diff <base>`, with `<repo>`
+the work tree root and `<base>` the ref the diff is against (the
+`git merge-base` of the branch and its target when reviewing a branch);
+it compares `<base>` with the working tree, so skip it for a branch that
+is not checked out, and go on without it when it exits non-zero. Read
+the touched files in its fan-in order, highest first. A `(!)` row or a `High: new cycle` line is
 reviewed as High exposure, and every importer listed for it is a caller
 to check.
 
