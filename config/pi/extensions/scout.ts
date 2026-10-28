@@ -4,7 +4,7 @@
  *
  * Contract with bin/scout (the wrapper owns the spawn; this file only reads
  * what it leaves behind under <sessions>/scout/):
- *   .running/<pid>.meta   key=value: pid model thinking started session task
+ *   .running/<pid>.meta   key=value: pid model thinking started session task mode repo
  *   .running/<pid>.out    digest so far (the child's stdout)
  *   .done/<pid>.meta      the same keys plus rc finished, written last
  *   .done/<pid>.out       final digest

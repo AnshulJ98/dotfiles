@@ -34,10 +34,10 @@ def parse_pi(path: Path) -> tuple[str, str, dict]:
             continue
         model = message.get("model", model)
         for block in message.get("content", []):
-            # Every assistant text, not just the last: the headless-close
-            # extension appends a corrected closing as a second message, and
-            # taking only the last one would score the correction instead of
-            # the reply.
+            # Every assistant text, not just the last: a reply that makes
+            # tool calls spans several assistant messages, and the README
+            # baselines were measured over all of them. (The headless-close
+            # extension that first motivated this is retired.)
             if block.get("type") == "text" and block.get("text", "").strip():
                 parts.append(block["text"])
         u = message.get("usage") or {}
