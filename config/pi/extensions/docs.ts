@@ -16,6 +16,7 @@ const bounded = (signal?: AbortSignal): AbortSignal => (signal ? AbortSignal.any
 interface SearchHit {
 	id: string;
 	title: string;
+	versions?: string[];
 }
 
 function headers(): Record<string, string> {
@@ -63,7 +64,8 @@ export async function lookup(library: string, query: string, signal?: AbortSigna
 	const [best, ...rest] = hits;
 	const others = rest.slice(0, 3).map((hit) => `${hit.id} (${hit.title})`).join(", ");
 	const docs = await fetchDocs(best.id, query, signal);
-	return `Library: ${best.id} (${best.title})${others ? `\nOther matches: ${others}` : ""}\n\n${docs}`;
+	const versions = best.versions?.length ? `\nVersions: ${best.versions.join(", ")}` : "";
+	return `Library: ${best.id} (${best.title})${versions}${others ? `\nOther matches: ${others}` : ""}\n\n${docs}`;
 }
 
 export default function docs(pi: ExtensionAPI): void {
@@ -71,7 +73,7 @@ export default function docs(pi: ExtensionAPI): void {
 		name: "docs",
 		label: "Docs",
 		description:
-			"Current documentation and code examples for a library, framework, SDK or CLI from Context7. Use before answering any library-specific API, config, version or setup question, even when you think you know the answer. Search is fuzzy: if the Library line names a different library than you asked for, say so and do not use the text.",
+			"Current documentation and code examples for a library, framework, SDK or CLI from Context7. Use before answering any library-specific API, config, version or setup question, even when you think you know the answer. Search is fuzzy: if the Library line names a different library than you asked for, say so and do not use the text. Docs track the latest release: when the project pins a version, pass /org/project/version if listed, and check the installed package (types in node_modules, the lockfile), trusting it where the two differ.",
 		parameters: Type.Object({
 			library: Type.String({ description: "Library name, or a Context7 ID like /org/project or /org/project/version" }),
 			query: Type.String({ description: "What to look up: one topic, specific" }),
