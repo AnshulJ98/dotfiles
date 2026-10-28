@@ -4,6 +4,14 @@ argument-hint: "[diff | paths]"
 ---
 Review the following; if nothing is specified, review `git diff`: $@
 
+When the review is a diff of a git repo, first run
+`node ~/.agents/skills/map/map.mjs <repo> --diff <base>`, with `<base>`
+the ref the diff is against (the `git merge-base` of the branch and its
+target when reviewing a branch). Read the touched files in its fan-in
+order, highest first. A `(!)` row or a `High: new cycle` line is
+reviewed as High exposure, and every importer listed for it is a caller
+to check.
+
 Don't edit files. Read the code around each change before judging it,
 and find what the change is for: a plan or spec earlier in this
 conversation wins, then the request, a PR description or a commit

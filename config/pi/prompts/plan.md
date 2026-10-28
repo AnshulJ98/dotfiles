@@ -37,7 +37,11 @@ Write about 300 words, skipping any section with nothing to say:
    `file:line`. For each unknown, the default you chose and why, in one
    line. An unknown that changes what gets built is a
    question for me, not a default; ask it with `ask_user` before
-   writing the plan.
+   writing the plan. For a change inside an existing module, run
+   `node ~/.agents/skills/map/map.mjs <repo> <module-dir>` first; a file
+   the steps touch with fan-in 10+ or in a cycle is a finding (its
+   importers are the callers the plan must check), cited as `file
+   (fan-in N)`.
 3. **Approach**: only when two designs are plausible. Two lines each,
    and why one wins.
 4. **Plan**: ordered steps, each `<step> (files) → check: <command or
