@@ -73,7 +73,7 @@ export default function docs(pi: ExtensionAPI) {
 			query: Type.String({ description: "What to look up: one topic, specific" }),
 		}),
 		async execute(_toolCallId, params, signal) {
-			return { content: [{ type: "text", text: await lookup(params.library, params.query, signal) }] };
+			return { content: [{ type: "text", text: await lookup(params.library, params.query, signal) }], details: {} };
 		},
 	});
 }
