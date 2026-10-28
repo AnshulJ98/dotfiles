@@ -17,7 +17,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const posix = path.posix;
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__", "fixture", "fixtures", "__fixtures__"]);
 const JS_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const LANGS = { ".ts": "TypeScript", ".tsx": "Tsx", ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript", ".py": "Python" };
 const langOf = (f) => LANGS[posix.extname(f)];
@@ -146,13 +146,13 @@ async function scan(repo, lang, rules, files) {
     chunks.at(-1).push(f);
     bytes += size;
   }
-  const outs = await Promise.all(
-    chunks.map((c) =>
-      exec("ast-grep", ["scan", "--inline-rules", yaml, "--json=compact", "--", ...c], { cwd: repo, maxBuffer: 1 << 29 }).then(({ stdout }) =>
-        JSON.parse(stdout || "[]").map(slim),
-      ),
-    ),
-  );
+  // Chunks run one after another: scans already overlap per language, kind and (in --diff) side,
+  // and ast-grep is multi-threaded itself, so a large repo would otherwise start dozens at once.
+  const outs = [];
+  for (const c of chunks) {
+    const { stdout } = await exec("ast-grep", ["scan", "--inline-rules", yaml, "--json=compact", "--", ...c], { cwd: repo, maxBuffer: 1 << 29 });
+    outs.push(JSON.parse(stdout || "[]").map(slim));
+  }
   return outs.flat();
 }
 function slim(m) {

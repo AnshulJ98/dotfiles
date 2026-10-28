@@ -8,6 +8,10 @@ import { Type } from "typebox";
 
 const BASE = "https://context7.com/api/v2";
 const BODY_PREVIEW = 200;
+const TIMEOUT_MS = 30_000;
+
+/** The caller's abort plus a hard timeout, so a stalled Context7 call ends without the user. */
+const bounded = (signal?: AbortSignal): AbortSignal => (signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS));
 
 interface SearchHit {
 	id: string;
@@ -27,7 +31,7 @@ async function fail(what: string, response: Response): Promise<never> {
 /** Library name → Context7 ID of the best match plus the next few; null when nothing matches. */
 export async function searchLibrary(name: string, query: string, signal?: AbortSignal): Promise<SearchHit[] | null> {
 	const url = `${BASE}/libs/search?${new URLSearchParams({ query, libraryName: name })}`;
-	const response = await fetch(url, { headers: headers(), signal });
+	const response = await fetch(url, { headers: headers(), signal: bounded(signal) });
 	const text = await response.text();
 	let json: unknown;
 	try {
@@ -45,7 +49,7 @@ export async function searchLibrary(name: string, query: string, signal?: AbortS
 /** Snippets for a query from a Context7 library ID. Empty text is an error: either the library is not finalized or the API changed. */
 export async function fetchDocs(id: string, query: string, signal?: AbortSignal): Promise<string> {
 	const url = `${BASE}/context?${new URLSearchParams({ query, libraryId: id })}`;
-	const response = await fetch(url, { headers: headers(), signal });
+	const response = await fetch(url, { headers: headers(), signal: bounded(signal) });
 	if (!response.ok) return fail("docs", response);
 	const text = await response.text();
 	if (!text.trim()) throw new Error(`Context7 docs failed: empty body for ${id}`);
@@ -62,7 +66,7 @@ export async function lookup(library: string, query: string, signal?: AbortSigna
 	return `Library: ${best.id}${others ? `\nOther matches: ${others}` : ""}\n\n${docs}`;
 }
 
-export default function docs(pi: ExtensionAPI) {
+export default function docs(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "docs",
 		label: "Docs",

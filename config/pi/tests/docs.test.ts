@@ -84,6 +84,7 @@ test("docs: no match is a result, not an error", async () => {
 const failures: Array<{ name: string; replies: Record<string, Reply>; library: string; message: RegExp }> = [
 	{ name: "search HTTP 500", replies: { [SEARCH]: { status: 500, body: '{"message":"down"}' } }, library: "zod", message: /search failed: HTTP 500 .*down/ },
 	{ name: "search non-JSON body", replies: { [SEARCH]: { status: 200, body: "<html>" } }, library: "zod", message: /search failed: HTTP 200 non-JSON body <html>/ },
+	{ name: "search JSON null body on a 404", replies: { [SEARCH]: { status: 404, body: "null" } }, library: "zod", message: /search failed: HTTP 404 null/ },
 	{ name: "search without results array", replies: { [SEARCH]: { status: 200, body: '{"data":[]}' } }, library: "zod", message: /no results array/ },
 	{ name: "docs HTTP 404 on a bad ID", replies: { [CONTEXT]: { status: 404, body: "" } }, library: "/nope/nope", message: /docs failed: HTTP 404/ },
 	{ name: "docs empty body", replies: { [CONTEXT]: { status: 200, body: "  \n" } }, library: "/colinhacks/zod", message: /empty body for \/colinhacks\/zod/ },

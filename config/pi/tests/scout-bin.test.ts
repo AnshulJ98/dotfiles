@@ -79,12 +79,16 @@ function doneMeta(scoutRoot: string): string {
 	return readFileSync(join(scoutRoot, ".done", meta), "utf8");
 }
 
-test("a refused spec leaves no run folder behind", async () => {
+test("a refused spec leaves no run folder, running meta or spec temp file behind", async () => {
 	const { env, scoutRoot } = sandbox();
-	const run = await runScout(["--spec", "-"], env, "no frontmatter\n");
+	const tmp = mkdtempSync(join(tmpdir(), "scout-spec-tmp-"));
+	const run = await runScout(["--spec", "-"], { ...env, TMPDIR: tmp }, "no frontmatter\n");
 	assert.equal(run.code, 2);
 	const runs = existsSync(scoutRoot) ? readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)) : [];
 	assert.deepEqual(runs, []);
+	const running = join(scoutRoot, ".running");
+	assert.deepEqual(existsSync(running) ? readdirSync(running) : [], []);
+	assert.deepEqual(readdirSync(tmp), []);
 });
 
 test("a package.json without a type above scout does not refuse the spec", () => {

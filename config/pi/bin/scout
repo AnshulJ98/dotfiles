@@ -215,11 +215,12 @@ if [ "$RW" = 1 ] && [ -n "$OPEN_WORKER" ]; then
   exit 75
 fi
 # Claim the slot now, so a scout started during the spec parse below sees this one as live. The
-# full meta overwrites it before pi starts; until then any exit removes it.
+# full meta overwrites it before pi starts; until then any exit removes it (and a spec still held
+# in its temp file, which the trap above this point covered).
 mkdir -p "$RUNNING"
 META="$RUNNING/$$.meta"
 printf 'pid=%s\nstarted=%s\nmode=%s\nrepo=%s\n' "$$" "$(($(date +%s) * 1000))" "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
-trap 'rm -f "$META"' EXIT
+trap 'rm -f "$META" "${SPEC_TMP:-}"' EXIT
 
 WORKER=()
 if [ "$RW" = 1 ]; then
