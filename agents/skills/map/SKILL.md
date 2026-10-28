@@ -1,6 +1,6 @@
 ---
 name: map
-description: Build a module map for a TypeScript module before working in it — prints a zero-token digest (reading order, fan-in, exported signatures), then plays back the operator's own ten-line summary verbatim; nothing is written unless the operator says "save". Use when the operator says "map <module>".
+description: Build a module map for a TypeScript, JavaScript or Python module before working in it — prints a zero-token digest (reading order, fan-in, exported signatures), then plays back the operator's own ten-line summary verbatim; nothing is written unless the operator says "save". Use when the operator says "map <module>".
 ---
 
 # Map
@@ -13,10 +13,11 @@ written to disk unless the operator says "save".
 1. Run the digest to stdout. It costs no model tokens:
 
    ```sh
-   ~/.agents/skills/map/digest.sh <repo> <module-dir> -
+   node ~/.agents/skills/map/map.mjs <repo> <module-dir>
    ```
 
-   Exit 2 means a bad argument; report the message and stop.
+   Exit 2 means a bad argument (including `ast-grep` missing from
+   PATH); report the message and stop.
 
 2. Tool output is collapsed in the TUI, so repeat the digest verbatim
    in your reply, every line, then stop. Add nothing: no summary of the
@@ -70,12 +71,17 @@ with `DRAFTED BY AGENT, NOT REVIEWED`.
 
 ## Digest limits
 
-- Edges come from relative imports only (static, side-effect, dynamic,
-  `require`; `./dir` resolves to `./dir/index`). Path aliases (`@/x`) and
-  barrel re-exports are not followed, so their fan-in is undercounted.
-  Say so when the repo's tsconfig declares `paths`.
-- Signatures come from the repo's own `tsc --emitDeclarationOnly`, run
-  against the nearest `tsconfig.json` at or above the module. When that
-  emit produces nothing, the file says so and lists grepped `export`
-  lines without inferred types.
-- Paths containing spaces are refused.
+- Edges come from ast-grep over every TS, TSX, JS, JSX, MJS, CJS and
+  Python file in the repo (git's ignore rules apply at a work tree root;
+  tests, `.d.ts`, `node_modules`, `dist`, `build` and virtualenvs are
+  skipped). Followed: relative imports (static, side-effect, re-export,
+  dynamic `import()`, `require`; `./x.js` finds `x.ts`, `./dir` finds
+  `dir/index`), aliases from the nearest tsconfig/jsconfig `paths` (one
+  level of `extends`), barrels (importing a file that re-exports another
+  counts toward that file's fan-in, listed `(via <barrel>)`), and Python
+  relative imports plus absolute ones from the repo root, `src/` or a
+  `pyproject.toml` package-dir. Packages and built-ins are dropped.
+- No inferred types: export lines are the headers as written.
+- A Python package-dir not in those roots is not resolved, so imports
+  of it are dropped.
+- `export default` of an anonymous expression shows as `export default`.

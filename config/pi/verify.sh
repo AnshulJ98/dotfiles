@@ -67,6 +67,7 @@ check "pi still warns 'No models match pattern' for a bogus pattern (no-match ch
 # --- tools and pi internals the config depends on ---
 echo "[tools]"
 check "timeout on PATH is GNU (scout uses --foreground)" "timeout --version 2>/dev/null | grep -q 'GNU coreutils'"
+check "ast-grep on PATH (map skill)" "command -v ast-grep"
 # OAuth shim: loaded by bin/scout only when present (work machines may lack it).
 # claude-opus-5-5 needs Claude Code >= 2.1.280; claude-fable-5-1 needs >= 2.1.251.
 # Upgrades of the package have reverted a hand patch before.
@@ -176,6 +177,7 @@ done
 # --- the node tests; run here in review, never by workers ---
 echo "[tests]"
 check "node tests pass" "node --test '$DOT'/tests/*.test.ts"
+check "map skill tests pass" "node --test '$DOT'/../../agents/skills/map/tests/*.test.mjs"
 
 # --- strict type check of every extension, lib and test against the running pi ---
 # node --test strips types without checking them, so a wrong tool-result shape or a
