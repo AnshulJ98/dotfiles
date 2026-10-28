@@ -130,6 +130,21 @@ a false clean). opus-5-5 missed falsy-vs-absent once in 10 runs.
 grok-4.6, fable-5 @ xhigh, and sonnet-5-5 (11 runs) have hit every
 category.
 
+## Post harness-cuts control (2026-10-28, config at auto/harness-cuts)
+
+One run per leg on the pruned config (context7 package replaced by
+`docs`, web tools deferred, ask-user skill off): recall is unchanged,
+cost flat.
+
+| Leg | Review | Premise | Impl |
+|---|---|---|---|
+| sonnet-5-5 @ medium | 13/13 +rt, 314 w, $0.04 | gated in sentence 1, 0 "?", 524 w, $0.04 | 8 tests, 2 files, green verified, ASCII flagged, $0.04 |
+| sonnet-5-5 @ high | 13/13 +rt, 379 w, $0.04 | gated in paragraph 2 after a fixture note, 0 "?", 612 w, $0.05 | 11 tests, 2 files, green verified, ASCII flagged with the NFD fix, $0.04 |
+| opus-5-5 @ medium | 13/13 +rt, 436 w, $0.12 | gated in sentence 1, 0 "?", 413 w, $0.09 | 11 tests, 2 files, green verified, ASCII stated, $0.08 |
+
+Results: `results/20261027-2308{04,33}` and `results/20261027-230909`.
+No memory writes. opus-5-5 @ high not run (usage budget).
+
 ## Impl board (slugify probe, 2026-09-12 → 2026-09-29)
 
 All legs: two files only, independently re-verified green. Ranked by
