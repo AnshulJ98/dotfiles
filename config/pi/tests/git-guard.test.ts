@@ -112,7 +112,7 @@ test("git guard: refuses to run without PI_SCOUT_REAL_GIT", () => {
 	const { guarded, env } = world("rw");
 	delete env.PI_SCOUT_REAL_GIT;
 	const run = spawnSync(GUARD, ["status"], { cwd: guarded, env, encoding: "utf8" });
-	assert.equal(run.status, 1);
+	assert.equal(run.status, 77);
 	assert.match(run.stderr, /PI_SCOUT_REAL_GIT/);
 });
 
@@ -120,7 +120,7 @@ test("git guard: refuses to run itself when PI_SCOUT_REAL_GIT is the guard", () 
 	const { guarded, env } = world("rw");
 	env.PI_SCOUT_REAL_GIT = GUARD;
 	const run = spawnSync(GUARD, ["status"], { cwd: guarded, env, encoding: "utf8", timeout: 5_000 });
-	assert.equal(run.status, 1);
+	assert.equal(run.status, 77);
 	assert.match(run.stderr, /refusing to run itself/);
 });
 

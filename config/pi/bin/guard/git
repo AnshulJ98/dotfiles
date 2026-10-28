@@ -11,15 +11,18 @@
 # A tripwire, not a sandbox: an absolute /usr/bin/git, or an alias set with
 # `git -c alias.x=stash x`, still gets through.
 #
+# Exit 1 is a refused command; 77 (EX_CONFIG) means the guard itself is
+# misconfigured and nothing can run, which the sensors read as cannot-run.
+#
 # Not `set -u`: empty arrays are unbound on macOS's bash 3.2.
 
 if [ -z "${PI_SCOUT_REAL_GIT:-}" ]; then
   echo "scout git guard: PI_SCOUT_REAL_GIT is not set; refusing to guess which git to run" >&2
-  exit 1
+  exit 77
 fi
 if [ "$PI_SCOUT_REAL_GIT" -ef "${BASH_SOURCE[0]}" ]; then
   echo "scout git guard: PI_SCOUT_REAL_GIT is this guard ($PI_SCOUT_REAL_GIT); refusing to run itself" >&2
-  exit 1
+  exit 77
 fi
 
 original=("$@")
