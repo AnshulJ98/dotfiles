@@ -1,8 +1,9 @@
 /**
  * Scout pane — loaded only by bin/scout when it runs the child as an
- * interactive pi in a herdr tab instead of `pi -p`. When the run settles (no
- * sensor retry or queued message left), it writes the last assistant text to
- * SCOUT_DIGEST, the digest `pi -p` would have printed, and exits.
+ * interactive pi in a herdr tab instead of `pi -p`. When the run settles idle,
+ * it writes the last assistant text to SCOUT_DIGEST, the digest `pi -p` would
+ * have printed, and exits. If the last turn errored or was aborted (or there is
+ * none), it also writes 1 to SCOUT_PANE_RC, since exiting the TUI is rc 0.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -18,7 +19,10 @@ export default function (pi: ExtensionAPI) {
 			if (e.type === "message" && e.message.role === "assistant") last = e.message as AssistantMessage;
 		}
 		const text = (last?.content ?? []).flatMap((c) => (c.type === "text" ? [c.text] : [])).join("");
-		writeFileSync(digest, text.endsWith("\n") ? text : `${text}\n`);
+		const failed = last?.stopReason === "error" || last?.stopReason === "aborted" || !last;
+		const shown = failed && !text ? (last?.errorMessage ?? `pi stopped: ${last?.stopReason ?? "no reply"}`) : text;
+		writeFileSync(digest, shown.endsWith("\n") ? shown : `${shown}\n`);
+		if (failed && process.env.SCOUT_PANE_RC) writeFileSync(process.env.SCOUT_PANE_RC, "1\n");
 		ctx.shutdown();
 	});
 }
