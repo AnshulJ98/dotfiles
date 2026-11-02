@@ -13,6 +13,8 @@ const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\nDo it.\n";
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would)
 const FAKE_PI = `#!/usr/bin/env bash
+# In a herdr tab, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
+[ -n "$SCOUT_DIGEST" ] && exec >"$SCOUT_DIGEST"
 dir=""
 while [ $# -gt 0 ]; do [ "$1" = "--session-dir" ] && dir="$2"; shift; done
 [ -n "$dir" ] && echo '{"type":"message","message":{"role":"user"}}' >"$dir/s.jsonl"
@@ -46,7 +48,29 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH}`, PI_CODING_AGENT_DIR: root };
 	delete env.PI_SCOUT_DEPTH;
 	delete env.PI_SESSION_FILE;
+	// Headless even when the suite runs inside a herdr pane; herdrSandbox sets it back
+	delete env.HERDR_PANE_ID;
 	return { env, scoutRoot: join(root, "sessions", "scout") };
+}
+
+// FAKE_HERDR: ok, or broken (tab create fails). Every call is logged; `pane run` runs the command detached, as a pane would.
+const FAKE_HERDR = `#!/usr/bin/env bash
+echo "$*" >>"$FAKE_HERDR_LOG"
+case "$1 $2" in
+"tab create") [ "$FAKE_HERDR" = broken ] && exit 1; echo '{"result":{"tab":{"tab_id":"w1:t9"},"root_pane":{"pane_id":"w1:p9"}}}' ;;
+"pane run") (bash -c "$4" </dev/null >/dev/null 2>&1 &) ;;
+"agent rename") exit 1 ;;
+esac
+`;
+
+/** sandbox() as seen from inside herdr pane w1:p1, with a fake herdr on PATH. */
+function herdrSandbox(mode: "ok" | "broken"): { env: NodeJS.ProcessEnv; log: string } {
+	const { env } = sandbox();
+	const root = String(env.PI_CODING_AGENT_DIR);
+	writeFileSync(join(root, "bin", "herdr"), FAKE_HERDR);
+	chmodSync(join(root, "bin", "herdr"), 0o755);
+	const log = join(root, "herdr.log");
+	return { env: { ...env, HERDR_PANE_ID: "w1:p1", HERDR_WORKSPACE_ID: "w1", FAKE_HERDR: mode, FAKE_HERDR_LOG: log }, log };
 }
 
 interface Run {
@@ -233,6 +257,25 @@ test("a child whose session file goes stale is killed as a stall", async () => {
 	assert.ok(run.ms < 20_000, `took ${run.ms}ms`);
 	assert.match(run.stdout.split("\n")[0], /^WORKER-SENSORS: CANNOT-RUN model stream stalled/);
 	assert.match(report(scoutRoot).reasons[0], /model stream stalled/);
+});
+
+test("inside herdr the child runs in a new herdr tab, its digest comes back, and the tab closes on rc 0", async () => {
+	const { env, log } = herdrSandbox("ok");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 0);
+	assert.match(run.stdout, /^x{20}$/m);
+	const calls = readFileSync(log, "utf8");
+	assert.match(calls, /^tab create --workspace w1 --cwd \S+ --label scout \d+ --no-focus$/m);
+	assert.match(calls, /^pane run w1:p9 bash \S+\/pane\.sh$/m);
+	assert.match(calls, /^tab close w1:t9$/m);
+});
+
+test("when herdr cannot open a tab, scout falls back to pi -p", async () => {
+	const { env, log } = herdrSandbox("broken");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 0);
+	assert.match(run.stdout, /^x{20}$/m);
+	assert.doesNotMatch(readFileSync(log, "utf8"), /^pane run/m);
 });
 
 test("a reader that quits early (| head) does not kill the run", () => {
