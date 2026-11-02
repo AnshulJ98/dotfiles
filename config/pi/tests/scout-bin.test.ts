@@ -11,7 +11,7 @@ const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scou
 const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\nDo it.\n";
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
-// verdict (prints a sensors verdict line of its own, as a non -p pi would)
+// verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
 # In a herdr tab, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
 [ -n "$SCOUT_DIGEST" ] && exec >"$SCOUT_DIGEST"
@@ -24,6 +24,7 @@ hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
+error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
 esac
 `;
 
@@ -59,23 +60,24 @@ echo "$*" >>"$FAKE_HERDR_LOG"
 case "$1 $2" in
 "tab create") [ "$FAKE_HERDR" = broken ] && exit 1; echo '{"result":{"tab":{"tab_id":"w1:t9"},"root_pane":{"pane_id":"w1:p9"}}}' ;;
 "pane run") (bash -c "$4" </dev/null >/dev/null 2>&1 &) ;;
-"agent rename") exit 1 ;;
+"agent rename") [ -n "$FAKE_HERDR_RENAME_OK" ] && exit 0; exit 1 ;;
 esac
 `;
 
 /** sandbox() as seen from inside herdr pane w1:p1, with a fake herdr on PATH. */
-function herdrSandbox(mode: "ok" | "broken"): { env: NodeJS.ProcessEnv; log: string } {
-	const { env } = sandbox();
+function herdrSandbox(mode: "ok" | "broken"): { env: NodeJS.ProcessEnv; log: string; scoutRoot: string } {
+	const { env, scoutRoot } = sandbox();
 	const root = String(env.PI_CODING_AGENT_DIR);
 	writeFileSync(join(root, "bin", "herdr"), FAKE_HERDR);
 	chmodSync(join(root, "bin", "herdr"), 0o755);
 	const log = join(root, "herdr.log");
-	return { env: { ...env, HERDR_PANE_ID: "w1:p1", HERDR_WORKSPACE_ID: "w1", FAKE_HERDR: mode, FAKE_HERDR_LOG: log }, log };
+	return { env: { ...env, HERDR_PANE_ID: "w1:p1", HERDR_WORKSPACE_ID: "w1", FAKE_HERDR: mode, FAKE_HERDR_LOG: log }, log, scoutRoot };
 }
 
 interface Run {
 	code: number | null;
 	stdout: string;
+	stderr: string;
 	ms: number;
 }
 
@@ -84,10 +86,12 @@ function runScout(args: string[], env: NodeJS.ProcessEnv, stdin = "", onSpawn?: 
 	return new Promise((done) => {
 		const child = spawn(SCOUT, args, { env });
 		let stdout = "";
+		let stderr = "";
 		child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+		child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
 		child.stdin.end(stdin);
 		if (child.pid) onSpawn?.(child.pid);
-		child.on("close", (code) => done({ code, stdout, ms: Date.now() - started }));
+		child.on("close", (code) => done({ code, stdout, stderr, ms: Date.now() - started }));
 	});
 }
 
@@ -268,6 +272,97 @@ test("inside herdr the child runs in a new herdr tab, its digest comes back, and
 	assert.match(calls, /^tab create --workspace w1 --cwd \S+ --label scout \d+ --no-focus$/m);
 	assert.match(calls, /^pane run w1:p9 bash \S+\/pane\.sh$/m);
 	assert.match(calls, /^tab close w1:t9$/m);
+});
+
+const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** The run folder's file, once scout has made it (the folder is keyed by scout's pid). */
+function runFile(scoutRoot: string, name: string): string | undefined {
+	if (!existsSync(scoutRoot)) return undefined;
+	const dir = readdirSync(scoutRoot).find((d) => /^\d+$/.test(d) && existsSync(join(scoutRoot, d, name)));
+	return dir ? join(scoutRoot, dir, name) : undefined;
+}
+
+/** Runs a herdr-mode scout whose fake pi sleeps; reads pane.sh once the pane has started, then SIGTERMs scout. */
+async function capturePaneScript(env: NodeJS.ProcessEnv, scoutRoot: string): Promise<{ run: Run; text: string; mode: number; path: string }> {
+	const seen = { text: "", mode: -1, path: "" };
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "sleep" }, "", (pid) => {
+		void (async () => {
+			// pane.sh is removed on exit, so an earlier run's folder never matches
+			const started = (): string | undefined => {
+				const sh = runFile(scoutRoot, "pane.sh");
+				return sh && existsSync(join(sh, "..", "pane.pid")) ? sh : undefined;
+			};
+			for (let i = 0; i < 100 && !started(); i += 1) await sleepMs(100);
+			const path = started();
+			if (path) Object.assign(seen, { text: readFileSync(path, "utf8"), mode: statSync(path).mode & 0o777, path });
+			process.kill(pid, "SIGTERM");
+		})();
+	});
+	return { run, ...seen };
+}
+
+test("a failed model run (extension writes rc 1) returns rc 1 with the reason, and the tab stays open", async () => {
+	const { env, log } = herdrSandbox("ok");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "error" });
+	assert.equal(run.code, 1);
+	assert.match(run.stdout, /404/);
+	assert.doesNotMatch(readFileSync(log, "utf8"), /^tab close/m);
+});
+
+test("pane.sh is 0600, drops the herdr socket, exports no HERDR_ var, and is gone after exit", async () => {
+	const { env, scoutRoot } = herdrSandbox("ok");
+	const seen = await capturePaneScript({ ...env, HERDR_SOCKET_PATH: "/tmp/herdr.sock", HERDR_ENV: "1" }, scoutRoot);
+	assert.equal(seen.mode, 0o600);
+	assert.match(seen.text, /^unset HERDR_SOCKET_PATH HERDR_ENV$/m);
+	assert.doesNotMatch(seen.text, /^export HERDR_/m);
+	assert.ok(seen.path);
+	assert.equal(existsSync(seen.path), false, "pane.sh outlived scout");
+});
+
+test("a herdr child that times out returns 124 without a cat error", async () => {
+	const { env } = herdrSandbox("ok");
+	const run = await runScout(["--timeout", "2", "look around"], { ...env, FAKE_PI: "hang" });
+	assert.equal(run.code, 124);
+	assert.doesNotMatch(run.stderr, /cat:/);
+});
+
+test("SIGKILL of scout takes the pane child with it, and the pane still counts toward the cap until then", async () => {
+	const { env, scoutRoot } = herdrSandbox("ok");
+	const pidfile = join(scoutRoot, "..", "fake.pid");
+	const first = spawn(SCOUT, ["--rw", "--spec", "-"], { env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile }, stdio: ["pipe", "ignore", "ignore"] });
+	first.stdin.end(SPEC);
+	const metaPath = join(scoutRoot, ".running", `${first.pid}.meta`);
+	for (let i = 0; i < 100 && !(existsSync(pidfile) && existsSync(metaPath) && /^pane=\d+$/m.test(readFileSync(metaPath, "utf8"))); i += 1) await sleepMs(100);
+	const fakePid = Number(readFileSync(pidfile, "utf8"));
+	process.kill(first.pid ?? 0, "SIGKILL");
+	const second = await runScout(["--rw", "--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+	const isAlive = (pid: number): boolean => {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	const wasAlive = isAlive(fakePid);
+	for (let i = 0; i < 60 && isAlive(fakePid); i += 1) await sleepMs(100);
+	const alive = isAlive(fakePid);
+	if (alive) process.kill(fakePid, "SIGKILL");
+	assert.equal(second.code, 75, second.stderr);
+	assert.ok(wasAlive, "the child was already gone when the second scout ran");
+	assert.equal(alive, false, "the child pi outlived scout by more than 6s");
+});
+
+test("pi gets -na unless the cwd is under a trusted path in trust.json", async () => {
+	const { env, scoutRoot } = herdrSandbox("ok");
+	const trustFile = join(String(env.PI_CODING_AGENT_DIR), "trust.json");
+	writeFileSync(trustFile, JSON.stringify({ "/some/other/place": true }));
+	assert.match((await capturePaneScript(env, scoutRoot)).text, / -na /);
+	writeFileSync(trustFile, JSON.stringify({ [process.cwd()]: true, [process.env.PWD ?? process.cwd()]: true }));
+	const trusted = await capturePaneScript(env, scoutRoot);
+	assert.ok(trusted.text.includes("timeout --foreground"));
+	assert.doesNotMatch(trusted.text, / -na /);
 });
 
 test("when herdr cannot open a tab, scout falls back to pi -p", async () => {
