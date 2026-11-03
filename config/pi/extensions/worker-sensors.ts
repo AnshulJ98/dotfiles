@@ -6,7 +6,17 @@
  * `files-allowed` (globs relative to the repo root), `tests` (a shell
  * command), an optional `max-lines` (default 400, from the handoff), and an
  * optional `allowed-commands` list of command prefixes exempt from the cloud
- * block (`cdk deploy MyStack-dev`), each given a purpose by /plan.
+ * block (`cdk deploy MyStack-dev`), each given a purpose by /plan. An optional
+ * `interface-frozen` glob list freezes the export headers of matching files:
+ * at load every frozen TypeScript file must spell out its interface (rule
+ * list below, FROZEN_RULES), and at settle `map.mjs --diff --json` must show
+ * no export header added or removed in a frozen file the worker touched.
+ *
+ * A repo with `sgconfig.yml` at its root gets an ast-grep scan at settle:
+ * an `error` hit in a changed file fails, and a `warning` rule whose
+ * repo-wide count rises above `.ast-grep-baseline.json` (`{"rule-id": n}`,
+ * read at the snapshot so the worker cannot raise it) fails as a ratchet;
+ * without a baseline, warnings are only advice.
  *
  * Three layers. Git is guarded by bin/guard/git, a wrapper first on PATH for
  * every scout child, so history, stash, remote and tree-switching commands
@@ -36,23 +46,29 @@
  * CANNOT-RUN itself when no report exists.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
+import { promisify } from "node:util";
 
 const DEFAULT_MAX_LINES = 400;
 const MAX_RETRIES = 1;
 const TEST_TIMEOUT_MS = 300_000;
 const OUTPUT_TAIL_LINES = 40;
 const DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
+// The installed map skill, the same path /plan and /review call.
+const MAP_MJS = join(homedir(), ".agents/skills/map/map.mjs");
+const MAP_TIMEOUT_MS = 120_000;
 
 export interface WorkerSpec {
   filesAllowed: string[];
   tests: string;
   maxLines: number;
   allowedCommands: string[];
+  /** Globs whose export headers must not change; empty means no freeze. */
+  interfaceFrozen: string[];
 }
 
 export interface CheckFailure {
@@ -126,7 +142,9 @@ export function parseSpec(text: string): WorkerSpec | string {
   if (!Number.isInteger(maxLines) || maxLines <= 0) return `spec max-lines must be a positive integer, got ${String(rawMax)}`;
   const allowed = fields.get("allowed-commands") ?? [];
   if (!Array.isArray(allowed)) return "spec allowed-commands must be a list of command prefixes";
-  return { filesAllowed, tests, maxLines, allowedCommands: allowed };
+  const frozen = fields.get("interface-frozen") ?? [];
+  if (!Array.isArray(frozen)) return "spec interface-frozen must be a list of globs";
+  return { filesAllowed, tests, maxLines, allowedCommands: allowed, interfaceFrozen: frozen };
 }
 
 /** True when a repo-relative path matches one of the spec's globs. */
@@ -431,6 +449,185 @@ function takeSnapshot(cwd: string): Snapshot {
   return { root, base, untrackedAtStart, untrackedText };
 }
 
+// --- interface-frozen ---
+
+const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
+const EXPORTED = { kind: "export_statement", inside: { kind: "program" } };
+const EXPORTED_VARS = { any: [{ kind: "lexical_declaration" }, { kind: "variable_declaration" }], inside: EXPORTED };
+const FUNCTIONS = ["function_declaration", "generator_function_declaration", "function_expression", "generator_function", "arrow_function"].map((kind) => ({ kind }));
+
+/**
+ * What map's export headers cannot see, so a body edit could change the interface unseen: an inferred
+ * return or const type, class members (a class header stops at `{`), and an `export { a }` list, whose
+ * signatures sit on declarations elsewhere in the file. A frozen file must have none of these.
+ */
+const FROZEN_RULES: Record<string, { why: string; rule: object }> = {
+  "untyped-function": {
+    why: "exported function without a return type",
+    rule: {
+      all: [
+        { any: FUNCTIONS },
+        { any: [{ inside: EXPORTED }, { inside: { field: "value", kind: "variable_declarator", inside: EXPORTED_VARS } }] },
+        { not: { has: { field: "return_type", kind: "type_annotation" } } },
+      ],
+    },
+  },
+  "untyped-const": {
+    why: "exported variable without a type annotation",
+    rule: {
+      kind: "variable_declarator",
+      inside: EXPORTED_VARS,
+      not: { any: [{ has: { field: "type", kind: "type_annotation" } }, { has: { field: "value", any: FUNCTIONS } }] },
+    },
+  },
+  "exported-class": {
+    why: "exported class, whose members map cannot see",
+    rule: { any: [{ kind: "class_declaration" }, { kind: "abstract_class_declaration" }, { kind: "class" }], inside: EXPORTED },
+  },
+  "export-list": {
+    why: "`export { ... }` list, which hides the signatures",
+    rule: { kind: "export_statement", inside: { kind: "program" }, has: { kind: "export_clause" }, not: { has: { field: "source", pattern: "$S" } } },
+  },
+};
+
+/**
+ * Check at load that every tracked file under interface-frozen spells out its interface in map's headers.
+ * Throws on a setup problem (no match, no ast-grep, no map skill) so the worker fails closed before editing.
+ */
+function frozenGaps(root: string, globs: readonly string[]): string[] {
+  if (!existsSync(MAP_MJS)) throw new Error(`interface-frozen needs the map skill at ${MAP_MJS}`);
+  const files = git(root, ["ls-files", "-z"]).split("\0").filter((f) => f && isAllowed(f, globs));
+  if (files.length === 0) throw new Error(`interface-frozen matches no tracked file: ${globs.join(", ")}`);
+  const ts = files.filter((f) => TS_SOURCE.test(f));
+  if (ts.length === 0) return [];
+  const yaml = ["TypeScript", "Tsx"]
+    .flatMap((language) => Object.entries(FROZEN_RULES).map(([id, { rule }]) => JSON.stringify({ id, language, rule })))
+    .join("\n---\n");
+  const out = execFileSync("ast-grep", ["scan", "--inline-rules", yaml, "--json=compact", "--", ...ts], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 1 << 28,
+    timeout: MAP_TIMEOUT_MS,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const hits = JSON.parse(out || "[]") as Array<{ ruleId: string; file: string; range: { start: { line: number } } }>;
+  return hits.map((h) => `${h.file}:${h.range.start.line + 1} ${FROZEN_RULES[h.ruleId]?.why ?? h.ruleId}`).sort();
+}
+
+interface ExportChange {
+  file: string;
+  added: string[];
+  removed: string[];
+}
+
+function isExportChanges(value: unknown): value is ExportChange[] {
+  return Array.isArray(value) && value.every((e) => typeof e?.file === "string" && Array.isArray(e.added) && Array.isArray(e.removed));
+}
+
+const execFileAsync = promisify(execFile);
+
+/** Export headers added or removed in the given frozen files, per map.mjs --diff against the snapshot. */
+async function frozenChanges(snap: Snapshot, frozen: readonly string[]): Promise<CheckFailure[]> {
+  if (frozen.length === 0) return [];
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync("node", [MAP_MJS, snap.root, "--diff", snap.base, "--json"], {
+      cwd: snap.root,
+      timeout: MAP_TIMEOUT_MS,
+      maxBuffer: 1 << 28,
+    }));
+  } catch (error) {
+    return [{ kind: "cannot-run", reason: `interface-frozen: map --diff failed: ${tail(error instanceof Error ? error.message : String(error), 3)}` }];
+  }
+  const exports: unknown = (JSON.parse(stdout) as { exports?: unknown }).exports;
+  if (!isExportChanges(exports)) return [{ kind: "cannot-run", reason: "interface-frozen: map --diff --json has no exports list" }];
+  const short = (header: string): string => header.replace(/\s+/g, " ").slice(0, 160);
+  return exports
+    .filter((e) => frozen.includes(e.file))
+    .map((e) => ({
+      kind: "fail" as const,
+      reason:
+        `${e.file}: frozen export headers changed (${[...e.added.map((h) => `+ ${short(h)}`), ...e.removed.map((h) => `- ${short(h)}`)].join(" | ")}). ` +
+        "Restore the headers and change only bodies",
+    }));
+}
+
+// --- ast-grep rules (sgconfig.yml) ---
+
+const SGCONFIG = "sgconfig.yml";
+const RULE_BASELINE = ".ast-grep-baseline.json";
+const LISTED_HITS = 5;
+
+interface RuleHit {
+  ruleId: string;
+  severity: string;
+  file: string;
+  line: number;
+  message: string;
+}
+
+function isScanOutput(value: unknown): value is Array<{ ruleId: string; severity: string; file: string; message?: string; range: { start: { line: number } } }> {
+  return Array.isArray(value) && value.every((h) => typeof h?.ruleId === "string" && typeof h.file === "string" && typeof h.range?.start?.line === "number");
+}
+
+/** The repo's own rules over the whole tree. ast-grep exits 1 when an error-severity rule matched; that is still a result. */
+async function scanRules(root: string): Promise<RuleHit[] | CheckFailure> {
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync("ast-grep", ["scan", "-c", SGCONFIG, "--json=compact"], { cwd: root, timeout: MAP_TIMEOUT_MS, maxBuffer: 1 << 28 }));
+  } catch (error) {
+    const failed = error as { code?: unknown; stdout?: unknown; message?: string };
+    if (failed.code !== 1 || typeof failed.stdout !== "string" || failed.stdout === "") {
+      return { kind: "cannot-run", reason: `ast-grep scan failed: ${tail(failed.message ?? String(error), 3)}` };
+    }
+    stdout = failed.stdout;
+  }
+  const hits: unknown = JSON.parse(stdout || "[]");
+  if (!isScanOutput(hits)) return { kind: "cannot-run", reason: "ast-grep scan printed no JSON match list" };
+  return hits.map((h) => ({ ruleId: h.ruleId, severity: h.severity, file: normalize(h.file), line: h.range.start.line + 1, message: h.message ?? "" }));
+}
+
+/** Pure: error hits in changed files, and warning rules counted past the baseline; no baseline, no warning ratchet. */
+export function ruleFailures(hits: readonly RuleHit[], changed: ReadonlySet<string>, baseline: Readonly<Record<string, number>> | undefined): string[] {
+  const reasons: string[] = [];
+  const errors = hits.filter((h) => h.severity === "error" && changed.has(h.file));
+  if (errors.length) {
+    const listed = errors.slice(0, LISTED_HITS).map((h) => `${h.file}:${h.line} ${h.ruleId}${h.message ? ` (${h.message})` : ""}`);
+    const more = errors.length > LISTED_HITS ? `, +${errors.length - LISTED_HITS} more` : "";
+    reasons.push(`ast-grep error rules hit in changed files: ${listed.join(", ")}${more}`);
+  }
+  if (!baseline) return reasons;
+  const counts = new Map<string, number>();
+  for (const h of hits) if (h.severity === "warning") counts.set(h.ruleId, (counts.get(h.ruleId) ?? 0) + 1);
+  for (const [rule, count] of [...counts].sort(([a], [b]) => a.localeCompare(b))) {
+    const allowed = Object.hasOwn(baseline, rule) ? baseline[rule] : 0;
+    if (count > allowed) reasons.push(`ast-grep warning ${rule}: ${count} hits, baseline ${allowed} in ${RULE_BASELINE}`);
+  }
+  return reasons;
+}
+
+function parseBaseline(text: string | undefined): Record<string, number> | undefined | string {
+  if (text === undefined) return undefined;
+  try {
+    const data: unknown = JSON.parse(text);
+    if (data && typeof data === "object" && !Array.isArray(data) && Object.values(data).every((n) => Number.isInteger(n) && n >= 0)) {
+      return data as Record<string, number>;
+    }
+  } catch {
+    // Falls through to the same message as a wrong shape.
+  }
+  return `${RULE_BASELINE} at the snapshot is not a {"rule-id": count} object`;
+}
+
+async function rulesCheck(snap: Snapshot, changed: ReadonlySet<string>): Promise<CheckFailure[]> {
+  if (!existsSync(resolve(snap.root, SGCONFIG))) return [];
+  const baseline = parseBaseline(showAtBase(snap, RULE_BASELINE));
+  if (typeof baseline === "string") return [{ kind: "cannot-run", reason: baseline }];
+  const hits = await scanRules(snap.root);
+  if (!Array.isArray(hits)) return [hits];
+  return ruleFailures(hits, changed, baseline).map((reason) => ({ kind: "fail", reason }));
+}
+
 async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: CheckFailure[]; testOutput: string }> {
   const failures: CheckFailure[] = [];
   const tests = await runShell(spec.tests, snap.root);
@@ -473,6 +670,11 @@ async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: 
     const why = testWeakening(showAtBase(snap, file), readIfPresent(resolve(snap.root, file)));
     if (why) failures.push({ kind: "fail", reason: `${file}: ${why}. Restore the tests and fix the code instead` });
   }
+
+  // A file untracked at load has no base to compare, so map would call all its headers new.
+  const frozen = [...changed.keys()].filter((f) => isAllowed(f, spec.interfaceFrozen) && !snap.untrackedAtStart.has(f));
+  failures.push(...(await frozenChanges(snap, frozen)));
+  failures.push(...(await rulesCheck(snap, new Set(changed.keys()))));
   return { failures, testOutput: tests.output };
 }
 
@@ -489,6 +691,12 @@ export default function (pi: ExtensionAPI) {
     if (typeof parsed === "string") setupError = `${specPath}: ${parsed}`;
     else spec = parsed;
     snap = takeSnapshot(process.cwd());
+    if (spec && spec.interfaceFrozen.length > 0) {
+      const gaps = frozenGaps(snap.root, spec.interfaceFrozen);
+      if (gaps.length) {
+        setupError = `interface-frozen files must spell out their interface before a freeze (fix these, or unfreeze the file): ${gaps.join("; ")}`;
+      }
+    }
   } catch (error) {
     setupError ??= `worker-sensors setup: ${error instanceof Error ? error.message : String(error)}`;
   }
