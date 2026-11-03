@@ -48,6 +48,10 @@ vim.o.showbreak = '↪ '
 -- whichever character hits the window edge.
 vim.o.linebreak = true
 
+-- Scroll by screen line through wrapped text (long table rows, prose) instead
+-- of jumping a whole buffer line at a time; keeps <C-e>/<C-d> steady.
+vim.o.smoothscroll = true
+
 -- One statusline for the whole screen. With one per window, neo-tree, the
 -- terminal and the debugger panel each drew a line of junk, and the code
 -- window's own line truncated its path once the panel took 60 columns.

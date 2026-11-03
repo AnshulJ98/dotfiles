@@ -24,6 +24,15 @@ vim.diagnostic.config {
   },
 }
 
+-- 0.12 built-ins, loaded on first use.
+vim.keymap.set('n', '<leader>u', function()
+  vim.cmd.packadd 'nvim.undotree'
+  vim.cmd.Undotree()
+end, { desc = '[U]ndo tree' })
+vim.api.nvim_create_user_command('DiffTool', function(o)
+  vim.cmd.packadd 'nvim.difftool'
+  vim.cmd.DiffTool(o.args)
+end, { nargs = '*', complete = 'file' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 vim.keymap.set('n', '<leader>td', function() vim.diagnostic.enable(not vim.diagnostic.is_enabled()) end, { desc = '[T]oggle [D]iagnostics' })
 
