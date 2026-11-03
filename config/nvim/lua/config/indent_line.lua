@@ -82,6 +82,8 @@ end
 
 ibl.setup {
   indent = { char = '▏' },
+  -- md-render's reading view indents its text; guides there are noise.
+  exclude = { filetypes = { 'md-render' } },
   -- VS Code draws no line under the scope's opening statement.
   scope = {
     char = '▏',
