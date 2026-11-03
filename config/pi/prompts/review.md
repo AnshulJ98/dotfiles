@@ -51,3 +51,14 @@ change didn't introduce as pre-existing; still report them if a caller
 can reach them through the changed code. Skip nitpicks and anything the
 linter already catches. Close with the clean categories in one line. If
 nothing material is wrong, say so plainly.
+
+A finding that will recur (the same mistake in another file, or one
+seen in an earlier review) and that has a syntax shape gets a proposed
+ast-grep rule under it: `rules/<id>.yml` with a `severity` and a
+`message` naming the fix, plus `rule-tests/<id>-test.yml` with at least
+one `valid` and one `invalid` case taken from this diff. Write them
+after the review, once the user agrees; the repo needs `sgconfig.yml`
+with `ruleDirs: [rules]` and `testConfigs: [{testDir: rule-tests}]`, and
+`ast-grep test --skip-snapshot-tests` must pass before the rule lands.
+The worker sensors then fail an `error` rule hit in any changed file,
+and ratchet `warning` rules against `.ast-grep-baseline.json`.

@@ -1,0 +1,52 @@
+# herdr runs inside kitty: kitty keeps fonts, cursor, blur and the theme; herdr
+# adds the server that keeps panes alive after kitty closes, plus pi's
+# working/blocked/idle state (`herdr integration install pi`).
+# Unset keys use the defaults: `herdr --default-config`.
+# Check with `herdr config check`; apply with `herdr server reload-config`.
+
+onboarding = false
+
+[theme]
+# Draw herdr's UI from kitty's palette (Bearded HC Midnight Void).
+name = "terminal"
+
+[keys]
+# kitty keeps every Cmd chord, so direct herdr keys use Ctrl+Alt (free in
+# kitty, AeroSpace and nvim; Alt arrives because kitty.conf sets
+# macos_option_as_alt). Each mirrors the kitty Cmd key in its comment.
+# Everything else stays on the ctrl+b prefix; ctrl+b twice sends ctrl+b.
+split_vertical   = ["prefix+v", "ctrl+alt+d"]           # cmd+d
+split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"] # cmd+shift+d
+focus_pane_left  = ["prefix+h", "ctrl+alt+h"]           # cmd+opt+arrows
+focus_pane_down  = ["prefix+j", "ctrl+alt+j"]
+focus_pane_up    = ["prefix+k", "ctrl+alt+k"]
+focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+zoom             = ["prefix+z", "ctrl+alt+f"]           # cmd+alt+f
+new_tab          = ["prefix+c", "ctrl+alt+t"]           # cmd+t
+goto             = ["prefix+g", "ctrl+alt+g"]           # jump to any agent
+# kitty_mod+h would show herdr's screen, not the pane's history; this opens
+# the focused pane's scrollback in $EDITOR.
+edit_scrollback  = ["prefix+e", "ctrl+alt+e"]
+
+[ui]
+prompt_new_tab_name = false
+hide_tab_bar_when_single_tab = true
+# Pass the focused pane's title to kitty's tab, as before herdr, so the
+# tab_title_template colours still apply.
+window_title = "{terminal_title}"
+# Default true: herdr owns clicks and Ctrl-click opens only http(s) links.
+# false hands OSC 8 links back to kitty (open-actions.conf opens files in
+# nvim) but drops herdr's click-to-focus and border dragging.
+# mouse_capture = true
+
+[ui.toast]
+# kitty shows the desktop notification (OSC 99) when a background agent
+# finishes or needs input.
+delivery = "terminal"
+
+[experimental]
+# Replay each pane's recent screen after a full server restart (the processes
+# still end). Off by default because saved screens can hold tokens and
+# prompts; herdr writes them to session-history.json beside session.json,
+# outside this repo, since only config.toml is linked.
+pane_history = true
