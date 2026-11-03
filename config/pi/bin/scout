@@ -44,6 +44,15 @@
 # session file has not changed for SCOUT_STALE_SECS (600; 900 with --rw or
 # xhigh) while no tool call is running, and exits 124.
 #
+# Herdr: inside a herdr pane (HERDR_PANE_ID set, SCOUT_HERDR not 0) the child
+# is an interactive pi in a new herdr tab, so it can be watched and steered.
+# extensions/scout-pane.ts writes the digest and exits when the run settles, as
+# pi -p would. The tab closes on rc 0 and stays open otherwise. The child's rc
+# comes from pane.rc: the extension writes 1 on an error or abort, else it is
+# pi's or timeout's. pane.sh holds the environment, so it is 0600 and deleted on
+# exit; the pane's process group dies when scout does. If herdr fails, scout
+# falls back to pi -p.
+#
 # Exit codes: 0 ok, 2 usage or recursion refused, 75 fan-out refused,
 # 124 timeout or stall, 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
 # A SIGKILL skips everything; extensions/scout.ts finishes that run instead.
@@ -196,12 +205,14 @@ if [ "$RW" = 1 ] && [ -z "${BRIEF_FILE:-}" ]; then
 fi
 
 # Fan-out cap, checked before anything lands in the sessions tree. A meta whose
-# pid is dead is a SIGKILLed run the extension has not swept yet; it does not count.
+# pid and pane (herdr child) are both dead is a SIGKILLed run the extension has
+# not swept yet; it does not count.
 meta_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 LIVE=0 OPEN_WORKER=""
 for m in "$RUNNING"/*.meta; do
   [ -f "$m" ] || continue
-  kill -0 "$(meta_field "$m" pid)" 2>/dev/null || continue
+  m_pane="$(meta_field "$m" pane)"
+  kill -0 "$(meta_field "$m" pid)" 2>/dev/null || { [ -n "$m_pane" ] && kill -0 "$m_pane" 2>/dev/null; } || continue
   LIVE=$((LIVE + 1))
   [ "$(meta_field "$m" mode)" = rw ] && [ -n "$PI_SCOUT_GIT_DIR" ] &&
     [ "$(meta_field "$m" repo)" = "$PI_SCOUT_GIT_DIR" ] && OPEN_WORKER="$(meta_field "$m" pid)"
@@ -305,7 +316,7 @@ finish() {
     printf 'rc=%s\nfinished=%s\n' "$rc" "$(($(date +%s) * 1000))"
   } >"$DONE/$$.meta.tmp"
   mv -f "$DONE/$$.meta.tmp" "$DONE/$$.meta"
-  rm -f "$META"
+  rm -f "$META" "$SESSIONS/pane.sh"
 }
 trap finish EXIT
 
@@ -317,14 +328,14 @@ ERR="$SESSIONS/stderr.log"
 STALLED="$SESSIONS/stalled"
 # The run folder is keyed by pid; after a pid wraps, a finished run's verdict and
 # stall marker would pass as this run's.
-rm -f "$STALLED" "$SESSIONS/verdict.json"
+rm -f "$STALLED" "$SESSIONS/verdict.json" "$SESSIONS/pane.pid" "$SESSIONS/pane.rc"
 
 # Outer stall guard: the newest session file is the child's heartbeat. A
 # trailing assistant tool call means a tool is running, which may be silent.
 watch_stall() {
   local child=$1 start file last age
   start=$(date +%s)
-  while sleep "${SCOUT_POLL_SECS:-15}" && kill -0 "$child" 2>/dev/null; do
+  while sleep "${SCOUT_POLL_SECS:-15}" && kill -0 -- "$child" 2>/dev/null; do
     file=$(ls -t "$SESSIONS"/*.jsonl 2>/dev/null | head -n 1)
     last=$start
     if [ -n "$file" ]; then
@@ -335,10 +346,10 @@ watch_stall() {
     age=$(($(date +%s) - last))
     if [ "$age" -ge "$STALE_SECS" ]; then
       echo "$age" >"$STALLED"
-      kill -TERM "$child" 2>/dev/null # timeout passes it on to pi
+      kill -TERM -- "$child" 2>/dev/null # timeout passes it on to pi
       sleep 10
       pkill -KILL -P "$child" 2>/dev/null
-      kill -KILL "$child" 2>/dev/null
+      kill -KILL -- "$child" 2>/dev/null
       return
     fi
   done
@@ -371,38 +382,113 @@ conclude() {
     # the model quoting it); the one from the report is the only one kept.
     { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
   fi
-  cat "$OUT"
+  if [ -f "$OUT" ]; then cat "$OUT"; fi
 }
 
 on_signal() {
   trap - TERM INT HUP
-  kill -TERM "$CHILD" 2>/dev/null
-  wait "$CHILD" 2>/dev/null
+  kill -TERM -- "$TARGET" 2>/dev/null
+  wait "$CHILD" 2>/dev/null # returns at once for a pane child, which is not ours
   conclude 143 || true
   exit 143
 }
 
+PI_OPTS=(-ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np -t "$TOOLS" "${SESSION[@]}"
+  --model "$MODEL" --thinking "$THINKING" --system-prompt "$(cat "$PROMPT")")
+if [ "$RW" = 1 ]; then KIND=worker; else KIND=scout; fi
+PANE="" TAB=""
+
+# Sets PANE, TAB and CHILD (the pane job's pid, which leads its process group:
+# bash, timeout and pi). The tab goes in the workspace herdr has open for this
+# worktree, else in the caller's.
+herdr_launch() {
+  [ -n "${HERDR_PANE_ID:-}" ] && [ "${SCOUT_HERDR:-1}" != 0 ] && command -v herdr >/dev/null || return 1
+  local ws="" top json n script="$SESSIONS/pane.sh" trust
+  top="$("$PI_SCOUT_REAL_GIT" rev-parse --show-toplevel 2>/dev/null)" &&
+    ws="$(herdr worktree list --cwd "$top" 2>/dev/null | node -e '
+      let s = "";
+      process.stdin.on("data", (d) => (s += d)).on("end", () => {
+        const w = JSON.parse(s || "{}").result?.worktrees?.find((w) => w.path === process.argv[1]);
+        if (w?.open_workspace_id) console.log(w.open_workspace_id);
+      });' "$top" 2>/dev/null)"
+  json="$(herdr tab create --workspace "${ws:-$HERDR_WORKSPACE_ID}" --cwd "$PWD" --label "$KIND $$" --no-focus)" || return 1
+  read -r TAB PANE < <(node -e 'const r = JSON.parse(process.argv[1]).result; console.log(r.tab.tab_id, r.root_pane.pane_id)' "$json") || return 1
+  # A TUI pi blocks on its trust prompt in a folder it was not told to trust; -p
+  # proceeds untrusted. Decide it the way -p does: not under a trusted path -> -na.
+  trust="$(node -e '
+    try {
+      const t = JSON.parse(require("node:fs").readFileSync(process.argv[2], "utf8"));
+      const cwd = process.argv[1];
+      if (Object.entries(t).some(([k, v]) => v === true && (cwd === k || cwd.startsWith(k + "/")))) process.exit(0);
+    } catch {}
+    console.log("-na")' "$PWD" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/trust.json" 2>/dev/null)" || trust="-na"
+  # The pane's shell is the user's own: hand pi this scout's environment, minus
+  # the herdr and terminal identity, which must stay the new pane's. The script
+  # holds tokens, so it is 0600; the pane's herdr socket is dropped so the child
+  # cannot drive the session.
+  (umask 077
+  {
+    printf 'unset HERDR_SOCKET_PATH HERDR_ENV\n'
+    printf 'echo $$ >%q\n' "$SESSIONS/pane.pid"
+    # The pane group dies with scout, SIGKILL included, which skips scout's trap.
+    printf '( while kill -0 %s 2>/dev/null && kill -0 $$ 2>/dev/null; do sleep 2; done\n' "$$"
+    printf '  kill -0 %s 2>/dev/null || { kill -TERM -- -$$ 2>/dev/null || pkill -TERM -P $$ 2>/dev/null; } ) &\n' "$$"
+    for n in $(compgen -e); do
+      case "$n" in HERDR_* | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
+      printf 'export %s=%q\n' "$n" "${!n}"
+    done
+    printf 'export PI_SCOUT_DEPTH=1 SCOUT_DIGEST=%q SCOUT_PANE_RC=%q\ncd %q || exit 2\n' "$OUT" "$SESSIONS/pane.rc" "$PWD"
+    printf 'timeout --foreground %q pi' "$TIMEOUT"
+    printf ' %q' "${PI_OPTS[@]}" ${trust:+"$trust"} -e "$DIR/../extensions/scout-pane.ts" "${BRIEF[@]}" "$TASK"
+    printf ' 2>%q\nrc=$?; [ -s %q ] || echo $rc >%q\n' "$ERR" "$SESSIONS/pane.rc" "$SESSIONS/pane.rc"
+  } >"$script")
+  herdr pane run "$PANE" "bash $(printf %q "$script")" >/dev/null || {
+    herdr tab close "$TAB" >/dev/null 2>&1
+    return 1
+  }
+  for n in $(seq 30); do [ -s "$SESSIONS/pane.pid" ] && break; sleep 1; done
+  CHILD="$(cat "$SESSIONS/pane.pid" 2>/dev/null)"
+  [ -n "$CHILD" ] || {
+    herdr tab close "$TAB" >/dev/null 2>&1
+    return 1
+  }
+}
+
 set +e
-# pi writes to a file, not through tee: a reader that quits early (| head) used
-# to break the pipe and kill the worker with EPIPE mid-run.
-# --foreground keeps pi in scout's process group: when the parent's bash tool
-# kills that group, pi dies with it instead of running on, unseen, until its
-# own timeout.
-PI_SCOUT_DEPTH=1 timeout --foreground "$TIMEOUT" pi -p -ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np \
-  -t "$TOOLS" "${SESSION[@]}" \
-  --model "$MODEL" --thinking "$THINKING" \
-  --system-prompt "$(cat "$PROMPT")" \
-  "${BRIEF[@]}" "$TASK" 2>"$ERR" >"$OUT" </dev/null &
-CHILD=$!
+if herdr_launch; then
+  TARGET="-$CHILD"
+  printf 'pane=%s\n' "$CHILD" >>"$META"
+else
+  PANE=""
+  # pi writes to a file, not through tee: a reader that quits early (| head) used
+  # to break the pipe and kill the worker with EPIPE mid-run.
+  # --foreground keeps pi in scout's process group: when the parent's bash tool
+  # kills that group, pi dies with it instead of running on, unseen, until its
+  # own timeout.
+  PI_SCOUT_DEPTH=1 timeout --foreground "$TIMEOUT" pi -p "${PI_OPTS[@]}" \
+    "${BRIEF[@]}" "$TASK" 2>"$ERR" >"$OUT" </dev/null &
+  CHILD=$!
+  TARGET=$CHILD
+fi
 # Detached from stdout: its pending sleep must not hold the caller's pipe open
-watch_stall "$CHILD" >/dev/null 2>&1 &
+watch_stall "$TARGET" >/dev/null 2>&1 &
 MONITOR=$!
 # Set after the launch so the child keeps the default SIGPIPE; scout's own
 # late writes to a closed reader then fail instead of skipping the EXIT trap.
 trap '' PIPE
 trap on_signal TERM INT HUP
-wait "$CHILD"
-rc=$?
+if [ -n "$PANE" ]; then
+  NAMED=""
+  while [ ! -s "$SESSIONS/pane.rc" ] && kill -0 "$CHILD" 2>/dev/null; do
+    if [ -z "$NAMED" ] && herdr agent rename "$PANE" "$KIND-$$" >/dev/null 2>&1; then NAMED=1; fi
+    sleep 1
+  done
+  rc="$(cat "$SESSIONS/pane.rc" 2>/dev/null)" || rc=143 # the pane job died before writing it
+  [ "$rc" = 0 ] && herdr tab close "$TAB" >/dev/null 2>&1
+else
+  wait "$CHILD"
+  rc=$?
+fi
 [ -s "$STALLED" ] && rc=124
 conclude "$rc"
 exit $rc

@@ -20,8 +20,8 @@ const git = (cwd, ...args) => {
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 };
-const mapDiff = (repo, base) => {
-  const r = spawnSync(process.execPath, [MAP, repo, "--diff", base], { encoding: "utf8", env: ENV });
+const mapDiff = (repo, base, ...flags) => {
+  const r = spawnSync(process.execPath, [MAP, repo, "--diff", base, ...flags], { encoding: "utf8", env: ENV });
   return { code: r.status, out: r.stdout, err: r.stderr, lines: r.stdout.split("\n") };
 };
 const mapTemps = () => fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("map-base-")).length;
@@ -114,6 +114,25 @@ test("export changes: added and removed headers per touched file", () => {
   assert.ok(!body.includes("### src/legacy.cjs"), "unchanged exports are omitted");
   // table order: a.ts section precedes c.tsx's (fan-in 10+ vs deleted 1)
   assert.ok(body.indexOf("### src/core/a.ts") < body.indexOf("### src/core/c.tsx"));
+});
+
+test("--json: the same diff as data, export headers per file", () => {
+  const r = mapDiff(repo, "HEAD", "--json");
+  assert.equal(r.code, 0, r.err);
+  const data = JSON.parse(r.out);
+  assert.equal(data.base, git(repo, "rev-parse", "--short", "HEAD"));
+  assert.equal(data.files.length, 15);
+  assert.deepEqual(data.files[0].file, "src/core/a.ts");
+  assert.ok(data.files[0].importedBy.includes("src/many/i0.ts"));
+  assert.deepEqual(data.exports.find((e) => e.file === "src/core/a.ts"), { file: "src/core/a.ts", added: ["export function extra(n: number): string"], removed: [] });
+  assert.ok(data.edges.added.some(([from, to]) => from === "src/core/b.ts" && to === "src/core/d.ts"));
+  assert.deepEqual(data.cycles.resolved, [["src/core/a.ts", "src/core/b.ts"]]);
+});
+
+test("a stray fourth argument that is not --json exits 2", () => {
+  const r = mapDiff(repo, "HEAD", "--jsn");
+  assert.equal(r.code, 2);
+  assert.match(r.err, /usage: .*--diff <base> \[--json\]/);
 });
 
 test("a run leaves no map-base-* temp dir behind", () => {

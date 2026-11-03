@@ -1,9 +1,9 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import workerSensors, {
 	addedLines,
@@ -14,6 +14,7 @@ import workerSensors, {
 	nextStep,
 	parseSpec,
 	repoRelative,
+	ruleFailures,
 	testWeakening,
 } from "../extensions/worker-sensors.ts";
 
@@ -79,6 +80,16 @@ test("parseSpec: allowed-commands as a block list", () => {
 	const parsed = parseSpec(spec("allowed-commands:\n  - cdk deploy MyStack-dev\n  - aws lambda invoke --function-name smoke\n"));
 	assert.notEqual(typeof parsed, "string");
 	if (typeof parsed !== "string") assert.deepEqual(parsed.allowedCommands, ["cdk deploy MyStack-dev", "aws lambda invoke --function-name smoke"]);
+});
+
+test("parseSpec: interface-frozen is a glob list, empty by default", () => {
+	const parsed = parseSpec(spec("interface-frozen: [src/api/*.ts, src/types.ts]\n"));
+	assert.ok(typeof parsed !== "string");
+	assert.deepEqual(parsed.interfaceFrozen, ["src/api/*.ts", "src/types.ts"]);
+	const none = parseSpec(spec(""));
+	assert.ok(typeof none !== "string");
+	assert.deepEqual(none.interfaceFrozen, []);
+	assert.equal(parseSpec(spec("interface-frozen: src/api.ts\n")), "spec interface-frozen must be a list of globs");
 });
 
 test("parseSpec: allowed-commands defaults to none", () => {
@@ -243,4 +254,135 @@ test("settle check: lines added to a file that was already untracked count towar
 		process.chdir(cwd);
 		delete process.env.PI_WORKER_SPEC;
 	}
+});
+
+type Handler = (event: unknown) => Promise<unknown>;
+
+/** Commit `files` in a temp repo, arm the sensors there with `frontmatter`, run `body`, restore cwd and env. */
+async function withWorker(files: Record<string, string>, frontmatter: string, body: (repo: string, on: Map<string, Handler>, verdict: () => Promise<string>) => Promise<void>): Promise<void> {
+	const repo = mkdtempSync(join(tmpdir(), "ws-repo-"));
+	const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
+	git("init", "-q");
+	for (const [rel, text] of Object.entries(files)) {
+		mkdirSync(dirname(join(repo, rel)), { recursive: true });
+		writeFileSync(join(repo, rel), text);
+	}
+	git("add", ".");
+	git("commit", "-qm", "init");
+	const dir = mkdtempSync(join(tmpdir(), "ws-spec-"));
+	writeFileSync(join(dir, "spec.md"), `---\nfiles-allowed: ["**"]\ntests: "true"\n${frontmatter}---\nbody\n`);
+	const handlers = new Map<string, Handler>();
+	const pi = { on: (name: string, handler: Handler) => handlers.set(name, handler) };
+	const verdict = async (): Promise<string> => {
+		await handlers.get("agent_settled")?.({});
+		return readFileSync(join(dir, "verdict.json"), "utf8");
+	};
+	const cwd = process.cwd();
+	process.env.PI_WORKER_SPEC = join(dir, "spec.md");
+	process.env.PI_WORKER_REPORT = join(dir, "verdict.json");
+	process.chdir(repo);
+	try {
+		workerSensors(pi as unknown as Parameters<typeof workerSensors>[0]);
+		await body(repo, handlers, verdict);
+	} finally {
+		process.chdir(cwd);
+		delete process.env.PI_WORKER_SPEC;
+		delete process.env.PI_WORKER_REPORT;
+	}
+}
+
+const API = "export function area(w: number, h: number): number {\n  return w * h;\n}\n";
+const settleContent = async (on: Map<string, Handler>): Promise<string | undefined> =>
+	((await on.get("agent_before_settle")?.({ outcome: "completed" })) as { entries?: Array<{ content: string }> } | undefined)?.entries?.[0]?.content;
+
+test("interface-frozen: a changed signature in a frozen file fails the settle check", async () => {
+	await withWorker({ "src/api.ts": API }, "interface-frozen: [src/api.ts]\n", async (repo, on) => {
+		writeFileSync(join(repo, "src/api.ts"), API.replace("h: number)", "h: number, d: number)"));
+		const content = await settleContent(on);
+		assert.match(content ?? "", /src\/api\.ts: frozen export headers changed \(\+ export function area\(w: number, h: number, d: number\): number \| - export function area\(w: number, h: number\): number\)/);
+	});
+});
+
+test("interface-frozen: a body-only edit in a frozen file passes", async () => {
+	await withWorker({ "src/api.ts": API }, "interface-frozen: [src/api.ts]\n", async (repo, on, verdict) => {
+		writeFileSync(join(repo, "src/api.ts"), API.replace("w * h", "h * w"));
+		assert.equal(await settleContent(on), undefined);
+		assert.match(await verdict(), /"verdict":"PASS"/);
+	});
+});
+
+test("interface-frozen: an export change in an unfrozen file passes", async () => {
+	await withWorker({ "src/api.ts": API, "src/other.ts": API }, "interface-frozen: [src/api.ts]\n", async (repo, on, verdict) => {
+		writeFileSync(join(repo, "src/other.ts"), API.replace("area(", "areaOf("));
+		assert.equal(await settleContent(on), undefined);
+		assert.match(await verdict(), /"verdict":"PASS"/);
+	});
+});
+
+test("interface-frozen: a frozen file with an inferred return type blocks every edit", async () => {
+	const files = { "src/api.ts": "export function area(w: number, h: number) {\n  return w * h;\n}\nexport const MAX = 3;\n" };
+	await withWorker(files, "interface-frozen: [src/*.ts]\n", async (_repo, on) => {
+		const blocked = (await on.get("tool_call")?.({ toolName: "edit", input: { path: "src/api.ts" } })) as { block: boolean; reason: string };
+		assert.equal(blocked.block, true);
+		assert.match(blocked.reason, /src\/api\.ts:1 exported function without a return type; src\/api\.ts:4 exported variable without a type annotation/);
+	});
+});
+
+test("interface-frozen: a glob that matches no tracked file blocks every edit", async () => {
+	await withWorker({ "src/api.ts": API }, "interface-frozen: [src/apu.ts]\n", async (_repo, on) => {
+		const blocked = (await on.get("tool_call")?.({ toolName: "bash", input: { command: "true" } })) as { block: boolean; reason: string };
+		assert.match(blocked.reason, /interface-frozen matches no tracked file: src\/apu\.ts/);
+	});
+});
+
+const hit = (ruleId: string, severity: string, file: string, line = 1) => ({ ruleId, severity, file, line, message: "" });
+const RULE_CASES: Array<[string, ReturnType<typeof hit>[], string[], Record<string, number> | undefined, RegExp[]]> = [
+	["error hit in a changed file", [hit("no-console", "error", "src/a.ts", 3)], ["src/a.ts"], undefined, [/error rules hit in changed files: src\/a\.ts:3 no-console$/]],
+	["error hit in an untouched file", [hit("no-console", "error", "src/old.ts")], ["src/a.ts"], undefined, []],
+	["warnings at the baseline", [hit("no-any", "warning", "a.ts"), hit("no-any", "warning", "b.ts")], [], { "no-any": 2 }, []],
+	["warnings past the baseline", [hit("no-any", "warning", "a.ts"), hit("no-any", "warning", "b.ts")], [], { "no-any": 1 }, [/warning no-any: 2 hits, baseline 1/]],
+	["a warning rule missing from the baseline counts from zero", [hit("new-rule", "warning", "a.ts")], [], {}, [/warning new-rule: 1 hits, baseline 0/]],
+	["a rule named like an Object prototype key", [hit("constructor", "warning", "a.ts")], [], {}, [/warning constructor: 1 hits, baseline 0/]],
+	["no baseline: warnings are advice", [hit("no-any", "warning", "a.ts")], ["a.ts"], undefined, []],
+	["info and hint never fail", [hit("x", "info", "a.ts"), hit("y", "hint", "a.ts")], ["a.ts"], {}, []],
+];
+
+for (const [name, hits, changed, baseline, expected] of RULE_CASES) {
+	test(`ruleFailures: ${name}`, () => {
+		const reasons = ruleFailures(hits, new Set(changed), baseline);
+		assert.equal(reasons.length, expected.length, reasons.join("\n"));
+		expected.forEach((pattern, i) => assert.match(reasons[i], pattern));
+	});
+}
+
+const RULE_REPO = {
+	"sgconfig.yml": "ruleDirs: [rules]\n",
+	"rules/no-console.yml": 'id: no-console\nlanguage: TypeScript\nseverity: error\nmessage: use the logger\nrule: {pattern: "console.log($$$)"}\n',
+	"rules/no-any.yml": 'id: no-any\nlanguage: TypeScript\nseverity: warning\nrule: {pattern: "let $A: any = $V"}\n',
+	".ast-grep-baseline.json": '{"no-any": 1}\n',
+	"src/old.ts": "console.log(1);\nlet legacy: any = 1;\n",
+	"src/other.ts": "export const n = 1;\n",
+};
+
+test("rules sensor: a new error-rule hit fails the settle check", async () => {
+	await withWorker(RULE_REPO, "", async (repo, on) => {
+		writeFileSync(join(repo, "src/new.ts"), "console.log(2);\n");
+		assert.match((await settleContent(on)) ?? "", /ast-grep error rules hit in changed files: src\/new\.ts:1 no-console \(use the logger\)/);
+	});
+});
+
+test("rules sensor: old violations in untouched files pass", async () => {
+	await withWorker(RULE_REPO, "", async (repo, on, verdict) => {
+		writeFileSync(join(repo, "src/other.ts"), "export const n = 2;\n");
+		assert.equal(await settleContent(on), undefined);
+		assert.match(await verdict(), /"verdict":"PASS"/);
+	});
+});
+
+test("rules sensor: a warning past the snapshot's baseline fails, even when the worker raises the baseline", async () => {
+	await withWorker(RULE_REPO, "", async (repo, on) => {
+		writeFileSync(join(repo, "src/other.ts"), "let more: any = 2;\n");
+		writeFileSync(join(repo, ".ast-grep-baseline.json"), '{"no-any": 2}\n');
+		assert.match((await settleContent(on)) ?? "", /ast-grep warning no-any: 2 hits, baseline 1 in \.ast-grep-baseline\.json/);
+	});
 });

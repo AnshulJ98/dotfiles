@@ -60,6 +60,7 @@ files-allowed: [<every file the steps touch, relative to the git root>]
 tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
 max-lines: <cap on added lines across all files; omit for 400>
 allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]
+interface-frozen: [<only if callers must not see a change: globs of files whose exports keep their headers>]
 ---
 ```
 
@@ -69,7 +70,15 @@ plan and say whether it starts. Omit `allowed-commands` unless a step
 must deploy or change cloud resources; then list each prefix with a
 one-line purpose under Plan. Workers are blocked from `cdk
 deploy|destroy|bootstrap` and `aws` create/put/update/delete/terminate/
-invoke calls not listed there.
+invoke calls not listed there. Omit `interface-frozen` unless a step
+edits a file that other slices or callers import; a frozen file may
+change bodies but not export headers (an export added, removed or
+re-signed fails the worker). The check reads headers as written, so a
+frozen TypeScript file needs explicit return types and const
+annotations on its exports and no exported class or `export { a }`
+list; otherwise the worker is blocked before its first edit. Read the
+exports in the map digest before freezing, and fix headers in an
+earlier step.
 
 Stop and wait.
 

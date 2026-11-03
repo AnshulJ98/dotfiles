@@ -21,6 +21,7 @@ files-allowed: [<every file the steps touch, relative to the git root>]
 tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
 max-lines: <cap on added lines across all files; omit for 400>
 allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]
+interface-frozen: [<only if callers must not see a change: globs of files whose exports keep their headers>]
 ---
 ```
 
@@ -28,6 +29,15 @@ allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk
 `/tmp`. Each `allowed-commands` entry gets a one-line purpose under
 Scope; without an entry, `cdk deploy|destroy|bootstrap` and `aws`
 create/put/update/delete/terminate/invoke calls are blocked.
+
+`interface-frozen` files may change bodies but not export headers: an
+export added, removed or re-signed in a touched frozen file fails the
+settle check, and so does a new file under a frozen glob. The freeze
+compares `map.mjs --diff` headers, so before freezing, every frozen
+TypeScript file needs explicit return types and const annotations on
+its exports, no exported classes and no local `export { a }` lists;
+otherwise the worker is blocked from the first edit, with the lines to
+fix. Frozen files must be tracked by git.
 
 Then exactly these sections and nothing else:
 
