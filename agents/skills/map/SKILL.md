@@ -85,3 +85,7 @@ with `DRAFTED BY AGENT, NOT REVIEWED`.
 - A Python package-dir not in those roots is not resolved, so imports
   of it are dropped.
 - `export default` of an anonymous expression shows as `export default`.
+
+`map.mjs <repo> --diff <base> [--json]` compares `<base>` with the
+working tree for `/review` and the worker sensors, not for this ritual;
+the header of `map.mjs` documents it.

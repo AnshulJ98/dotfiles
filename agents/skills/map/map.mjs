@@ -4,7 +4,13 @@
 //
 // Usage: node map.mjs <repo> <module-dir>    module-dir is relative to repo; prints to stdout.
 //        node map.mjs <repo> --diff <base>   touched files by fan-in, edge, cycle and export changes
-//                                             between commit-ish <base> and the working tree.
+//                                             between commit-ish <base> and the working tree (markdown).
+//        node map.mjs <repo> --diff <base> --json
+//                                             the same diff as JSON, for scripts and sensors:
+//                                             { base, files: [{ file, change, importedBy }],
+//                                               edges: { added, removed } of [from, to],
+//                                               cycles: { added, resolved } of member lists,
+//                                               exports: [{ file, added, removed }] of headers }
 //
 // Edges come from ast-grep on PATH: static imports, re-exports, dynamic import(), require() and
 // Python import/from. Relative specifiers, tsconfig/jsconfig `paths` aliases and Python imports
@@ -629,7 +635,7 @@ async function diffMap(repo, base) {
     const rows = [...touched]
       .filter((f) => now.known.has(f) || was.known.has(f))
       .map((file) => ({ file, change: !was.known.has(file) ? "added" : !now.known.has(file) ? "deleted" : "modified" }));
-    return renderDiff(git("rev-parse", "--short", sha).stdout.trim(), rows, now, was);
+    return diffData(git("rev-parse", "--short", sha).stdout.trim(), rows, now, was);
   } finally {
     cleanup();
     process.off("exit", cleanup);
@@ -637,63 +643,82 @@ async function diffMap(repo, base) {
   }
 }
 
-function renderDiff(short, touched, now, was) {
-  const count = (change) => touched.filter((t) => t.change === change).length;
-  const rows = touched
-    .map((t) => ({ ...t, by: (t.change === "deleted" ? was : now).fanIn(t.file) }))
-    .sort((a, b) => b.by.length - a.by.length || byPath(a.file, b.file));
+// The --diff result as data: `--json` prints it, renderDiff turns it into markdown.
+function diffData(base, touched, now, was) {
+  const files = touched
+    .map((t) => ({ ...t, importedBy: (t.change === "deleted" ? was : now).fanIn(t.file) }))
+    .sort((a, b) => b.importedBy.length - a.importedBy.length || byPath(a.file, b.file));
+
+  const edgeKeys = (a) => new Map([...a.edges].flatMap(([from, tos]) => [...tos.keys()].map((to) => [`${from}\0${to}`, [from, to]])));
+  const [edgesWas, edgesNow] = [edgeKeys(was), edgeKeys(now)];
+  const onlyEdges = (a, b) => [...a].filter(([k]) => !b.has(k)).map(([, e]) => e);
+
+  // A cycle is its member set: new when no base component has the same members, resolved the other way.
+  const cycleKeys = (a) => new Map(a.cycles().map((c) => [c.join("\0"), c]));
+  const [cyclesWas, cyclesNow] = [cycleKeys(was), cycleKeys(now)];
+  const only = (a, b) => [...a].filter(([k]) => !b.has(k)).sort((x, y) => byPath(x[0], y[0])).map(([, c]) => c);
+
+  const exports = [];
+  for (const { file } of files) {
+    const [before, after] = [was, now].map((a) => a.details.get(file)?.exports ?? []);
+    const added = [...new Set(after.filter((h) => !before.includes(h)))];
+    const removed = [...new Set(before.filter((h) => !after.includes(h)))];
+    if (added.length + removed.length) exports.push({ file, added, removed });
+  }
+  return {
+    base,
+    files,
+    edges: { added: onlyEdges(edgesNow, edgesWas), removed: onlyEdges(edgesWas, edgesNow) },
+    cycles: { added: only(cyclesNow, cyclesWas), resolved: only(cyclesWas, cyclesNow) },
+    exports,
+  };
+}
+
+function renderDiff({ base: short, files: rows, edges, cycles, exports }) {
+  const count = (change) => rows.filter((t) => t.change === change).length;
   const out = [
     `# diff map: ${short}..working tree`,
     "",
-    `${touched.length} touched source files, ${count("added")} added, ${count("deleted")} deleted, ${count("modified")} modified. Fan-in is importers in the working tree (base for deleted files); 10+ is flagged.`,
+    `${rows.length} touched source files, ${count("added")} added, ${count("deleted")} deleted, ${count("modified")} modified. Fan-in is importers in the working tree (base for deleted files); 10+ is flagged.`,
     "",
     "## Touched files by fan-in (read in this order)",
     "",
     "| file | in | change | imported by |",
     "|---|---|---|---|",
-    ...rows.map(({ file, change, by }) => `| ${file} | ${by.length}${by.length >= 10 ? " (!)" : ""} | ${change} | ${by.length ? by.join(", ") : "entry or unused"} |`),
+    ...rows.map(({ file, change, importedBy: by }) => `| ${file} | ${by.length}${by.length >= 10 ? " (!)" : ""} | ${change} | ${by.length ? by.join(", ") : "entry or unused"} |`),
   ];
   if (rows.length === 0) out.push("| (none) | | | |");
 
-  const edgeKeys = (a) => new Map([...a.edges].flatMap(([from, tos]) => [...tos.keys()].map((to) => [`${from}\0${to}`, [from, to]])));
-  const [edgesWas, edgesNow] = [edgeKeys(was), edgeKeys(now)];
-  const edgeLines = [
-    ...[...edgesNow].filter(([k]) => !edgesWas.has(k)).map(([, e]) => ["+", ...e]),
-    ...[...edgesWas].filter(([k]) => !edgesNow.has(k)).map(([, e]) => ["-", ...e]),
-  ]
+  const edgeLines = [...edges.added.map((e) => ["+", ...e]), ...edges.removed.map((e) => ["-", ...e])]
     .sort((a, b) => byPath(a[1], b[1]) || byPath(a[2], b[2]))
     .map(([sign, from, to]) => `${sign} ${from} -> ${to}`);
   out.push("", "## Import edges", "", ...(edgeLines.length ? edgeLines : ["(none)"]));
 
-  // A cycle is its member set: new when no base component has the same members, resolved the other way.
-  const cycleKeys = (a) => new Map(a.cycles().map((c) => [c.join("\0"), c]));
-  const [cyclesWas, cyclesNow] = [cycleKeys(was), cycleKeys(now)];
-  const only = (a, b) => [...a].filter(([k]) => !b.has(k)).sort((x, y) => byPath(x[0], y[0])).map(([, c]) => [...c, c[0]].join(" -> "));
-  const cycleLines = [...only(cyclesNow, cyclesWas).map((c) => `High: new cycle ${c}`), ...only(cyclesWas, cyclesNow).map((c) => `Resolved: ${c}`)];
+  const loop = (c) => [...c, c[0]].join(" -> ");
+  const cycleLines = [...cycles.added.map((c) => `High: new cycle ${loop(c)}`), ...cycles.resolved.map((c) => `Resolved: ${loop(c)}`)];
   out.push("", "## Cycles", "", ...(cycleLines.length ? cycleLines : ["(none)"]));
 
   out.push("", "## Export changes");
-  const signed = (sign, headers) => [...new Set(headers)].flatMap((h) => h.split("\n").map((l) => `${sign} ${l}`));
-  let changed = 0;
-  for (const { file } of rows) {
-    const [before, after] = [was, now].map((a) => a.details.get(file)?.exports ?? []);
-    const added = after.filter((h) => !before.includes(h));
-    const removed = before.filter((h) => !after.includes(h));
-    if (added.length + removed.length === 0) continue;
-    changed++;
-    out.push("", `### ${file}`, "", ...signed("+", added), ...signed("-", removed));
-  }
-  if (changed === 0) out.push("", "(none)");
+  const signed = (sign, headers) => headers.flatMap((h) => h.split("\n").map((l) => `${sign} ${l}`));
+  for (const { file, added, removed } of exports) out.push("", `### ${file}`, "", ...signed("+", added), ...signed("-", removed));
+  if (exports.length === 0) out.push("", "(none)");
   return out;
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const diff = args[1] === "--diff";
-  if (args.length !== (diff ? 3 : 2)) fail("usage: node map.mjs <repo> <module-dir> | node map.mjs <repo> --diff <base>");
+  const json = diff && args[3] === "--json";
+  if (args.length !== (diff ? (json ? 4 : 3) : 2)) {
+    fail("usage: node map.mjs <repo> <module-dir> | node map.mjs <repo> --diff <base> [--json]");
+  }
   const repo = checkDir(path.resolve(args[0]));
-  const out = await (diff ? diffMap(repo, args[2]) : moduleMap(repo, args[1]));
-  process.stdout.write(`${out.join("\n")}\n`);
+  if (diff) {
+    const data = await diffMap(repo, args[2]);
+    process.stdout.write(json ? `${JSON.stringify(data)}\n` : `${renderDiff(data).join("\n")}\n`);
+    return;
+  }
+  process.stdout.write(`${(await moduleMap(repo, args[1])).join("\n")}\n`);
 }
 
 main().catch((err) => {
