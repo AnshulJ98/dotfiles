@@ -19,3 +19,6 @@ require('mactag'):setup {
 
 -- Directories browsed in yazi join zoxide's ranking, not just shell `cd`s.
 require('zoxide'):setup { update_db = true }
+
+-- Yanked files are shared between yazi instances (one per herdr pane).
+require("session"):setup { sync_yanked = true }
