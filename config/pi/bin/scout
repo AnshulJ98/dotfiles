@@ -399,12 +399,26 @@ if [ "$RW" = 1 ]; then KIND=worker; else KIND=scout; fi
 PANE="" TAB=""
 
 # Sets PANE, TAB and CHILD (the pane job's pid, which leads its process group:
-# bash, timeout and pi). The tab goes in the workspace herdr has open for this
-# worktree, else in the caller's.
+# bash, timeout and pi). The tab goes in the caller's workspace when the caller's
+# pane sits in this worktree; otherwise in the workspace herdr has open for the
+# worktree, else the caller's. (worktree list names one workspace per worktree,
+# so with two workspaces on one repo it would send every tab to the first.)
 herdr_launch() {
   [ -n "${HERDR_PANE_ID:-}" ] && [ "${SCOUT_HERDR:-1}" != 0 ] && command -v herdr >/dev/null || return 1
-  local ws="" top json n script="$SESSIONS/pane.sh" trust
-  top="$("$PI_SCOUT_REAL_GIT" rev-parse --show-toplevel 2>/dev/null)" &&
+  local ws="" top caller json n script="$SESSIONS/pane.sh" trust
+  top="$("$PI_SCOUT_REAL_GIT" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  if [ -n "$top" ]; then
+    caller="$(herdr pane list 2>/dev/null | node -e '
+      let s = "";
+      process.stdin.on("data", (d) => (s += d)).on("end", () => {
+        const p = JSON.parse(s || "{}").result?.panes?.find((p) => p.pane_id === process.argv[1]);
+        if (p?.cwd) console.log(p.cwd);
+      });' "$HERDR_PANE_ID" 2>/dev/null)" || caller=""
+    if [ -n "$caller" ] && [ "$("$PI_SCOUT_REAL_GIT" -C "$caller" rev-parse --show-toplevel 2>/dev/null)" = "$top" ]; then
+      ws="$HERDR_WORKSPACE_ID"
+    fi
+  fi
+  [ -n "$ws" ] || [ -z "$top" ] ||
     ws="$(herdr worktree list --cwd "$top" 2>/dev/null | node -e '
       let s = "";
       process.stdin.on("data", (d) => (s += d)).on("end", () => {

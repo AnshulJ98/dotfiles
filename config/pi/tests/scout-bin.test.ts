@@ -55,10 +55,13 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 }
 
 // FAKE_HERDR: ok, or broken (tab create fails). Every call is logged; `pane run` runs the command detached, as a pane would.
+// FAKE_HERDR_WORKTREE_WS names the workspace `worktree list` reports open for the repo; FAKE_HERDR_PANE_CWD is where w1's pane sits (none: pane list fails).
 const FAKE_HERDR = `#!/usr/bin/env bash
 echo "$*" >>"$FAKE_HERDR_LOG"
 case "$1 $2" in
 "tab create") [ "$FAKE_HERDR" = broken ] && exit 1; echo '{"result":{"tab":{"tab_id":"w1:t9"},"root_pane":{"pane_id":"w1:p9"}}}' ;;
+"worktree list") [ -n "$FAKE_HERDR_WORKTREE_WS" ] && echo '{"result":{"worktrees":[{"path":"'"$4"'","open_workspace_id":"'"$FAKE_HERDR_WORKTREE_WS"'"}]}}' ;;
+"pane list") [ "$FAKE_HERDR_PANE_CWD" = none ] && exit 1; echo '{"result":{"panes":[{"pane_id":"w1:p1","workspace_id":"w1","cwd":"'"\${FAKE_HERDR_PANE_CWD:-$PWD}"'"}]}}' ;;
 "pane run") (bash -c "$4" </dev/null >/dev/null 2>&1 &) ;;
 "agent rename") [ -n "$FAKE_HERDR_RENAME_OK" ] && exit 0; exit 1 ;;
 esac
@@ -272,6 +275,27 @@ test("inside herdr the child runs in a new herdr tab, its digest comes back, and
 	assert.match(calls, /^tab create --workspace w1 --cwd \S+ --label scout \d+ --no-focus$/m);
 	assert.match(calls, /^pane run w1:p9 bash \S+\/pane\.sh$/m);
 	assert.match(calls, /^tab close w1:t9$/m);
+});
+
+test("a second workspace on the same repo does not steal the tab: the caller's workspace wins when it holds the repo", async () => {
+	const { env, log } = herdrSandbox("ok");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7" });
+	assert.equal(run.code, 0);
+	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w1 /m);
+});
+
+test("when pane list fails the tab still falls back to the worktree's workspace", async () => {
+	const { env, log } = herdrSandbox("ok");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7", FAKE_HERDR_PANE_CWD: "none" });
+	assert.equal(run.code, 0);
+	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w7 /m);
+});
+
+test("a worker dispatched into another worktree goes to that worktree's workspace", async () => {
+	const { env, log } = herdrSandbox("ok");
+	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7", FAKE_HERDR_PANE_CWD: "/elsewhere" });
+	assert.equal(run.code, 0);
+	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w7 /m);
 });
 
 const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
