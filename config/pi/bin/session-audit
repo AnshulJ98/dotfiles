@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+// Zero-token audit of pi sessions: what inference keeps getting spent on the same work.
+// usage: session-audit [sessions-dir]   (default ~/.pi/agent/sessions)
+// Prints one markdown table: kind | item | sessions | count.
+//   cmd     an exact bash command (whitespace-normalized) seen in 2+ sessions
+//   shape   a command shape (program + subcommand) seen in the most sessions
+//   seq     two command shapes run back to back in one session
+//   read    a file read in 2+ sessions
+//   review  a /review finding category, by keyword
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const root = process.argv[2] ?? path.join(os.homedir(), ".pi/agent/sessions");
+const TOP = 20;
+
+function* jsonlFiles(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) yield* jsonlFiles(p);
+    else if (e.name.endsWith(".jsonl")) yield p;
+  }
+}
+
+// Program plus the word that says what it does: `git diff`, `node --test`, `npm run build`.
+const SUBCOMMAND = new Set(["git", "npm", "pnpm", "yarn", "bun", "npx", "brew", "gh", "docker", "aws", "cdk", "pi", "uv", "cargo", "go"]);
+function shape(segment) {
+  const words = segment.trim().replace(/^(\w+=\S+\s+)+/, "").split(/\s+/).filter(Boolean);
+  let [prog, ...rest] = words;
+  if (!prog) return undefined;
+  if (prog === "cd") return undefined;
+  if (prog === "sudo" || prog === "time" || prog === "timeout") [prog, ...rest] = /^\d/.test(rest[0] ?? "") ? rest.slice(1) : rest;
+  prog = path.basename(prog ?? "");
+  if (!prog) return undefined;
+  if (SUBCOMMAND.has(prog)) {
+    const sub = rest.find((w) => !w.startsWith("-"));
+    return sub ? `${prog} ${sub === "run" ? `run ${rest[rest.indexOf(sub) + 1] ?? ""}`.trim() : sub}` : prog;
+  }
+  if (prog === "node" || prog === "python3" || prog === "python" || prog === "bash" || prog === "sh") {
+    const arg = rest.find((w) => !w.startsWith("-") || w === "--test");
+    return arg ? `${prog} ${arg === "--test" ? "--test" : path.basename(arg.replace(/['"]/g, ""))}` : prog;
+  }
+  return prog;
+}
+// The commands of a bash call: split on && || ; and newlines, keep each pipeline's first stage, and drop
+// shell syntax and plumbing, which say nothing about the work.
+const PLUMBING = new Set(["for", "do", "done", "if", "then", "else", "fi", "while", "echo", "printf", "sleep", "true", "exit", "export", "set", "[", "test", "{", "}"]);
+const HEREDOC = /<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2(?=\n|$)/g;
+const segments = (cmd) =>
+  cmd
+    .replace(HEREDOC, "<<$2$3")
+    .split(/&&|\|\||;|\n/)
+    .map((s) => s.split(/(?<!\|)\|(?!\|)/)[0].trim())
+    .filter((s) => s && !PLUMBING.has(s.split(/\s+/)[0]));
+
+// Keyword buckets for the review categories in AGENTS.md; first match wins.
+const CATEGORIES = [
+  ["tests", /\btests?\b|assert|coverage|fixture/i],
+  ["types", /\bany\b|return type|\btype\b|interface\b|unknown/i],
+  ["errors", /swallow|catch|throw|error handling|exit code|non-zero|fails? (open|closed)/i],
+  ["concurrency", /race|concurren|parallel|await|stampede|retry|backoff/i],
+  ["input", /inject|escap|quot|travers|encod|validat|sanitiz/i],
+  ["limits", /timeout|ttl|evict|size|limit|cap\b|unbounded|memory/i],
+  ["config", /hardcod|env\b|environment|endpoint|path\b/i],
+  ["cache/state", /cache|state|__proto__|falsy|stale/i],
+  ["design", /coupl|duplicat|abstraction|module|simpler|dead code|unused/i],
+  ["intent", /scope|spec|asked|requirement|missing step/i],
+];
+const FINDING = /^\s*[-*]\s+.*`?[\w./-]+:\d+/;
+
+const cmdSessions = new Map(); // command -> Set(session)
+const cmdCount = new Map();
+const shapeSessions = new Map();
+const shapeCount = new Map();
+const seqSessions = new Map();
+const seqCount = new Map();
+const readSessions = new Map();
+const readCount = new Map();
+const reviewSessions = new Map();
+const reviewCount = new Map();
+const bump = (sessions, counts, key, id) => {
+  if (!sessions.has(key)) sessions.set(key, new Set());
+  sessions.get(key).add(id);
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+};
+
+let files = 0;
+let calls = 0;
+for (const file of jsonlFiles(root)) {
+  files++;
+  const id = path.basename(file, ".jsonl");
+  let cwd = "";
+  let lastShape;
+  let inReview = false;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!line) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // a session cut off mid-write
+    }
+    if (entry.type === "session") cwd = entry.cwd ?? "";
+    const msg = entry.type === "message" ? entry.message : undefined;
+    if (!msg || !Array.isArray(msg.content)) continue;
+    if (msg.role === "user") {
+      const text = msg.content.map((c) => c.text ?? "").join("");
+      inReview = text.startsWith("Review the following;");
+      continue;
+    }
+    if (msg.role !== "assistant") continue;
+    for (const part of msg.content) {
+      if (part.type === "text" && inReview) {
+        for (const l of part.text.split("\n").filter((l) => FINDING.test(l))) {
+          const cat = CATEGORIES.find(([, re]) => re.test(l))?.[0] ?? "other";
+          bump(reviewSessions, reviewCount, cat, id);
+        }
+      }
+      if (part.type !== "toolCall") continue;
+      calls++;
+      const args = part.arguments ?? {};
+      if (part.name === "bash" && typeof args.command === "string") {
+        const cmd = args.command.replace(/\s+/g, " ").trim();
+        bump(cmdSessions, cmdCount, cmd, id);
+        for (const seg of segments(args.command)) {
+          const s = shape(seg);
+          if (!s) continue;
+          bump(shapeSessions, shapeCount, s, id);
+          if (lastShape && lastShape !== s) bump(seqSessions, seqCount, `${lastShape} -> ${s}`, id);
+          lastShape = s;
+        }
+      } else if (part.name === "read" && typeof args.path === "string") {
+        const p = args.path.replace(/^@/, "").replace(/^~(?=\/|$)/, os.homedir());
+        const abs = path.resolve(cwd || os.homedir(), p).replace(os.homedir(), "~");
+        bump(readSessions, readCount, abs, id);
+      }
+    }
+  }
+}
+
+const rank = (sessions, counts, min = 2) =>
+  [...sessions]
+    .map(([k, s]) => [k, s.size, counts.get(k)])
+    .filter(([, n]) => n >= min)
+    .sort((a, b) => b[1] - a[1] || b[2] - a[2] || a[0].localeCompare(b[0]));
+
+const cell = (s) => (s.length > 110 ? `${s.slice(0, 107)}...` : s).replace(/\|/g, "\\|");
+const rows = [
+  ...rank(cmdSessions, cmdCount).slice(0, TOP).map((r) => ["cmd", ...r]),
+  ...rank(shapeSessions, shapeCount).slice(0, TOP).map((r) => ["shape", ...r]),
+  ...rank(seqSessions, seqCount).slice(0, TOP).map((r) => ["seq", ...r]),
+  ...rank(readSessions, readCount).slice(0, TOP).map((r) => ["read", ...r]),
+  ...rank(reviewSessions, reviewCount, 1).map((r) => ["review", ...r]),
+];
+console.log(`${files} session files, ${calls} tool calls, under ${root.replace(os.homedir(), "~")}\n`);
+console.log("| kind | item | sessions | count |\n|---|---|---|---|");
+for (const [kind, item, n, count] of rows) console.log(`| ${kind} | \`${cell(item)}\` | ${n} | ${count} |`);
