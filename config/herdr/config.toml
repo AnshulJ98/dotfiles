@@ -27,10 +27,28 @@ goto             = ["prefix+g", "ctrl+alt+g"]           # jump to any agent
 # kitty_mod+h would show herdr's screen, not the pane's history; this opens
 # the focused pane's scrollback in $EDITOR.
 edit_scrollback  = ["prefix+e", "ctrl+alt+e"]
+last_pane        = "ctrl+alt+o"                        # back-and-forth, across workspaces
+previous_workspace = "ctrl+alt+["
+next_workspace     = "ctrl+alt+]"
 
 [ui]
+sidebar_width = 24
+sidebar_min_width = 24
+sidebar_max_width = 24
+status_indicators = "symbols"
+accent = "#44ddff"
+pane_scrollbars = false
+pane_outer_borders = false
+pane_gaps = false
+tab_bar_position = "top"
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "command", command = "git branch --show-current 2>/dev/null", interval_seconds = 10 },
+  { type = "datetime", format = "%H:%M" },
+]
+tab_bar_right_separator = " │ "
 prompt_new_tab_name = false
-hide_tab_bar_when_single_tab = true
+hide_tab_bar_when_single_tab = false
 # Pass the focused pane's title to kitty's tab, as before herdr, so the
 # tab_title_template colours still apply.
 window_title = "{terminal_title}"
@@ -50,3 +68,16 @@ delivery = "terminal"
 # prompts; herdr writes them to session-history.json beside session.json,
 # outside this repo, since only config.toml is linked.
 pane_history = true
+
+[[keys.command]]
+key = "ctrl+alt+shift+g"
+type = "popup"
+command = "lazygit"
+width = "90%"
+height = "90%"
+
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace"], ["branch", "git_status"]]
+
+[ui.sidebar.agents]
+rows = [["state_icon", "agent", "tab"], ["$model", "$context_usage"]]
