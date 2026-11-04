@@ -108,6 +108,7 @@ link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
 # herdr's folder also holds its sockets, logs and session.json, so link the file.
 link "$DOT/config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
+link "$DOT/config/herdr/config-gpui.local.toml" "$HOME/.config/herdr/config-gpui.local.toml" # Herdr UI
 # delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
 link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
 if command -v bat >/dev/null 2>&1; then
@@ -168,11 +169,18 @@ link "$DOT/config/pi/bin"           "$HOME/.pi/agent/bin"   # scout wrapper, ref
 link "$DOT/config/pi/themes"      "$HOME/.pi/agent/themes"
 mkdir -p "$HOME/.pi/agent/skills-local"   # settings.json names it; pi does not create it
 
-# 7. VSCode Insiders (macOS-specific path) -----------------------------------
-mkdir -p "$VSC_USER"
-for item in settings.json keybindings.json snippets; do
-  [ -e "$DOT/vscode-insiders/$item" ] && link "$DOT/vscode-insiders/$item" "$VSC_USER/$item"
+# 7. VSCode (macOS-specific paths) -------------------------------------------
+# Insiders' files are the source; stable VS Code shares them.
+for user_dir in "$VSC_USER" "$HOME/Library/Application Support/Code/User"; do
+  mkdir -p "$user_dir"
+  for item in settings.json keybindings.json snippets css; do
+    [ -e "$DOT/vscode-insiders/$item" ] && link "$DOT/vscode-insiders/$item" "$user_dir/$item"
+  done
 done
+# `code serve-web` (Herdr UI's VS Code tab): settings and custom CSS. Re-run
+# vscode-serve-web-sync after a VS Code update or a settings change.
+link "$DOT/vscode-insiders/serve-web-sync.sh" "$HOME/.local/bin/vscode-serve-web-sync"
+"$DOT/vscode-insiders/serve-web-sync.sh"
 
 # 8. Post-install: bootstrap nvim plugins + mason tools ----------------------
 if command -v nvim >/dev/null 2>&1; then
