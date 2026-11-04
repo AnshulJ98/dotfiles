@@ -10,13 +10,14 @@ side, git sees the change.
 home/              → ~/                                  shell rcs, .gitconfig, .p10k.zsh
 config/nvim/       → ~/.config/nvim                      neovim (kickstart-based, lazy-lock committed)
 config/kitty/      → ~/.config/kitty                     terminal
+config/herdr/      → ~/.config/herdr/*.toml              herdr daemon + Herdr UI (files; the folder holds sockets)
 config/aerospace/  → ~/.config/aerospace                 tiling window manager
 config/borders/    → ~/.config/borders                   window borders (JankyBorders)
 config/ccstatusline/ → ~/.config/ccstatusline            Claude Code statusline
 config/pi/         → ~/.pi/agent/*                       pi coding agent (see below)
 claude/            → ~/.claude/*                         Claude Code settings, agents, skills
 agents/skills/     → ~/.agents/skills                    skills shared across harnesses
-vscode-insiders/   → ~/Library/.../Code - Insiders/User  settings, keybindings, snippets
+vscode-insiders/   → ~/Library/.../Code*/User            settings, keybindings, snippets, custom CSS
 archive/           (no symlinks)                         retired configs, kept for reference
 Brewfile           full machine manifest for `brew bundle`
 install.sh         idempotent bootstrap

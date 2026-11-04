@@ -1,0 +1,27 @@
+.monaco-workbench.mac {
+  --monaco-monospace-font: Iosevka Nerd Font;
+  --webkit-font-smoothing: subpixel=antialiased;
+  font-weight: 600;
+  font-family: Iosevka Nerd Font;
+}
+
+iframe.webview,
+iframe.webview.ready,
+iframe[src^="vscode-webview://"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  color-scheme: normal !important;
+}
+body > div:has(> div > iframe.webview),
+body > div > div:has(> iframe.webview) {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.monaco-workbench .editor-container,
+.monaco-workbench .editor-instance,
+.monaco-workbench .part.editor > .content,
+.monaco-workbench .part.editor .webview-container {
+  background: transparent !important;
+  background-color: transparent !important;
+}
