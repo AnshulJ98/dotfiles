@@ -179,7 +179,8 @@ vim.api.nvim_create_autocmd('WinResized', {
   desc = 'Keep the reading view at window width',
   group = group,
   callback = function()
-    for _, win in ipairs(vim.v.event.windows) do
+    -- A `:doautocmd WinResized` (kitty-scrollback fires one) has no window list.
+    for _, win in ipairs(vim.v.event.windows or vim.api.nvim_list_wins()) do
       if vim.api.nvim_win_is_valid(win) and vim.b[vim.api.nvim_win_get_buf(win)].md_render then fit(win) end
     end
   end,
