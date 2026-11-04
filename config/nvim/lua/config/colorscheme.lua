@@ -127,6 +127,12 @@ require('bearded').setup {
     set('RenderMarkdownCode', { bg = ui.uibackgroundalt })
     set('RenderMarkdownCodeInline', { bg = ui.primaryalt })
     set('RenderMarkdownBullet', { fg = c.blue })
+    -- Tables as the reading view (md-render) draws them: FloatBorder lines, and
+    -- header cells, markdown's one plain @markup.heading capture, in the bold
+    -- colour rather than heading yellow.
+    set('RenderMarkdownTableHead', { link = 'FloatBorder' })
+    set('RenderMarkdownTableRow', { link = 'FloatBorder' })
+    set('@markup.heading.markdown', { link = '@markup.strong' })
     set('RenderMarkdownDash', { fg = ui.defaultalt })
   end,
 }

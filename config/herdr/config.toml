@@ -24,6 +24,7 @@ focus_pane_right = ["prefix+l", "ctrl+alt+l"]
 zoom             = ["prefix+z", "ctrl+alt+f"]           # cmd+alt+f
 new_tab          = ["prefix+c", "ctrl+alt+t"]           # cmd+t
 goto             = ["prefix+g", "ctrl+alt+g"]           # jump to any agent
+toggle_sidebar   = ["prefix+b", "ctrl+alt+b"]           # full width for a pane
 # kitty_mod+h would show herdr's screen, not the pane's history; this opens
 # the focused pane's scrollback in $EDITOR.
 edit_scrollback  = ["prefix+e", "ctrl+alt+e"]
@@ -35,6 +36,9 @@ next_workspace     = "ctrl+alt+]"
 sidebar_width = 24
 sidebar_min_width = 24
 sidebar_max_width = 24
+# Collapsed (ctrl+alt+b), the sidebar takes no columns; "compact" keeps a
+# narrow agent-status rail.
+sidebar_collapsed_mode = "hidden"
 status_indicators = "symbols"
 accent = "#44ddff"
 pane_scrollbars = false
