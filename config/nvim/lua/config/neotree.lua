@@ -8,6 +8,20 @@ vim.pack.add {
 -- on the defaults (no folder icons, glyph git marks, no watcher). Setup costs
 -- 0.3ms.
 local file_icon = require('neo-tree.defaults').default_component_configs.icon.provider
+
+-- The window opens before neo-tree has read the folder, and until then
+-- state.tree is nil and nearly every key indexed it: Enter raised E5108 at
+-- commands.lua:827 on a large repo. Unfixed upstream as of 3.42.0. Those keys
+-- now do nothing until the tree exists; the ones below need no tree.
+local no_tree_needed = { cancel = true, close_window = true, refresh = true, show_help = true, next_source = true, prev_source = true }
+local filesystem_commands = {}
+for name, command in pairs(require 'neo-tree.sources.filesystem.commands') do
+  if type(command) == 'function' and not no_tree_needed[name] then
+    filesystem_commands[name] = function(state, ...)
+      if state.tree then return command(state, ...) end
+    end
+  end
+end
 require('neo-tree').setup {
   default_component_configs = {
     icon = {
@@ -46,6 +60,7 @@ require('neo-tree').setup {
     -- until a manual refresh. The OS watcher covers the expanded
     -- directories, hidden ones included.
     use_libuv_file_watcher = true,
+    commands = filesystem_commands,
     window = {
       mappings = {
         ['\\'] = 'close_window',
