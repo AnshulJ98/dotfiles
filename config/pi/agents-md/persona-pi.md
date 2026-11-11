@@ -3,6 +3,9 @@
 
 - Batch tool calls only when each one is already needed; don't read
   ahead speculatively.
+- In codemode scripts, return only what the task needs: filter, count,
+  or slice tool output inside the script. Redirect large output to a
+  file and grep or read ranges from it instead of returning it.
 
 ## Delegation
 
