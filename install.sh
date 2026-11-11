@@ -108,7 +108,12 @@ link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
 # herdr's folder also holds its sockets, logs and session.json, so link the file.
 link "$DOT/config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
-link "$DOT/config/herdr/config-gpui.local.toml" "$HOME/.config/herdr/config-gpui.local.toml" # Herdr UI
+# Herdr app (cask herdr-app, runs on herdr-core/hc). Its folder also holds
+# sockets, layouts, mods and an AGENTS.md it rewrites, so link the files. The
+# app's Settings write settings.json through the link.
+for f in settings.json keys.json themes/bearded-hc-midnightvoid.json; do
+  link "$DOT/config/herdr-app/$f" "$HOME/.config/herdr-app/$f"
+done
 # delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
 link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
 if command -v bat >/dev/null 2>&1; then
@@ -177,10 +182,6 @@ for user_dir in "$VSC_USER" "$HOME/Library/Application Support/Code/User"; do
     [ -e "$DOT/vscode-insiders/$item" ] && link "$DOT/vscode-insiders/$item" "$user_dir/$item"
   done
 done
-# `code serve-web` (Herdr UI's VS Code tab): settings and custom CSS. Re-run
-# vscode-serve-web-sync after a VS Code update or a settings change.
-link "$DOT/vscode-insiders/serve-web-sync.sh" "$HOME/.local/bin/vscode-serve-web-sync"
-"$DOT/vscode-insiders/serve-web-sync.sh"
 
 # 8. Post-install: bootstrap nvim plugins + mason tools ----------------------
 if command -v nvim >/dev/null 2>&1; then
