@@ -1,0 +1,27 @@
+#!/bin/sh
+# Mark only the outer kitty window; Herdr panes inherit stale kitty variables.
+set -f
+real=
+IFS=:
+for directory in $PATH; do
+  candidate="${directory:-.}/herdr"
+  if [ -f "$candidate" ] && [ -x "$candidate" ] && ! [ "$candidate" -ef "$0" ]; then
+    real="$candidate"
+    break
+  fi
+done
+unset IFS
+if [ -z "$real" ]; then
+  printf '%s\n' 'herdr: executable not found after the kitty launcher on PATH' >&2
+  exit 127
+fi
+
+# Piped CLI output and calls inside Herdr must remain byte-for-byte unchanged.
+if [ -z "${KITTY_WINDOW_ID:-}" ] || [ -n "${HERDR_PANE_ID:-}" ] || ! [ -t 1 ]; then
+  exec "$real" "$@"
+fi
+
+printf '\033]1337;SetUserVar=herdr=MQ==\007'
+trap 'printf "\033]1337;SetUserVar=herdr\007"' EXIT
+"$real" "$@"
+exit "$?"
