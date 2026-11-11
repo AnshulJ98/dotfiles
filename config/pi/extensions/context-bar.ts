@@ -14,7 +14,6 @@
  *   instead of cutting off the cost: cwd and branch, then model and cost pinned
  *   top right; cache and context flush right below. Narrower still, the model
  *   name is cut before the cost, and the cache hit goes before the context.
- * - The cost total includes heads-up side requests (heads-up.ts entries).
  * - Shows the last request's cache-hit share, which pi's default footer had.
  * - Renders extension statuses (ctx.ui.setStatus, e.g. scout) on a line of
  *   their own under the footer; upstream dropped them.
@@ -54,9 +53,6 @@ export default function (pi: ExtensionAPI) {
 						if (e.type === "message" && e.message.role === "assistant") {
 							last = e.message as AssistantMessage;
 							cost += last.usage.cost.total;
-						} else if (e.type === "custom" && e.customType === "heads-up") {
-							const sideCost = (e.data as { cost?: unknown } | undefined)?.cost;
-							if (typeof sideCost === "number") cost += sideCost;
 						}
 					}
 
