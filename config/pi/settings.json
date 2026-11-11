@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "1.5.0",
+  "lastChangelogVersion": "1.5.2",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "medium",
@@ -19,7 +19,7 @@
   "enabledModels": [
     "anthropic/claude-opus-5-5",
     "anthropic/claude-sonnet-5-5",
-    "anthropic/claude-fable-5-1"
+    "anthropic/claude-fable-5-2"
   ],
   "compaction": {
     "enabled": true,
@@ -46,7 +46,6 @@
     "~/Dev/dotfiles/config/pi/extensions/scout.ts",
     "~/Dev/dotfiles/config/pi/extensions/polish-chrome.ts",
     "~/Dev/dotfiles/config/pi/extensions/context-bar.ts",
-    "~/Dev/dotfiles/config/pi/extensions/heads-up.ts",
     "~/Dev/dotfiles/config/pi/extensions/background.ts",
     "~/Dev/dotfiles/config/pi/extensions/stream-watchdog.ts",
     "~/Dev/dotfiles/config/pi/extensions/bedrock-reasoning.ts",
@@ -77,8 +76,9 @@
   ],
   "extensionChangelogVersions": {
     "{\"source\":\"npm:pi-rtk-optimizer\",\"scope\":\"user\"}": "0.9.0",
-    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.46.0",
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.47.0",
     "{\"source\":\"npm:pi-usage-widget\",\"scope\":\"user\"}": "0.2.1",
-    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.4.4"
+    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.4.4",
+    "{\"source\":\"npm:@narumitw/pi-herdr\",\"scope\":\"user\"}": "0.4.1"
   }
 }
