@@ -108,6 +108,7 @@ link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
 # herdr's folder also holds its sockets, logs and session.json, so link the file.
 link "$DOT/config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
+link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"
 # Herdr app (cask herdr-app, runs on herdr-core/hc). Its folder also holds
 # sockets, layouts, mods and an AGENTS.md it rewrites, so link the files. The
 # app's Settings write settings.json through the link.
