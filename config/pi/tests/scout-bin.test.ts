@@ -200,7 +200,7 @@ test("a package.json without a type above scout does not refuse the spec", () =>
 	const { env } = sandbox();
 	const home = mkdtempSync(join(tmpdir(), "scout-typeless-"));
 	writeFileSync(join(home, "package.json"), "{}\n");
-	for (const dir of ["bin", "extensions"]) cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), { recursive: true });
+	for (const dir of ["bin", "extensions", "lib"]) cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), { recursive: true });
 	const run = spawnSync(join(home, "bin", "scout"), ["--spec", "-"], { env: { ...env, FAKE_PI: "env" }, input: SPEC, encoding: "utf8" });
 	assert.doesNotMatch(run.stderr, /spec on stdin/);
 	assert.match(run.stdout, /^mode=rw$/m);
