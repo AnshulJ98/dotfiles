@@ -1,0 +1,31 @@
+{
+  "id": "scout-auto-run-blocks",
+  "role": "scout",
+  "repo": "~/Dev/dotfiles",
+  "rev": "39f0715b106fd501e2ba24f3b4d27ca7cb4a7608",
+  "paths": ["config/pi"],
+  "expect": [
+    {"at": [
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [90, 100]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [4, 7]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [85, 88]},
+      {"file": "config/pi/DESIGN.md", "lines": [38, 38]},
+      {"file": "config/pi/AGENTS.md", "lines": [141, 143]}
+    ], "must": ["AUTO\\.md"]},
+    {"at": [
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [102, 112]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [12, 13]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [38, 41]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [147, 153]},
+      {"file": "config/pi/DESIGN.md", "lines": [38, 38]},
+      {"file": "config/pi/AGENTS.md", "lines": [262, 265]},
+      {"file": "config/pi/CLAUDE.md", "lines": [247, 250]}
+    ], "must": ["worktreeRefusal|worktree add"]},
+    {"at": [
+      {"file": "config/pi/bin/scout", "lines": [454, 455]},
+      {"file": "config/pi/extensions/auto-run.ts", "lines": [15, 18]},
+      {"file": "config/pi/DESIGN.md", "lines": [28, 28]},
+      {"file": "config/pi/DESIGN.md", "lines": [126, 126]}
+    ], "must": ["-ne"]}
+  ]
+}

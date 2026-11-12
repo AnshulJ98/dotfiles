@@ -1,0 +1,1 @@
+In this pi config (config/pi), which model and thinking level does my main pi session start with, and which model and thinking level does scout use by default for a read-only run and for a --rw run? How do I override them for one call? Cite the file and the line where each default is set.

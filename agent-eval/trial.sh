@@ -2,6 +2,9 @@
 # One worker trial: scout --rw in an isolated HOME and a fresh workspace; appends a graded record.
 # A review task (role review, with "rev") runs plain pi -p --mode json on the prompt in the workspace at rev and is
 # graded by judge.sh (record: pass = every defect found, plus found, of, disagreements, judgeCost).
+# A scout task (role scout, with "rev" and usually "paths") runs `scout --model M --thinking L "<prompt.md>"` read-only
+# in the workspace at rev, and is graded by lib/scout-grade.ts from the digest's file:line citations against the
+# task's expect list (record: pass, plus hits and of, the expect entries satisfied).
 # usage: trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>   (<task>: id under tasks/ or a dir)
 # Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI (default pi), EVAL_REAL_HOME (default $HOME);
 # judge.sh reads EVAL_JUDGE_PI.
@@ -21,9 +24,10 @@ role="$(task_get "$task_dir" role)"
 case "$role" in
   worker) ;;
   review) [ -n "$(task_get "$task_dir" rev)" ] || { echo "role not supported yet: review (task has no rev)" >&2; exit 2; } ;;
+  scout) [ -n "$(task_get "$task_dir" rev)" ] || { echo "role not supported yet: scout (task has no rev)" >&2; exit 2; } ;;
   *) echo "role not supported yet: $role" >&2; exit 2 ;;
 esac
-expect="$(task_get "$task_dir" expect)"
+[ "$role" = scout ] || expect="$(task_get "$task_dir" expect)"
 
 mkdir -p "$(dirname "$out")"
 out="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
@@ -34,6 +38,21 @@ scout="${EVAL_SCOUT:-$home/.pi/agent/bin/scout}"
 
 make_workspace "$task_dir" "$ws" base
 rc=0
+
+if [ "$role" = scout ]; then
+  start="$(date +%s)"
+  (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$scout" --model "$model" --thinking "$thinking" \
+    "$(cat "$task_dir/prompt.md")" < /dev/null > "$dir/digest.txt" 2> "$dir/stderr.txt") || rc=$?
+  seconds=$(( $(date +%s) - start ))
+  record="$(node "$EVAL_DIR/lib/record.ts" \
+    --task "$(task_get "$task_dir" id)" --role "$role" --model "$model" --thinking "$thinking" --trial "$n" \
+    --rc "$rc" --seconds "$seconds" --task-file "$task_dir/task.json" --digest-file "$dir/digest.txt" \
+    --sessions-dir "$home/.pi/agent/sessions" \
+    --needle "$(task_get "$task_dir" repo)" --needle "$EVAL_REAL_HOME/.pi/agent/memory.md" \
+    --needle "$EVAL_REAL_HOME/.pi/agent/sessions" --dir "$dir")"
+  printf '%s\n' "$record" | tee -a "$out"
+  exit 0
+fi
 
 if [ "$role" = review ]; then
   reviewer="${EVAL_REVIEW_PI:-pi}"
