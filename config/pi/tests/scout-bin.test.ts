@@ -137,13 +137,14 @@ test("a spec whose body is not a plan (no numbered step, or no check: line) is r
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
 });
 
-test("a child loads background.ts for its bash tool and gets no bg_run", async () => {
+test("a child loads background.ts for its bash tool and gets no bg_run; only a worker gets codemode", async () => {
 	const { env } = sandbox();
-	for (const [args, stdin] of [[["look"], ""], [["--spec", "-"], SPEC]] as const) {
+	for (const [args, stdin, worker] of [[["look"], "", false], [["--spec", "-"], SPEC, true]] as const) {
 		const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
 		assert.equal(run.code, 0);
-		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts /);
-		assert.match(run.stdout, / -t read,grep,find,ls,bash(,edit,write)? /);
+		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts -e \S+\/extensions\/bash-changes\.ts /);
+		assert.match(run.stdout, worker ? / -t read,grep,find,ls,bash,edit,write,codemode / : / -t read,grep,find,ls,bash /);
+		assert.equal(/ -e builtin:codemode /.test(run.stdout), worker);
 	}
 });
 

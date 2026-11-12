@@ -47,6 +47,12 @@ function load(mode: "print" | "tui" = "print") {
 	return {
 		run: (name: string, params: Record<string, unknown>) => tools.get(name)!("call", params, undefined, undefined, { cwd: tmpdir(), mode, ui }),
 		next: () => new Promise<Sent>((resolve) => (onSent = resolve)),
+		/** The timeout a bash call ends up with after the tool_call handlers. */
+		timeoutFor: async (command: string, timeout?: number): Promise<number | undefined> => {
+			const input: { command: string; timeout?: number } = { command, ...(timeout === undefined ? {} : { timeout }) };
+			for (const handler of handlers.get("tool_call") ?? []) await (handler as unknown as (event: unknown) => Promise<void>)({ toolName: "bash", toolCallId: "c", input });
+			return input.timeout;
+		},
 		shutdown: async () => {
 			for (const handler of handlers.get("session_shutdown") ?? []) await handler();
 			stale = true;
@@ -95,4 +101,21 @@ test("lastLines shows the last lines as a terminal would", () => {
 		["10%\r20%\r", 5, "20%"],
 	];
 	for (const [text, lines, expected] of cases) assert.equal(lastLines(text, lines), expected, JSON.stringify(text));
+});
+
+test("bash timeout: 120 s by default, 600 s at most; scout and auto-slice bound themselves and are left alone", async () => {
+	const pi = load();
+	const rows: Array<[command: string, asked: number | undefined, expected: number | undefined]> = [
+		["npm test", undefined, 120],
+		["npm test", 300, 300],
+		["npm test", 3600, 600],
+		["echo scouting the repo", undefined, 120],
+		["~/.pi/agent/bin/scout --rw --spec - <spec.md", undefined, undefined],
+		["cd ../x && ~/.pi/agent/bin/scout 'look'", 900, 900],
+		["~/.pi/agent/bin/auto-slice dispatch parse /tmp/spec.md", undefined, undefined],
+		["auto-slice merge parse 'feat: parse'", undefined, undefined],
+		["sleep 500 &", 60, undefined],
+	];
+	for (const [command, asked, expected] of rows) assert.equal(await pi.timeoutFor(command, asked), expected, command);
+	await pi.shutdown();
 });

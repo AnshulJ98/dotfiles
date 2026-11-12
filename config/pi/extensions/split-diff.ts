@@ -111,6 +111,8 @@ function isEditBox(value: unknown): value is EditBox {
 }
 
 export default async function (pi: ExtensionAPI): Promise<void> {
+	// Internal: pi-tidy does not export this file; loaded by path, checked with pi-tidy 0.4.12.
+	// verify.sh [tools] fails when the file or its renderSplitDiff export is gone.
 	const file = join(getAgentDir(), "npm", "node_modules", "pi-tidy", "split-diff.ts");
 	let split: RenderSplit;
 	try {

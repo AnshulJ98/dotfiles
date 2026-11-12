@@ -3,12 +3,18 @@
 // extensions/bash-changes.ts through a fake pi and a fake ctx.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import bashChanges from "../extensions/bash-changes.ts";
 import { changedBy, describe, parsePorcelain, snapshot, type Change, type FileState, type Snapshot } from "../lib/bash-changes.ts";
+import { append, endLine, logPath, roleOf, rotate, startLine, summarize, type Who } from "../lib/bash-log.ts";
+
+// The extension appends to the bash log; keep the tests out of the real one.
+const LOG = join(realpathSync(mkdtempSync(join(tmpdir(), "bash-log-"))), "logs", "bash.log");
+process.env.PI_BASH_LOG = LOG;
+const logged = (): string[] => (existsSync(LOG) ? readFileSync(LOG, "utf8").split("\n").filter(Boolean) : []);
 
 function snap(files: Record<string, FileState>, head = "h1"): Snapshot {
 	return { root: "/r", head, files: new Map(Object.entries(files)) };
@@ -89,7 +95,7 @@ function armed(hasUI = true): { on: Map<string, Handler>; notes: string[]; ctx: 
 	const on = new Map<string, Handler>();
 	bashChanges({ on: (name: string, handler: Handler) => on.set(name, handler) } as unknown as Parameters<typeof bashChanges>[0]);
 	const notes: string[] = [];
-	return { on, notes, ctx: { hasUI, ui: { notify: (text: string) => notes.push(text) } } };
+	return { on, notes, ctx: { hasUI, ui: { notify: (text: string) => notes.push(text) }, sessionManager: { getSessionId: () => "01a1-session-abc123" } } };
 }
 
 async function inRepo(body: (repo: string) => Promise<void>): Promise<void> {
@@ -140,4 +146,69 @@ test("handler: without a UI nothing is notified", async () => {
 		await on.get("tool_result")?.(event, ctx);
 		assert.deepEqual(notes, []);
 	});
+});
+
+const WHO: Who = { role: "main", session: "01a1-session-abc123", call: "toolu_019f2c" };
+const AT = new Date(2026, 10, 11, 22, 41, 7);
+
+test("bash log lines: start names the role, session, call, cwd and command; end the time, exit, kill and changes", () => {
+	assert.equal(startLine(AT, WHO, "/home/u/Dev/repo", "git add -- a.ts", "/home/u"), "22:41:07 main abc123 #9f2c \u25b6 [~/Dev/repo] git add -- a.ts");
+	assert.equal(startLine(AT, WHO, "/tmp/x", "\ncat > f <<'EOF'\none\n\ntwo\nEOF\n", "/home/u"), "22:41:07 main abc123 #9f2c \u25b6 [/tmp/x] cat > f <<'EOF' (+3 lines)");
+	assert.equal(summarize("x".repeat(200)), `${"x".repeat(160)}\u2026`);
+	const rows: Array<[Parameters<typeof endLine>[2], string]> = [
+		[{ ms: 412, failed: false, exitCode: 0, changed: "" }, "\u2713 0.4s"],
+		[{ ms: 412, failed: false, changed: "src/a.ts (+3 \u22121)" }, "\u2713 0.4s \u00b7 changed: src/a.ts (+3 \u22121)"],
+		[{ ms: 1500, failed: false, exitCode: 2, changed: "" }, "\u2717 1.5s exit 2"],
+		[{ ms: 91200, failed: true, exitCode: 137, killed: "[watchdog] killed: idle 90s", changed: "" }, "\u2717 91.2s exit 137 \u00b7 [watchdog] killed: idle 90s"],
+		[{ ms: 100, failed: true, changed: "" }, "\u2717 0.1s"],
+	];
+	for (const [ended, tail] of rows) assert.equal(endLine(AT, WHO, ended), `22:41:07 main abc123 #9f2c ${tail}`);
+});
+
+test("bash log: role and path come from the environment; a log over 5 MB is rotated once; an unwritable path reports false", () => {
+	assert.equal(roleOf({}), "main");
+	assert.equal(roleOf({ PI_SCOUT_DEPTH: "0" }), "main");
+	assert.equal(roleOf({ PI_SCOUT_DEPTH: "1" }), "scout");
+	assert.equal(roleOf({ PI_SCOUT_DEPTH: "1", PI_WORKER_SPEC: "/s.md" }), "worker");
+	assert.equal(logPath({ PI_CODING_AGENT_DIR: "/agent" }), "/agent/logs/bash.log");
+	assert.equal(logPath({ PI_BASH_LOG: "/x.log", PI_CODING_AGENT_DIR: "/agent" }), "/x.log");
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), "bash-log-rotate-")));
+	const path = join(dir, "sub", "bash.log");
+	assert.equal(append(path, "one"), true);
+	rotate(path);
+	assert.equal(existsSync(`${path}.1`), false);
+	writeFileSync(path, "x".repeat(5 * 1024 * 1024 + 1));
+	rotate(path);
+	assert.equal(statSync(`${path}.1`).size, 5 * 1024 * 1024 + 1);
+	assert.equal(existsSync(path), false);
+	writeFileSync(join(dir, "file"), "");
+	assert.equal(append(join(dir, "file", "bash.log"), "one"), false);
+});
+
+test("handler: every bash call gets a start and an end line in the log, with or without a UI, a repo or a change", async () => {
+	await inRepo(async (repo) => {
+		const { on, ctx } = armed(false);
+		const from = logged().length;
+		const event = { toolName: "bash", toolCallId: "call-aaaa", input: { command: "sed -i s/a/b/ src/a.ts" } };
+		await on.get("tool_call")?.(event, ctx);
+		assert.match(logged().at(-1) ?? "", /^\d\d:\d\d:\d\d main abc123 #aaaa \u25b6 \[.*\] sed -i s\/a\/b\/ src\/a\.ts$/);
+		writeFileSync(join(repo, "src", "a.ts"), "changed\n");
+		const killed = [{ type: "text", text: "partial\n[watchdog] killed: idle 90s (no output/CPU/network)\n" }];
+		await on.get("tool_result")?.({ ...event, isError: true, content: killed, structuredContent: { exit_code: 137 } }, ctx);
+		assert.match(logged().at(-1) ?? "", /^\d\d:\d\d:\d\d main abc123 #aaaa \u2717 \d+\.\ds exit 137 \u00b7 \[watchdog\] killed: idle 90s \(no output\/CPU\/network\) \u00b7 changed: src\/a\.ts \(\+1 \u22123\)$/);
+		await on.get("tool_call")?.({ toolName: "read", toolCallId: "call-bbbb", input: { path: "a" } }, ctx);
+		assert.equal(logged().length, from + 2, "only bash is logged");
+	});
+	const outside = realpathSync(mkdtempSync(join(tmpdir(), "bash-log-norepo-")));
+	const cwd = process.cwd();
+	process.chdir(outside);
+	try {
+		const { on, ctx } = armed();
+		const event = { toolName: "bash", toolCallId: "call-cccc", input: { command: "ls" } };
+		await on.get("tool_call")?.(event, ctx);
+		await on.get("tool_result")?.({ ...event, content: [{ type: "text", text: "a\n" }] }, ctx);
+		assert.match(logged().at(-1) ?? "", /#cccc \u2713 \d+\.\ds$/);
+	} finally {
+		process.chdir(cwd);
+	}
 });

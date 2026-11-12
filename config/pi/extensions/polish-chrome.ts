@@ -3,6 +3,9 @@
 // in column 3, the gutter pi's own tool rows and notices use (upstream: column 0, text in 2). The "Waiting for your
 // answer" phase keys on pi-ask-user's ask_user (upstream: questionnaire).
 // Cut: upstream's blanking of hidden-thinking rows; pi-minimalist owns thinking rows.
+// Internal: AssistantMessageComponent and UserMessageComponent are exported but undocumented, and the
+// prototype methods patched below (updateContent, rebuild, render) and Markdown's defaultTextStyle are
+// private. Checked with pi 1.5.2; verify.sh [tools] fails when one of the methods is gone.
 import { AssistantMessageComponent, CustomEditor, type ExtensionAPI, UserMessageComponent } from "@earendil-works/pi-coding-agent";
 import { Markdown } from "@earendil-works/pi-tui";
 
