@@ -205,3 +205,45 @@ echo '{"type":"message_end","message":{"role":"assistant","model":"stub/m","cont
 		rmSync(real, { recursive: true, force: true });
 	}
 });
+
+test("run.sh gives review-clean only its own fixture, records impl.workdir, and exits 2 on an unknown probe", () => {
+	const real = fakeRealHome();
+	const scratch = mkdtempSync(join(tmpdir(), "isolate-run-"));
+	const stub = join(scratch, "pi");
+	writeFileSync(
+		stub,
+		`#!/usr/bin/env bash
+{ pwd; ls; } > "${scratch}/seen-$(basename "$PWD" | cut -c1-12)-$$"
+echo '{"type":"session"}'
+echo '{"type":"message_end","message":{"role":"assistant","model":"stub/m","content":[{"type":"text","text":"ok"}],"usage":{"input":1,"output":1}}}'
+`,
+	);
+	chmodSync(stub, 0o755);
+	const env = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", EVAL_REAL_HOME: real, EVAL_PI: stub };
+	const dirs: string[] = [];
+	let resultsDir = "";
+	try {
+		const bad = spawnSync(RUN, ["", "", "no-such-probe"], { encoding: "utf8", env });
+		assert.equal(bad.status, 2, bad.stdout + bad.stderr);
+		const r = spawnSync(RUN, ["", "", "review-clean", "impl"], { encoding: "utf8", env });
+		assert.equal(r.status, 0, r.stderr + r.stdout);
+		const printed = r.stdout.match(/^outputs: (.+)$/m);
+		assert.ok(printed, r.stdout);
+		resultsDir = resolve(EVAL_DIR, printed[1]);
+		const seen = readdirSync(scratch).filter((n) => n.startsWith("seen-")).map((n) => readFileSync(join(scratch, n), "utf8").trim().split("\n"));
+		assert.equal(seen.length, 2);
+		for (const [cwd] of seen) dirs.push(cwd);
+		const clean = seen.find(([cwd]) => cwd.includes("agent-eval-fixture."));
+		assert.deepEqual(clean?.slice(1), ["review-target.ts"]);
+		assert.doesNotMatch(readFileSync(join(clean![0], "review-target.ts"), "utf8"), /node-fetch/);
+		const impl = seen.find(([cwd]) => cwd.includes("agent-eval-impl."));
+		assert.deepEqual(impl?.slice(1), []);
+		// the stub's pwd resolves /tmp -> /private/tmp on macOS, so compare the temp dir names
+		assert.equal(readFileSync(join(resultsDir, "impl.workdir"), "utf8").trim().split("/").pop(), impl![0].split("/").pop());
+	} finally {
+		if (resultsDir) rmSync(resultsDir, { recursive: true, force: true });
+		for (const d of dirs) rmSync(d, { recursive: true, force: true });
+		rmSync(scratch, { recursive: true, force: true });
+		rmSync(real, { recursive: true, force: true });
+	}
+});

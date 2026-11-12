@@ -31,6 +31,10 @@ PI_ARGS=(-p --no-session --mode json -xt ask_user)
 ISOLATE="$PWD/lib/isolate.sh"
 
 for probe in "${PROBES[@]}"; do
+  if [ ! -f "prompts/$probe.txt" ]; then
+    echo "run.sh: no prompt for probe '$probe' (prompts/$probe.txt)" >&2
+    exit 2
+  fi
   prompt="$(cat "prompts/$probe.txt")"
   out="$PWD/$RUN_DIR/$probe.json"
   # Each probe gets its own throwaway HOME: live config, empty memory.md.
@@ -40,12 +44,18 @@ for probe in "${PROBES[@]}"; do
       # Implementation probe needs an empty writable directory.
       workdir="$(mktemp -d "/tmp/agent-eval-impl.XXXXXX")"
       ( cd "$workdir" && "$ISOLATE" "$home" timeout "$PROBE_TIMEOUT" "${EVAL_PI:-pi}" "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
+      echo "$workdir" > "$RUN_DIR/impl.workdir"
       echo "impl workdir: $workdir (verify: cd there && node --test)"
       ;;
     *)
       # A temp copy keeps README.md (the scoring rubric) out of `ls ..` reach.
+      # Each probe sees only its own fixture dir; review-clean must not see the seeded target.
+      case "$probe" in
+        review-clean) fixture=review-clean ;;
+        *) fixture=review ;;
+      esac
       workdir="$(mktemp -d "/tmp/agent-eval-fixture.XXXXXX")"
-      cp fixtures/* "$workdir"/
+      cp fixtures/"$fixture"/* "$workdir"/
       ( cd "$workdir" && "$ISOLATE" "$home" timeout "$PROBE_TIMEOUT" "${EVAL_PI:-pi}" "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
       ;;
   esac
