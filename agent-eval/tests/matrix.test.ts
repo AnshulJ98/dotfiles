@@ -248,6 +248,32 @@ test("gate: a smaller task set than the baseline's fails even when every pass ra
 	assert.equal(r.status, 1, r.stdout + r.stderr);
 	assert.match(r.stdout, /FAIL worker m\/m:low[^\n]*counted 1 task\(s\), baseline 3/);
 });
+test("gate: a dropped role fails as MISSING; --partial lets the subset pass but never one-sided recall", () => {
+	const dir = join(scratch, "results", "dropped-role");
+	mkdirSync(dir, { recursive: true });
+	const line = JSON.stringify({ task: "t0", role: "worker", model: "m/m", thinking: "low", trial: 1, pass: true, seconds: 1, cost: 0, leak: false, infra: false });
+	writeFileSync(join(dir, "trials.jsonl"), line + "\n");
+	const worker = { passRate: 1, tasks: 1, flaky: 0 };
+	const baseline = (roles: object) => writeFileSync(join(scratch, "baseline.json"), JSON.stringify({ configSha: "x", date: "d", roles }));
+	baseline({ worker: { "m/m:low": worker }, review: { "m/m:low": { passRate: 0, tasks: 1, flaky: 0, recall: 0.8, defects: 5, flakyDefects: 0 } } });
+	const full = run("gate.sh", [dir]);
+	assert.equal(full.status, 1, full.stdout + full.stderr);
+	assert.match(full.stdout, /FAIL review m\/m:low: MISSING/);
+	assert.match(full.stdout, /ok   worker m\/m:low/);
+	assert.match(full.stdout, /gate: FAIL/);
+	const partial = run("gate.sh", [dir, "--partial"]);
+	assert.equal(partial.status, 0, partial.stdout + partial.stderr);
+	assert.match(partial.stdout, /skip review m\/m:low: MISSING[^\n]*--partial/);
+	assert.match(partial.stdout, /gate: pass/);
+	// Nothing in common is still exit 2 under --partial.
+	baseline({ review: { "m/m:low": worker } });
+	assert.equal(run("gate.sh", [dir, "--partial"]).status, 2);
+	// Recall in the baseline only: fails even with --partial.
+	baseline({ worker: { "m/m:low": { ...worker, recall: 1, defects: 5, flakyDefects: 0 } } });
+	const one = run("gate.sh", [dir, "--partial"]);
+	assert.equal(one.status, 1, one.stdout + one.stderr);
+	assert.match(one.stdout, /FAIL worker m\/m:low[^\n]*recall in the baseline only/);
+});
 test("gate: review cells are gated on defect recall", () => {
 	const dir = join(scratch, "results", "review-gate");
 	mkdirSync(dir, { recursive: true });

@@ -140,6 +140,11 @@ export function parseJudged(text: string): Judged {
 	};
 }
 
+/** timeout exits 124 on a timeout, and 137 (KILL, after -k) when the child ignored TERM: both mean the review never finished (infra). */
+export function isReviewTimeout(rc: number): boolean {
+	return rc === 124 || rc === 137;
+}
+
 /** A review passes when it found every defect and the judging itself worked. */
 export function gradeReview(j: Judged): boolean {
 	return !j.infra && j.of > 0 && j.found === j.of;
@@ -176,7 +181,7 @@ function main(argv: string[]): void {
 			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
 			pass: gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra || Number(v.rc) === 124, dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra || isReviewTimeout(Number(v.rc)), dir: v.dir,
 		}));
 		return;
 	}
