@@ -29,7 +29,8 @@ export interface Snapshot {
 
 export interface Change {
 	path: string;
-	kind: "new" | "modified" | "deleted";
+	/** reverted: dirty before the call and as HEAD has it after (git restore, git stash, an edit undone). */
+	kind: "new" | "modified" | "deleted" | "reverted";
 }
 
 function git(cwd: string, args: string[]): string {
@@ -90,6 +91,10 @@ export function changedBy(before: Snapshot, after: Snapshot): Change[] {
 	for (const [path, now] of after.files) {
 		const was = before.files.get(path);
 		if (!was || was.size !== now.size || was.mtimeMs !== now.mtimeMs) changes.push({ path, kind: kindOf(now) });
+	}
+	// Dirty before and not now: an untracked file removed, or a tracked one put back
+	for (const [path, was] of before.files) {
+		if (!after.files.has(path)) changes.push({ path, kind: was.status === "??" ? "deleted" : "reverted" });
 	}
 	return changes;
 }

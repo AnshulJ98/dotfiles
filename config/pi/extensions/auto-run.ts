@@ -119,7 +119,8 @@ export function editRefusal(target: string, cwd: string): string | undefined {
 	const trees = worktrees(cwd);
 	const runs = trees ? runsIn(trees) : [];
 	if (!trees || runs.length === 0) return undefined;
-	const path = physical(resolve(cwd, expandHome(target)));
+	// pi's own tools drop a leading @ from a path before resolving it
+	const path = physical(resolve(cwd, expandHome(target.replace(/^@/, ""))));
 	if (runs.some((root) => path === join(root, "AUTO.md"))) return undefined;
 	if (!trees.some((tree) => (runs.includes(tree.root) || tree.branch.startsWith("slice/")) && within(path, tree.root))) return undefined;
 	return (

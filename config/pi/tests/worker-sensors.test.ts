@@ -1,7 +1,7 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -259,7 +259,8 @@ test("settle check: lines added to a file that was already untracked count towar
 type Handler = (event: unknown) => Promise<unknown>;
 
 /** Commit `files` in a temp repo, arm the sensors there with `frontmatter`, run `body`, restore cwd and env. */
-async function withWorker(files: Record<string, string>, frontmatter: string, body: (repo: string, on: Map<string, Handler>, verdict: () => Promise<string>) => Promise<void>): Promise<void> {
+// `dirt` is written after the commit and before the sensors load: what the worker finds in the checkout.
+async function withWorker(files: Record<string, string>, frontmatter: string, body: (repo: string, on: Map<string, Handler>, verdict: () => Promise<string>) => Promise<void>, dirt: Record<string, string> = {}): Promise<void> {
 	const repo = mkdtempSync(join(tmpdir(), "ws-repo-"));
 	const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
 	git("init", "-q");
@@ -269,6 +270,7 @@ async function withWorker(files: Record<string, string>, frontmatter: string, bo
 	}
 	git("add", ".");
 	git("commit", "-qm", "init");
+	for (const [rel, text] of Object.entries(dirt)) writeFileSync(join(repo, rel), text);
 	const dir = mkdtempSync(join(tmpdir(), "ws-spec-"));
 	writeFileSync(join(dir, "spec.md"), `---\nfiles-allowed: ["**"]\ntests: "true"\n${frontmatter}---\nbody\n`);
 	const handlers = new Map<string, Handler>();
@@ -416,7 +418,31 @@ test("bash result: a change outside files-allowed gets a note naming it; one ins
 		assert.equal(noted.content[1].text.trim(), note);
 		assert.equal(noted.structuredContent.output, `ok\n${note}\n`);
 
+		// The undo the note asks for is not noted again: the file put back, and a new file removed.
+		assert.equal(await handlers.get("tool_call")?.({ ...outside, toolCallId: "t3" }), undefined);
+		writeFileSync(join(repo, "docs/b.md"), "b\n");
+		assert.equal(await handlers.get("tool_result")?.({ ...result, toolCallId: "t3" }), undefined);
+		writeFileSync(join(repo, "docs/new.md"), "n\n");
+		assert.equal(await handlers.get("tool_call")?.({ ...outside, toolCallId: "t4" }), undefined);
+		rmSync(join(repo, "docs/new.md"));
+		assert.equal(await handlers.get("tool_result")?.({ ...result, toolCallId: "t4" }), undefined);
+
 		// No matching snapshot: a no-op, not a throw.
 		assert.equal(await handlers.get("tool_result")?.({ ...result, toolCallId: "unknown" }), undefined);
 	});
+});
+
+test("what the worker finds in the checkout is not its doing, unless PI_WORKER_FROM_HEAD says the slice began at HEAD", async () => {
+	const files = { "src/a.ts": "a\n", "docs/b.md": "b\n" };
+	const left = { "docs/b.md": "left by the dispatch that failed\n", "docs/stray.md": "so was this\n" };
+	await withWorker(files, 'files-allowed: ["src/**"]\n', async (_repo, on, verdict) => {
+		assert.equal(await settleContent(on), undefined);
+		assert.match(await verdict(), /"verdict":"PASS"/);
+	}, left);
+	process.env.PI_WORKER_FROM_HEAD = "1";
+	try {
+		await withWorker(files, 'files-allowed: ["src/**"]\n', async (_repo, on) => assert.match((await settleContent(on)) ?? "", /files outside files-allowed: docs\/b\.md, docs\/stray\.md/), left);
+	} finally {
+		delete process.env.PI_WORKER_FROM_HEAD;
+	}
 });

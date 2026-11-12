@@ -171,8 +171,9 @@ You never fix by hand in an auto run. The only file you edit is
 `AUTO.md`; the harness blocks the rest of the run's checkout and every
 slice worktree while it exists.
 
-The script exits 1 and names the stop condition for: a slice that does
-not pass its rework; a PASS with anything under Blocked on me; a worker
+The script exits 1 and names the stop condition for: a slice worktree
+with changes in it before its first dispatch; a slice that does not
+pass its rework; a PASS with anything under Blocked on me; a worker
 timeout (rc 124); `AUTO.md` changed during a dispatch; a merge
 conflict; `tests` failing on `auto/<effort>`; a slice out of list
 order (the list is frozen). Stop as well for: a first dispatch that
