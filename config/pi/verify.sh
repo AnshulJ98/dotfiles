@@ -78,6 +78,14 @@ if [ -f "$SHIM" ]; then
   check "anthropic auth shim Claude Code version ${ccv:-<not found>} >= $CC_FLOOR" \
     "[ -n '$ccv' ] && [ \"\$(printf '%s\n%s\n' '$ccv' '$CC_FLOOR' | sort -V | head -1)\" = '$CC_FLOOR' ]"
 fi
+# Files loaded by path from inside a package (not an export): bin/scout loads the shim's
+# src/index.ts, split-diff.ts loads pi-tidy's split-diff.ts for renderSplitDiff.
+if [ -d "$AGENT/npm/node_modules/@gotgenes/pi-anthropic-auth" ]; then
+  check "anthropic auth shim src/index.ts is where bin/scout loads it" "[ -f '$AGENT/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts' ]"
+fi
+if [ -d "$AGENT/npm/node_modules/pi-tidy" ]; then
+  check "pi-tidy split-diff.ts exports renderSplitDiff (split-diff)" "grep -q '^export function renderSplitDiff' '$AGENT/npm/node_modules/pi-tidy/split-diff.ts'"
+fi
 # Extensions patch these prototypes and skip silently when a method is gone,
 # so a pi upgrade would turn them into no-ops.
 PI_PKG="$(node --no-warnings --input-type=module -e "import { piPackage } from '$DOT/tests/pi-package.ts'; console.log(piPackage())" 2>/dev/null)"

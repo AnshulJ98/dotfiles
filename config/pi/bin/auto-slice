@@ -51,6 +51,9 @@ esac
 SCOUT="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)/scout"
 COMMON="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || die 2 "not inside a git repo"
 NAME='^[a-z0-9][a-z0-9-]*$'
+# pi's bash tool does not time this script out (extensions/background.ts UNCAPPED): scout bounds a
+# dispatch and a review, and this bounds each tests command in merge.
+TESTS_SECS="${AUTO_SLICE_TESTS_SECS:-900}"
 
 # The worktree checked out on branch $1, or nothing
 tree_of() { git worktree list --porcelain | awk -v b="branch refs/heads/$1" '/^worktree /{w=substr($0,10)} $0==b{print w; exit}'; }
@@ -209,9 +212,10 @@ merge)
   while IFS= read -r run_tests; do
     echo "auto-slice: on $BRANCH: $run_tests" >&2
     tick "the tests are still running"
-    (cd "$RUN" && bash -c "$run_tests") >"$STATE/tests.log" 2>&1 </dev/null
+    (cd "$RUN" && timeout --foreground "$TESTS_SECS" bash -c "$run_tests") >"$STATE/tests.log" 2>&1 </dev/null
     rc=$?
     untick
+    [ "$rc" != 124 ] || die 1 "tests on $BRANCH after merging slice/$name: '$run_tests' still running after ${TESTS_SECS}s (a stop condition). The slice is merged and not ticked"
     [ "$rc" = 0 ] || {
       tail -n 30 "$STATE/tests.log" >&2
       die 1 "tests fail on $BRANCH after merging slice/$name: '$run_tests' exit $rc (a stop condition). The slice is merged and not ticked"

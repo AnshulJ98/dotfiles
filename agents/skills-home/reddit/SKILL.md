@@ -17,8 +17,11 @@ Read Reddit through the logged-in Brave session: `fetch_content` with
 - **Large results**: the fetch is stored; slice it with
   `get_search_content({ responseId, urlIndex, offset, limit })` or find
   passages with `findText` instead of returning it whole.
-- **Rate**: at most 20 Reddit fetches a minute. Batch several URLs in
-  one `fetch_content` call with `urls`.
+- **Rate**: at most 20 Reddit requests a minute, searches and thread
+  fetches together. Every URL counts, including each one in a batched
+  `fetch_content` call with `urls`, so a batch holds at most 20. When
+  the next request would be the 21st inside a minute, wait it out
+  (`sleep`) before sending.
 - `fetch_content` in `mode: "answer"` needs an enabled answer model; if
   it refuses, use the plain fetch and slice.
 

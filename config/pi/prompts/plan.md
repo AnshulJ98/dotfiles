@@ -157,11 +157,9 @@ Per slice, in this order:
    line of the slice list is not a plan: scout refuses a spec without
    steps and checks, and the script refuses one written before the
    worktree existed.
-3. `auto-slice dispatch <name> <spec-file>` runs the worker there. It
-   can take 15 minutes, longer than a foreground bash call may: use
-   `bg_run` and end the turn; its exit wakes you with the verdict.
-   Headless, where no wake comes, run it in the foreground with
-   `--timeout 540` after the spec file and a bash timeout of 600.
+3. `auto-slice dispatch <name> <spec-file>` runs the worker there, in
+   the foreground. It can take 15 minutes: the harness leaves
+   `auto-slice` out of the bash timeout, and scout bounds the worker.
 4. The sensors gate the slice; there is no review per slice. When the
    script says the slice passed, `auto-slice merge <name> "<type>:
    <description>"` commits, merges `--no-ff` into `auto/<effort>`, runs
@@ -188,7 +186,7 @@ unticked slice. "auto abandon" deletes `AUTO.md` and its exclude line,
 keeps the branches and worktrees, and reports.
 
 After the last slice comes the run's one review, before any merge into
-the base: `auto-slice review`, through `bg_run` as a dispatch is. It
+the base: `auto-slice review`, in the foreground. It
 runs `scout --review <base-sha>` in the run worktree, which reviews
 `git diff <base-sha>...HEAD` and `git log --first-parent
 <base-sha>..HEAD` against the spec in `AUTO.md` as `review.md` does,

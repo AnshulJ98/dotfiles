@@ -216,6 +216,13 @@ test("stops: a second failure, a third dispatch, a PASS with Blocked on me, test
 	assert.equal(red.status, 1);
 	assert.match(red.stderr, /tests fail on auto\/e after merging slice\/parse: 'test -f missing\.txt' exit 1/);
 	assert.match(autoMd(m), /^- \[ \] 1\. parse,/m, "merged, not ticked");
+
+	const slow = started();
+	slow.slice(["new", "parse"]);
+	assert.equal(slow.slice(["dispatch", "parse", slow.spec("parse", "sleep 5")], { FAKE_SCOUT: "pass" }).status, 0);
+	const hung = slow.slice(["merge", "parse", "feat: parse"], { AUTO_SLICE_TESTS_SECS: "1" });
+	assert.equal(hung.status, 1);
+	assert.match(hung.stderr, /'sleep 5' still running after 1s \(a stop condition\)/);
 });
 
 test("review: after the last slice, scout --review <base> from the run worktree", () => {

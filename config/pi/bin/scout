@@ -54,6 +54,8 @@
 # Bash: the child loads extensions/background.ts for its bash tool only: the
 # 2-minute default and 10-minute cap, the idle watchdog and $PI_HEARTBEAT.
 # bg_run stays off: pi -p exits when the turn ends, which kills the job.
+# extensions/bash-changes.ts writes each of the child's bash calls to the
+# bash log (~/.pi/agent/logs/bash.log), beside the main session's.
 #
 # Stall guard: the child loads extensions/stream-watchdog.ts (aborts a silent
 # model stream, resumes once). As an outer layer, scout kills a child whose
@@ -92,6 +94,8 @@ DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 PROMPT="$DIR/scout.prompt.md"
 SENSORS="$DIR/../extensions/worker-sensors.ts"
 UNCONFIRMED="Mark anything you couldn't confirm, and say where you looked."
+# Internal: the package's source entry, loaded by path (checked with
+# @gotgenes/pi-anthropic-auth 3.4.4; verify.sh [tools] fails when it moves).
 SHIM="$HOME/.pi/agent/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts"
 # Under the sessions tree so pi-usage-widget (recursive walk) counts scout
 # spend in today/all-time; /resume lists only sessions/<cwd>/, so no leak.
@@ -347,9 +351,11 @@ if [ "$RW" = 1 ]; then
     BRIEF_FILE="$SESSIONS/spec.md"
     BRIEF=("@$BRIEF_FILE")
   fi
-  TOOLS="$TOOLS,edit,write"
+  # Workers call their tools through codemode scripts, as the main session does
+  # (settings.json codemode.mode). -ne drops the built-in extensions, so name it.
+  TOOLS="$TOOLS,edit,write,codemode"
   PROMPT="$DIR/worker.prompt.md"
-  WORKER=(-e "$SENSORS")
+  WORKER=(-e "$SENSORS" -e builtin:codemode)
   export PI_WORKER_SPEC="$(cd "$(dirname "$BRIEF_FILE")" && pwd)/$(basename "$BRIEF_FILE")"
   export PI_WORKER_REPORT="$SESSIONS/verdict.json"
   : "${THINKING:=high}" "${TIMEOUT:=900}"
@@ -366,7 +372,7 @@ fi
 # when present, otherwise pi's native auth (API key or auth.json) is used.
 EXT=()
 [ -f "$SHIM" ] && EXT=(-e "$SHIM")
-for ext in stream-watchdog bedrock-reasoning background; do
+for ext in stream-watchdog bedrock-reasoning background bash-changes; do
   [ -f "$DIR/../extensions/$ext.ts" ] && EXT+=(-e "$DIR/../extensions/$ext.ts")
 done
 if [ "$RW" = 1 ] || [ "$THINKING" = xhigh ]; then STALE_SECS="${SCOUT_STALE_SECS:-900}"; else STALE_SECS="${SCOUT_STALE_SECS:-600}"; fi

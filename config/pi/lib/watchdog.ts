@@ -42,6 +42,8 @@ export interface Track {
  * threshold killed it. ps reports 0.01s steps; this only absorbs float noise.
  */
 export const CPU_EPSILON = 1e-6;
+/** Starts the line background.ts adds to a bash result when it kills the command; the bash log reads it back. */
+export const WATCHDOG_TAG = "[watchdog]";
 /** A tick gap longer than this many ticks (Mac sleep, a blocked event loop) restarts the quiet clocks. */
 export const GAP_TICKS = 3;
 

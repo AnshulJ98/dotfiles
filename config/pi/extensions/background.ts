@@ -33,6 +33,7 @@ import {
 	type Reading,
 	startTrack,
 	type Track,
+	WATCHDOG_TAG,
 } from "../lib/watchdog.ts";
 
 const run = promisify(execFile);
@@ -41,8 +42,9 @@ const TAIL_LINES = 20;
 const TAIL_BYTES = 64 * 1024;
 const BASH_DEFAULT_TIMEOUT = 120;
 const BASH_MAX_TIMEOUT = 600;
-// Scouts are child pi runs that routinely exceed the 10-minute cap; bin/scout bounds them itself
-const UNCAPPED = /(^|[;&|(])\s*(\S*\/)?scout(\s|$)/;
+// Scouts are child pi runs that routinely exceed the 10-minute cap; bin/scout bounds them itself.
+// bin/auto-slice runs a scout (dispatch, review) or tests under its own 15-minute timeout (merge).
+const UNCAPPED = /(^|[;&|(])\s*(\S*\/)?(scout|auto-slice)(\s|$)/;
 const WAKE_DEBOUNCE_MS = 1000;
 const MAX_WAKES = 10;
 const MAX_SHOWN_JOBS = 3;
@@ -468,7 +470,7 @@ export default function (pi: ExtensionAPI) {
 					options.onData(data);
 				};
 				const result = await ops.exec(watchPrefix(fg.watch) + command, cwd, { ...options, onData });
-				if (fg.killed) options.onData(Buffer.from(`\n[watchdog] ${fg.killed}\n`));
+				if (fg.killed) options.onData(Buffer.from(`\n${WATCHDOG_TAG} ${fg.killed}\n`));
 				return result;
 			} finally {
 				foreground.delete(fg);
