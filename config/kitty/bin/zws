@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
-#   zws new [--ask]      new workspace named after the current folder (--ask prompts for it)
-#   zws create NAME CWD  used by --ask
+#   zws new [--ask | --window]  new workspace on the current folder (--ask prompts for a name,
+#                               --window opens it in an OS window of its own)
 #   zws switch N | next | prev
+#   zws agent N                 focus the Nth agent, in the sidebar's order
+#   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
+# The session name is fixed. What the sidebar and picker show is the ws_name user var of its
+# panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
 set -u
 export PATH=/opt/homebrew/bin:$PATH
 DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
@@ -11,7 +15,7 @@ mkdir -p "$DIR"
 self=$(realpath "$0")
 
 # Prints: active session, active pane's folder, then open workspaces in tab order, one per line.
-# kitty reports the folder of `zmx attach` for held panes, so ask the session's shell instead.
+# kitty reports the folder of 'zmx attach' for held panes, so ask the session's shell instead.
 state() {
   kitten @ ls | /usr/bin/python3 -c '
 import json, subprocess, sys
@@ -34,24 +38,47 @@ print(cur); print(cwd); print("\n".join(order))'
 
 go() { kitten @ action goto_session "$DIR/$1.kitty-session"; }
 
-create() { # name cwd
-  printf 'cd %s\nlaunch\n' "$2" > "$DIR/$1.kitty-session"
+# A free session name for a folder: its lower-cased name, then -2, -3...
+unique() { # cwd
+  local open base name n=2
+  open=$(state | tail -n +3)
+  base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$1" = "$HOME" ] && base=home
+  name=$base
+  while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
+  echo "$name"
+}
+
+create() { # name cwd [shown-name] [window]
+  {
+    [ -n "${4:-}" ] && echo new_os_window
+    printf 'cd %s\n' "$2"
+    if [ -n "${3:-}" ]; then printf 'launch --var %q\n' "ws_name=$3"; else echo launch; fi
+  } > "$DIR/$1.kitty-session"
   go "$1"
 }
 
+# Run a prompt in an overlay over the active pane. In the script $0 is this file.
+overlay() { # cwd script args...
+  local cwd=$1 script=$2; shift 2
+  kitten @ launch --type=overlay --cwd "$cwd" bash -c "export PATH=/opt/homebrew/bin:\$PATH; $script" "$self" ${1+"$@"} >/dev/null
+}
+# wt's error would vanish with the overlay, so keep it up until a key.
+PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
+
 case ${1:-} in
   new)
-    st=$(state); cwd=$(sed -n 2p <<<"$st"); cwd=${cwd:-$HOME}; open=$(tail -n +3 <<<"$st")
-    base=$(basename "$cwd" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$cwd" = "$HOME" ] && base=home
-    name=$base; n=2
-    while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
-    if [ "${2:-}" = --ask ]; then
-      kitten @ launch --type=overlay --cwd "$cwd" bash -c \
-        'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$n" "$2"' "$self" "$name" "$cwd" >/dev/null
-    else
-      create "$name" "$cwd"
-    fi ;;
-  create) create "$2" "$3" ;;
+    cwd=$(state | sed -n 2p); cwd=${cwd:-$HOME}; name=$(unique "$cwd")
+    case ${2:-} in
+      --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n"' "$name" "$cwd" ;;
+      --window) create "$name" "$cwd" '' window ;;
+      *) create "$name" "$cwd" ;;
+    esac ;;
+  create) create "$2" "$3" "${4:-}" ;;
+  here) # a workspace on $PWD (wt runs this in the worktree): the one already there, or a new one
+    for f in "$DIR"/*.kitty-session; do
+      [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && { kitten @ action goto_session "$f"; exit; }
+    done
+    create "$(unique "$PWD")" "$PWD" ;;
   switch|next|prev)
     st=$(state); cur=$(sed -n 1p <<<"$st"); IFS=$'\n' read -d '' -r -a ws < <(tail -n +3 <<<"$st" | sed '/^$/d')
     [ ${#ws[@]} -eq 0 ] && exit 0
@@ -62,5 +89,29 @@ case ${1:-} in
       prev) i=$(( (i - 1 + ${#ws[@]}) % ${#ws[@]} )) ;;
     esac
     go "${ws[$i]}" ;;
-  *) sed -n '2,6p' "$0" >&2; exit 2 ;;
+  agent) # panes that report a program status, in tab order: the sidebar's agents list
+    read -r ws id cur < <(kitten @ ls | /usr/bin/python3 -c '
+import json, sys
+agents, cur = [], "-"
+for o in json.load(sys.stdin):
+    for t in o["tabs"]:
+        for w in t["windows"]:
+            if o["is_active"] and t["is_active"] and w["is_active"]: cur = w.get("session_name") or "-"
+            if w["program_status"] and w.get("session_name") and w["user_vars"].get("role") != "sidebar":
+                agents.append((w["session_name"], w["id"]))
+n = int(sys.argv[1]) - 1
+if 0 <= n < len(agents): print(*agents[n], cur)' "$2")
+    [ -n "${id:-}" ] || exit 0
+    # switch first, or the tab bar keeps showing the old workspace's tabs
+    [ "$ws" != "$cur" ] && go "$ws"
+    kitten @ focus-window --match "id:$id" ;;
+  rename) # empty answer: back to the folder's name
+    overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2" ;;
+  close) kitten @ action close_session "$2" ;;
+  worktree) # wt makes or picks the worktree and runs 'zws here' inside it
+    case $2 in
+      new) overlay "$3" 'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; wt switch -c "$b" --no-cd -x "$0" -- here '"$PAUSE" ;;
+      open) overlay "$3" 'wt switch --no-cd -x "$0" -- here '"$PAUSE" ;;
+    esac ;;
+  *) sed -n '2,11p' "$0" >&2; exit 2 ;;
 esac

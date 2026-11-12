@@ -3,7 +3,8 @@
 
 workspaces.py starts one in every workspace tab and writes a byte to the visible one's stdin
 when something it shows changes; it redraws from 'kitten @ ls' only then. A click switches
-workspace or focuses an agent's pane. Model and context use come from pi (pi-holder.ts).
+workspace or focuses an agent's pane; a right click on a space opens a menu under it (bin/zws
+does the work). Model and context use come from pi (pi-holder.ts).
 """
 from __future__ import annotations  # /usr/bin/python3 is 3.9
 
@@ -22,14 +23,16 @@ import tty
 os.environ['PATH'] = '/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:' + os.environ.get('PATH', '')
 TO = os.environ.get('KITTY_LISTEN_ON', '')
 DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
+ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
 ME = int(os.environ.get('KITTY_WINDOW_ID', '0'))
 RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']  # least to most urgent
 # glyph, SGR colour (terminal palette, so it follows the kitty theme)
 ICON = {'': ('·', '39'), 'idle': ('○', '32'), 'working': ('◐', '33'), 'done': ('●', '36'),
         'error': ('✗', '31'), 'blocked': ('◉', '31')}
 BAND = '48;5;8;'  # selected row
+MENU = (('Rename', 'rename'), ('Close', 'close'), ('New worktree', 'new'), ('Open worktree…', 'open'))
 MOUSE = re.compile(rb'\x1b\[<(\d+);(\d+);(\d+)([Mm])')
-_git: dict[str, tuple[float, str, str]] = {}
+_git: dict[str, tuple[float, str, str, str, str, str]] = {}
 
 
 def run(*cmd: str) -> str:
@@ -61,23 +64,29 @@ def live_cwd(holder: str, fallback: str) -> str:
     return next((line[1:] for line in out.splitlines() if line.startswith('n')), fallback)
 
 
-def git_info(name: str, holder: str, cwd: str) -> tuple[str, str]:
-    """(branch, ahead and behind counts) of a workspace's first pane, cached for 3 s."""
+def folder_info(name: str, sp: dict) -> tuple[str, str, str, str]:
+    """(folder name, branch, ahead and behind counts, folder) of a workspace's first pane.
+
+    The folder name is the repo's when inside one. Cached for 3 s, or until the pane's title
+    changes, which it does on cd."""
     now = time.monotonic()
     hit = _git.get(name)
-    if hit and now - hit[0] < 3:
-        return hit[1], hit[2]
-    cwd = live_cwd(holder, cwd)
-    branch = run('git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip()
+    if hit and now - hit[0] < 3 and hit[1] == sp['title']:
+        return hit[2:]
+    cwd = live_cwd(sp['holder'], sp['cwd'])
+    top = run('git', '-C', cwd, 'rev-parse', '--show-toplevel').strip()
+    branch = run('git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip() if top else ''
     counts = run('git', '-C', cwd, 'rev-list', '--left-right', '--count', '@{u}...HEAD').split() if branch else []
     behind, ahead = (counts + ['0', '0'])[:2]
     status = ' '.join(x for x in ('↑' + ahead if ahead != '0' else '', '↓' + behind if behind != '0' else '') if x)
-    _git[name] = now, branch, status
-    return branch, status
+    shown = 'home' if cwd == os.path.expanduser('~') else os.path.basename(top or cwd) or cwd
+    _git[name] = now, sp['title'], shown, branch, status, cwd
+    return shown, branch, status, cwd
 
 
 def model() -> tuple[dict[str, dict], list[dict], str]:
-    """(spaces, agents, current space), all in tab order: the order 'zws switch N' uses."""
+    """(spaces, agents, current space), all in tab order: the order 'zws switch N' and
+    'zws agent N' use."""
     try:
         oswins = json.loads(kitten('ls'))
     except ValueError:
@@ -95,8 +104,11 @@ def model() -> tuple[dict[str, dict], list[dict], str]:
             if not name:
                 continue
             sp = spaces.setdefault(name, {'states': [], 'tabs': 0, 'holder': panes[0]['user_vars'].get('holder', ''),
-                                          'cwd': panes[0]['cwd']})
+                                          'cwd': panes[0]['cwd'], 'title': panes[0]['title'], 'named': ''})
             sp['tabs'] += 1
+            # a rename marks the panes and sidebars of that moment, and those panes may close
+            sp['named'] = sp['named'] or next((w['user_vars']['ws_name'] for w in tab['windows']
+                                               if w['user_vars'].get('ws_name')), '')
             for w in panes:
                 states = [r['state'] for r in w['program_status']]
                 sp['states'] += states
@@ -105,10 +117,13 @@ def model() -> tuple[dict[str, dict], list[dict], str]:
                     agents.append({'id': w['id'], 'state': worst(states), 'app': w['program_status'][0]['app'] or 'agent',
                                    'space': name, 'tab': sp['tabs'], 'on': mine and w['is_active'],
                                    'model': v.get('pi_model', ''), 'ctx': v.get('pi_ctx', '')})
+    for name, sp in spaces.items():
+        sp['folder'], sp['branch'], sp['status'], sp['live'] = folder_info(name, sp)
+        sp['shown'] = sp['named'] or sp['folder']
     return spaces, agents, current
 
 
-def render(clicks: list) -> None:
+def render(clicks: list, menu: str) -> None:
     cols, rows = shutil.get_terminal_size((24, 40))
     spaces, agents, current = model()
 
@@ -125,14 +140,16 @@ def render(clicks: list) -> None:
     for name, sp in spaces.items():
         glyph, colour = ICON.get(worst(sp['states']), ICON[''])
         on, go = name == current, ('space', name)
-        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(name, cols - 4), '1;97' if on else '97')], on), go))
-        branch, status = git_info(name, sp['holder'], sp['cwd'])
-        if branch:
-            room = cols - 4 - (len(status) + 1 if status else 0)
-            segs = [('   ', ''), (fit(branch, room), '39')]
-            for part in status.split():
+        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(sp['shown'], cols - 4), '1;97' if on else '97')], on), go))
+        if sp['branch']:
+            room = cols - 4 - (len(sp['status']) + 1 if sp['status'] else 0)
+            segs = [('   ', ''), (fit(sp['branch'], room), '39')]
+            for part in sp['status'].split():
                 segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
             top.append((line(segs, on), go))
+        if name == menu:  # the worktree entries need a repo
+            for label, what in MENU if sp['branch'] else MENU[:2]:
+                top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['live'])))
 
     bottom: list[tuple[str, tuple | None]] = []
     if agents:
@@ -140,7 +157,7 @@ def render(clicks: list) -> None:
     for a in agents:  # same rows whichever workspace is shown
         glyph, colour = ICON.get(a['state'], ICON[''])
         go = ('pane', a['id'], '' if a['space'] == current else a['space'])
-        label = fit(f"{a['app']} · {a['space']} {a['tab']}", cols - 4)
+        label = fit(f"{a['app']} · {spaces[a['space']]['shown']} {a['tab']}", cols - 4)
         bottom.append((line([(' ', ''), (glyph + ' ', colour), (label, '1;97' if a['on'] else '97')], a['on']), go))
         if a['model'] or a['ctx']:
             tail = f" · {a['ctx']}" if a['model'] and a['ctx'] else a['ctx']
@@ -157,9 +174,13 @@ def render(clicks: list) -> None:
 def act(action: tuple | None) -> None:
     if action is None:
         return
-    kind, arg, *space = action
-    if kind == 'space' or space[0]:  # switch first, or the tab bar keeps showing the old workspace's tabs
-        kitten('action', 'goto_session', os.path.join(DIR, f"{arg if kind == 'space' else space[0]}.kitty-session"))
+    kind, arg, *rest = action
+    if kind == 'menu':
+        name, cwd = rest
+        run(ZWS, *{'rename': ('rename', name), 'close': ('close', name)}.get(arg, ('worktree', arg, cwd)))
+        return
+    if kind == 'space' or rest[0]:  # switch first, or the tab bar keeps showing the old workspace's tabs
+        kitten('action', 'goto_session', os.path.join(DIR, f"{arg if kind == 'space' else rest[0]}.kitty-session"))
     if kind == 'pane':
         kitten('focus-window', '--match', f'id:{arg}')
 
@@ -168,6 +189,7 @@ def main() -> None:
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     clicks: list = []
+    menu = ''  # the space whose right-click menu is open
     wake_r, wake_w = os.pipe()  # a resize lands here, so select() returns and the loop redraws
     os.set_blocking(wake_w, False)
     signal.set_wakeup_fd(wake_w)
@@ -175,7 +197,7 @@ def main() -> None:
     try:
         tty.setraw(fd)
         sys.stdout.write('\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J')
-        render(clicks)
+        render(clicks, menu)
         while True:
             ready, _, _ = select.select([fd, wake_r], [], [])
             if wake_r in ready:
@@ -186,9 +208,16 @@ def main() -> None:
                 if not data:
                     return
                 for m in MOUSE.finditer(data):
-                    if m[4] == b'M' and int(m[1]) == 0 and int(m[3]) - 1 < len(clicks):
-                        act(clicks[int(m[3]) - 1])
-            render(clicks)
+                    button, row = int(m[1]), int(m[3]) - 1
+                    if m[4] != b'M' or button not in (0, 2) or row >= len(clicks):
+                        continue
+                    action = clicks[row]
+                    if button == 2:  # right click: open the menu of that space, or close it
+                        menu = action[1] if action and action[0] == 'space' and action[1] != menu else ''
+                    else:
+                        menu = ''
+                        act(action)
+            render(clicks, menu)
     finally:
         sys.stdout.write('\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h')
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)

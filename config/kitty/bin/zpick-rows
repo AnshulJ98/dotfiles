@@ -6,9 +6,12 @@ usage: zpick-rows VIEW [WINDOW]   VIEW is all | detached (detached sessions and 
 only); WINDOW is the pane the picker was opened from, whose workspace is marked current.
 Each row: kind, target, holder, cwd, clients, display; tab separated. kind is ws | tab | pane |
 det | closed; target is the session name, tab id, window id, zmx session or session file.
+clients is 0 only for a session no terminal is attached to. Inside fzf (FZF_COLUMNS) the right
+hand columns are set flush against the preview.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -20,6 +23,11 @@ ACCENT = '\033[38;2;68;221;255m'
 STATUS = {'working': '\033[38;2;255;136;68m', 'blocked': '\033[38;2;255;85;85m',
           'done': '\033[38;2;102;255;136m', 'running': '', 'idle': '\033[2m', 'shell': '\033[2m'}
 DIM, BOLD, OFF = '\033[2m', '\033[1m', '\033[0m'
+ANSI = re.compile(r'\033\[[0-9;]*m')
+# fzf's list: its width less the preview and the pointer, marker, scrollbar and border columns
+WIDTH = int(os.environ.get('FZF_COLUMNS') or 0) - int(os.environ.get('FZF_PREVIEW_COLUMNS') or 0) - 5
+if WIDTH < 20:  # not in fzf
+    WIDTH = 96
 
 
 def run(*cmd: str) -> str:
@@ -78,8 +86,9 @@ def foreground() -> dict[int, str]:
     return {pid: name(pid) for pid in procs}
 
 
-def git_ref(cwd: str) -> str:
-    """'branch', or 'branch · worktree of repo' in a linked worktree; read from .git, no subprocess."""
+def git_ref(cwd: str) -> tuple[str, str]:
+    """('branch' or 'branch · worktree of repo', the checkout's folder); read from .git, no
+    subprocess. ('', '') outside a repo."""
     d = cwd
     while d and d != '/':
         git = os.path.join(d, '.git')
@@ -91,20 +100,26 @@ def git_ref(cwd: str) -> str:
                     of = os.path.basename(git.split('/.git/worktrees/')[0])
             head = open(os.path.join(git, 'HEAD')).read().strip()
             name = head.rpartition('refs/heads/')[2] if head.startswith('ref:') else head[:7]
-            return name + (f' · worktree of {of}' if of else '')
+            return name + (f' · worktree of {of}' if of else ''), d
         except (OSError, IndexError):
             d = os.path.dirname(d)
-    return ''
+    return '', ''
 
 
 def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: str) -> str:
     return '\t'.join((kind, target, holder, cwd, clients, display))
 
 
-def pane_cols(label: str, proc: str, status: str, when: str, holder: str) -> str:
-    color = STATUS.get(status, '')
-    return (f'{fit(label, 22)} {fit(proc, 8)} {color}{fit(status, 8)}{OFF} {DIM}{when:>3}  '
-            f'{holder}{OFF}')
+def flush(left: str, rights: list[str], label: str = '') -> str:
+    """left, the label, then the first of rights that leaves the label room, set against the
+    right edge. rights go from the fullest to the leanest; in a narrow list none may fit."""
+    for right in [*rights, '']:
+        room = WIDTH - len(ANSI.sub('', left)) - len(ANSI.sub('', right)) - 1
+        if room >= (12 if label else 0):
+            break
+    if len(label) > room:
+        label = label[:max(0, room - 1)] + '…'
+    return left + label + ' ' * (room - len(label) + 1) + right
 
 
 def main() -> None:
@@ -131,55 +146,67 @@ def main() -> None:
         status = st or ('shell' if proc in SHELLS else 'running')
         return proc, status, when
 
-    rows, held, open_ws = [], set(), []
+    held, open_ws = set(), []
     workspaces: dict[str, list[dict]] = {}
+    named: dict[str, str] = {}  # names given with rename; on panes and sidebars
     current = ''
     for o in kitty:
         for t in o['tabs']:
             ws = next((w.get('session_name', '') for w in t['windows'] if w.get('session_name')), '')
             if any(w['user_vars'].get('role') == 'zgoto' for w in t['windows']):
                 continue
+            named[ws] = named.get(ws) or next((w['user_vars']['ws_name'] for w in t['windows']
+                                               if w['user_vars'].get('ws_name')), '')
             t['windows'] = [w for w in t['windows'] if w['user_vars'].get('role') != 'sidebar'] or t['windows']
             workspaces.setdefault(ws, []).append(t)
             for w in t['windows']:
                 held.add(w['user_vars'].get('holder', ''))
                 if str(w['id']) == origin or (not origin and o['is_active'] and t['is_active'] and w['is_active']):
                     current = ws
+    det = [z for name, z in zs.items() if name not in held]
+    hw = max([len(h) for h in held] + [len(z['name']) for z in det] + [0])  # the session column
+
+    def pane_cols(proc: str, status: str, when: str, holder: str) -> list[str]:
+        state = f'{STATUS.get(status, "")}{fit(status, 8)}{OFF}'
+        return [f'{fit(proc, 8)} {state} {DIM}{when:>3}  {holder:>{hw}}{OFF}',
+                f'{fit(proc, 8)} {state} {DIM}{when:>3}{OFF}', state]
+
+    rows = []
     if view == 'all':
         for ws, tabs in workspaces.items():
             open_ws.append(ws)
-            first = next((w for t in tabs for w in t['windows'] if w['is_active']), tabs[0]['windows'][0])
-            mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
+            panes = [w for t in tabs for w in t['windows']]
+            first = panes[0]  # names the workspace, as in the sidebar
             holder = first['user_vars'].get('holder', '')
-            ref = git_ref(zs.get(holder, {}).get('cwd') or first.get('cwd', ''))
-            rows.append(row('ws', ws, holder, first.get('cwd', ''), '',
-                            f'{mark} {BOLD}{ws or "(no workspace)"}{OFF} {DIM}{len(tabs)} tab'
-                            f'{"s" if len(tabs) > 1 else ""}{OFF}{"  " + ref if ref else ""}'))
+            cwd = zs.get(holder, {}).get('cwd') or first.get('cwd', '')
+            ref, top = git_ref(cwd)
+            shown = named[ws] or ('home' if cwd == HOME else os.path.basename(top or cwd)) or ws
+            mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
+            rows.append(row('ws', ws, holder, first.get('cwd', ''), '', flush(
+                f'{mark} {BOLD}{shown if ws else "(no workspace)"}{OFF} {DIM}{len(tabs)} tab{"s" if len(tabs) > 1 else ""}{OFF}',
+                [f'{DIM}{ref}{OFF}'])))
             for ti, t in enumerate(tabs):
                 last_t = ti == len(tabs) - 1
                 active = next((w for w in t['windows'] if w['is_active']), t['windows'][0])
                 rows.append(row('tab', str(t['id']), active['user_vars'].get('holder', ''), active.get('cwd', ''), '',
-                                f'  {"└─" if last_t else "├─"} {fit(t["title"], 40)}'))
+                                flush(f'  {"└─" if last_t else "├─"} ', [], t['title'])))
                 for wi, w in enumerate(t['windows']):
                     holder = w['user_vars'].get('holder', '')
-                    proc, status, when = proc_status(w, holder)
                     stem = '   ' if last_t else '│  '
                     branch = '└─' if wi == len(t['windows']) - 1 else '├─'
                     rows.append(row('pane', str(w['id']), holder, w.get('cwd', ''), '1',
-                                    f'  {stem}{branch} ' + pane_cols(w['title'], proc, status, when, holder)))
+                                    flush(f'  {stem}{branch} ', pane_cols(*proc_status(w, holder), holder), w['title'])))
     else:
         open_ws = list(workspaces)
 
-    det = [z for name, z in zs.items() if name not in held]
     if det:
         rows.append(row('hdr', '', '', '', '', f'{DIM}detached{OFF}'))
         for i, z in enumerate(det):
-            proc, status, when = proc_status({}, z['name'])
             other = z.get('clients', '0') != '0'
             branch = '└─' if i == len(det) - 1 else '├─'
-            rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'),
-                            f'  {branch} ' + pane_cols(short(z['cwd']), proc, status, when,
-                                                         z['name'] + (' · other kitty' if other else ''))))
+            rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
+                f'  {branch} ', pane_cols(*proc_status({}, z['name']), z['name']),
+                short(z['cwd']) + (' · other kitty' if other else ''))))
     try:
         files = sorted(f for f in os.listdir(DIR) if f.endswith('.kitty-session'))
     except OSError:
@@ -191,11 +218,13 @@ def main() -> None:
             path = os.path.join(DIR, f)
             text = open(path, errors='replace').read()
             tabs = max(1, text.count('\nnew_tab') + text.startswith('new_tab'))
-            ref = git_ref(next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), ''))
+            ref = git_ref(next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), ''))[0]
+            count = f'{tabs} tab{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path)):>3}'
             branch = '└─' if i == len(closed) - 1 else '├─'
-            rows.append(row('closed', path, '', '', '',
-                            f'  {branch} {fit(f[:-len(".kitty-session")], 22)} {DIM}{tabs} tab'
-                            f'{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path))}{OFF}{"  " + ref if ref else ""}'))
+            rows.append(row('closed', path, '', '', '', flush(
+                f'  {branch} ',
+                [f'{DIM}{ref + "  " if ref else ""}{count}{OFF}', f'{DIM}{count}{OFF}'],
+                f[:-len('.kitty-session')])))
     print('\n'.join(rows))
 
 
