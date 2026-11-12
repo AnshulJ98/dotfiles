@@ -3,6 +3,8 @@
 export interface TrialRecord {
 	task: string; role: string; model: string; thinking: string; trial: number;
 	pass: boolean; seconds: number; cost: number; leak: boolean; infra: boolean;
+	/** review records: defects found and defects asked about in the trial */
+	found?: number; of?: number;
 }
 
 export interface CellSummary {
@@ -20,6 +22,12 @@ export interface CellSummary {
 	/** tasks whose counted trials disagree */
 	flaky: string[];
 	meanCost: number; meanSeconds: number; leaks: number; infra: number;
+	/**
+	 * Review cells whose counted records carry found/of: defects found and asked about, summed over counted trials, and a
+	 * lower bound on the defects whose judgement differs across a task's trials (most found minus least found, per task;
+	 * the record keeps counts, not which defects).
+	 */
+	found?: number; of?: number; flakyDefects?: number;
 }
 
 export interface RoleSummary {
@@ -29,15 +37,18 @@ export interface RoleSummary {
 	saturated: string[];
 }
 
-export interface BaselineCell { passRate: number; tasks: number; flaky: number }
+/** Review cells also carry defect recall (found/of), defects per trial and flakyDefects; the gate then compares those. */
+export interface BaselineCell { passRate: number; tasks: number; flaky: number; recall?: number; defects?: number; flakyDefects?: number }
 
 /** role -> cell -> numbers; one cell may appear under several roles. */
 export type RoleCells = Record<string, Record<string, BaselineCell>>;
 
 export interface GateRow {
 	role: string; cell: string; baseline: BaselineCell; current: BaselineCell;
-	/** pass-rate drop in tasks, and the allowed drop: the larger flaky-task count of the two sides */
-	drop: number; allowed: number; fail: boolean;
+	/** drop in baseline tasks (pass rate) or in defects (recall), and the allowed drop: the larger flaky count of the two sides */
+	drop: number; allowed: number; unit: "task" | "defect";
+	/** fewer counted tasks than the baseline ran: always a fail */
+	short: boolean; fail: boolean;
 }
 
 const EPSILON = 1e-9;
@@ -50,7 +61,11 @@ function asRecord(value: unknown): TrialRecord | undefined {
 	if (typeof task !== "string" || typeof role !== "string" || typeof model !== "string" || typeof thinking !== "string") return undefined;
 	if (typeof trial !== "number" || typeof pass !== "boolean") return undefined;
 	const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
-	return { task, role, model, thinking, trial, pass, seconds: num(v.seconds), cost: num(v.cost), leak: v.leak === true, infra: v.infra === true };
+	const count = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+	return {
+		task, role, model, thinking, trial, pass, seconds: num(v.seconds), cost: num(v.cost), leak: v.leak === true, infra: v.infra === true,
+		...(count(v.found) && count(v.of) ? { found: v.found, of: v.of } : {}),
+	};
 }
 
 /** Parse JSON lines; lines that are not JSON or lack the fields above are skipped and counted. */
@@ -69,6 +84,18 @@ export function parseRecords(text: string): { records: TrialRecord[]; malformed:
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
 
+function recallOf(counted: TrialRecord[]): Pick<CellSummary, "found" | "of" | "flakyDefects"> {
+	const judged = counted.filter((r) => r.found !== undefined && r.of !== undefined);
+	if (judged.length === 0) return {};
+	const byTask = new Map<string, number[]>();
+	for (const r of judged) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r.found ?? 0]);
+	const spread = [...byTask.values()].map((xs) => Math.max(...xs) - Math.min(...xs));
+	return {
+		found: judged.reduce((n, r) => n + (r.found ?? 0), 0), of: judged.reduce((n, r) => n + (r.of ?? 0), 0),
+		flakyDefects: spread.reduce((a, b) => a + b, 0),
+	};
+}
+
 function summarizeCell(role: string, cell: string, records: TrialRecord[]): CellSummary {
 	const counted = records.filter((r) => !r.leak && !r.infra);
 	const byTask = new Map<string, boolean[]>();
@@ -86,6 +113,7 @@ function summarizeCell(role: string, cell: string, records: TrialRecord[]): Cell
 		meanSeconds: mean(counted.map((r) => r.seconds)),
 		leaks: records.filter((r) => r.leak).length,
 		infra: records.filter((r) => r.infra).length,
+		...(role === "review" ? recallOf(counted) : {}),
 	};
 }
 
@@ -111,28 +139,39 @@ export function compare(a: CellSummary, b: CellSummary): "no difference" | numbe
 	return Math.abs(gap) * Math.max(a.tasks, b.tasks) <= noise + EPSILON ? "no difference" : gap;
 }
 
-/** The gate's view of a run: role -> cell -> pass rate, tasks, flaky count. */
+/** The gate's view of a run: role -> cell -> pass rate, tasks, flaky count (review: also recall). Own keys only, so "__proto__" survives. */
 export function baselineCells(roles: RoleSummary[]): RoleCells {
-	const out: RoleCells = {};
-	for (const { role, cells } of roles) {
-		out[role] = Object.fromEntries(cells.map((c) => [c.cell, { passRate: c.passRate, tasks: c.tasks, flaky: c.flaky.length }]));
-	}
-	return out;
+	const cellOut = (c: CellSummary): BaselineCell => ({
+		passRate: c.passRate, tasks: c.tasks, flaky: c.flaky.length,
+		...(c.found !== undefined && c.of !== undefined && c.of > 0 && c.counted > 0
+			? { recall: c.found / c.of, defects: c.of / c.counted, flakyDefects: c.flakyDefects ?? 0 }
+			: {}),
+	});
+	return Object.fromEntries(roles.map(({ role, cells }) => [role, Object.fromEntries(cells.map((c) => [c.cell, cellOut(c)]))]));
 }
 
-/** Compare (role, cell) pairs present in both. One fails when its pass rate is below baseline by more than the flaky-task count (in tasks). */
+/**
+ * Compare (role, cell) pairs present in both. One fails when it counted fewer tasks than the baseline, or when its
+ * pass rate is below baseline by more than the flaky-task count (drop taken in baseline tasks). When both sides have
+ * defect recall (review), recall is compared instead, in defects, against the larger flaky-defect count.
+ */
 export function gate(baseline: RoleCells, current: RoleCells): GateRow[] {
+	const has = (o: object, k: string): boolean => Object.hasOwn(o, k);
 	return Object.keys(baseline)
 		.sort()
-		.filter((role) => role in current)
+		.filter((role) => has(current, role))
 		.flatMap((role) =>
 			Object.keys(baseline[role])
 				.sort()
-				.filter((cell) => cell in current[role])
+				.filter((cell) => has(current[role], cell))
 				.map((cell): GateRow => {
 					const [b, c] = [baseline[role][cell], current[role][cell]];
-					const [drop, allowed] = [(b.passRate - c.passRate) * c.tasks, Math.max(b.flaky, c.flaky)];
-					return { role, cell, baseline: b, current: c, drop, allowed, fail: drop > allowed + EPSILON };
+					const [br, cr, bd] = [b.recall, c.recall, b.defects];
+					const byRecall = br !== undefined && cr !== undefined && bd !== undefined;
+					const drop = byRecall ? (br - cr) * bd : (b.passRate - c.passRate) * b.tasks;
+					const allowed = byRecall ? Math.max(b.flakyDefects ?? 0, c.flakyDefects ?? 0) : Math.max(b.flaky, c.flaky);
+					const short = c.tasks < b.tasks;
+					return { role, cell, baseline: b, current: c, drop, allowed, unit: byRecall ? "defect" : "task", short, fail: short || drop > allowed + EPSILON };
 				}),
 		);
 }

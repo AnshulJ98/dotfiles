@@ -85,6 +85,75 @@ test("gate: table", () => {
 	);
 	assert.deepEqual(rows.map((r) => [r.role, r.cell, r.fail]), [["review", "b", false], ["worker", "b", true]]);
 });
+test("gate: a cell with fewer counted tasks than the baseline fails, even at a full pass rate or with no tasks at all", () => {
+	const cell = (passRate: number, tasks: number, flaky = 0): BaselineCell => ({ passRate, tasks, flaky });
+	const table: [string, BaselineCell, BaselineCell, boolean][] = [
+		["all infra: no counted task", cell(0.8, 4), cell(0, 0), true],
+		["a smaller subset at 100%", cell(0.9, 10), cell(1, 5), true],
+		["a smaller subset with flaky slack", cell(0.9, 10, 3), cell(1, 9, 3), true],
+		["the same tasks", cell(0.9, 10), cell(0.9, 10), false],
+		["more tasks than the baseline", cell(0.9, 10), cell(0.9, 12), false],
+	];
+	for (const [name, baseline, current, fail] of table) {
+		const [row] = gate({ worker: { c: baseline } }, { worker: { c: current } });
+		assert.equal(row.fail, fail, name);
+		assert.equal(row.short, current.tasks < baseline.tasks, name);
+	}
+	const allInfra = baselineCells(summarize([rec("a", "p/m", 1, true, { infra: true })]));
+	assert.equal(allInfra.worker["p/m:low"].tasks, 0);
+	assert.equal(gate({ worker: { "p/m:low": cell(1, 3) } }, allInfra)[0].fail, true);
+});
+test("gate: the drop is taken in the baseline's tasks, not the run's", () => {
+	const cell = (passRate: number, tasks: number, flaky: number): BaselineCell => ({ passRate, tasks, flaky });
+	// 1.0 -> 0.8 over a run of 8 tasks would be 1.6 tasks (fail against one flaky); over the baseline's 4 it is 0.8.
+	const [row] = gate({ worker: { c: cell(1, 4, 1) } }, { worker: { c: cell(0.8, 8, 0) } });
+	assert.ok(Math.abs(row.drop - 0.8) < 1e-9, String(row.drop));
+	assert.equal(row.fail, false);
+});
+test("gate: no pairs in common gives no rows; role and cell names are own keys only", () => {
+	const cell: BaselineCell = { passRate: 1, tasks: 1, flaky: 0 };
+	assert.deepEqual(gate({ worker: { a: cell } }, { review: { a: cell } }), []);
+	assert.deepEqual(gate({ worker: { a: cell } }, { worker: { b: cell } }), []);
+	// JSON.parse makes "__proto__" and "constructor" ordinary keys; `in` would match "constructor" on any object.
+	const parsed = (text: string): RoleCells => JSON.parse(text);
+	assert.deepEqual(gate(parsed('{"constructor":{"a":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } }), []);
+	assert.deepEqual(gate(parsed('{"worker":{"constructor":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } }), []);
+	const records = [rec("a", "p/m", 1, true, { role: "__proto__" }), rec("a", "p/m", 1, false, { role: "worker" })];
+	const cells = baselineCells(summarize(records));
+	assert.deepEqual(Object.keys(cells).sort(), ["__proto__", "worker"]);
+	assert.equal(cells.worker["p/m:low"].passRate, 0);
+	const viaJson = parsed(JSON.stringify(cells));
+	assert.deepEqual(gate(viaJson, viaJson).map((r) => [r.role, r.fail]), [["__proto__", false], ["worker", false]]);
+	const worse = parsed('{"__proto__":{"p/m:low":{"passRate":0,"tasks":1,"flaky":0}}}');
+	assert.deepEqual(gate(viaJson, worse).map((r) => [r.role, r.fail]), [["__proto__", true]]);
+});
+test("review cells carry summed found and of, and the gate compares defect recall with a flaky allowance in defects", () => {
+	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		found.map((f, i) => rec("r1", "p/m", i + 1, f === 5, { role: "review", found: f, of: 5, ...over }));
+	const cellOf = (records: TrialRecord[]) => summarize(records)[0].cells[0];
+	const steady = cellOf([...review([5, 5, 5]), ...review([0], { leak: true }).map((r) => ({ ...r, trial: 9 }))]);
+	assert.deepEqual([steady.found, steady.of, steady.flakyDefects], [15, 15, 0]);
+	const wobbly = cellOf(review([5, 3, 5]));
+	assert.deepEqual([wobbly.found, wobbly.of, wobbly.flakyDefects, wobbly.flaky], [13, 15, 2, ["r1"]]);
+	assert.equal("found" in summarize(grid("p/m", { a: [true] }))[0].cells[0], false);
+	const base = baselineCells([summarize(review([5, 5, 5]))[0]]);
+	assert.deepEqual(base.review["p/m:low"], { passRate: 1, tasks: 1, flaky: 0, recall: 1, defects: 5, flakyDefects: 0 });
+	// Review is one task, so its pass rate can never fall by more than the flaky allowance; recall can: 5 -> 4 defects, every trial.
+	const table: [string, number[], boolean][] = [
+		["same recall", [5, 5, 5], false],
+		["one defect missed every trial", [4, 4, 4], true],
+		["one defect missed in one trial, which makes it flaky", [5, 4, 5], false],
+		["three missed every trial", [2, 2, 2], true],
+	];
+	for (const [name, found, fail] of table) {
+		const [row] = gate(base, baselineCells([summarize(review(found))[0]]));
+		assert.equal(row.unit, "defect", name);
+		assert.equal(row.fail, fail, name + ": drop " + row.drop + " allowed " + row.allowed);
+	}
+	// A baseline without recall (written before this change) still gates on the pass rate.
+	const [old] = gate({ review: { "p/m:low": { passRate: 1, tasks: 1, flaky: 0 } } }, baselineCells([summarize(review([4, 4, 4]))[0]]));
+	assert.deepEqual([old.unit, old.fail], ["task", true]);
+});
 test("baselineCells keys by role then cell; one cell under two roles keeps both", () => {
 	const ok = baselineCells(summarize(grid("p/m", { a: [true, false], b: [true, true] })));
 	assert.deepEqual(ok, { worker: { "p/m:low": { passRate: 0.75, tasks: 2, flaky: 1 } } });
@@ -103,4 +172,15 @@ test("render: tables per role, saturated, comparisons, malformed note", () => {
 	assert.match(text, /- p\/x:low vs p\/y:low: no difference/);
 	assert.match(text, /skipped 2 malformed line/);
 	assert.equal(render([]).trim(), "no records");
+});
+test("render: only the review table has a recall column, 80.0% (8/10) with flaky defects when non-zero", () => {
+	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		found.map((f, i) => rec("r1", "p/m", i + 1, f === 5, { role: "review", found: f, of: 5, ...over }));
+	const text = render(summarize([...review([5, 3]), ...review([4, 4], { model: "p/n" }), ...grid("p/x", { a: [true] })]));
+	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| recall \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){10}\n/);
+	assert.match(text, /\| p\/m:low \| 50\.0% \(1\/2\) \| 1\/1 \| 0\/1 \| 1 \(r1\) \| 80\.0% \(8\/10\), 2 flaky \| 0\.5000 \|/);
+	assert.match(text, /\| p\/n:low \| 0\.0% \(0\/2\) \| 0\/1 \| 0\/1 \| 0 \| 80\.0% \(8\/10\) \| 0\.5000 \|/);
+	// worker table unchanged, and a review cell without counts shows "-"
+	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){9}\n\| p\/x:low \| 100\.0% \(1\/1\) \| 1\/1 \| 1\/1 \| 0 \| 0\.5000 \|/);
+	assert.match(render(summarize(grid("p/z", { a: [true] }, { role: "review" }))), /\| 0 \| - \| 0\.5000 \|/);
 });

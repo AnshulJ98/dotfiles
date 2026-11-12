@@ -89,10 +89,10 @@ if [ ${mode} = blocked ]; then printf '**Blocked on me**\\n- needs a credential\
 }
 
 let counter = 0;
-function trial(task: string, mode: Mode) {
+function trial(task: string, mode: Mode, extra: Record<string, string> = {}) {
 	const stub = makeStub(mode);
 	const out = join(scratch, `out-${counter++}.jsonl`);
-	const r = run("trial.sh", [task, "prov/model-x", "high", "3", out], { EVAL_SCOUT: stub.path, EVAL_REAL_HOME: realHome });
+	const r = run("trial.sh", [task, "prov/model-x", "high", "3", out], { EVAL_SCOUT: stub.path, EVAL_REAL_HOME: realHome, ...extra });
 	const records = existsSync(out) ? readFileSync(out, "utf8").trim().split("\n") : [];
 	const rec = records.length ? JSON.parse(records[records.length - 1]) : undefined;
 	if (rec) keep.push(rec.dir);
@@ -155,6 +155,57 @@ test("an expect-blocked task passes only when nothing changed and the digest nam
 	assert.ok(!existsSync(join(pass.dir, "test.txt")));
 	assert.equal(trial(task, "noop").rec.pass, false);
 	assert.equal(trial(task, "fix").rec.pass, false);
+});
+
+test("run_test: a test command that outlives EVAL_TEST_TIMEOUT is a failing test, not a hang", () => {
+	const started = Date.now();
+	const { r, rec } = trial(makeTask("slow", { test: "sleep 60" }), "fix", { EVAL_TEST_TIMEOUT: "2" });
+	assert.equal(r.status, 0, r.stderr);
+	assert.ok(Date.now() - started < 40000, "the trial waited for the test command");
+	assert.deepEqual([rec.pass, rec.infra], [false, false]);
+	assert.match(readFileSync(join(rec.dir, "test.txt"), "utf8"), /timed out after 2s/);
+});
+
+test("run_test: the test command runs under a scratch HOME and a reduced environment", () => {
+	const { rec } = trial(makeTask("homey", { test: 'echo "HOME=$HOME"; echo "EVAL=$(env | grep -c ^EVAL_ || true)"; exit 1' }), "fix");
+	const out = readFileSync(join(rec.dir, "test.txt"), "utf8");
+	const home = /^HOME=(.*)$/m.exec(out)?.[1] ?? "";
+	assert.match(home, /\/agent-eval-test\.[A-Za-z0-9]+\/home$/);
+	assert.notEqual(home, realHome);
+	assert.notEqual(home, join(rec.dir, "home"));
+	assert.match(out, /^EVAL=0$/m);
+	assert.ok(!existsSync(resolve(home, "..")), "the scratch home is removed after the run");
+});
+
+test("validate.sh: a hanging test command is INVALID after EVAL_TEST_TIMEOUT, not a hang", () => {
+	const started = Date.now();
+	const r = run("validate.sh", [makeTask("vslow", { test: "sleep 60" })], { EVAL_TEST_TIMEOUT: "1" });
+	assert.ok(Date.now() - started < 40000, "validate waited for the test command");
+	assert.notEqual(r.status, 0);
+	assert.match(r.stdout, /^INVALID vslow: hidden tests fail with the reference applied$/m);
+});
+
+test("trial.sh review: a reviewer that outlives EVAL_REVIEW_TIMEOUT is recorded as infra with rc 124 and is not judged", () => {
+	const turn = JSON.stringify({ type: "message", message: { role: "assistant", usage: { input: 1, output: 1, cost: { total: 0.1 } }, content: [] } });
+	const marker = join(scratch, "judge-called");
+	const reviewer = join(scratch, "stub-slow-reviewer");
+	write(reviewer, `#!/usr/bin/env bash
+mkdir -p "$HOME/.pi/agent/sessions/review"
+printf '%s\\n' '${turn}' > "$HOME/.pi/agent/sessions/review/s.jsonl"
+exec sleep 60
+`, 0o755);
+	const judge = join(scratch, "stub-judge");
+	write(judge, `#!/usr/bin/env bash\ntouch ${marker}\n`, 0o755);
+	const task = makeTask("rslow", { role: "review", rev: fixSha, defects: [{ id: "d1", text: "t", hit: "h" }] });
+	const out = join(scratch, `out-${counter++}.jsonl`);
+	const started = Date.now();
+	const r = run("trial.sh", [task, "prov/model-x", "high", "1", out], { EVAL_REVIEW_PI: reviewer, EVAL_JUDGE_PI: judge, EVAL_REAL_HOME: realHome, EVAL_REVIEW_TIMEOUT: "2" });
+	assert.equal(r.status, 0, r.stderr);
+	assert.ok(Date.now() - started < 40000, "the trial waited for the reviewer");
+	const rec = JSON.parse(readFileSync(out, "utf8").trim());
+	keep.push(rec.dir);
+	assert.deepEqual([rec.rc, rec.infra, rec.pass, rec.turns], [124, true, false, 1]);
+	assert.equal(existsSync(marker), false);
 });
 
 test("usage errors and unsupported roles exit 2", () => {

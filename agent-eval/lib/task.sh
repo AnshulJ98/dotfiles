@@ -5,6 +5,9 @@
 #   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix (a task with "rev": that commit, kind ignored),
 #                           "paths" (pathspecs after `--` of git archive) limit what is extracted, "exclude" paths removed, fresh one-commit repo, links symlinked
 #   overlay_hidden / apply_reference / run_test <dir> <ws>
+#                           run_test runs the task's test command in <ws> under lib/isolate.sh (scratch HOME, reduced
+#                           environment) and timeout (EVAL_TEST_TIMEOUT seconds, default 600); a timeout exits 124, a failing test
+#   timeout_bin             print the coreutils timeout (timeout or gtimeout), else return 1
 #   is_test_path <path>     true for .test. / .spec. / _test. names and files under tests/ or __tests__/
 # overlay_hidden copies a hidden test file beside the original as zz-hidden-<name>; a hidden file that is not a
 # test (a support module the hidden tests import) goes to its own path.
@@ -92,6 +95,14 @@ apply_reference() {
   done < <(task_get "$1" allowed)
 }
 
+timeout_bin() { command -v timeout || command -v gtimeout; }
+
 run_test() {
-  (cd "$2" && bash -c "$(task_get "$1" test)")
+  local limit="${EVAL_TEST_TIMEOUT:-600}" tmo scratch rc=0
+  tmo="$(timeout_bin)" || { echo "run_test: needs timeout (coreutils) on PATH" >&2; return 127; }
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/agent-eval-test.XXXXXX")"
+  (cd "$2" && "$TASK_EVAL_DIR/lib/isolate.sh" "$scratch/home" "$tmo" -k 10 "$limit" bash -c "$(task_get "$1" test)") || rc=$?
+  [ "$rc" -ne 124 ] || echo "run_test: timed out after ${limit}s" >&2
+  rm -rf "$scratch"
+  return "$rc"
 }
