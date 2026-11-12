@@ -1,0 +1,20 @@
+{
+  "id": "differ-patch",
+  "role": "worker",
+  "repo": "~/Dev/pi-lab",
+  "fix": "8e694c92ec7b2c4b3e0d2b8e6e09679ba7458636",
+  "test": "cd differ && npm test",
+  "allowed": [
+    "differ/package.json",
+    "differ/src/patch.ts",
+    "differ/tsconfig.json"
+  ],
+  "hidden": [
+    "differ/src/cases.ts",
+    "differ/src/diff.test.ts",
+    "differ/src/patch.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ]
+}

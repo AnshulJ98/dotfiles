@@ -1,0 +1,18 @@
+{
+  "id": "booking-delete-404-scope",
+  "role": "worker",
+  "repo": "~/Dev/pi-lab",
+  "fix": "807f50d19a79a3d9492e66bb6bda7c985d427fbb",
+  "test": "cd booking && npm test",
+  "allowed": [
+    "booking/src/booking.ts",
+    "booking/src/booking.test.ts"
+  ],
+  "hidden": [
+    "booking/src/booking.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ],
+  "expect": "blocked"
+}
