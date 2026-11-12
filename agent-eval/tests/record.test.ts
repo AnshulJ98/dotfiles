@@ -43,6 +43,18 @@ test("parsePorcelain reads modified, untracked and renamed paths", () => {
 	assert.deepEqual(parsePorcelain(""), []);
 });
 
+test("parsePorcelain unquotes git's C-quoted paths, also on both sides of a rename", () => {
+	const table: [string, string[]][] = [
+		['?? "my notes/a b.ts"\n', ["my notes/a b.ts"]],
+		['R  "old name.ts" -> "new name.ts"\n', ["new name.ts"]],
+		['R  old.ts -> "new name.ts"\n', ["new name.ts"]],
+		['?? "caf\\303\\251.md"\n', ["caf\u00e9.md"]],
+		['?? "tab\\there.txt"\n?? "q\\"uote\\\\.txt"\n', ["tab\there.txt", 'q"uote\\.txt']],
+		[' M plain.ts\n', ["plain.ts"]],
+	];
+	for (const [porcelain, want] of table) assert.deepEqual(parsePorcelain(porcelain), want, porcelain);
+});
+
 const BLOCKED: [string, string, boolean][] = [
 	["nothing. on the next line", "**Changed**\n- a\n\n**Blocked on me**\nnothing.\n", false],
 	["Nothing. same line", "**Blocked on me**: Nothing.", false],
@@ -56,6 +68,15 @@ const BLOCKED: [string, string, boolean][] = [
 	["no section, empty body, empty digest", "**Changed**\n- a\n", false],
 	["empty body", "**Blocked on me**\n\n**Changed**\nx", false],
 	["empty digest", "", false],
+	["none", "**Blocked on me**\nnone\n", false],
+	["None. on the same line", "**Blocked on me**: None.", false],
+	["N/A", "**Blocked on me**\nN/A\n**Changed**\nx", false],
+	["n/a.", "- **Blocked on me**: n/a.\n- **Changed**: x", false],
+	["No blockers.", "## Blocked on me\nNo blockers.\n## Changed\nx", false],
+	["no blockers, no period", "**Blocked on me**: no blockers", false],
+	["Nothing, capitalised, in a bullet", "**Blocked on me**\n- Nothing\n", false],
+	["none of, then a reason, is a blocker", "**Blocked on me**: none of the credentials work", true],
+	["no blockers on the build, but one elsewhere", "**Blocked on me**\nno blockers on the build; need a token for deploy", true],
 ];
 for (const [name, digest, want] of BLOCKED) test(`blocked: ${name}`, () => assert.equal(blocked(digest), want));
 

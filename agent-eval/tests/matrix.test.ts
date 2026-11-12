@@ -1,8 +1,8 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 // Drives matrix.sh, summarize.ts and gate.sh with a stub trial script: no model, no tokens.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
@@ -117,6 +117,53 @@ test("a failing trial call is reported, matrix exits 1, and the rest still ran",
 	assert.match(r.stdout, /FAILED t-a x\/good:low #1 rc=3/);
 	assert.equal(trialsOf("failing").length, 8);
 });
+// A stub trial that leaves a long sleep behind it: HANG_PID gets the sleep's pid. With HANG_MODE=timeout the sleep runs
+// under timeout, which puts it in a process group of its own, as trial.sh's isolated calls are.
+const hang = join(scratch, "trial-hang");
+writeFileSync(hang, `#!/usr/bin/env bash
+if [ "\${HANG_MODE:-}" = timeout ]; then
+  timeout 300 sh -c 'echo $$ > "$HANG_PID"; exec sleep 300'
+else
+  sleep 300 & echo $! > "$HANG_PID"; wait
+fi
+`);
+chmodSync(hang, 0o755);
+const alive = (pid: number): boolean => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+};
+async function until(ok: () => boolean, ms: number): Promise<boolean> {
+	for (let waited = 0; waited < ms; waited += 50) {
+		if (ok()) return true;
+		await new Promise((r) => setTimeout(r, 50));
+	}
+	return ok();
+}
+for (const mode of ["plain", "timeout"]) {
+	test(`SIGINT to matrix.sh stops the running trial's children (${mode})`, async () => {
+		const pidFile = join(scratch, `hang-${mode}.pid`);
+		const m = spawn(join(EVAL_DIR, "matrix.sh"), ["hang-" + mode, "--cells", "x/good:low", "--tasks", "t-a", "--trials", "1"], {
+			stdio: "ignore", env: baseEnv({ EVAL_TRIAL: hang, HANG_PID: pidFile, HANG_MODE: mode }),
+		});
+		const exited = new Promise<number | null>((resolve) => m.on("exit", resolve));
+		let sleeper = 0;
+		try {
+			assert.ok(await until(() => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "", 10000), "the stub trial never started");
+			sleeper = Number(readFileSync(pidFile, "utf8").trim());
+			assert.ok(alive(sleeper));
+			m.kill("SIGINT");
+			assert.equal(await Promise.race([exited, new Promise((r) => setTimeout(() => r("timeout"), 10000))]), 130);
+			assert.ok(await until(() => !alive(sleeper), 5000), "the trial's child is still running after SIGINT");
+		} finally {
+			if (sleeper && alive(sleeper)) process.kill(sleeper, "SIGKILL");
+			m.kill("SIGKILL");
+		}
+	});
+}
 test("summarize.ts prints both cells for a run dir or a file; usage and missing file exit 2", () => {
 	matrix("sum");
 	const dir = join(scratch, "results", "sum");
@@ -171,8 +218,9 @@ test("gate: steering change is detected against an older commit, and an unknown 
 	assert.match(run("gate.sh", [dir]).stdout, /not found in this repo/);
 	write(first, { worker: { "other/cell:low": { passRate: 1, tasks: 2, flaky: 0 } }, review: baseline.roles.worker });
 	const none = run("gate.sh", [dir]);
-	assert.equal(none.status, 0);
-	assert.match(none.stdout, /no role\/cell pairs in common/);
+	assert.equal(none.status, 2);
+	assert.match(none.stderr, /no role\/cell pairs in common/);
+	assert.doesNotMatch(none.stdout, /gate: pass/);
 });
 test("gate: one cell under two roles is keyed by role and cell; the same run gates 0, a worse one 1", () => {
 	const review = { STUB_REVIEW: "t-b" };
@@ -189,6 +237,63 @@ test("gate: one cell under two roles is keyed by role and cell; the same run gat
 	const worse = run("gate.sh", [join(scratch, "results", "roles-worse")]);
 	assert.equal(worse.status, 1, worse.stdout);
 	assert.match(worse.stdout, /FAIL review x\/good:low[^]*FAIL worker x\/good:low/);
+});
+test("gate: a smaller task set than the baseline's fails even when every pass rate is 100%", () => {
+	const dir = join(scratch, "results", "subset-gate");
+	mkdirSync(dir, { recursive: true });
+	const line = (task: string) => JSON.stringify({ task, role: "worker", model: "m/m", thinking: "low", trial: 1, pass: true, seconds: 1, cost: 0, leak: false, infra: false });
+	writeFileSync(join(dir, "trials.jsonl"), line("t0") + "\n");
+	writeFileSync(join(scratch, "baseline.json"), JSON.stringify({ configSha: "x", date: "d", roles: { worker: { "m/m:low": { passRate: 1, tasks: 3, flaky: 0 } } } }));
+	const r = run("gate.sh", [dir]);
+	assert.equal(r.status, 1, r.stdout + r.stderr);
+	assert.match(r.stdout, /FAIL worker m\/m:low[^\n]*counted 1 task\(s\), baseline 3/);
+});
+test("gate: review cells are gated on defect recall", () => {
+	const dir = join(scratch, "results", "review-gate");
+	mkdirSync(dir, { recursive: true });
+	const line = (trial: number, found: number) =>
+		JSON.stringify({ task: "r", role: "review", model: "m/m", thinking: "low", trial, pass: found === 5, found, of: 5, seconds: 1, cost: 0, leak: false, infra: false });
+	writeFileSync(join(dir, "trials.jsonl"), [1, 2, 3].map((n) => line(n, 4)).join("\n") + "\n");
+	const baseline = (recall: number) => writeFileSync(join(scratch, "baseline.json"),
+		JSON.stringify({ configSha: "x", date: "d", roles: { review: { "m/m:low": { passRate: recall === 1 ? 1 : 0, tasks: 1, flaky: 0, recall, defects: 5, flakyDefects: 0 } } } }));
+	baseline(1);
+	const worse = run("gate.sh", [dir]);
+	assert.equal(worse.status, 1, worse.stdout + worse.stderr);
+	assert.match(worse.stdout, /FAIL review m\/m:low: baseline recall 100\.0% \(flaky 0\) -> now 80\.0% \(flaky 0\), drop 1\.00 defect\(s\), allowed 0/);
+	baseline(0.8);
+	assert.equal(run("gate.sh", [dir]).status, 0);
+});
+test("gate --update exits 2 while the steering paths have uncommitted changes, and works once they are committed", () => {
+	const repo = join(scratch, "steer-repo");
+	mkdirSync(join(repo, "agent-eval/lib"), { recursive: true });
+	copyFileSync(join(EVAL_DIR, "gate.sh"), join(repo, "agent-eval/gate.sh"));
+	chmodSync(join(repo, "agent-eval/gate.sh"), 0o755);
+	copyFileSync(join(EVAL_DIR, "lib/summary.ts"), join(repo, "agent-eval/lib/summary.ts"));
+	mkdirSync(join(repo, "config/pi/prompts"), { recursive: true });
+	writeFileSync(join(repo, "config/pi/prompts/p.md"), "one\n");
+	const git = (...args: string[]) => {
+		const g = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8", env: baseEnv() });
+		assert.equal(g.status, 0, g.stderr);
+		return g.stdout.trim();
+	};
+	git("init", "-q");
+	git("add", "-A");
+	git("commit", "-q", "-m", "one");
+	const dir = join(scratch, "results", "gate-base");
+	const gate = (...args: string[]) => spawnSync(join(repo, "agent-eval/gate.sh"), [dir, ...args], { encoding: "utf8", env: baseEnv({ EVAL_BASELINE: join(scratch, "steer-baseline.json"), EVAL_HISTORY: join(scratch, "steer-history.jsonl") }) });
+	for (const dirty of [() => writeFileSync(join(repo, "config/pi/prompts/p.md"), "two\n"), () => writeFileSync(join(repo, "config/pi/prompts/new.md"), "new\n")]) {
+		dirty();
+		const r = gate("--update");
+		assert.equal(r.status, 2, r.stdout + r.stderr);
+		assert.match(r.stderr, /uncommitted changes under the steering paths/);
+		assert.equal(existsSync(join(scratch, "steer-baseline.json")), false);
+		git("add", "-A");
+		assert.equal(gate("--update").status, 2, "staged but uncommitted");
+		git("commit", "-q", "-m", "steer");
+	}
+	const ok = gate("--update");
+	assert.equal(ok.status, 0, ok.stderr);
+	assert.equal(JSON.parse(readFileSync(join(scratch, "steer-baseline.json"), "utf8")).configSha, git("rev-parse", "HEAD"));
 });
 test("gate: a flaky task widens the allowed drop", () => {
 	const dir = join(scratch, "results", "flaky");

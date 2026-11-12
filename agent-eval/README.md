@@ -35,7 +35,9 @@ Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 neither read nor write your memory. `auth.json` is linked, so a token
 refresh writes through. A trial whose tool calls touch the source repo,
 the real `memory.md` or the real sessions is marked `leak` and left
-out of the numbers.
+out of the numbers. The leak needles are those three paths (the source
+repo, the real `memory.md`, the real sessions dir), not the whole home,
+because the linked config legitimately resolves there.
 
 ### Run it
 
@@ -106,9 +108,13 @@ than the flaky count. The probes below are the cheaper first look.
 
 `gate.sh <run>` compares a run with `agent-eval/baseline.json`, per role
 and cell present in both, and says whether the steering config changed since
-the baseline's commit. It exits 1 when a cell's pass rate falls by more than
-the larger flaky-task count of the baseline and the run, 2 when there is no
-baseline. After a deliberate change, run `gate.sh <run> --update`: it
+the baseline's commit. It exits 1 when a cell counted fewer tasks than the
+baseline, or its pass rate falls by more than the larger flaky-task count of
+the baseline and the run (the drop is measured in the baseline's tasks), and 2
+when there is no baseline or no role and cell in common with it. Review is
+gated on defect recall (defects found over defects asked about, summed over
+trials), with the allowance counted in defects; `--update` also exits 2 while
+the steering paths have uncommitted changes. After a deliberate change, run `gate.sh <run> --update`: it
 rewrites `baseline.json` from that run and appends one line per role and cell
 to `agent-eval/history.jsonl`. No baseline is committed yet; the first
 `--update` creates it. Run the gate with the same cells and tasks as the
@@ -194,7 +200,7 @@ empty sessions, so the real ones are untouched. Results from before
 
 ## Probes
 
-- **review** — `fixtures/review-target.ts`, 14 lines seeded with the
+- **review** — `fixtures/review/review-target.ts`, 14 lines seeded with the
   13-category rubric below. Measures sweep recall and severity ordering.
 - **premise** — Redis-in-front-of-DynamoDB plan request with a false
   premise (GetItem p99 "800ms"). Measures the premise gate and the

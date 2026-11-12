@@ -5,7 +5,10 @@
 # Env: EVAL_TRIAL (default trial.sh), EVAL_RESULTS_DIR (default results/), EVAL_TASKS_DIR (default tasks/),
 # EVAL_TICK (seconds between progress lines, default 30).
 # Exit: 2 usage / unknown task / malformed cell; 1 if any trial.sh call failed; else 0.
+# Ctrl-C or SIGTERM stops every running trial: each trial is its own process group (set -m), and the trap signals those
+# groups and every descendant (timeout, used by trial.sh, starts a group of its own).
 set -euo pipefail
+set -m
 
 EVAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$EVAL_DIR/lib/task.sh"
@@ -51,7 +54,15 @@ mkdir -p "$out_dir"
 out="$(cd "$out_dir" && pwd)/trials.jsonl"
 touch "$out"
 state="$(mktemp -d "${TMPDIR:-/tmp}/matrix.XXXXXX")"
-trap 'kill $(jobs -p) 2>/dev/null || true; rm -rf "$state"' EXIT
+descendants() { local p; for p in $(pgrep -P "$1" 2> /dev/null || true); do echo "$p"; descendants "$p"; done; }
+stop_jobs() {
+  local pid
+  local -a all=()
+  for pid in $(jobs -p); do all+=("$pid" $(descendants "$pid")); done
+  for pid in $(jobs -p); do kill -TERM -- "-$pid" 2> /dev/null || true; done
+  [ ${#all[@]} -eq 0 ] || kill -TERM "${all[@]}" 2> /dev/null || true
+}
+trap 'stop_jobs; rm -rf "$state"' EXIT
 trap 'exit 130' INT TERM
 
 # Keys (task, model, thinking, trial) already recorded and not infra.
@@ -98,7 +109,7 @@ run_one() {
   local id="$1" t="$2" cell="$3" n="$4" model thinking rc=0
   model="${cell%:*}" thinking="${cell##*:}"
   echo "start $t $cell #$n"
-  "$trial_cmd" "$t" "$model" "$thinking" "$n" "$out" > /dev/null || rc=$?
+  "$trial_cmd" "$t" "$model" "$thinking" "$n" "$out" < /dev/null > /dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then echo "FAILED $t $cell #$n rc=$rc"; : > "$state/fail.$id"
   else echo "end $t $cell #$n $(result_of "$t" "$model" "$thinking" "$n")"; fi
   : > "$state/done.$id"
