@@ -1,5 +1,6 @@
 #!/bin/sh
 # AeroSpace cmd-enter: focus the one workspace kitty, or start it on the main workspace.
+# workspaces.py then reopens the other workspaces that were open when it last ran.
 # Other kitties (cmd-alt-enter, the Dock, herdr) start plain, with no workspace.
 PATH=/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:$PATH
 sock=/tmp/kitty-main

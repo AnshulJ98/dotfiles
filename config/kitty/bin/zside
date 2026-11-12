@@ -1,0 +1,198 @@
+#!/usr/bin/python3
+"""Workspace sidebar for a kitty tab-dock: spaces on top, agents at the bottom, as in herdr.
+
+workspaces.py starts one in every workspace tab and writes a byte to the visible one's stdin
+when something it shows changes; it redraws from 'kitten @ ls' only then. A click switches
+workspace or focuses an agent's pane. Model and context use come from pi (pi-holder.ts).
+"""
+from __future__ import annotations  # /usr/bin/python3 is 3.9
+
+import json
+import os
+import re
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import termios
+import time
+import tty
+
+os.environ['PATH'] = '/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:' + os.environ.get('PATH', '')
+TO = os.environ.get('KITTY_LISTEN_ON', '')
+DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
+ME = int(os.environ.get('KITTY_WINDOW_ID', '0'))
+RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']  # least to most urgent
+# glyph, SGR colour (terminal palette, so it follows the kitty theme)
+ICON = {'': ('·', '39'), 'idle': ('○', '32'), 'working': ('◐', '33'), 'done': ('●', '36'),
+        'error': ('✗', '31'), 'blocked': ('◉', '31')}
+BAND = '48;5;8;'  # selected row
+MOUSE = re.compile(rb'\x1b\[<(\d+);(\d+);(\d+)([Mm])')
+_git: dict[str, tuple[float, str, str]] = {}
+
+
+def run(*cmd: str) -> str:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ''
+
+
+def kitten(*args: str) -> str:
+    return run('kitten', '@', '--to', TO, *args)
+
+
+def fit(text: str, width: int) -> str:
+    return text if len(text) <= width else text[:max(0, width - 1)] + '…'
+
+
+def worst(states: list[str]) -> str:
+    return max(states, key=lambda s: RANK.index(s) if s in RANK else 0, default='')
+
+
+def live_cwd(holder: str, fallback: str) -> str:
+    """kitty reports the folder of 'zmx attach' for held panes, so ask the session's shell."""
+    if not holder:
+        return fallback
+    pid = next((p.strip().split('=')[1] for line in run('zmx', 'ls').splitlines() if f'name={holder}\t' in line
+                for p in line.split('\t') if p.strip().startswith('pid=')), '')
+    out = run('lsof', '-a', '-d', 'cwd', '-p', pid, '-Fn') if pid else ''
+    return next((line[1:] for line in out.splitlines() if line.startswith('n')), fallback)
+
+
+def git_info(name: str, holder: str, cwd: str) -> tuple[str, str]:
+    """(branch, ahead and behind counts) of a workspace's first pane, cached for 3 s."""
+    now = time.monotonic()
+    hit = _git.get(name)
+    if hit and now - hit[0] < 3:
+        return hit[1], hit[2]
+    cwd = live_cwd(holder, cwd)
+    branch = run('git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip()
+    counts = run('git', '-C', cwd, 'rev-list', '--left-right', '--count', '@{u}...HEAD').split() if branch else []
+    behind, ahead = (counts + ['0', '0'])[:2]
+    status = ' '.join(x for x in ('↑' + ahead if ahead != '0' else '', '↓' + behind if behind != '0' else '') if x)
+    _git[name] = now, branch, status
+    return branch, status
+
+
+def model() -> tuple[dict[str, dict], list[dict], str]:
+    """(spaces, agents, current space), all in tab order: the order 'zws switch N' uses."""
+    try:
+        oswins = json.loads(kitten('ls'))
+    except ValueError:
+        return {}, [], ''
+    spaces: dict[str, dict] = {}
+    agents: list[dict] = []
+    current = ''
+    for osw in oswins:
+        for tab in osw['tabs']:
+            panes = [w for w in tab['windows'] if w['user_vars'].get('role') != 'sidebar']
+            name = panes[0].get('session_name', '') if panes else ''
+            mine = any(w['id'] == ME for w in tab['windows'])
+            if mine:
+                current = name
+            if not name:
+                continue
+            sp = spaces.setdefault(name, {'states': [], 'tabs': 0, 'holder': panes[0]['user_vars'].get('holder', ''),
+                                          'cwd': panes[0]['cwd']})
+            sp['tabs'] += 1
+            for w in panes:
+                states = [r['state'] for r in w['program_status']]
+                sp['states'] += states
+                if states:
+                    v = w['user_vars']
+                    agents.append({'id': w['id'], 'state': worst(states), 'app': w['program_status'][0]['app'] or 'agent',
+                                   'space': name, 'tab': sp['tabs'], 'on': mine and w['is_active'],
+                                   'model': v.get('pi_model', ''), 'ctx': v.get('pi_ctx', '')})
+    return spaces, agents, current
+
+
+def render(clicks: list) -> None:
+    cols, rows = shutil.get_terminal_size((24, 40))
+    spaces, agents, current = model()
+
+    def line(segs: list[tuple[str, str]], band: bool = False) -> str:
+        out, used = [], 0
+        bg = BAND if band else ''
+        for text, sgr in segs:
+            text = text[:max(0, cols - used)]
+            used += len(text)
+            out.append(f'\x1b[0;{bg}{sgr}m{text}')
+        return ''.join(out) + f'\x1b[0;{bg}39m' + ' ' * (cols - used) + '\x1b[0m'
+
+    top: list[tuple[str, tuple | None]] = [(line([(' spaces', '1;97')]), None), (line([]), None)]
+    for name, sp in spaces.items():
+        glyph, colour = ICON.get(worst(sp['states']), ICON[''])
+        on, go = name == current, ('space', name)
+        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(name, cols - 4), '1;97' if on else '97')], on), go))
+        branch, status = git_info(name, sp['holder'], sp['cwd'])
+        if branch:
+            room = cols - 4 - (len(status) + 1 if status else 0)
+            segs = [('   ', ''), (fit(branch, room), '39')]
+            for part in status.split():
+                segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
+            top.append((line(segs, on), go))
+
+    bottom: list[tuple[str, tuple | None]] = []
+    if agents:
+        bottom += [(line([('─' * cols, '38;5;8')]), None), (line([(' agents', '1;97')]), None), (line([]), None)]
+    for a in agents:  # same rows whichever workspace is shown
+        glyph, colour = ICON.get(a['state'], ICON[''])
+        go = ('pane', a['id'], '' if a['space'] == current else a['space'])
+        label = fit(f"{a['app']} · {a['space']} {a['tab']}", cols - 4)
+        bottom.append((line([(' ', ''), (glyph + ' ', colour), (label, '1;97' if a['on'] else '97')], a['on']), go))
+        if a['model'] or a['ctx']:
+            tail = f" · {a['ctx']}" if a['model'] and a['ctx'] else a['ctx']
+            bottom.append((line([('   ', ''), (fit(a['model'], cols - 4 - len(tail)) + tail, '39')], a['on']), go))
+
+    bottom = bottom[:max(0, rows - 3)]
+    top = top[:max(0, rows - len(bottom))]
+    body = top + [(line([]), None)] * (rows - len(top) - len(bottom)) + bottom
+    clicks[:] = [action for _, action in body]
+    sys.stdout.write('\x1b[?2026h\x1b[H' + '\r\n'.join(text for text, _ in body) + '\x1b[?2026l')
+    sys.stdout.flush()
+
+
+def act(action: tuple | None) -> None:
+    if action is None:
+        return
+    kind, arg, *space = action
+    if kind == 'space' or space[0]:  # switch first, or the tab bar keeps showing the old workspace's tabs
+        kitten('action', 'goto_session', os.path.join(DIR, f"{arg if kind == 'space' else space[0]}.kitty-session"))
+    if kind == 'pane':
+        kitten('focus-window', '--match', f'id:{arg}')
+
+
+def main() -> None:
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    clicks: list = []
+    wake_r, wake_w = os.pipe()  # a resize lands here, so select() returns and the loop redraws
+    os.set_blocking(wake_w, False)
+    signal.set_wakeup_fd(wake_w)
+    signal.signal(signal.SIGWINCH, lambda *_: None)
+    try:
+        tty.setraw(fd)
+        sys.stdout.write('\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J')
+        render(clicks)
+        while True:
+            ready, _, _ = select.select([fd, wake_r], [], [])
+            if wake_r in ready:
+                os.read(wake_r, 4096)
+            if fd in ready:
+                time.sleep(0.05)  # let a burst of pokes arrive, then draw once
+                data = os.read(fd, 65536)
+                if not data:
+                    return
+                for m in MOUSE.finditer(data):
+                    if m[4] == b'M' and int(m[1]) == 0 and int(m[3]) - 1 < len(clicks):
+                        act(clicks[int(m[3]) - 1])
+            render(clicks)
+    finally:
+        sys.stdout.write('\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h')
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+if __name__ == '__main__':
+    main()
