@@ -158,7 +158,10 @@ test("a hidden support module is laid at its own path, so the hidden tests can i
 
 // The committed tasks: each prompt.md carries the task's own allowed list and test command in the --- block
 // (scout reads it as the spec) and a plan scout accepts: numbered steps with check: lines.
+// Only worker tasks carry a spec block and plan steps; review (and later scout) tasks are skipped.
 for (const id of readdirSync(join(EVAL_DIR, "tasks"))) {
+	const meta = JSON.parse(readFileSync(join(EVAL_DIR, "tasks", id, "task.json"), "utf8"));
+	if (meta.role !== "worker") continue;
 	test(`committed task ${id}: prompt.md matches task.json and has numbered steps with check: lines`, () => {
 		const dir = join(EVAL_DIR, "tasks", id);
 		const task = JSON.parse(readFileSync(join(dir, "task.json"), "utf8"));
