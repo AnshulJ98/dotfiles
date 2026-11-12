@@ -114,6 +114,29 @@ test("guard through the stubs", async (t) => {
 		const allowed = git(repo, "merge", "--no-ff", "-m", "m", "slice/x");
 		assert.equal(allowed.status, 0, allowed.err);
 	});
+	await t.test("merging auto/x is refused until its tip has a review record; slice merges need none", () => {
+		const repo = makeRepo();
+		mustGit(repo, "switch", "-qc", "base");
+		mustGit(repo, "switch", "-qc", "auto/x");
+		mustGit(repo, "switch", "-qc", "slice/y");
+		assert.equal(commit(repo).status, 0);
+		mustGit(repo, "switch", "-q", "auto/x");
+		mustGit(repo, "merge", "--no-ff", "-qm", "slice", "slice/y");
+		mustGit(repo, "switch", "-q", "base");
+		const refused = git(repo, "merge", "--no-ff", "-m", "land", "auto/x");
+		assert.equal(refused.status, 1);
+		assert.match(refused.err, /auto-guard: auto\/x has no review recorded for its tip [0-9a-f]{9}; run ~\/\.pi\/agent\/bin\/scout --review <base>/);
+		mustGit(repo, "merge", "--abort");
+		const tip = mustGit(repo, "rev-parse", "auto/x").out.trim();
+		mkdirSync(join(repo, ".git/pi-review"));
+		writeFileSync(join(repo, ".git/pi-review", tip), "base=base\n");
+		mustGit(repo, "merge", "--no-ff", "-qm", "land", "auto/x");
+		// A commit after the review moves the tip, so the record no longer covers it
+		mustGit(repo, "switch", "-q", "auto/x");
+		assert.equal(commit(repo).status, 0);
+		mustGit(repo, "switch", "-q", "base");
+		assert.equal(git(repo, "merge", "--no-ff", "-m", "land again", "auto/x").status, 1);
+	});
 	await t.test("AUTO.md: push from slice/x is refused; without AUTO.md it is allowed", () => {
 		const repo = makeRepo();
 		const remote = tmp("hooks-remote-");

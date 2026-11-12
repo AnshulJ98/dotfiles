@@ -8,13 +8,15 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 
 const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
-const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\nDo it.\n";
+const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) → check: true\n";
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
+// args (prints the arguments scout passed),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
 # In a herdr tab, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
 [ -n "$SCOUT_DIGEST" ] && exec >"$SCOUT_DIGEST"
+args="$*"
 dir=""
 while [ $# -gt 0 ]; do [ "$1" = "--session-dir" ] && dir="$2"; shift; done
 [ -n "$dir" ] && echo '{"type":"message","message":{"role":"user"}}' >"$dir/s.jsonl"
@@ -22,6 +24,7 @@ case "$FAKE_PI" in
 ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
+args) echo "$args" ;;
 env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
 error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
@@ -120,6 +123,75 @@ test("a refused spec leaves no run folder, running meta or spec temp file behind
 	const running = join(scoutRoot, ".running");
 	assert.deepEqual(existsSync(running) ? readdirSync(running) : [], []);
 	assert.deepEqual(readdirSync(tmp), []);
+});
+
+test("a spec whose body is not a plan (no numbered step, or no check: line) is refused with exit 2", async () => {
+	const { env, scoutRoot } = sandbox();
+	for (const body of ["Do it.", "1. Do it (a.txt)", "Do it → check: true", ""]) {
+		const run = await runScout(["--spec", "-"], env, `---\nfiles-allowed: [a.txt]\ntests: true\n---\n${body}\n`);
+		assert.equal(run.code, 2, body);
+		assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
+	}
+	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
+});
+
+test("a child loads background.ts for its bash tool and gets no bg_run", async () => {
+	const { env } = sandbox();
+	for (const [args, stdin] of [[["look"], ""], [["--spec", "-"], SPEC]] as const) {
+		const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
+		assert.equal(run.code, 0);
+		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts /);
+		assert.match(run.stdout, / -t read,grep,find,ls,bash(,edit,write)? /);
+	}
+});
+
+/** A clean repo with two commits, so HEAD~1 is a base. */
+function reviewRepo(): string {
+	const repo = mkdtempSync(join(tmpdir(), "scout-review-"));
+	const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8" });
+	git("init", "-q");
+	for (const text of ["one\n", "two\n"]) {
+		writeFileSync(join(repo, "a.txt"), text);
+		git("add", ".");
+		git("commit", "-qm", text.trim(), "--no-verify");
+	}
+	return repo;
+}
+const reviewRecords = (repo: string): string[] => (existsSync(join(repo, ".git", "pi-review")) ? readdirSync(join(repo, ".git", "pi-review")) : []);
+const headOf = (repo: string): string => spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+
+test("--review runs review.md over BASE...HEAD read-only, with AGENTS.md and AUTO.md, and records the reviewed tip", () => {
+	const { env } = sandbox();
+	const repo = reviewRepo();
+	writeFileSync(join(repo, "AUTO.md"), "spec\n");
+	mkdirSync(join(repo, ".git", "info"), { recursive: true });
+	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+	const run = spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
+	assert.equal(run.status, 0, run.stderr);
+	assert.match(run.stdout, /git diff HEAD~1\.\.\.HEAD/);
+	assert.match(run.stdout, /Pass 2, attack your own review/);
+	assert.doesNotMatch(run.stdout, /\$@/);
+	assert.match(run.stdout, /You are a read-only reviewer/);
+	assert.match(run.stdout, /@\S+\/AUTO\.md/);
+	assert.match(run.stdout, /--thinking high/);
+	assert.doesNotMatch(run.stdout, / -nc /);
+	assert.doesNotMatch(run.stdout, /,edit,write/);
+	assert.deepEqual(reviewRecords(repo), [headOf(repo)]);
+	assert.match(readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8"), /^base=HEAD~1$/m);
+});
+
+test("--review records nothing for a dirty tree, an unknown base, --rw, or a run that failed", () => {
+	const { env } = sandbox();
+	const repo = reviewRepo();
+	const review = (args: string[], extra: NodeJS.ProcessEnv = {}) => spawnSync(SCOUT, args, { cwd: repo, env: { ...env, FAKE_PI: "ok", ...extra }, encoding: "utf8" });
+	assert.equal(review(["--review", "nope"]).status, 2);
+	assert.equal(review(["--rw", "--review", "HEAD~1"]).status, 2);
+	assert.equal(review(["--review", "HEAD~1", "--timeout", "1"], { FAKE_PI: "hang" }).status, 124);
+	writeFileSync(join(repo, "a.txt"), "dirty\n");
+	const dirty = review(["--review", "HEAD~1"]);
+	assert.equal(dirty.status, 2);
+	assert.match(dirty.stderr, /needs a clean tree/);
+	assert.deepEqual(reviewRecords(repo), []);
 });
 
 test("a package.json without a type above scout does not refuse the spec", () => {
