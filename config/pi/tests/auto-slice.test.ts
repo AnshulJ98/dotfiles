@@ -2,7 +2,7 @@
 // Drives bin/auto-slice against real git in temp repos, with a fake scout beside it and a fake wt on PATH: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,7 @@ const FAKE_SCOUT = `#!/usr/bin/env bash
 echo "$PWD $*" >>"$FAKE_SCOUT_LOG"
 case "$1" in --review) echo "ship"; exit 0 ;; esac
 cat >/dev/null
+[ "$PI_WORKER_FROM_HEAD" = 1 ] || { echo "scout: a slice's worker is judged against HEAD" >&2; exit 2; }
 info() { echo "scout: dir=/scout/$1 cost=\\$0.010 blocked-on-me=$2" >&2; }
 case "$FAKE_SCOUT" in
 pass) echo changed >>src/a.txt; echo "WORKER-SENSORS: PASS"; info 11 no ;;
@@ -206,6 +207,14 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 test("stops: a second failure, a third dispatch, a PASS with Blocked on me, tests failing on the run branch", () => {
 	const l = started();
 	l.slice(["new", "parse"]);
+	const stray = join(`${l.repo}.slice-parse`, "stray.txt");
+	writeFileSync(stray, "put there by hand\n");
+	const none = existsSync(l.log) ? calls(l).length : 0;
+	const dirty = l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "pass" });
+	assert.equal(dirty.status, 1);
+	assert.match(dirty.stderr, /has changes before its first dispatch \(\?\? stray\.txt/);
+	assert.equal(existsSync(l.log) ? calls(l).length : 0, none, "no worker starts in a worktree that is not clean");
+	rmSync(stray);
 	assert.equal(l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "blocked" }).status, 1);
 	assert.match(readFileSync(join(l.state, "parse.runs"), "utf8"), /^BLOCKED rc=0 /);
 	assert.equal(l.slice(["merge", "parse", "feat: parse"]).status, 1, "a blocked PASS does not merge");

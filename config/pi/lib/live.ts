@@ -6,8 +6,8 @@
  *
  * The judging is pure; setLive(), dropLive() and readLive() are the only I/O.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { logsDir, type Role } from "./bash-log.ts";
 
 export interface Job {
@@ -109,6 +109,30 @@ export function readLive(dir = liveDir()): Live[] {
 		}
 	}
 	return found.sort((a, b) => a.since - b.since);
+}
+
+/**
+ * The repos (git common dirs) a pi process has been seen in, kept in <logs>/repos with the ones
+ * passed in added and the ones that no longer exist dropped. An auto run outlives the session
+ * that started it; without the list it would be forgotten once nothing is running in its repo.
+ */
+export function knownRepos(seen: string[], file = join(logsDir(), "repos")): string[] {
+	let known: string[] = [];
+	try {
+		known = readFileSync(file, "utf8").split("\n").filter(Boolean);
+	} catch {
+		// No list yet.
+	}
+	const all = [...new Set([...known, ...seen])].filter((dir) => existsSync(dir));
+	if (all.join("\n") !== known.join("\n")) {
+		try {
+			mkdirSync(dirname(file), { recursive: true });
+			writeFileSync(file, all.map((dir) => `${dir}\n`).join(""));
+		} catch {
+			// Unwritable: this call still looks at what it was given.
+		}
+	}
+	return all;
 }
 
 /** "45s", "2m10s", "1h05m". */

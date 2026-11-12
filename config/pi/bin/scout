@@ -302,6 +302,22 @@ fi
 # pid and pane (herdr child) are both dead is a SIGKILLed run the extension has
 # not swept yet; it does not count.
 meta_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+# The count and the claim below are one step under a lock: two scouts started together (the
+# documented "&" pair, or two sessions) would each count the other as absent. mkdir is the
+# atomic part. The step takes milliseconds, so a lock still there after SCOUT_LOCK_TRIES tenths of
+# a second was left by a scout killed inside it, and is taken over.
+LOCK="$SCOUT_ROOT/.admit"
+mkdir -p "$SCOUT_ROOT"
+tries=0
+until mkdir "$LOCK" 2>/dev/null; do
+  tries=$((tries + 1))
+  if [ "$tries" -ge "${SCOUT_LOCK_TRIES:-50}" ]; then
+    rmdir "$LOCK" 2>/dev/null || true
+    tries=0
+  fi
+  sleep 0.1
+done
+trap 'rmdir "$LOCK" 2>/dev/null; rm -f "${SPEC_TMP:-}"' EXIT
 LIVE=0 OPEN_WORKER=""
 for m in "$RUNNING"/*.meta; do
   [ -f "$m" ] || continue
@@ -328,6 +344,7 @@ mkdir -p "$RUNNING"
 META="$RUNNING/$$.meta"
 printf 'pid=%s\nstarted=%s\nmode=%s\nrepo=%s\n' "$$" "$(($(date +%s) * 1000))" "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
 trap 'rm -f "$META" "${SPEC_TMP:-}"' EXIT
+rmdir "$LOCK" 2>/dev/null || true
 
 WORKER=()
 if [ "$RW" = 1 ]; then

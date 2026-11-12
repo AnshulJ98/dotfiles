@@ -2,7 +2,7 @@
 // The events log (lib/events.ts), the live-state files (lib/live.ts) and bin/pi-health over them.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -155,4 +155,35 @@ test("pi-health: an auto run whose session is not running is a problem; one whos
 	setLive(live({ role: "worker", session: "c1", cwd: slice, since: now, active: now }), join(logs, "live"), process.ppid);
 	const carried = health(logs, repo);
 	assert.equal(carried.status, 0, carried.out);
+
+	// A second run on the repo: the worker carries the run that started its slice (pi-auto/<effort>/<slice>.new), not both.
+	writeFileSync(join(repo, "AUTO.md"), "- [ ] 1. parse, branch slice/parse\n");
+	git("checkout", "-q", "-b", "auto/a");
+	git("worktree", "add", "-q", "-b", "auto/b", `${repo}.auto-b`);
+	writeFileSync(join(`${repo}.auto-b`, "AUTO.md"), "- [ ] 1. cache, branch slice/cache\n");
+	mkdirSync(join(repo, ".git", "pi-auto", "a"), { recursive: true });
+	writeFileSync(join(repo, ".git", "pi-auto", "a", "parse.new"), "");
+	const two = health(logs, repo);
+	assert.equal(two.status, 1);
+	assert.deepEqual(two.out.match(/^! auto .*$/gm), [`! auto   ${repo}.auto-b  1 open, next: 1. cache  \u00b7 no session owns it (no session: line)`], two.out);
+});
+
+test("pi-health: a repo a pi process was seen in is remembered, so its run is reported from anywhere once nothing is live", () => {
+	const logs = temp("health-known");
+	const repo = temp("health-known-repo");
+	const elsewhere = temp("health-elsewhere");
+	execFileSync("git", ["init", "-q", repo]);
+	const now = Date.now();
+	setLive(live({ session: "s1", cwd: repo, state: "idle", what: "", since: now, active: now }), join(logs, "live"));
+	writeFileSync(join(repo, "AUTO.md"), "session: s1\n- [ ] 1. parse, branch slice/parse\n");
+	assert.equal(health(logs, elsewhere).status, 0);
+	assert.equal(health(logs, elsewhere).status, 0, "the shell's own folder is looked at, not remembered");
+	assert.equal(readFileSync(join(logs, "repos"), "utf8"), `${join(repo, ".git")}\n`);
+	rmSync(join(logs, "live"), { recursive: true });
+	const later = health(logs, elsewhere);
+	assert.equal(later.status, 1);
+	assert.match(later.out, /^! auto   \S+  1 open, next: 1\. parse  \u00b7 its session \(s1\) is not running\n$/);
+	rmSync(repo, { recursive: true });
+	assert.equal(health(logs, elsewhere).status, 0, "a repo that no longer exists is dropped");
+	assert.equal(readFileSync(join(logs, "repos"), "utf8"), "");
 });

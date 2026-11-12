@@ -32,7 +32,9 @@ const TABLE: Array<[name: string, before: Snapshot, after: Snapshot, expected: C
 	["a dirty file modified again (size)", snap({ "a.ts": state(" M", 5, 10) }), snap({ "a.ts": state(" M", 9, 10) }), [{ path: "a.ts", kind: "modified" }]],
 	["a tracked file deleted", snap({}), snap({ "o.ts": { status: " D" } }), [{ path: "o.ts", kind: "deleted" }]],
 	["an untouched dirty file", snap({ "a.ts": state(" M", 5, 10) }), snap({ "a.ts": state(" M", 5, 10) }), []],
-	["a path that left the dirty set", snap({ "a.ts": state(" M", 5, 10) }), snap({}), []],
+	["a dirty tracked file put back as HEAD has it", snap({ "a.ts": state(" M", 5, 10) }), snap({}), [{ path: "a.ts", kind: "reverted" }]],
+	["a deleted tracked file restored", snap({ "o.ts": { status: " D" } }), snap({}), [{ path: "o.ts", kind: "reverted" }]],
+	["an untracked file removed", snap({ "n.ts": state("??", 3, 10), "a.ts": state(" M", 5, 10) }), snap({ "a.ts": state(" M", 5, 10) }), [{ path: "n.ts", kind: "deleted" }]],
 	["HEAD moved", snap({}), snap({ "a.ts": state(" M", 5, 10) }, "h2"), []],
 ];
 for (const [name, before, after, expected] of TABLE) {

@@ -71,6 +71,7 @@ test("with AUTO.md, edits of repo code are refused in the checkout and its workt
 	writeFileSync(join(repo, "AUTO.md"), AUTO);
 	assert.match(String(editRefusal("src/a.ts", repo)), /Blocked: an auto run is in progress \(AUTO\.md\), and src\/a\.ts is repo code/);
 	assert.ok(editRefusal("new/file.ts", repo));
+	assert.ok(editRefusal("@src/a.ts", repo), "pi's tools strip a leading @ before they resolve the path");
 	assert.ok(editRefusal(join(repo, "src", "a.ts"), tmpdir()) === undefined, "a session outside the repo is not this run's orchestrator");
 	assert.ok(editRefusal(`${repo}.slice-x/src/a.ts`, repo), "a slice worktree is repo code too");
 	assert.ok(editRefusal("../AUTO.md", join(repo, "src")) === undefined);

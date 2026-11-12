@@ -304,6 +304,19 @@ test("a third scout is refused with exit 75 while two are live; dead pids do not
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)).length, 1, "a refused scout leaves no run folder");
 });
 
+test("admission runs under a lock: one left by a killed scout is taken over, and none is left after a run or a refusal", async () => {
+	const { env, scoutRoot } = sandbox();
+	mkdirSync(join(scoutRoot, ".admit"), { recursive: true });
+	let run = await runScout(["look around"], { ...env, FAKE_PI: "ok", SCOUT_LOCK_TRIES: "2" });
+	assert.equal(run.code, 0, run.stderr);
+	assert.equal(existsSync(join(scoutRoot, ".admit")), false);
+	runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
+	runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
+	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+	assert.equal(run.code, 75);
+	assert.equal(existsSync(join(scoutRoot, ".admit")), false);
+});
+
 test("a second worker on the same repo is refused with exit 75; another repo or a read scout is not", async () => {
 	const { env, scoutRoot } = sandbox();
 	const repo = gitCommonDir(process.cwd());
