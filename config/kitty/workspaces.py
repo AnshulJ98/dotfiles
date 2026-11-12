@@ -10,6 +10,10 @@ import os
 import re
 import time
 
+# Not documented kitty API, checked against kitty 0.50.0: add_timer and get_boss here, and below
+# boss.all_windows / all_tabs / active_window, window.created_in_session_name / os_window_id /
+# user_vars / write_to_child, tab.tab_manager_ref and its active_tab. tests/test_workspaces.py
+# fails when one of them goes. The on_* callbacks and boss.call_remote_control are documented.
 from kitty.fast_data_types import add_timer, get_boss
 
 DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
@@ -83,8 +87,9 @@ def _save(timer_id: int | None = None) -> None:
                                         f'--match=session:^{re.escape(name)}$', _file(name)))
         _place(_file(name), first not in where.get(name, {first}))
     if _owner and names:
-        with open(OPEN, 'w') as f:
+        with open(OPEN + '.tmp', 'w') as f:
             f.write('\n'.join(names) + '\n')
+        os.replace(OPEN + '.tmp', OPEN)  # a crash mid-write must not empty the list
 
 
 def _restore(timer_id: int | None = None) -> None:

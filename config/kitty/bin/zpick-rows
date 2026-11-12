@@ -51,6 +51,7 @@ def fit(text: str, width: int) -> str:
 
 
 def zmx_sessions() -> dict[str, dict[str, str]]:
+    # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
     out = {}
     for line in run('zmx', 'ls').splitlines():
         f = dict(p.strip().split('=', 1) for p in line.split('\t') if '=' in p)
