@@ -70,6 +70,10 @@
       "src": "https://github.com/delphinus/md-render.nvim",
       "version": "3.0.0 - 4.0.0"
     },
+    "meatcode.nvim": {
+      "rev": "0641fa0be06983bdab24fdfde6504ee0ab2d8672",
+      "src": "https://github.com/urwrstkn8mare/meatcode.nvim"
+    },
     "mini.nvim": {
       "rev": "1345d191bb3da9c7b0e977f4387c5761f9bff68d",
       "src": "https://github.com/nvim-mini/mini.nvim"
