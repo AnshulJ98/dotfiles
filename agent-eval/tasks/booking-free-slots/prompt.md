@@ -1,5 +1,5 @@
 ---
-files-allowed: [booking/src/booking.ts]
+files-allowed: [booking/src/booking.test.ts, booking/src/booking.ts]
 tests: cd booking && npm test
 ---
 # Free slots for a room

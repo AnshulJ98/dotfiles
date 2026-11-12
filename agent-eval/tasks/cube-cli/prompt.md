@@ -1,5 +1,5 @@
 ---
-files-allowed: [src/cli.ts]
+files-allowed: [src/cli.test.ts, src/cli.ts]
 tests: npm run check
 ---
 # cube: the CLI

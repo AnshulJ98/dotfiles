@@ -1,5 +1,5 @@
 ---
-files-allowed: [differ/package.json, differ/src/patch.ts, differ/tsconfig.json]
+files-allowed: [differ/package.json, differ/src/diff.test.ts, differ/src/patch.test.ts, differ/src/patch.ts, differ/tsconfig.json]
 tests: cd differ && npm test
 ---
 # differ: patch, the inverse of diff

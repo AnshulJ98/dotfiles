@@ -5,6 +5,7 @@
   "fix": "703b89e1df0a43be1cf15354786aed113033ec1e",
   "test": "cd booking && npm test",
   "allowed": [
+    "booking/src/booking.test.ts",
     "booking/src/booking.ts",
     "booking/src/http.ts"
   ],
