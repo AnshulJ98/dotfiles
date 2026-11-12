@@ -2,7 +2,8 @@
 # Task helpers for trial.sh and validate.sh (source it; it runs nothing).
 #   resolve_task <id|dir>   print the task dir, else return 1
 #   task_get <dir> <field>  a task.json field, arrays one item per line, leading ~ of repo expanded
-#   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix, fresh one-commit repo, links symlinked
+#   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix (a task with "rev": that commit, kind ignored),
+#                           "exclude" paths removed, fresh one-commit repo, links symlinked
 #   overlay_hidden / apply_reference / run_test <dir> <ws>
 #   is_test_path <path>     true for .test. / .spec. / _test. names and files under tests/ or __tests__/
 # overlay_hidden copies a hidden test file beside the original as zz-hidden-<name>; a hidden file that is not a
@@ -29,10 +30,17 @@ task_get() {
 make_workspace() {
   local task="$1" dest="$2" rev path repo fix
   repo="$(task_get "$task" repo)"
-  fix="$(task_get "$task" fix)"
-  case "$3" in base) rev="$fix^" ;; fix) rev="$fix" ;; *) echo "make_workspace: bad kind: $3" >&2; return 2 ;; esac
+  rev="$(task_get "$task" rev)"
+  if [ -z "$rev" ]; then
+    fix="$(task_get "$task" fix)"
+    case "$3" in base) rev="$fix^" ;; fix) rev="$fix" ;; *) echo "make_workspace: bad kind: $3" >&2; return 2 ;; esac
+  fi
   mkdir -p "$dest"
   git -C "$repo" archive "$rev" | tar -x -C "$dest" || return 1
+  while IFS= read -r path; do
+    case "/$path/" in //*|*/../*) echo "make_workspace: bad exclude path: $path" >&2; return 2 ;; esac
+    rm -rf "${dest:?}/$path"
+  done < <(task_get "$task" exclude)
   git -C "$dest" init -q
   git -C "$dest" add -A
   git -C "$dest" -c user.name=agent-eval -c user.email=agent-eval@example.invalid -c commit.gpgsign=false \
