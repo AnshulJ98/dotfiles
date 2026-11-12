@@ -169,13 +169,15 @@ dispatch)
   [ -n "$tests" ] || die 2 "$spec has no tests: line in its frontmatter"
   printf '%s\n' "$tests" >"$STATE/$name.tests"
   rm -f "$STATE/$name.tree"
-  # A slice worktree starts clean and all of it is committed on a pass, so the sensors judge everything in it
-  # against HEAD (PI_WORKER_FROM_HEAD): what a failed dispatch left behind cannot ride through the rework.
+  # A slice worktree starts clean and all of it is merged on a pass, so the sensors judge everything in it
+  # against the commit the slice began at (PI_WORKER_BASE; the run branch does not move while a slice is
+  # open): what a failed dispatch left behind, committed or not, cannot ride through the rework.
+  slice_base="$(git -C "$S" merge-base HEAD "$BRANCH")" || die 1 "slice/$name shares no commit with $BRANCH"
   [ -s "$STATE/$name.runs" ] || [ -z "$(git -C "$S" status --porcelain)" ] ||
     die 1 "slice/$name's worktree has changes before its first dispatch ($(git -C "$S" status --porcelain | head -n 5 | tr '\n' ' ')). A worker starts from a clean worktree: undo a hand edit there, and have git ignore what the worktree hook leaves"
   before="$(cksum <"$RUN/AUTO.md")"
   tick "the worker on slice/$name is still running"
-  (cd "$S" && PI_WORKER_FROM_HEAD=1 "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"
+  (cd "$S" && PI_WORKER_BASE="$slice_base" "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"
   rc="${PIPESTATUS[0]}"
   untick
   verdict="$(sed -n 's/^WORKER-SENSORS: \([A-Z-]*\).*/\1/p' "$STATE/$name.log" | head -n 1)"

@@ -259,8 +259,8 @@ test("settle check: lines added to a file that was already untracked count towar
 type Handler = (event: unknown) => Promise<unknown>;
 
 /** Commit `files` in a temp repo, arm the sensors there with `frontmatter`, run `body`, restore cwd and env. */
-// `dirt` is written after the commit and before the sensors load: what the worker finds in the checkout.
-async function withWorker(files: Record<string, string>, frontmatter: string, body: (repo: string, on: Map<string, Handler>, verdict: () => Promise<string>) => Promise<void>, dirt: Record<string, string> = {}): Promise<void> {
+// `before` runs after the commit and before the sensors load: it leaves what the worker finds in the checkout.
+async function withWorker(files: Record<string, string>, frontmatter: string, body: (repo: string, on: Map<string, Handler>, verdict: () => Promise<string>) => Promise<void>, before?: (repo: string) => void): Promise<void> {
 	const repo = mkdtempSync(join(tmpdir(), "ws-repo-"));
 	const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
 	git("init", "-q");
@@ -270,7 +270,7 @@ async function withWorker(files: Record<string, string>, frontmatter: string, bo
 	}
 	git("add", ".");
 	git("commit", "-qm", "init");
-	for (const [rel, text] of Object.entries(dirt)) writeFileSync(join(repo, rel), text);
+	before?.(repo);
 	const dir = mkdtempSync(join(tmpdir(), "ws-spec-"));
 	writeFileSync(join(dir, "spec.md"), `---\nfiles-allowed: ["**"]\ntests: "true"\n${frontmatter}---\nbody\n`);
 	const handlers = new Map<string, Handler>();
@@ -432,17 +432,24 @@ test("bash result: a change outside files-allowed gets a note naming it; one ins
 	});
 });
 
-test("what the worker finds in the checkout is not its doing, unless PI_WORKER_FROM_HEAD says the slice began at HEAD", async () => {
-	const files = { "src/a.ts": "a\n", "docs/b.md": "b\n" };
-	const left = { "docs/b.md": "left by the dispatch that failed\n", "docs/stray.md": "so was this\n" };
+test("what the worker finds in the checkout is not its doing, unless PI_WORKER_BASE names the commit the slice began at", async () => {
+	const files = { "src/a.ts": "a\n", "docs/b.md": "b\n", "docs/c.md": "c\n" };
+	// A dispatch that failed left an edit, a new file, and a commit of its own.
+	const left = (pin: boolean) => (repo: string) => {
+		const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8" });
+		if (pin) process.env.PI_WORKER_BASE = git("rev-parse", "HEAD").trim();
+		writeFileSync(join(repo, "docs/c.md"), "committed by the worker\n");
+		git("commit", "-qam", "wip");
+		writeFileSync(join(repo, "docs/b.md"), "edited\n");
+		writeFileSync(join(repo, "docs/stray.md"), "new\n");
+	};
 	await withWorker(files, 'files-allowed: ["src/**"]\n', async (_repo, on, verdict) => {
 		assert.equal(await settleContent(on), undefined);
 		assert.match(await verdict(), /"verdict":"PASS"/);
-	}, left);
-	process.env.PI_WORKER_FROM_HEAD = "1";
+	}, left(false));
 	try {
-		await withWorker(files, 'files-allowed: ["src/**"]\n', async (_repo, on) => assert.match((await settleContent(on)) ?? "", /files outside files-allowed: docs\/b\.md, docs\/stray\.md/), left);
+		await withWorker(files, 'files-allowed: ["src/**"]\n', async (_repo, on) => assert.match((await settleContent(on)) ?? "", /files outside files-allowed: docs\/b\.md, docs\/c\.md, docs\/stray\.md/), left(true));
 	} finally {
-		delete process.env.PI_WORKER_FROM_HEAD;
+		delete process.env.PI_WORKER_BASE;
 	}
 });

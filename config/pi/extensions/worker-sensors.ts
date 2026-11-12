@@ -30,7 +30,7 @@
  * settle check is the authority: before the run settles it reruns the tests
  * and diffs the tree against a snapshot taken at load, so bash writes,
  * dependency changes, size overruns, and weakened tests are all caught there.
- * With PI_WORKER_FROM_HEAD=1 (bin/auto-slice) the snapshot is HEAD itself.
+ * With PI_WORKER_BASE=<commit> (bin/auto-slice) the snapshot is that commit.
  * A failed check earns one continuation; a check that cannot run (missing
  * binary or service, exit 77, timeout) stops at once, because more model
  * turns cannot fix the environment.
@@ -440,15 +440,15 @@ function worktreeCommit(root: string): string {
 
 /**
  * Snapshot the tree as the worker found it, so pre-existing dirt is never blamed on the worker.
- * PI_WORKER_FROM_HEAD=1 says the checkout was clean when the slice began and all of it is committed on a
- * pass (bin/auto-slice): everything that differs from HEAD is judged, so what a failed dispatch left
- * behind cannot ride through the rework as "pre-existing".
+ * PI_WORKER_BASE=<commit> says the checkout was clean at that commit and all of it is merged on a pass
+ * (bin/auto-slice): everything that differs from it is judged, so what a failed dispatch left behind,
+ * committed or not, cannot ride through the rework as "pre-existing".
  */
 function takeSnapshot(cwd: string): Snapshot {
   const root = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
-  const fromHead = process.env.PI_WORKER_FROM_HEAD === "1";
-  const base = fromHead ? git(root, ["rev-parse", "HEAD"]).trim() : worktreeCommit(root);
-  const untrackedAtStart = fromHead ? new Map<string, string>() : hashUntracked(root);
+  const from = process.env.PI_WORKER_BASE;
+  const base = from ? git(root, ["rev-parse", "--verify", `${from}^{commit}`]).trim() : worktreeCommit(root);
+  const untrackedAtStart = from ? new Map<string, string>() : hashUntracked(root);
   const untrackedText = new Map<string, string>();
   let budget = UNTRACKED_TEXT_BUDGET;
   for (const file of untrackedAtStart.keys()) {

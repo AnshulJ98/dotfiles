@@ -14,11 +14,11 @@ const FAKE_SCOUT = `#!/usr/bin/env bash
 echo "$PWD $*" >>"$FAKE_SCOUT_LOG"
 case "$1" in --review) echo "ship"; exit 0 ;; esac
 cat >/dev/null
-[ "$PI_WORKER_FROM_HEAD" = 1 ] || { echo "scout: a slice's worker is judged against HEAD" >&2; exit 2; }
+echo "$PI_WORKER_BASE" >>"$FAKE_SCOUT_LOG.base"
 info() { echo "scout: dir=/scout/$1 cost=\\$0.010 blocked-on-me=$2" >&2; }
 case "$FAKE_SCOUT" in
 pass) echo changed >>src/a.txt; echo "WORKER-SENSORS: PASS"; info 11 no ;;
-fail) echo "WORKER-SENSORS: FAIL tests: exit 1"; info 12 no ;;
+fail) git commit -q --allow-empty -m "left by the worker"; echo "WORKER-SENSORS: FAIL tests: exit 1"; info 12 no ;;
 blocked) echo changed >>src/a.txt; echo "WORKER-SENSORS: PASS"; info 13 yes ;;
 refuse) echo "scout: refusing" >&2; exit 75 ;;
 esac
@@ -185,6 +185,8 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 	const passed = l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "pass" });
 	assert.equal(passed.status, 0, passed.stderr);
 	assert.match(passed.stdout, /slice\/parse passed its sensors\. Next: auto-slice merge parse/);
+	const start = l.git(l.run, "rev-parse", "HEAD");
+	assert.deepEqual([...new Set(readFileSync(`${l.log}.base`, "utf8").trim().split("\n"))], [start], "the rework is judged from where the slice began, not from what the failed worker committed");
 
 	writeFileSync(join(tree, "src", "a.txt"), "one\nchanged\nby hand\n");
 	const hand = l.slice(["merge", "parse", "feat: parse"]);

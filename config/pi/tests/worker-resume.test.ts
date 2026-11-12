@@ -34,7 +34,8 @@ test("worker stalls, is aborted, resumes exactly once, and ends PASS", async () 
 		for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
 	};
 
-	const saved = { cwd: process.cwd(), spec: process.env.PI_WORKER_SPEC, report: process.env.PI_WORKER_REPORT, stall: process.env.PI_STREAM_STALL_MS };
+	const saved = { cwd: process.cwd(), spec: process.env.PI_WORKER_SPEC, report: process.env.PI_WORKER_REPORT, stall: process.env.PI_STREAM_STALL_MS, logs: process.env.PI_LOG_DIR };
+	process.env.PI_LOG_DIR = join(dir, "logs");
 	process.env.PI_WORKER_SPEC = specFile;
 	process.env.PI_WORKER_REPORT = report;
 	process.env.PI_STREAM_STALL_MS = "20";
@@ -48,6 +49,7 @@ test("worker stalls, is aborted, resumes exactly once, and ends PASS", async () 
 		await new Promise((done) => setTimeout(done, 80));
 		assert.equal(abort.mock.callCount(), 1, "the silent stream was aborted once");
 		assert.equal(sendUserMessage.mock.callCount(), 0, "no resume before the run settles");
+		assert.match(readFileSync(join(dir, "logs", "events.log"), "utf8"), /^\S+ \S+ worker abc123 stream\.stall no model output for 0s\n$/);
 
 		await fire("agent_settled", { aborted: true }, { hasUI: false });
 		assert.equal(sendUserMessage.mock.callCount(), 1, "one resume after the abort");
@@ -58,7 +60,7 @@ test("worker stalls, is aborted, resumes exactly once, and ends PASS", async () 
 		assert.equal(sendUserMessage.mock.callCount(), 1, "still one resume");
 	} finally {
 		process.chdir(saved.cwd);
-		for (const [key, value] of [["PI_WORKER_SPEC", saved.spec], ["PI_WORKER_REPORT", saved.report], ["PI_STREAM_STALL_MS", saved.stall]] as const) {
+		for (const [key, value] of [["PI_WORKER_SPEC", saved.spec], ["PI_WORKER_REPORT", saved.report], ["PI_STREAM_STALL_MS", saved.stall], ["PI_LOG_DIR", saved.logs]] as const) {
 			if (value === undefined) delete process.env[key];
 			else process.env[key] = value;
 		}

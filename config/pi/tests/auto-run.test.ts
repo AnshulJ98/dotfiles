@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import autoRun, { dirtyDuringAuto, editRefusal, isStopped, nudge, openSlices, ownRun, worktreeAddTarget, worktreeRefusal } from "../extensions/auto-run.ts";
+import autoRun, { dirtyDuringAuto, editRefusal, isStopped, nudge, openSlices, ownRun, scoutRunning, worktreeAddTarget, worktreeRefusal } from "../extensions/auto-run.ts";
 import primeReminder from "../extensions/prime-reminder.ts";
 
 const AUTO = "# spec\n- [ ] not a slice line\n\n- [x] 1. parse, branch slice/parse, decisions 1\n- [ ] 2. cache, branch slice/cache, decisions 2,3\n  * [ ] 3. ui, branch slice/ui, decisions 4\n";
@@ -198,8 +198,13 @@ test("the handlers: block, report a dirty checkout once, and nudge twice per ope
 		writeFileSync(join(repo, "AUTO.md"), AUTO.replace("- [ ] 2.", "- [x] 2."));
 		assert.equal((await settle())?.continue, true, "a tick is progress: the count starts again");
 		assert.equal(await on.agent_before_settle({ outcome: "aborted" }), undefined);
-		mkdirSync(join(String(process.env.PI_CODING_AGENT_DIR), "sessions", "scout", ".running"), { recursive: true });
-		writeFileSync(join(String(process.env.PI_CODING_AGENT_DIR), "sessions", "scout", ".running", "1.meta"), "pid=1\n");
+		const running = join(String(process.env.PI_CODING_AGENT_DIR), "sessions", "scout", ".running");
+		mkdirSync(running, { recursive: true });
+		writeFileSync(join(running, "4194303.meta"), "pid=4194303\n");
+		assert.equal(scoutRunning(repo), false, "a meta left by a killed scout");
+		writeFileSync(join(running, "2.meta"), `pid=${process.pid}\nrepo=/elsewhere/.git\n`);
+		assert.equal(scoutRunning(repo), false, "another repo's scout");
+		writeFileSync(join(running, "1.meta"), "pid=1\n");
 		assert.equal(await settle(), undefined, "a scout is still running");
 	} finally {
 		process.chdir(before);

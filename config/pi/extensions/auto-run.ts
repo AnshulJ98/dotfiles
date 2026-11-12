@@ -164,9 +164,34 @@ export function nudge(cwd: string, scoutRunning: boolean, sessionId?: string): {
 	};
 }
 
-function scoutRunning(): boolean {
+function alive(pid: string | undefined): boolean {
+	if (!pid || !/^\d+$/.test(pid)) return false;
+	try {
+		process.kill(Number(pid), 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+/** A live scout on this repo. A meta left by a killed scout, or another repo's scout, must not let an unfinished run settle. */
+export function scoutRunning(cwd: string): boolean {
 	const running = join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "sessions", "scout", ".running");
-	return existsSync(running) && readdirSync(running).some((name) => name.endsWith(".meta"));
+	if (!existsSync(running)) return false;
+	const common = git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
+	return readdirSync(running).filter((name) => name.endsWith(".meta")).some((name) => {
+		let meta = "";
+		try {
+			meta = readFileSync(join(running, name), "utf8");
+		} catch {
+			return false;
+		}
+		const field = (key: string): string | undefined => new RegExp(`^${key}=(.*)$`, "m").exec(meta)?.[1];
+		// pid is the wrapper; in a herdr tab the child is the pane's (bin/scout counts a scout as live the same way)
+		if (!alive(field("pid")) && !alive(field("pane"))) return false;
+		const repo = field("repo");
+		return !repo || !common || repo === common;
+	});
 }
 
 export default function (pi: ExtensionAPI) {
@@ -205,7 +230,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("agent_before_settle", async (event, ctx) => {
 		if (event.outcome !== "completed") return undefined;
-		const next = nudge(process.cwd(), scoutRunning(), ctx.sessionManager.getSessionId());
+		const next = nudge(process.cwd(), scoutRunning(process.cwd()), ctx.sessionManager.getSessionId());
 		if (!next) return undefined;
 		if (next.open !== openAtLastNudge) nudges = 0;
 		if (nudges >= MAX_NUDGES) return undefined;

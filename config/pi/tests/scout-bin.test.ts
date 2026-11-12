@@ -304,17 +304,13 @@ test("a third scout is refused with exit 75 while two are live; dead pids do not
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)).length, 1, "a refused scout leaves no run folder");
 });
 
-test("admission runs under a lock: one left by a killed scout is taken over, and none is left after a run or a refusal", async () => {
+test("scouts started together claim before they count: never more than two are admitted", async () => {
 	const { env, scoutRoot } = sandbox();
-	mkdirSync(join(scoutRoot, ".admit"), { recursive: true });
-	let run = await runScout(["look around"], { ...env, FAKE_PI: "ok", SCOUT_LOCK_TRIES: "2" });
-	assert.equal(run.code, 0, run.stderr);
-	assert.equal(existsSync(join(scoutRoot, ".admit")), false);
-	runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
-	runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
-	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 75);
-	assert.equal(existsSync(join(scoutRoot, ".admit")), false);
+	const runs = await Promise.all([1, 2, 3, 4, 5].map(() => runScout(["--timeout", "2", "look around"], { ...env, FAKE_PI: "hang" })));
+	const codes = runs.map((run) => run.code);
+	assert.ok(codes.every((code) => code === 75 || code === 124), runs.map((run) => `${run.code} ${run.stderr}`).join(""));
+	assert.ok(codes.filter((code) => code === 124).length <= 2, `admitted: ${codes}`);
+	assert.deepEqual(readdirSync(join(scoutRoot, ".running")).filter((name) => name.endsWith(".meta")), [], "a refused claim is removed");
 });
 
 test("a second worker on the same repo is refused with exit 75; another repo or a read scout is not", async () => {
