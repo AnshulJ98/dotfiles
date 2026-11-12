@@ -138,7 +138,7 @@ out of this context; only its digest comes back.
   one is merged or rejected, because unreviewed slices stack faster than
   they can be read.
 - Don't delegate what you can finish in fewer steps than the dispatch
-  costs. Inside an auto run (a root `AUTO.md` exists) that rule is off:
+  costs. Inside an auto run (its `AUTO.md` exists) that rule is off:
   every slice goes to a worker, a failed one gets a rework dispatch, and
   the only file you edit is `AUTO.md`.
 
@@ -309,8 +309,9 @@ fix. Then list the clean categories in one line.
 For runs that change files or span many steps:
 
 - Keep the task list in the spec or an existing `NOW.md`, never a new
-  file, and tick items as they close. The one exception is the root
-  `AUTO.md` of an auto run; after a compaction, re-read it first.
+  file, and tick items as they close. The one exception is the
+  `AUTO.md` of an auto run, at the root of the run's worktree; after a
+  compaction, re-read it first.
 - End with three headings: **Blocked on me**, **Changed**, **Found**.
   One line per item; leave out an empty heading. Mark anything you
   couldn't confirm and say where you looked.

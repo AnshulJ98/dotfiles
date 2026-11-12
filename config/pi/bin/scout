@@ -22,6 +22,9 @@
 #                  tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
 #                  sha>; config/git/bin/auto-guard refuses to merge an auto/*
 #                  branch whose tip has no such record. Thinking high, 900s.
+#                  A second and third review of the same base read only the
+#                  diff since the round before, with its findings attached;
+#                  a fourth is refused (exit 2).
 #   --fork         Child starts from a COPY of the parent session. Re-bills
 #                  the whole parent context; opt in only when the child must
 #                  see the conversation verbatim. Never the default.
@@ -205,12 +208,40 @@ if [ -n "$REVIEW_BASE" ]; then
     echo "scout: --review needs a clean tree; commit first, the record is for HEAD" >&2
     exit 2
   }
+  # Rounds. A record with this base for a commit between it and HEAD is an earlier round of this review.
+  # Rounds 2 and 3 read only what changed since the round before, with its findings attached; a fourth
+  # is refused, so a review that does not converge stops instead of looping.
+  REVIEW_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/pi-review"
+  REVIEW_BASE_SHA="$(git rev-parse "$REVIEW_BASE^{commit}")"
+  REVIEW_ROUND=1
+  REVIEW_PREV=""
+  for rec in "$REVIEW_DIR"/*; do
+    sha="${rec##*/}"
+    [ -f "$rec" ] && [ "$sha" != "$REVIEW_TIP" ] && grep -qx "base_sha=$REVIEW_BASE_SHA" "$rec" &&
+      git merge-base --is-ancestor "$sha" HEAD 2>/dev/null || continue
+    n="$(sed -n 's/^round=//p' "$rec")"
+    [ "${n:-1}" -lt "$REVIEW_ROUND" ] || {
+      REVIEW_ROUND=$((${n:-1} + 1))
+      REVIEW_PREV="$sha"
+    }
+  done
+  [ "$REVIEW_ROUND" -le 3 ] || {
+    echo "scout: three review rounds are done on this range (the last at ${REVIEW_PREV:0:9}); a fourth is the user's call. Stop and report the open findings. Starting over means deleting the records in $REVIEW_DIR" >&2
+    exit 2
+  }
   REVIEW_TARGET="\`git diff $REVIEW_BASE...HEAD\` and \`git log --first-parent $REVIEW_BASE..HEAD\`, every slice of the run at once"
   REVIEW_TOP="$(git rev-parse --show-toplevel)"
   if [ -z "${BRIEF_FILE:-}" ] && [ -f "$REVIEW_TOP/AUTO.md" ]; then
     BRIEF_FILE="$REVIEW_TOP/AUTO.md"
     BRIEF=("@$BRIEF_FILE")
     REVIEW_TARGET="$REVIEW_TARGET, against the spec in the attached AUTO.md"
+  fi
+  if [ "$REVIEW_ROUND" -gt 1 ]; then
+    REVIEW_TARGET="\`git diff $REVIEW_PREV..HEAD\`, the fixes made since round $((REVIEW_ROUND - 1)) of the review of \`$REVIEW_BASE..HEAD\`${BRIEF_FILE:+ (its spec is in the attached AUTO.md)}. This is round $REVIEW_ROUND of 3: judge whether this diff resolves the last round's findings and what it breaks; anything outside this diff is out of scope unless the diff caused it"
+    if [ -r "$REVIEW_DIR/$REVIEW_PREV.findings" ]; then
+      BRIEF+=("@$REVIEW_DIR/$REVIEW_PREV.findings")
+      REVIEW_TARGET="$REVIEW_TARGET. The last round's findings are attached"
+    fi
   fi
   REVIEW_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$REVIEW_MD")"
   # Split on the literal $@ instead of ${body/..}: bash 5.2 expands & in a replacement
@@ -441,6 +472,25 @@ conclude() {
     { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
   fi
   if [ -f "$OUT" ]; then cat "$OUT"; fi
+  # Where the run's files are, what it cost, and whether a worker left something under Blocked on me: a PASS
+  # with a refused step is not a finished slice. On stderr, so stdout stays the digest; bin/auto-slice reads it.
+  node -e '
+    const fs = require("node:fs");
+    const [dir, out, rw] = process.argv.slice(1);
+    let cost = 0;
+    for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+      if (!name.endsWith(".jsonl")) continue;
+      for (const line of fs.readFileSync(dir + "/" + name, "utf8").split("\n")) {
+        try { cost += JSON.parse(line).message?.usage?.cost?.total ?? 0; } catch {}
+      }
+    }
+    const lines = (fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "").split("\n");
+    const at = lines.findIndex((line) => /^\W*Blocked on me\b/i.test(line));
+    let body = at < 0 ? "" : lines[at].replace(/^\W*Blocked on me\W*/i, "");
+    for (let i = at + 1; at >= 0 && i < lines.length && !/^\W*\*\*[A-Z]|^#+ /.test(lines[i]); i++) body += " " + lines[i];
+    const blocked = !/^[\s*.:-]*($|nothing\b|none\b|n\/a)/i.test(body);
+    console.error("scout: dir=" + dir + " cost=$" + cost.toFixed(3) + (rw === "1" ? " blocked-on-me=" + (blocked ? "yes" : "no") : ""));
+  ' "$SESSIONS" "$OUT" "$RW" || true
 }
 
 on_signal() {
@@ -565,9 +615,10 @@ fi
 conclude "$rc"
 if [ -n "$REVIEW_BASE" ] && [ "$rc" = 0 ] && [ -s "$OUT" ]; then
   if [ "$("$PI_SCOUT_REAL_GIT" rev-parse HEAD 2>/dev/null)" = "$REVIEW_TIP" ]; then
-    mkdir -p "$PI_SCOUT_GIT_DIR/pi-review"
-    printf 'base=%s\nreviewed=%s\nrun=%s\n' "$REVIEW_BASE" "$(date -u +%FT%TZ)" "$SESSIONS" >"$PI_SCOUT_GIT_DIR/pi-review/$REVIEW_TIP"
-    echo "scout: review recorded for ${REVIEW_TIP:0:9}" >&2
+    mkdir -p "$REVIEW_DIR"
+    printf 'base=%s\nbase_sha=%s\nround=%s\nreviewed=%s\nrun=%s\n' "$REVIEW_BASE" "$REVIEW_BASE_SHA" "$REVIEW_ROUND" "$(date -u +%FT%TZ)" "$SESSIONS" >"$REVIEW_DIR/$REVIEW_TIP"
+    cp "$OUT" "$REVIEW_DIR/$REVIEW_TIP.findings"
+    echo "scout: review round $REVIEW_ROUND recorded for ${REVIEW_TIP:0:9}" >&2
   else
     echo "scout: HEAD moved during the review; nothing recorded" >&2
   fi

@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import autoRun, { dirtyDuringAuto, editRefusal, isStopped, nudge, openSlices, worktreeAddTarget, worktreeRefusal } from "../extensions/auto-run.ts";
+import autoRun, { dirtyDuringAuto, editRefusal, isStopped, nudge, openSlices, ownRun, worktreeAddTarget, worktreeRefusal } from "../extensions/auto-run.ts";
+import primeReminder from "../extensions/prime-reminder.ts";
 
 const AUTO = "# spec\n- [ ] not a slice line\n\n- [x] 1. parse, branch slice/parse, decisions 1\n- [ ] 2. cache, branch slice/cache, decisions 2,3\n  * [ ] 3. ui, branch slice/ui, decisions 4\n";
 
@@ -100,12 +101,67 @@ test("nudge: unticked slices send the turn back; a stopped: line, a running scou
 	assert.equal(nudge(repo, false), undefined);
 });
 
+/** makeRepo plus a run worktree beside it, as bin/auto-slice start leaves it: auto/e with an AUTO.md that names session s1. */
+function makeSiblingRun(): { repo: string; run: string } {
+	const repo = makeRepo();
+	const run = `${repo}.auto-e`;
+	execFileSync("git", ["worktree", "add", "-q", run, "-b", "auto/e"], { cwd: repo, stdio: "ignore" });
+	execFileSync("git", ["worktree", "add", "-q", `${repo}.other`, "-b", "feature/other"], { cwd: repo, stdio: "ignore" });
+	writeFileSync(join(run, "AUTO.md"), `${AUTO}session: s1\n`);
+	return { repo, run };
+}
+
+test("a run in its own worktree: its checkout and slice worktrees are closed, the main checkout and other worktrees stay open", () => {
+	const { repo, run } = makeSiblingRun();
+	assert.equal(editRefusal("src/a.ts", repo), undefined, "the main checkout is not the run's");
+	assert.equal(editRefusal(`${repo}.other/src/a.ts`, repo), undefined);
+	assert.match(String(editRefusal(`${run}/src/a.ts`, repo)), /Blocked: an auto run is in progress/);
+	assert.ok(editRefusal(`${repo}.slice-x/src/a.ts`, repo));
+	assert.equal(editRefusal(`${run}/AUTO.md`, repo), undefined);
+	assert.ok(editRefusal("src/a.ts", run), "from inside the run worktree too");
+});
+
+test("ownRun: the run in the session's checkout, else the one whose AUTO.md names the session", () => {
+	const { repo, run } = makeSiblingRun();
+	assert.equal(ownRun(repo), undefined);
+	assert.equal(ownRun(repo, "s2"), undefined, "another session's run");
+	assert.equal(ownRun(repo, "s1"), run);
+	assert.equal(ownRun(join(run, "src")), run);
+	assert.equal(ownRun(tmpdir(), "s1"), undefined);
+	writeFileSync(join(run, "src", "a.ts"), "export const a = 2;\n");
+	writeFileSync(join(repo, "src", "a.ts"), "export const a = 3;\n");
+	assert.equal(dirtyDuringAuto(repo, "s1"), " M src/a.ts", "the run's checkout, not the session's");
+	assert.equal(dirtyDuringAuto(repo, "s2"), "");
+	assert.match(String(nudge(repo, false, "s1")?.content), new RegExp(`^${run}/AUTO\\.md still lists 2 unticked slices`));
+	assert.equal(nudge(repo, false, "s2"), undefined);
+});
+
 type Handler = (event: Record<string, unknown>) => Promise<Record<string, unknown> | undefined>;
-function load(): Record<string, Handler> {
+type RawHandler = (event: Record<string, unknown>, ctx: unknown) => ReturnType<Handler>;
+function load(extension: (pi: never) => void = autoRun, sessionId = "s1"): Record<string, Handler> {
 	const handlers: Record<string, Handler> = {};
-	autoRun({ on: (name: string, handler: Handler) => (handlers[name] = handler) } as never);
+	const ctx = { sessionManager: { getSessionId: () => sessionId }, ui: { notify: () => undefined } };
+	extension({ on: (name: string, handler: RawHandler) => (handlers[name] = (event) => handler(event, ctx)), sendUserMessage: () => undefined } as never);
 	return handlers;
 }
+
+test("after a compaction the reminder names the AUTO.md of the run this session owns", async () => {
+	const { repo, run } = makeSiblingRun();
+	const before = process.cwd();
+	process.chdir(repo);
+	try {
+		const mine = load(primeReminder);
+		assert.equal(await mine.before_agent_start({}), undefined, "no compaction, no reminder");
+		await mine.session_compact({ reason: "threshold", willRetry: false });
+		const sent = (await mine.before_agent_start({})) as { message: { content: string } };
+		assert.ok(sent.message.content.endsWith(`re-read ${run}/AUTO.md before anything else.`), sent.message.content);
+		const other = load(primeReminder, "s2");
+		await other.session_compact({ reason: "threshold", willRetry: false });
+		assert.doesNotMatch(((await other.before_agent_start({})) as { message: { content: string } }).message.content, /AUTO\.md/);
+	} finally {
+		process.chdir(before);
+	}
+});
 
 test("the handlers: block, report a dirty checkout once, and nudge twice per open count", async () => {
 	const repo = makeRepo();
