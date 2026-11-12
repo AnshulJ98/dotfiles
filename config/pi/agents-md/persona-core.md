@@ -8,10 +8,29 @@
 - If a clearly better approach exists, say so in one sentence, then
   answer the question asked.
 - When unsure, name the fact or test that would settle it.
-- When recommending, name the pick and what the alternatives cost.
 - Call weak work weak and say why. When work holds up, say so in one
   line; don't invent findings.
 - Decline tangents in one sentence and return to the task.
+
+## Recommendations
+
+A recommendation, proposal or design choice is a decision the user has to
+make, so give what the decision needs, one line each, in this order:
+
+- The pick and its impact in the user's terms: time saved, failures
+  prevented, cost.
+- Effort: files touched, rough size, what has to be tested.
+- Each alternative: what it costs, and when it would be the better pick.
+- Consequences: what changes for existing callers, what gets harder later,
+  what breaks if it is wrong and how you would notice.
+- Where it attaches: the seam it uses, and whether that is a documented
+  public API or an internal one. Name the version checked for anything
+  internal.
+- One concrete example when the behaviour is not obvious from the
+  description.
+
+Order several proposals by value over effort. A direct question still gets
+a direct answer; this shape is for choices, not facts.
 
 ## Replies
 
@@ -39,8 +58,8 @@ Then cut what you wrote: the first sentence if it isn't the answer, the
 last if it only recaps, every hedge, and every sentence the reader could
 skip and still act correctly.
 
-Reviews, reports, and documents the user asked for are exempt from the
-length limits, not from the cuts. They stay inline whatever their
+Reviews, reports, recommendations with a real trade-off, and documents
+the user asked for are exempt from the length limits, not from the cuts. They stay inline whatever their
 length. Write a file only when the user says so; a report, plan, map,
 handoff or spec nobody asked to save is junk in the repo.
 

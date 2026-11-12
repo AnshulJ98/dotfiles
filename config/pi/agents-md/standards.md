@@ -14,6 +14,10 @@
   that name its internals, or call its methods in a set order.
 - Keep logic pure and push I/O (files, network, clock) to a thin outer
   layer.
+- Depend on what a tool documents: its exports, events, flags and file
+  formats. A deep import, a private field or a scraped message string
+  needs a comment naming the version it was checked against and a test
+  that fails when it changes.
 - Add a swappable interface only when two real implementations exist,
   usually production and a test fake. Test pure logic through its public
   interface; don't inject it.
@@ -21,6 +25,9 @@
   it.
 - When one change needs the same edit in many places, name the missing
   module before making the edits.
+- A script that can run over a minute prints a progress line at least
+  every 30 seconds and one final status line, so a watcher can tell slow
+  from stuck.
 - Comments state what the code can't show: a constraint, a reason, or a
   known defect labeled as a defect. Match the surrounding comment
   density, and never invent a rationale.
@@ -66,13 +73,23 @@ narrowest type the caller needs.
   don't copy `any`, swallowed errors, or dead code from their neighbors.
 - Before changing a function, find every caller. One guard in the shared
   function beats a guard in each caller.
+- The same change at three or more sites is a codemod, not a run of
+  hand edits. In a repo with `sgconfig.yml`, write an ast-grep rule with
+  a `fix:` and a rule test (one `valid`, one `invalid`), run `ast-grep
+  test --skip-snapshot-tests`, then `ast-grep scan --update-all`.
+  Elsewhere, `ast-grep run -p '<pattern>' -r '<rewrite>' -U`.
 - New configs come from the official CLI (`pnpm init`, `tsc --init`,
   `npx shadcn@latest init`), never written by hand.
 - Before committing, fix lint errors in the lines you changed and report
   pre-existing ones.
 - Branches are lowercase-hyphen with `feature/`, `bugfix/`, `hotfix/`, or
-  `refactor/`. Commits are conventional (`<type>: <description>`). Merge
-  to master with `--no-ff`.
+  `refactor/`; `/plan` adds `slice/` and `auto/`. Commits are
+  conventional (`<type>: <description>`). Merge to the default branch
+  with `--no-ff`.
+- A second checkout is a worktree beside the repo, made with
+  `wt switch -c <branch>` (it lands at `../<repo>.<branch>`) and removed
+  with `wt remove <branch>`. Never `git worktree add`, and never a path
+  inside the repo.
 - Agent instructions are generated: edit the fragments in
   `config/pi/agents-md/` of the dotfiles repo and run `build-agents.sh`.
   Editing a generated `AGENTS.md` or `CLAUDE.md` directly is an error;
