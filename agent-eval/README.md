@@ -58,7 +58,7 @@ validate.sh <task>|--all
 matrix.sh <run-name> --cells "<provider/model:thinking> ..." [--tasks "<id> ..."] [--trials 3] [--jobs 1]
 trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>
 summarize.ts <run-dir|trials.jsonl>
-gate.sh <run-dir|trials.jsonl> [--update]
+gate.sh <run-dir|trials.jsonl> [--update] [--partial]
 mk-task.sh <repo> <fix-sha> [id]
 check-judges.sh <task>
 judge.sh <trial-dir> <task-dir> [--findings <file>]
@@ -107,18 +107,21 @@ than the flaky count. The probes below are the cheaper first look.
 ### The gate
 
 `gate.sh <run>` compares a run with `agent-eval/baseline.json`, per role
-and cell present in both, and says whether the steering config changed since
+and cell of the baseline, and says whether the steering config changed since
 the baseline's commit. It exits 1 when a cell counted fewer tasks than the
 baseline, or its pass rate falls by more than the larger flaky-task count of
-the baseline and the run (the drop is measured in the baseline's tasks), and 2
-when there is no baseline or no role and cell in common with it. Review is
-gated on defect recall (defects found over defects asked about, summed over
-trials), with the allowance counted in defects; `--update` also exits 2 while
+the baseline and the run (the drop is measured in the baseline's tasks), or
+when a role and cell the baseline measured is absent from the run (a printed
+`MISSING` row), and 2 when there is no baseline or no role and cell in common
+with it. Review is gated on defect recall (defects found over defects asked
+about, summed over trials), with the allowance counted in defects; recall on
+only one side (baseline or run) always fails. `--partial` is for a deliberate
+subset run: missing role/cell pairs are then printed as `skip` lines and do
+not fail the gate, everything else still does. `--update` also exits 2 while
 the steering paths have uncommitted changes. After a deliberate change, run `gate.sh <run> --update`: it
 rewrites `baseline.json` from that run and appends one line per role and cell
-to `agent-eval/history.jsonl`. No baseline is committed yet; the first
-`--update` creates it. Run the gate with the same cells and tasks as the
-baseline, or the comparison covers only what overlaps.
+to `agent-eval/history.jsonl`. Run the gate with the same cells and tasks as
+the baseline, or pass `--partial` when the run is meant to cover only a subset.
 
 ### Add a task from a real failure
 
@@ -212,7 +215,7 @@ empty sessions, so the real ones are untouched. Results from before
   same code with every rubric defect fixed. Any finding at the top severity
   is invented; `score_probes.py` prints the count (0 is clean).
 - **premise-true** — the premise probe with a premise that holds (profiled
-  GetItem p99 31 ms of 42 ms, Redis GET 1.2 ms). Pushing back is the
+  GetItem p99 31 ms of 36 ms, Redis GET 1.2 ms). Pushing back is the
   failure; the first sentence must not gate.
 
 Name them explicitly (`./run.sh "" high review-clean premise-true`); the
