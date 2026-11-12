@@ -1,0 +1,55 @@
+## Keys shown by cmd+/ (bin/zkeys). Tab separated: key, what it does, and where it is bound when
+## that is not kitty.conf. "1..9" and "a|b" stand for one key each. config/herdr/tests/test_keys.py
+## fails when a kitty.conf command key is missing here or a key here is not in kitty.conf.
+# Workspaces
+cmd+enter	the workspace kitty: focus it, or start it	AeroSpace
+cmd+alt+n	new workspace, named after this folder
+cmd+alt+shift+n	new workspace, ask for the name
+cmd+alt+w	close the workspace (panes keep running)
+cmd+alt+1..9	switch to workspace 1..9
+ctrl+alt+[	previous workspace
+ctrl+alt+]	next workspace
+cmd+alt+b	hide or show the sidebar
+click	a sidebar row: go to that workspace or agent	sidebar
+cmd+alt+g	Go to: pick a workspace, tab, pane or session
+cmd+/	this list
+# In the Go to picker
+enter	go to the row	picker
+ctrl+s	open a detached session in a split	picker
+ctrl+t	all, or detached and closed only	picker
+tab	mark several rows	picker
+ctrl+x	kill the session, or forget a closed workspace	picker
+esc	close	picker
+# Panes
+cmd+d	split right
+cmd+shift+d	split down
+cmd+w	close the pane (it keeps running; Go to)
+cmd+opt+left|right|up|down	focus the pane on that side
+cmd+ctrl+left|right|up|down	resize the pane
+cmd+alt+f	zoom the pane to fill the tab, and back
+cmd+shift+]	next pane (also while zoomed)
+cmd+shift+[	previous pane
+cmd+shift+l	next layout
+# Tabs
+cmd+t	new tab in this folder
+cmd+shift+t	new tab
+cmd+alt+t	new tab with a plain shell, outside zmx
+cmd+alt+l	lazygit for this folder in a full tab (q closes)
+cmd+1..9	go to tab 1..9
+cmd+shift+w	close the tab
+cmd+shift+b	move the tab to a new window
+cmd+shift+j	move the tab to another window (asks which)
+# Windows
+cmd+n	new window here (joins no workspace)
+cmd+shift+n	new window
+cmd+alt+enter	a second, plain kitty with no workspaces	AeroSpace
+ctrl+alt+enter	kitty running herdr	AeroSpace
+# Screen and scrollback
+ctrl+shift+h	scrollback in nvim
+ctrl+shift+g	the last command's output in nvim
+cmd+shift+e	open a URL by hint
+cmd+shift+f	insert a path from the screen by hint
+cmd+shift+g	open a file:line from the screen by hint
+cmd+equal	bigger font
+cmd+minus	smaller font
+cmd+0	reset the font size
