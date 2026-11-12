@@ -1,0 +1,16 @@
+{
+  "id": "cube-render",
+  "role": "worker",
+  "repo": "~/Dev/sim/cube",
+  "fix": "9456dd59d30037d8b0ec1935c0605d3cb7148f5c",
+  "test": "npm run check",
+  "allowed": [
+    "src/render.ts"
+  ],
+  "hidden": [
+    "src/render.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ]
+}
