@@ -44,11 +44,15 @@ export interface BaselineCell { passRate: number; tasks: number; flaky: number; 
 export type RoleCells = Record<string, Record<string, BaselineCell>>;
 
 export interface GateRow {
-	role: string; cell: string; baseline: BaselineCell; current: BaselineCell;
+	role: string; cell: string; baseline: BaselineCell; current: BaselineCell | undefined;
 	/** drop in baseline tasks (pass rate) or in defects (recall), and the allowed drop: the larger flaky count of the two sides */
 	drop: number; allowed: number; unit: "task" | "defect";
 	/** fewer counted tasks than the baseline ran: always a fail */
 	short: boolean; fail: boolean;
+	/** the baseline measured this pair and the run has nothing for it (current is then undefined); a fail, unless the run is a deliberate subset */
+	missing: boolean;
+	/** recall on one side only ("baseline" or "run"): always a fail */
+	oneSided?: "baseline" | "run";
 }
 
 const EPSILON = 1e-9;
@@ -151,27 +155,34 @@ export function baselineCells(roles: RoleSummary[]): RoleCells {
 }
 
 /**
- * Compare (role, cell) pairs present in both. One fails when it counted fewer tasks than the baseline, or when its
- * pass rate is below baseline by more than the flaky-task count (drop taken in baseline tasks). When both sides have
- * defect recall (review), recall is compared instead, in defects, against the larger flaky-defect count.
+ * One row per (role, cell) pair in the baseline. A pair absent from the run is a failing row marked missing. Otherwise
+ * it fails when it counted fewer tasks than the baseline, or when its pass rate is below baseline by more than the
+ * flaky-task count (drop taken in baseline tasks). When both sides have defect recall (review), recall is compared
+ * instead, in defects, against the larger flaky-defect count; recall on one side only always fails (oneSided).
  */
 export function gate(baseline: RoleCells, current: RoleCells): GateRow[] {
 	const has = (o: object, k: string): boolean => Object.hasOwn(o, k);
 	return Object.keys(baseline)
 		.sort()
-		.filter((role) => has(current, role))
 		.flatMap((role) =>
 			Object.keys(baseline[role])
 				.sort()
-				.filter((cell) => has(current[role], cell))
 				.map((cell): GateRow => {
-					const [b, c] = [baseline[role][cell], current[role][cell]];
+					const b = baseline[role][cell];
+					if (!has(current, role) || !has(current[role], cell)) {
+						return { role, cell, baseline: b, current: undefined, drop: 0, allowed: 0, unit: "task", short: false, fail: true, missing: true };
+					}
+					const c = current[role][cell];
 					const [br, cr, bd] = [b.recall, c.recall, b.defects];
 					const byRecall = br !== undefined && cr !== undefined && bd !== undefined;
+					const oneSided = (br !== undefined) !== (cr !== undefined) ? (br !== undefined ? "baseline" : "run") : undefined;
 					const drop = byRecall ? (br - cr) * bd : (b.passRate - c.passRate) * b.tasks;
 					const allowed = byRecall ? Math.max(b.flakyDefects ?? 0, c.flakyDefects ?? 0) : Math.max(b.flaky, c.flaky);
 					const short = c.tasks < b.tasks;
-					return { role, cell, baseline: b, current: c, drop, allowed, unit: byRecall ? "defect" : "task", short, fail: short || drop > allowed + EPSILON };
+					return {
+						role, cell, baseline: b, current: c, drop, allowed, unit: byRecall ? "defect" : "task", short, missing: false,
+						...(oneSided ? { oneSided } : {}), fail: short || oneSided !== undefined || drop > allowed + EPSILON,
+					};
 				}),
 		);
 }

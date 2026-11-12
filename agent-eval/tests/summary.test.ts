@@ -83,7 +83,30 @@ test("gate: table", () => {
 		{ worker: { a: cell(1, 0), b: cell(1, 0) }, review: { b: cell(1, 0) }, scout: { b: cell(1, 0) } },
 		{ worker: { b: cell(0, 0), z: cell(0, 0) }, review: { b: cell(1, 0) } },
 	);
-	assert.deepEqual(rows.map((r) => [r.role, r.cell, r.fail]), [["review", "b", false], ["worker", "b", true]]);
+	// Baseline pairs absent from the run are failing rows marked missing; run-only pairs (worker z) are not gated.
+	assert.deepEqual(rows.map((r) => [r.role, r.cell, r.fail, r.missing]), [
+		["review", "b", false, false], ["scout", "b", true, true], ["worker", "a", true, true], ["worker", "b", true, false],
+	]);
+});
+test("gate: a dropped role or dropped cells fail as missing rows instead of passing", () => {
+	const cell: BaselineCell = { passRate: 1, tasks: 1, flaky: 0 };
+	const rows = gate({ worker: { a: cell, b: cell }, review: { a: cell } }, { worker: { a: cell } });
+	assert.deepEqual(rows.map((r) => [r.role, r.cell, r.missing, r.fail]), [["review", "a", true, true], ["worker", "a", false, false], ["worker", "b", true, true]]);
+	assert.equal(rows[0].current, undefined);
+});
+test("gate: recall on one side only fails, in either direction, naming the side", () => {
+	const plain: BaselineCell = { passRate: 0, tasks: 1, flaky: 0 };
+	const withRecall: BaselineCell = { ...plain, recall: 0.8, defects: 5, flakyDefects: 0 };
+	const [lost] = gate({ review: { c: withRecall } }, { review: { c: plain } });
+	assert.deepEqual([lost.fail, lost.oneSided, lost.missing], [true, "baseline", false]);
+	const [gained] = gate({ review: { c: plain } }, { review: { c: withRecall } });
+	assert.deepEqual([gained.fail, gained.oneSided], [true, "run"]);
+	// Records without found/of (of 0) produce no recall, so a baseline with recall cannot be satisfied by them.
+	const noRecall = baselineCells(summarize([rec("r1", "p/m", 1, false, { role: "review", found: 0, of: 0 })]));
+	assert.equal("recall" in noRecall.review["p/m:low"], false);
+	assert.equal(gate({ review: { "p/m:low": withRecall } }, noRecall)[0].oneSided, "baseline");
+	const [both] = gate({ review: { c: withRecall } }, { review: { c: withRecall } });
+	assert.deepEqual([both.fail, both.oneSided], [false, undefined]);
 });
 test("gate: a cell with fewer counted tasks than the baseline fails, even at a full pass rate or with no tasks at all", () => {
 	const cell = (passRate: number, tasks: number, flaky = 0): BaselineCell => ({ passRate, tasks, flaky });
@@ -110,14 +133,15 @@ test("gate: the drop is taken in the baseline's tasks, not the run's", () => {
 	assert.ok(Math.abs(row.drop - 0.8) < 1e-9, String(row.drop));
 	assert.equal(row.fail, false);
 });
-test("gate: no pairs in common gives no rows; role and cell names are own keys only", () => {
+test("gate: no pairs in common gives only missing rows; role and cell names are own keys only", () => {
 	const cell: BaselineCell = { passRate: 1, tasks: 1, flaky: 0 };
-	assert.deepEqual(gate({ worker: { a: cell } }, { review: { a: cell } }), []);
-	assert.deepEqual(gate({ worker: { a: cell } }, { worker: { b: cell } }), []);
+	const allMissing = (rows: ReturnType<typeof gate>) => rows.length > 0 && rows.every((r) => r.missing && r.fail);
+	assert.ok(allMissing(gate({ worker: { a: cell } }, { review: { a: cell } })));
+	assert.ok(allMissing(gate({ worker: { a: cell } }, { worker: { b: cell } })));
 	// JSON.parse makes "__proto__" and "constructor" ordinary keys; `in` would match "constructor" on any object.
 	const parsed = (text: string): RoleCells => JSON.parse(text);
-	assert.deepEqual(gate(parsed('{"constructor":{"a":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } }), []);
-	assert.deepEqual(gate(parsed('{"worker":{"constructor":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } }), []);
+	assert.ok(allMissing(gate(parsed('{"constructor":{"a":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } })));
+	assert.ok(allMissing(gate(parsed('{"worker":{"constructor":{"passRate":1,"tasks":1,"flaky":0}}}'), { worker: { a: cell } })));
 	const records = [rec("a", "p/m", 1, true, { role: "__proto__" }), rec("a", "p/m", 1, false, { role: "worker" })];
 	const cells = baselineCells(summarize(records));
 	assert.deepEqual(Object.keys(cells).sort(), ["__proto__", "worker"]);
@@ -125,7 +149,8 @@ test("gate: no pairs in common gives no rows; role and cell names are own keys o
 	const viaJson = parsed(JSON.stringify(cells));
 	assert.deepEqual(gate(viaJson, viaJson).map((r) => [r.role, r.fail]), [["__proto__", false], ["worker", false]]);
 	const worse = parsed('{"__proto__":{"p/m:low":{"passRate":0,"tasks":1,"flaky":0}}}');
-	assert.deepEqual(gate(viaJson, worse).map((r) => [r.role, r.fail]), [["__proto__", true]]);
+	assert.deepEqual(gate(viaJson, worse).map((r) => [r.role, r.fail]), [["__proto__", true], ["worker", true]]);
+	assert.deepEqual(gate(viaJson, worse).map((r) => [r.role, r.missing]), [["__proto__", false], ["worker", true]]);
 });
 test("review cells carry summed found and of, and the gate compares defect recall with a flaky allowance in defects", () => {
 	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
@@ -150,9 +175,9 @@ test("review cells carry summed found and of, and the gate compares defect recal
 		assert.equal(row.unit, "defect", name);
 		assert.equal(row.fail, fail, name + ": drop " + row.drop + " allowed " + row.allowed);
 	}
-	// A baseline without recall (written before this change) still gates on the pass rate.
-	const [old] = gate({ review: { "p/m:low": { passRate: 1, tasks: 1, flaky: 0 } } }, baselineCells([summarize(review([4, 4, 4]))[0]]));
-	assert.deepEqual([old.unit, old.fail], ["task", true]);
+	// A baseline without recall (written before recall) against a run with it is one-sided: it fails, whatever the pass rates say.
+	const [old] = gate({ review: { "p/m:low": { passRate: 1, tasks: 1, flaky: 0 } } }, baselineCells([summarize(review([5, 5, 5]))[0]]));
+	assert.deepEqual([old.unit, old.oneSided, old.fail], ["task", "run", true]);
 });
 test("baselineCells keys by role then cell; one cell under two roles keeps both", () => {
 	const ok = baselineCells(summarize(grid("p/m", { a: [true, false], b: [true, true] })));

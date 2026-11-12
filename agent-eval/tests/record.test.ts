@@ -1,7 +1,7 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blocked, grade, leaked, measure, outsideAllowed, parsePorcelain } from "../lib/record.ts";
+import { blocked, grade, isReviewTimeout, leaked, measure, outsideAllowed, parsePorcelain } from "../lib/record.ts";
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -88,4 +88,8 @@ test("grade: test exit decides unless expect is blocked, which needs no change a
 	assert.equal(grade({ expect: "blocked", testExit: null, changed: [], digest: yes }), true);
 	assert.equal(grade({ expect: "blocked", testExit: null, changed: ["a.ts"], digest: yes }), false);
 	assert.equal(grade({ expect: "blocked", testExit: 0, changed: [], digest: "**Blocked on me**\nnothing.\n" }), false);
+});
+
+test("a review timeout is rc 124, or 137 when the child ignored TERM and timeout -k killed it", () => {
+	assert.deepEqual([124, 137, 0, 1, 143].map(isReviewTimeout), [true, true, false, false, false]);
 });
