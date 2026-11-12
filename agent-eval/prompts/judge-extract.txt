@@ -1,0 +1,20 @@
+You turn a code review into structured data. You have no tools; use only the review below.
+
+Read the review and list every distinct problem it reports about the code. Answer with one JSON array and nothing else (no prose, no code fence). Each element is an object:
+
+  {"file": "<path the problem is in, or \"\" if the review names none>", "line": <line number, or null if none is given>, "severity": "high" | "medium" | "low", "claim": "<what is wrong and why, in one or two plain sentences>"}
+
+Rules:
+- One element per distinct problem. Merge repeats of the same problem; do not split one problem into several.
+- Keep the review's own mechanism: if it says why the code misbehaves, the claim says so. Do not weaken, sharpen or add detail.
+- Write each claim in neutral wording. Do not mention who wrote the review, any model or tool, or how sure the reviewer sounded.
+- Add nothing the review does not say. Do not report problems you notice yourself.
+- Report only problems. Skip praise, summaries, style remarks that are not claims of a defect, and suggestions with no stated problem.
+- Severity is the review's own ranking when it gives one; otherwise "medium".
+- If the review reports no problems, answer [].
+
+The review:
+
+<review>
+{{REVIEW}}
+</review>

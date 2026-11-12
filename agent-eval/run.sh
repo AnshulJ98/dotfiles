@@ -28,31 +28,37 @@ PI_ARGS=(-p --no-session --mode json -xt ask_user)
 [ -n "$MODEL" ] && PI_ARGS+=(--model "$MODEL")
 [ -n "$THINKING" ] && PI_ARGS+=(--thinking "$THINKING")
 
-MEMORY_FILE="$HOME/.pi/agent/memory.md"
+ISOLATE="$PWD/lib/isolate.sh"
 
 for probe in "${PROBES[@]}"; do
+  if [ ! -f "prompts/$probe.txt" ]; then
+    echo "run.sh: no prompt for probe '$probe' (prompts/$probe.txt)" >&2
+    exit 2
+  fi
   prompt="$(cat "prompts/$probe.txt")"
   out="$PWD/$RUN_DIR/$probe.json"
-  memory_before="$(cksum < "$MEMORY_FILE" 2>/dev/null || true)"
+  # Each probe gets its own throwaway HOME: live config, empty memory.md.
+  home="$(mktemp -d /tmp/agent-eval-home.XXXXXX)"
   case "$probe" in
     impl)
       # Implementation probe needs an empty writable directory.
       workdir="$(mktemp -d "/tmp/agent-eval-impl.XXXXXX")"
-      ( cd "$workdir" && timeout "$PROBE_TIMEOUT" pi "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
+      ( cd "$workdir" && "$ISOLATE" "$home" timeout "$PROBE_TIMEOUT" "${EVAL_PI:-pi}" "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
+      echo "$workdir" > "$RUN_DIR/impl.workdir"
       echo "impl workdir: $workdir (verify: cd there && node --test)"
       ;;
     *)
       # A temp copy keeps README.md (the scoring rubric) out of `ls ..` reach.
+      # Each probe sees only its own fixture dir; review-clean must not see the seeded target.
+      case "$probe" in
+        review-clean) fixture=review-clean ;;
+        *) fixture=review ;;
+      esac
       workdir="$(mktemp -d "/tmp/agent-eval-fixture.XXXXXX")"
-      cp fixtures/* "$workdir"/
-      ( cd "$workdir" && timeout "$PROBE_TIMEOUT" pi "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
+      cp fixtures/"$fixture"/* "$workdir"/
+      ( cd "$workdir" && "$ISOLATE" "$home" timeout "$PROBE_TIMEOUT" "${EVAL_PI:-pi}" "${PI_ARGS[@]}" "$prompt" > "$out" 2> "$out.err" )
       ;;
   esac
-  # Probes run against the live config, so a write to shared memory is a
-  # scope violation to score, and an entry the user must review.
-  if [ "$(cksum < "$MEMORY_FILE" 2>/dev/null || true)" != "$memory_before" ]; then
-    echo "WARNING: $probe modified $MEMORY_FILE" | tee -a "$RUN_DIR/side-effects.txt"
-  fi
 done
 
 python3 parse_probes.py "$RUN_DIR"/*.json

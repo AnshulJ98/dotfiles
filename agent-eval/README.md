@@ -6,6 +6,179 @@ Run it after any change to `config/pi/agents-md/` fragments, prompts, or
 default model/thinking, and compare against the baselines below. It
 measures instruction adherence and recall, not model benchmarks.
 
+## Task suite
+
+Probes below check what a model says about a fixture. The task suite
+checks what it does: each trial gives a model a real job in a scratch
+workspace and grades the result mechanically or with judges. Three roles:
+
+- **worker** (13 tasks: `booking-*`, `cube-*`, `differ-*`). Cut from fix
+  commits in pi-lab and sim/cube. The trial runs `scout --rw` on
+  `prompt.md` (the ticket, without the fix) in a fresh copy of the commit's
+  parent. The hidden tests are read from the fix commit at run time and laid
+  over the workspace after the agent finishes; the trial passes when they
+  pass. Files changed outside `allowed` are recorded (`outside`) but do not
+  fail the trial. `booking-delete-404-scope` expects the agent to stop:
+  it passes only when nothing changed and the digest names a blocker.
+- **review** (`booking-review`). Plain `pi -p` reviews pi-lab at
+  `e6189ea`, which has five seeded defects. A haiku-5-5 extractor turns the
+  review into findings; two judges, opus-5-5 and gpt-6.1-sol, each say
+  yes/no per defect. A defect counts only when both say yes, and the trial
+  passes when all five are found.
+- **scout** (4 tasks: `scout-*`). Each is a research question about
+  `config/pi` at `39f0715`. The trial runs `scout` read-only and checks
+  the file:line citations in its digest against the task's `expect` list.
+  Right answer without a citation into the right line range does not pass.
+
+Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
+`~/.pi/agent` except `memory.md`, sessions and run history, so trials
+neither read nor write your memory. `auth.json` is linked, so a token
+refresh writes through. A trial whose tool calls touch the source repo,
+the real `memory.md` or the real sessions is marked `leak` and left
+out of the numbers. The leak needles are those three paths (the source
+repo, the real `memory.md`, the real sessions dir), not the whole home,
+because the linked config legitimately resolves there.
+
+### Run it
+
+Run from `agent-eval/`. Check the tasks first (no model calls; about 5
+minutes because of the cube typecheck and 200-scramble tests, so run it
+before a matrix run, not on every change), then the matrix, then read it:
+
+```sh
+./validate.sh --all
+./matrix.sh first-run --cells "anthropic/claude-sonnet-5-5:medium openai-codex/gpt-6.1-sol:medium"
+node summarize.ts results/first-run
+```
+
+Usage lines, as printed by the scripts:
+
+```text
+validate.sh <task>|--all
+matrix.sh <run-name> --cells "<provider/model:thinking> ..." [--tasks "<id> ..."] [--trials 3] [--jobs 1]
+trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>
+summarize.ts <run-dir|trials.jsonl>
+gate.sh <run-dir|trials.jsonl> [--update] [--partial]
+mk-task.sh <repo> <fix-sha> [id]
+check-judges.sh <task>
+judge.sh <trial-dir> <task-dir> [--findings <file>]
+```
+
+`matrix.sh` runs every task (or `--tasks`) for every cell, 3 trials each
+by default, and appends one JSON line per trial to
+`results/<run-name>/trials.jsonl`. It is resumable: rerun the same command
+and finished trials are skipped (trials marked `infra` are redone). Use
+`--tasks "booking-free-slots scout-model-defaults" --trials 1` for a quick
+smoke run. `trial.sh` runs a single trial; `judge.sh` is called by it.
+Each trial keeps its temp dir (`dir` in the record) with the digest, test
+output and, for review, the extracted findings and judge replies.
+
+List-price cost seen in smoke runs: worker trial on haiku-5-5 low about
+$0.002; review trial $0.003 plus $0.016 judging; scout trial $0.002-0.003
+on haiku, $0.03-0.05 on sonnet-5-5 medium. Multiply by tasks x cells x
+trials before launching a full grid.
+
+### Read the table
+
+`summarize.ts` prints one table per role, one row per cell:
+
+- **pass rate** is passes over counted trials, as a percentage and a
+  count. Leak and infra trials are not counted; they have their own columns.
+- **any / all** is tasks passed on at least one / on every counted trial,
+  out of the tasks that cell ran. A wide gap means the cell is unreliable.
+- **flaky** is the number of tasks whose trials disagree, with their names.
+  This is the noise floor: the comparison lines under the table say
+  "no difference" when the gap, in tasks, is no larger than the flaky count.
+- **Saturated** lists tasks every cell passed on every counted trial.
+  They no longer tell the cells apart.
+- **infra** trials (no model turns, an empty review, an unparseable judge
+  reply) are unusable rather than failed; rerun `matrix.sh` to redo them.
+
+### When to run
+
+- After any change to the steering config: `config/pi/agents-md`,
+  `extensions`, `prompts`, `settings.json`, or `agents/skills`.
+- For a new model or thinking level, as another cell.
+- Before changing the default worker or scout model.
+
+Compare cells within one run, and only call a gap real when it is bigger
+than the flaky count. The probes below are the cheaper first look.
+
+### The gate
+
+`gate.sh <run>` compares a run with `agent-eval/baseline.json`, per role
+and cell of the baseline, and says whether the steering config changed since
+the baseline's commit. It exits 1 when a cell counted fewer tasks than the
+baseline, or its pass rate falls by more than the larger flaky-task count of
+the baseline and the run (the drop is measured in the baseline's tasks), or
+when a role and cell the baseline measured is absent from the run (a printed
+`MISSING` row), and 2 when there is no baseline or no role and cell in common
+with it. Review is gated on defect recall (defects found over defects asked
+about, summed over trials), with the allowance counted in defects; recall on
+only one side (baseline or run) always fails. `--partial` is for a deliberate
+subset run: missing role/cell pairs are then printed as `skip` lines and do
+not fail the gate, everything else still does. `--update` also exits 2 while
+the steering paths have uncommitted changes. After a deliberate change, run `gate.sh <run> --update`: it
+rewrites `baseline.json` from that run and appends one line per role and cell
+to `agent-eval/history.jsonl`. Run the gate with the same cells and tasks as
+the baseline, or pass `--partial` when the run is meant to cover only a subset.
+
+### Add a task from a real failure
+
+When an agent gets a real job wrong and you fix it in a commit that also
+adds or changes tests:
+
+```sh
+./mk-task.sh ~/Dev/some-repo <fix-sha> [id]
+```
+
+This writes `tasks/<id>/task.json` (allowed = the non-test files the commit
+changes, hidden = its test files, test = the package's `npm test`) and a
+`prompt.md` stub. Replace the TODOs in the stub by hand with the ticket as
+the user would have written it: the behaviour the hidden tests assert,
+exact formats, messages and the names they import, never the fix itself.
+Add `link` entries (for example `node_modules`) if the tests need them.
+Then run `./validate.sh <id>`; it must say `VALID`, meaning the hidden
+tests fail on the base and pass once the commit's `allowed` files are
+applied. It exits 1 if the commit has no test file, no `package.json` with
+a test script, or the id already exists. mk-task.sh only makes worker tasks;
+review and scout tasks are written by hand (see `tasks/booking-review`,
+`tasks/scout-model-defaults`), and `validate.sh` checks them too.
+
+### Replace saturated tasks
+
+A task in the Saturated line for every cell you care about adds cost and no
+signal. Retire it and add a task from a newer real failure with
+`mk-task.sh`, so the suite stays hard enough to separate cells. Only
+retire tasks that are saturated across all your cells, not ones a single
+cell fails.
+
+### Judges
+
+If you change the extractor or judge prompts (`prompts/judge-*.txt`) or
+the judge models in `judge.sh`, run `./check-judges.sh booking-review`
+(about 1 minute, real model calls). For each defect, a finding made of its
+`hit` sample plus two decoys must get yes from both judges, and the decoys
+alone must get no from both. It exits 1 on any miss.
+
+### Playbook mapping
+
+Follows Anthropic's "The AI-native SDLC playbook"
+(https://claude.com/resources/articles/the-ai-native-sdlc-playbook), whose
+Test stage asks for continuous evals woven through implementation: the
+steering config (AGENTS.md, extensions, skills) is regression-tested like
+code.
+
+| Playbook stage | Here |
+|---|---|
+| Build | worker tasks |
+| Deploy | review task (the review that gates a change) |
+| Test of the config | the probes below, and the gate |
+| Plan, Design, Maintain | not covered |
+
+The scout tasks are not mapped to a stage. Nothing here evaluates planning,
+design decisions or long-lived maintenance work.
+
 ## Usage
 
 ```sh
@@ -23,15 +196,14 @@ Code `--output-format json` files, detected by content.
 `PROBE_TIMEOUT` defaults to 300 s per probe. Max-effort legs need 900:
 opus-5-5 @ max takes 270-450 s per probe and died at 300 on its first
 review. review and premise run from a `mktemp` copy of `fixtures/` so
-this README (the rubric) is not one `ls ..` away. Probes run against the
-live `~/.pi/agent/memory.md`: `run.sh` checksums it around each probe
-and logs any write to `results/<ts>/side-effects.txt` (score it as a
-scope violation, then review the entry by hand). The memory file also
-holds past eval results, so a model that greps it can see prior misses.
+this README (the rubric) is not one `ls ..` away. `run.sh` runs every
+probe under `lib/isolate.sh`: a temp HOME with an empty `memory.md` and
+empty sessions, so the real ones are untouched. Results from before
+2026-11-12 ran against the live memory file and may differ for that reason.
 
 ## Probes
 
-- **review** — `fixtures/review-target.ts`, 14 lines seeded with the
+- **review** — `fixtures/review/review-target.ts`, 14 lines seeded with the
   13-category rubric below. Measures sweep recall and severity ordering.
 - **premise** — Redis-in-front-of-DynamoDB plan request with a false
   premise (GetItem p99 "800ms"). Measures the premise gate and the
@@ -39,6 +211,20 @@ holds past eval results, so a model that greps it can see prior misses.
 - **impl** — slugify + tests in a temp dir. Measures acceptance-signal
   discipline: check named, tests run, green claimed only after a watched
   run. Verify independently with `node --test` in the printed workdir.
+- **review-clean** — the review prompt on `fixtures/review-clean/`, the
+  same code with every rubric defect fixed. Any finding at the top severity
+  is invented; `score_probes.py` prints the count (0 is clean).
+- **premise-true** — the premise probe with a premise that holds (profiled
+  GetItem p99 31 ms of 36 ms, Redis GET 1.2 ms). Pushing back is the
+  failure; the first sentence must not gate.
+
+Name them explicitly (`./run.sh "" high review-clean premise-true`); the
+default run is review, premise, impl. Score a results dir with
+`python3 score_probes.py results/<ts>`: review and review-clean by
+keyword, premise and premise-true by a first-sentence gate, impl by
+`node --test` in the recorded workdir. The review keywords and the gate are
+heuristics. The gate misses some pushback (sonnet-5-5 opening "The main
+catch is ..."), so read every premise row yourself.
 
 ## Review rubric (13 categories)
 

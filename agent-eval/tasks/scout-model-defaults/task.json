@@ -1,0 +1,20 @@
+{
+  "id": "scout-model-defaults",
+  "role": "scout",
+  "repo": "~/Dev/dotfiles",
+  "rev": "39f0715b106fd501e2ba24f3b4d27ca7cb4a7608",
+  "paths": ["config/pi"],
+  "expect": [
+    {"at": [
+      {"file": "config/pi/settings.json", "lines": [3, 5]},
+      {"file": "config/pi/DESIGN.md", "lines": [105, 105]}
+    ], "must": ["claude-opus-5-5"]},
+    {"file": "config/pi/bin/scout", "lines": [100, 101], "must": ["claude-sonnet-5-5"]},
+    {"at": [
+      {"file": "config/pi/bin/scout", "lines": [324, 327]},
+      {"file": "config/pi/bin/scout", "lines": [37, 41]},
+      {"file": "config/pi/DESIGN.md", "lines": [28, 28]},
+      {"file": "config/pi/DESIGN.md", "lines": [145, 145]}
+    ], "must": ["\\bhigh\\b"]}
+  ]
+}

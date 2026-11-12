@@ -1,0 +1,84 @@
+{
+	"configSha": "39f0715b106fd501e2ba24f3b4d27ca7cb4a7608",
+	"date": "2026-11-12T12:14:00.778Z",
+	"roles": {
+		"review": {
+			"anthropic/claude-opus-5-5:medium": {
+				"passRate": 0,
+				"tasks": 1,
+				"flaky": 0,
+				"recall": 0.8,
+				"defects": 5,
+				"flakyDefects": 0
+			},
+			"anthropic/claude-sonnet-5-5:high": {
+				"passRate": 0,
+				"tasks": 1,
+				"flaky": 0,
+				"recall": 0.8,
+				"defects": 5,
+				"flakyDefects": 0
+			},
+			"anthropic/claude-sonnet-5-5:medium": {
+				"passRate": 0.5,
+				"tasks": 1,
+				"flaky": 1,
+				"recall": 0.9,
+				"defects": 5,
+				"flakyDefects": 1
+			},
+			"openai-codex/gpt-6.1-sol:medium": {
+				"passRate": 0,
+				"tasks": 1,
+				"flaky": 0,
+				"recall": 0.6,
+				"defects": 5,
+				"flakyDefects": 0
+			}
+		},
+		"scout": {
+			"anthropic/claude-opus-5-5:medium": {
+				"passRate": 0.875,
+				"tasks": 4,
+				"flaky": 1
+			},
+			"anthropic/claude-sonnet-5-5:high": {
+				"passRate": 0.75,
+				"tasks": 4,
+				"flaky": 0
+			},
+			"anthropic/claude-sonnet-5-5:medium": {
+				"passRate": 1,
+				"tasks": 4,
+				"flaky": 0
+			},
+			"openai-codex/gpt-6.1-sol:medium": {
+				"passRate": 1,
+				"tasks": 4,
+				"flaky": 0
+			}
+		},
+		"worker": {
+			"anthropic/claude-opus-5-5:medium": {
+				"passRate": 1,
+				"tasks": 13,
+				"flaky": 0
+			},
+			"anthropic/claude-sonnet-5-5:high": {
+				"passRate": 1,
+				"tasks": 13,
+				"flaky": 0
+			},
+			"anthropic/claude-sonnet-5-5:medium": {
+				"passRate": 1,
+				"tasks": 13,
+				"flaky": 0
+			},
+			"openai-codex/gpt-6.1-sol:medium": {
+				"passRate": 1,
+				"tasks": 13,
+				"flaky": 0
+			}
+		}
+	}
+}
