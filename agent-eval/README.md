@@ -163,20 +163,24 @@ the existing board and the 2026-10-28 control, not rerun.
 | 6 | fable-5-2 @ max | 13/13, every finding reproduced in Node | gated, sentence 1 | 17 tests, 11 mutants killed | $4.52 |
 | 7 | haiku-5-5 @ xhigh (10-09) | 12/12 +rt | fixture complaint, then gated | 15 tests, ASCII flagged | $0.013 |
 | 8 | haiku-5-5 @ max (10-09) | 12/12 +rt | fixture complaint, then gated | 21 tests, mutants, strict tsc | $0.066 |
-| 9 | haiku-5-5 @ high (10-09) | 10/12 +rt | fixture complaint, then gated | 15 tests, ASCII flagged | $0.009 |
-| 10 | haiku-5-5 @ medium (10-09) | 10/12 +rt | fixture complaint, then gated | 2 tests, ASCII flagged | $0.008 |
-| 11 | gpt-6.1-sol @ medium | 10/12 +rt | gated, sentence 1 | 10 tests, `.mjs`, ASCII not flagged | $0.10 |
-| 12 | gpt-6.1-sol @ xhigh | 10/12 +rt | gated, sentence 1 | 12 tests, `.mjs`, ASCII not flagged | $0.18 |
-| 13 | gpt-6.1-terra @ high | 10/12 +rt | gated, sentence 1 | 8 tests, `.js`, ASCII not flagged | $0.034 |
-| 14 | gpt-6.1-terra @ xhigh | 10/12 | gated, sentence 1 | 9 tests, `.mjs`, ASCII not flagged | $0.040 |
-| 15 | gpt-6.1-sol @ high | 9/12 +rt, false clean (config) | gated, sentence 1 | 9 tests, `.mjs`, ASCII not flagged | $0.12 |
-| 16 | gpt-6.1-terra @ medium | 9/12, false clean (config) | gated, then full plan | 7 tests, `.js`, ASCII not flagged | $0.035 |
-| 17 | gpt-6-luna @ high | 9/12 +rt | NOT gated: fixture complaint, then plan | 4 tests, `.mjs` | $0.004 |
-| 18 | gpt-6-luna @ xhigh | 9/12 +rt, false clean (config), all P2 | NOT gated | 4 tests, `.mjs` | $0.006 |
-| 19 | gpt-6-luna @ medium | 7/12, false clean (limits) | NOT gated | 3 tests | $0.003 |
+| 9 | gpt-6.1-sol @ max | 12/12 +rt, 7 findings reproduced | gated, sentence 1, cites DynamoDB latency docs | 12 tests, `.mjs`, ASCII not flagged | $0.25 |
+| 10 | haiku-5-5 @ high (10-09) | 10/12 +rt | fixture complaint, then gated | 15 tests, ASCII flagged | $0.009 |
+| 11 | haiku-5-5 @ medium (10-09) | 10/12 +rt | fixture complaint, then gated | 2 tests, ASCII flagged | $0.008 |
+| 12 | gpt-6.1-sol @ medium | 10/12 +rt | gated, sentence 1 | 10 tests, `.mjs`, ASCII not flagged | $0.10 |
+| 13 | gpt-6.1-sol @ xhigh | 10/12 +rt | gated, sentence 1 | 12 tests, `.mjs`, ASCII not flagged | $0.18 |
+| 14 | gpt-6-astra @ medium | 10/12 +rt | gated, sentence 1 | 11 tests, `.mjs`, ASCII not flagged | $0.36 |
+| 15 | gpt-6-astra @ high | 10/12 +rt | gated, sentence 1 | 10 tests, `.mjs`, ASCII not flagged | $0.40 |
+| 16 | gpt-6.1-terra @ high | 10/12 +rt | gated, sentence 1 | 8 tests, `.js`, ASCII not flagged | $0.034 |
+| 17 | gpt-6.1-terra @ xhigh | 10/12 | gated, sentence 1 | 9 tests, `.mjs`, ASCII not flagged | $0.040 |
+| 18 | gpt-6.1-sol @ high | 9/12 +rt, false clean (config) | gated, sentence 1 | 9 tests, `.mjs`, ASCII not flagged | $0.12 |
+| 19 | gpt-6.1-terra @ medium | 9/12, false clean (config) | gated, then full plan | 7 tests, `.js`, ASCII not flagged | $0.035 |
+| 20 | gpt-6-luna @ high | 9/12 +rt | NOT gated: fixture complaint, then plan | 4 tests, `.mjs` | $0.004 |
+| 21 | gpt-6-luna @ xhigh | 9/12 +rt, false clean (config), all P2 | NOT gated | 4 tests, `.mjs` | $0.006 |
+| 22 | gpt-6-luna @ medium | 7/12, false clean (limits) | NOT gated | 3 tests | $0.003 |
 
-Recurring misses: every GPT-6 leg missed node-fetch (9/9) and all but
-luna @ xhigh missed falsy-vs-absent; GPT-6 never flagged the ASCII
+Recurring misses: GPT-6 legs below max missed node-fetch (11/11) and all
+but luna @ xhigh missed falsy-vs-absent; sol @ max caught both (12/12);
+astra costs 2-3x sol for the same recall; GPT-6 never flagged the ASCII
 decision on impl. fable-5-2 hit all 13 categories at every effort; max
 adds reproduction at 8x the cost of medium. All impl legs: two files,
 re-verified green with `node --test`, ASCII-only output. No probe
@@ -185,7 +189,8 @@ sessions editing it while the two chains ran in parallel).
 
 Results: fable-5-2 `results/20261111-1752{00,44}`, `-175339`,
 `-175507`; sol `-175203`, `-175310`, `-175523`; terra `-175924`,
-`-180027`, `-180129`; luna `-180240`, `-180340`, `-180509`.
+`-180027`, `-180129`; luna `-180240`, `-180340`, `-180509`; astra
+`-193905`, `-194014`; sol @ max `-194159`.
 
 ## Impl board (slugify probe, 2026-09-12 → 2026-09-29)
 
