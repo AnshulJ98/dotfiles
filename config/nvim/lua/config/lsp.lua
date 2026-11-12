@@ -210,7 +210,8 @@ require('mason-tool-installer').setup {
     'shellcheck',
     'markdownlint',
     'js-debug-adapter',
-    'delve',
+    -- Mason builds delve with `go install`; skip it where Go is absent.
+    vim.fn.executable 'go' == 1 and 'delve' or nil,
   },
 }
 
