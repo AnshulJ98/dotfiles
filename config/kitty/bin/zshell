@@ -1,0 +1,44 @@
+#!/bin/bash
+# kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
+# A pane tagged holder=<name> (session restore, the Go to picker) reattaches that session;
+# otherwise a new session is named after the folder. Without zmx it falls back to a plain zsh.
+ZMX=/opt/homebrew/bin/zmx
+SHELL_BIN=/bin/zsh
+[ -x "$ZMX" ] || exec "$SHELL_BIN" -il
+
+# Window user vars (set by --var on launch) are only readable over remote control.
+vars=$(kitten @ ls --match "id:${KITTY_WINDOW_ID:-0}" 2>/dev/null | /usr/bin/python3 -c '
+import json, sys
+try:
+    for o in json.load(sys.stdin):
+        for t in o["tabs"]:
+            for w in t["windows"]:
+                v = w["user_vars"]; print(v.get("holder", "")); print(v.get("pi_session", "")); raise SystemExit
+except (ValueError, KeyError): pass' 2>/dev/null)
+name=$(printf '%s\n' "$vars" | sed -n 1p)
+pi_session=$(printf '%s\n' "$vars" | sed -n 2p)
+
+existing=$("$ZMX" ls --short 2>/dev/null)
+if [ -z "$name" ]; then
+  base=$(basename "$PWD" | tr -c 'A-Za-z0-9._-\n' '-' | tr 'A-Z' 'a-z'); [ "$PWD" = "$HOME" ] && base=home
+  n=1; while printf '%s\n' "$existing" | grep -qx "$base-$n"; do n=$((n + 1)); done
+  name=$base-$n
+fi
+# Tag the pane so kitty's saved session reattaches this name.
+printf '\033]1337;SetUserVar=holder=%s\007' "$(printf %s "$name" | base64)"
+
+# zmx's own detach key would steal ctrl+\ from programs; closing the pane already detaches.
+export ZMX_NO_DETACH_KEY=1
+unset ZMX_SESSION
+# kitty only injects shell integration into a shell it starts itself.
+export KITTY_SHELL_INTEGRATION=enabled
+export ZDOTDIR=${KITTY_INSTALLATION_DIR:-/Applications/kitty.app/Contents/Resources/kitty}/shell-integration/zsh
+# zmx 1.0.1 writes a crash report on every session exit (zmx #294).
+( find "$HOME/Library/Logs/DiagnosticReports" -name 'zmx-*.ips' -mmin +60 -delete 2>/dev/null & )
+
+if ! printf '%s\n' "$existing" | grep -qx "$name" && [ -n "$pi_session" ] && [ -f "$pi_session" ]; then
+  # The session is gone (reboot) but pi ran here: resume it in its own folder, then a shell.
+  cwd=$(head -1 "$pi_session" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("cwd",""))' 2>/dev/null)
+  exec "$ZMX" attach "$name" "$SHELL_BIN" -lc 'cd "$1" 2>/dev/null; pi --session "$2"; exec "$0" -il' "$SHELL_BIN" "${cwd:-$PWD}" "$pi_session"
+fi
+exec "$ZMX" attach "$name"

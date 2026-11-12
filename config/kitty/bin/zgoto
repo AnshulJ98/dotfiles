@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# cmd+alt+g. One picker tab at most: open it, focus it, or, if it has focus, switch its
+# view between all and detached sessions (forwards ctrl-t to fzf). esc closes it.
+# $1 = @active-kitty-window-id
+export PATH=/opt/homebrew/bin:$PATH
+state=$(kitten @ ls 2>/dev/null | python3 -c '
+import json, sys
+st = "none"
+for o in json.load(sys.stdin):
+    for t in o["tabs"]:
+        for w in t["windows"]:
+            if w.get("user_vars", {}).get("role") == "zgoto":
+                st = "focused" if (o["is_focused"] and t["is_focused"] and w["is_focused"]) else "open"
+print(st)')
+case $state in
+  focused) kitten @ send-key --match var:role=zgoto ctrl+t ;;
+  open)    kitten @ focus-window --match var:role=zgoto ;;
+  *)       kitten @ launch --type=tab --tab-title 'Go to' --var role=zgoto "$(dirname "$(realpath "$0")")/zpick" "$1" >/dev/null ;;
+esac
