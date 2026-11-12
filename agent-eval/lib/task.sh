@@ -4,6 +4,9 @@
 #   task_get <dir> <field>  a task.json field, arrays one item per line, leading ~ of repo expanded
 #   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix, fresh one-commit repo, links symlinked
 #   overlay_hidden / apply_reference / run_test <dir> <ws>
+#   is_test_path <path>     true for .test. / .spec. / _test. names and files under tests/ or __tests__/
+# overlay_hidden copies a hidden test file beside the original as zz-hidden-<name>; a hidden file that is not a
+# test (a support module the hidden tests import) goes to its own path.
 
 TASK_EVAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -43,10 +46,18 @@ make_workspace() {
   done < <(task_get "$task" link)
 }
 
+is_test_path() {
+  case "$1" in tests/*|*/tests/*|__tests__/*|*/__tests__/*) return 0 ;; esac
+  case "${1##*/}" in *.test.*|*.spec.*|*_test.*) return 0 ;; esac
+  return 1
+}
+
 overlay_hidden() {
-  local path
+  local path target
   while IFS= read -r path; do
-    git -C "$(task_get "$1" repo)" show "$(task_get "$1" fix):$path" > "$2/$(dirname "$path")/zz-hidden-$(basename "$path")" || return 1
+    if is_test_path "$path"; then target="$2/$(dirname "$path")/zz-hidden-$(basename "$path")"; else target="$2/$path"; fi
+    mkdir -p "$(dirname "$target")"
+    git -C "$(task_get "$1" repo)" show "$(task_get "$1" fix):$path" > "$target" || return 1
   done < <(task_get "$1" hidden)
 }
 
