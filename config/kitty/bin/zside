@@ -58,6 +58,7 @@ def live_cwd(holder: str, fallback: str) -> str:
     """kitty reports the folder of 'zmx attach' for held panes, so ask the session's shell."""
     if not holder:
         return fallback
+    # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
     pid = next((p.strip().split('=')[1] for line in run('zmx', 'ls').splitlines() if f'name={holder}\t' in line
                 for p in line.split('\t') if p.strip().startswith('pid=')), '')
     out = run('lsof', '-a', '-d', 'cwd', '-p', pid, '-Fn') if pid else ''

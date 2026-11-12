@@ -28,11 +28,14 @@ for o in json.load(sys.stdin):
             if o["is_active"] and t["is_active"] and w["is_active"]:
                 cur, cwd, holder = s, w["cwd"], w["user_vars"].get("holder", "")
 if holder:
-    out = subprocess.run(["zmx", "ls"], capture_output=True, text=True).stdout
-    pid = next((p.split("=")[1] for l in out.splitlines() if f"name={holder}\t" in l
-                for p in l.split("\t") if p.strip().startswith("pid=")), "")
-    live = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"], capture_output=True, text=True).stdout if pid else ""
-    cwd = next((l[1:] for l in live.splitlines() if l.startswith("n")), cwd)
+    try:  # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
+        out = subprocess.run(["zmx", "ls"], capture_output=True, text=True).stdout
+        pid = next((p.split("=")[1] for l in out.splitlines() if f"name={holder}\t" in l
+                    for p in l.split("\t") if p.strip().startswith("pid=")), "")
+        live = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"], capture_output=True, text=True).stdout if pid else ""
+        cwd = next((l[1:] for l in live.splitlines() if l.startswith("n")), cwd)
+    except OSError:  # no zmx or lsof: keep the folder kitty reported
+        pass
 print(cur); print(cwd); print("\n".join(order))'
 }
 
