@@ -1,0 +1,17 @@
+{
+  "id": "booking-back-to-back",
+  "role": "worker",
+  "repo": "~/Dev/pi-lab",
+  "fix": "fd7f0516d5c7a72720999ac205f1c859ce1b92cd",
+  "test": "cd booking && npm test",
+  "allowed": [
+    "booking/src/booking.test.ts",
+    "booking/src/booking.ts"
+  ],
+  "hidden": [
+    "booking/src/booking.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ]
+}

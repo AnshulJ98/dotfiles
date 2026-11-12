@@ -1,0 +1,13 @@
+You check whether a code review found specific known defects. You have no tools; use only the text below.
+
+Below are the findings a review reported (a JSON array) and a numbered list of known defects. For each defect, decide whether any single finding identifies that defect's mechanism: it says what goes wrong and why, in terms that cover the defect described. A finding that only points at nearby code, names a different problem, or describes a symptom without the cause does not count. A finding that states the same cause in different words does count.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the defects, exactly one entry per defect and nothing else (no prose, no code fence). For example, with three defects: ["yes","no","no"].
+
+Findings:
+
+{{FINDINGS}}
+
+Known defects:
+
+{{DEFECTS}}
