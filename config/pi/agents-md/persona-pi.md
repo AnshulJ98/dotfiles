@@ -42,7 +42,7 @@ out of this context; only its digest comes back.
   one is merged or rejected, because unreviewed slices stack faster than
   they can be read.
 - Don't delegate what you can finish in fewer steps than the dispatch
-  costs. Inside an auto run (a root `AUTO.md` exists) that rule is off:
+  costs. Inside an auto run (its `AUTO.md` exists) that rule is off:
   every slice goes to a worker, a failed one gets a rework dispatch, and
   the only file you edit is `AUTO.md`.
 

@@ -335,6 +335,16 @@ test("interface-frozen: a glob that matches no tracked file blocks every edit", 
 	});
 });
 
+test("settle check: a file the tests command leaves behind is the spec's fault, named as such, and not the worker's", async () => {
+	await withWorker({ "src/a.ts": "export const a = 1;\n" }, 'files-allowed: [src/**]\ntests: "date > .last-run"\n', async (repo, on, verdict) => {
+		writeFileSync(join(repo, "src/a.ts"), "export const a = 2;\n");
+		await on.get("agent_before_settle")?.({ outcome: "completed" });
+		const report = JSON.parse(await verdict()) as { verdict: string; reasons: string[] };
+		assert.equal(report.verdict, "CANNOT-RUN");
+		assert.deepEqual(report.reasons, ["tests: `date > .last-run` leaves untracked files behind (.last-run); ignore them or fix the command, then dispatch again"]);
+	});
+});
+
 const hit = (ruleId: string, severity: string, file: string, line = 1) => ({ ruleId, severity, file, line, message: "" });
 const RULE_CASES: Array<[string, ReturnType<typeof hit>[], string[], Record<string, number> | undefined, RegExp[]]> = [
 	["error hit in a changed file", [hit("no-console", "error", "src/a.ts", 3)], ["src/a.ts"], undefined, [/error rules hit in changed files: src\/a\.ts:3 no-console$/]],

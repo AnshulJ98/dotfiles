@@ -633,6 +633,7 @@ async function rulesCheck(snap: Snapshot, changed: ReadonlySet<string>): Promise
 
 async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: CheckFailure[]; testOutput: string }> {
   const failures: CheckFailure[] = [];
+  const untrackedBeforeTests = new Set(listUntracked(snap.root));
   const tests = await runShell(spec.tests, snap.root);
   if (tests.code !== 0) {
     const kind = classifyFailure(tests.code, tests.output, tests.timedOut);
@@ -641,7 +642,12 @@ async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: 
   }
 
   const untrackedNow = hashUntracked(snap.root);
-  const newFiles = [...untrackedNow.keys()].filter((f) => !snap.untrackedAtStart.has(f));
+  // A file this rerun of the tests created is the spec's doing, not the worker's: no edit of its own can make it go away.
+  const leftByTests = [...untrackedNow.keys()].filter((f) => !untrackedBeforeTests.has(f));
+  if (leftByTests.length) {
+    failures.push({ kind: "cannot-run", reason: `tests: \`${spec.tests}\` leaves untracked files behind (${leftByTests.join(", ")}); ignore them or fix the command, then dispatch again` });
+  }
+  const newFiles = [...untrackedNow.keys()].filter((f) => !snap.untrackedAtStart.has(f) && !leftByTests.includes(f));
   const touchedUntracked = [...snap.untrackedAtStart].filter(([f, hash]) => untrackedNow.get(f) !== hash).map(([f]) => f);
   const tracked = git(snap.root, ["diff", "--no-renames", "--numstat", snap.base]).split("\n").filter(Boolean);
   const changed = new Map<string, number>();

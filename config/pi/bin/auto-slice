@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# auto-slice — the mechanical steps of plan.md's auto mode, so the session that
+# orchestrates a run only plans slices and reads verdicts.
+#
+# Usage, from any checkout of the repo:
+#   auto-slice start <effort>
+#       Worktree ../<repo>.auto-<effort> on auto/<effort> from HEAD, AUTO.md
+#       excluded. Prints where to write AUTO.md. Uncommitted work in the
+#       current checkout is not part of the run and does not stop it.
+#   auto-slice new <name>
+#       Worktree for slice/<name> off the run branch. <name> must be the first
+#       unticked slice in AUTO.md: the list is frozen.
+#   auto-slice dispatch <name> <spec-file> [scout options]
+#       scout --rw from the slice worktree. Refuses a spec written before
+#       "new" (it was not planned against the code as it is now) and a third
+#       dispatch of one slice.
+#   auto-slice merge <name> "<commit message>"
+#       Only what the sensors passed: commit, merge --no-ff into the run
+#       branch, every merged slice's tests there, remove the worktree, tick
+#       AUTO.md and log the slice in it.
+#   auto-slice review ["focus"]
+#       scout --review <base> from the run worktree, after the last slice.
+#
+# The run is the worktree of this repo whose root holds AUTO.md; AUTO_RUN=<path>
+# picks one when there are several. State is in <git-common-dir>/pi-auto/<effort>/
+# (base, tests.log, and per slice .new .tests .runs .tree .merged .log).
+# Every command after start writes "session: $PI_SESSION_ID" into AUTO.md when
+# pi's bash tool set that variable (a bg_run job has none and leaves the line
+# as it is); extensions/auto-run.ts sends that session back to the slices.
+#
+# Exit: 0 done; 1 a stop condition of the run, named in the message; 2 usage;
+# from dispatch and review, scout's own code otherwise.
+set -uo pipefail
+
+usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+die() {
+  echo "auto-slice: $2" >&2
+  exit "$1"
+}
+
+[ $# -gt 0 ] || {
+  usage >&2
+  exit 2
+}
+case "$1" in -h | --help)
+  usage
+  exit 0
+  ;;
+esac
+
+SCOUT="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)/scout"
+COMMON="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || die 2 "not inside a git repo"
+NAME='^[a-z0-9][a-z0-9-]*$'
+
+# The worktree checked out on branch $1, or nothing
+tree_of() { git worktree list --porcelain | awk -v b="branch refs/heads/$1" '/^worktree /{w=substr($0,10)} $0==b{print w; exit}'; }
+
+# Sets RUN, BRANCH and STATE, and writes this session into AUTO.md
+find_run() {
+  local n
+  RUN="${AUTO_RUN:-$(git rev-parse --show-toplevel)}"
+  if [ ! -f "$RUN/AUTO.md" ] && [ -z "${AUTO_RUN:-}" ]; then
+    RUN="$(git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r w; do [ -f "$w/AUTO.md" ] && echo "$w"; done)"
+    n="$(printf '%s' "$RUN" | grep -c . || true)"
+    [ "$n" = 1 ] || die 2 "$n auto runs on this repo (worktrees with an AUTO.md). With none: auto-slice start <effort>, then write AUTO.md. With several: AUTO_RUN=<worktree>"
+  fi
+  [ -f "$RUN/AUTO.md" ] || die 2 "$RUN has no AUTO.md"
+  BRANCH="$(git -C "$RUN" branch --show-current)"
+  case "$BRANCH" in auto/*) ;; *) die 2 "$RUN is on '$BRANCH', not auto/<effort>" ;; esac
+  STATE="$COMMON/pi-auto/${BRANCH#auto/}"
+  mkdir -p "$STATE"
+  if [ -n "${PI_SESSION_ID:-}" ] && ! grep -qx "session: $PI_SESSION_ID" "$RUN/AUTO.md"; then
+    {
+      grep -v '^session: ' "$RUN/AUTO.md"
+      echo "session: $PI_SESSION_ID"
+    } >"$STATE/AUTO.tmp"
+    cat "$STATE/AUTO.tmp" >"$RUN/AUTO.md"
+    rm -f "$STATE/AUTO.tmp"
+  fi
+}
+
+# A line every 30 s while a worker, a review or the tests run, so a watcher can tell slow from stuck
+TICK=""
+trap '[ -z "$TICK" ] || kill "$TICK" 2>/dev/null' EXIT
+tick() {
+  (
+    s=0
+    trap 'kill $! 2>/dev/null; exit 0' TERM
+    while :; do
+      sleep 30 &
+      wait $!
+      s=$((s + 30))
+      echo "auto-slice: $1, ${s}s" >&2
+    done
+  ) &
+  TICK=$!
+}
+untick() {
+  [ -z "$TICK" ] || {
+    kill "$TICK" 2>/dev/null
+    wait "$TICK" 2>/dev/null
+  }
+  TICK=""
+}
+
+cmd="$1"
+shift
+case "$cmd" in
+start)
+  effort="${1:-}"
+  [[ "$effort" =~ $NAME ]] || die 2 "start needs an effort name, lowercase-hyphen"
+  from="$(git branch --show-current)"
+  [ -n "$from" ] || die 1 "HEAD is detached; start from the branch the run will merge back into"
+  default="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)"
+  default="${default#origin/}"
+  if [ "$from" = "$default" ] || { [ -z "$default" ] && { [ "$from" = master ] || [ "$from" = main ]; }; }; then
+    die 1 "HEAD is the default branch ($from), and an auto run never merges there. Start from a feature branch"
+  fi
+  git show-ref -q --verify "refs/heads/auto/$effort" && die 2 "auto/$effort exists: resume it with the other commands, or pick another name"
+  git ls-files --error-unmatch AUTO.md >/dev/null 2>&1 && die 1 "AUTO.md is tracked in this repo"
+  base="$(git rev-parse HEAD)"
+  wt switch -y --no-cd -c "auto/$effort" --base "$from" >&2 || die 1 "wt switch could not make the run worktree"
+  RUN="$(tree_of "auto/$effort")"
+  [ -n "$RUN" ] || die 1 "no worktree for auto/$effort after wt switch"
+  mkdir -p "$COMMON/info"
+  grep -qx 'AUTO.md' "$COMMON/info/exclude" 2>/dev/null || echo AUTO.md >>"$COMMON/info/exclude"
+  rm -rf "$COMMON/pi-auto/$effort"
+  mkdir -p "$COMMON/pi-auto/$effort"
+  echo "$base" >"$COMMON/pi-auto/$effort/base"
+  [ -z "$(git status --porcelain)" ] || echo "auto-slice: this checkout has uncommitted changes; the run starts from $from @ ${base:0:9} without them" >&2
+  printf 'run: %s\nbranch: auto/%s\nbase: %s @ %s\nNow write %s/AUTO.md.\n' "$RUN" "$effort" "$from" "$base" "$RUN"
+  ;;
+new)
+  name="${1:-}"
+  [[ "$name" =~ $NAME ]] || die 2 "new needs a slice name"
+  find_run
+  next="$(sed -n 's/^- \[ \] [0-9][0-9]*\. \([^, ]*\),.*/\1/p' "$RUN/AUTO.md" | head -n 1)"
+  [ "$name" = "$next" ] || die 1 "the first unticked slice in AUTO.md is '${next:-none}', not '$name'; the list is frozen"
+  S="$(tree_of "slice/$name")"
+  if [ -z "$S" ]; then
+    (cd "$RUN" && wt switch -y --no-cd -c "slice/$name" --base "$BRANCH") >&2 || die 1 "wt switch could not make the slice worktree"
+    S="$(tree_of "slice/$name")"
+  fi
+  : >"$STATE/$name.new"
+  printf 'slice: %s\nPlan slice/%s against that worktree as it is now, write the spec to a file outside the repo, then: auto-slice dispatch %s <spec-file>\n' "$S" "$name" "$name"
+  ;;
+dispatch)
+  name="${1:-}"
+  spec="${2:-}"
+  [[ "$name" =~ $NAME ]] && [ -n "$spec" ] || die 2 "dispatch needs a slice name and a spec file"
+  shift 2
+  find_run
+  S="$(tree_of "slice/$name")"
+  [ -n "$S" ] || die 2 "no worktree for slice/$name; first: auto-slice new $name"
+  [ -r "$spec" ] || die 2 "spec not readable: $spec"
+  [ "$spec" -nt "$STATE/$name.new" ] || die 1 "$spec is older than slice/$name's worktree. A slice is planned against the code as it is after the last merge: read it there, then write the spec"
+  failed="$(grep -vc '^PASS ' "$STATE/$name.runs" 2>/dev/null || true)"
+  [ "${failed:-0}" -lt 2 ] || die 1 "slice/$name has had its dispatch and its rework and passed neither (a stop condition). Add 'stopped: $name failed after rework' to AUTO.md and report"
+  tests="$(awk '/^---[[:space:]]*$/ { n++; next } n == 1 && /^tests:/ { sub(/^tests:[[:space:]]*/, ""); t = $0 } END { print t }' "$spec")"
+  case "$tests" in \"*\" | \'*\') tests="${tests:1:${#tests}-2}" ;; esac
+  [ -n "$tests" ] || die 2 "$spec has no tests: line in its frontmatter"
+  printf '%s\n' "$tests" >"$STATE/$name.tests"
+  rm -f "$STATE/$name.tree"
+  before="$(cksum <"$RUN/AUTO.md")"
+  tick "the worker on slice/$name is still running"
+  (cd "$S" && "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"
+  rc="${PIPESTATUS[0]}"
+  untick
+  verdict="$(sed -n 's/^WORKER-SENSORS: \([A-Z-]*\).*/\1/p' "$STATE/$name.log" | head -n 1)"
+  info="$(grep '^scout: dir=' "$STATE/$name.log" | tail -n 1)"
+  # A refusal before the worker started (usage, the fan-out cap) is not a dispatch
+  [ -n "$verdict" ] || [ "$rc" = 0 ] || [ -n "$info" ] || exit "$rc"
+  case "$verdict $info" in "PASS "*blocked-on-me=yes*) verdict=BLOCKED ;; esac
+  echo "${verdict:-NONE} rc=$rc ${info#scout: }" >>"$STATE/$name.runs"
+  [ "$(cksum <"$RUN/AUTO.md")" = "$before" ] || die 1 "AUTO.md changed during the dispatch (a stop condition)"
+  if [ "$rc" = 0 ] && [ "$verdict" = PASS ]; then
+    git -C "$S" add -A && git -C "$S" write-tree >"$STATE/$name.tree"
+    echo "auto-slice: slice/$name passed its sensors. Next: auto-slice merge $name \"<type>: <description>\""
+  elif [ "$verdict" = BLOCKED ]; then
+    die 1 "slice/$name passed its sensors, but the worker left something under Blocked on me (a stop condition): the slice is not finished"
+  elif [ "$rc" = 124 ]; then
+    die 124 "the worker on slice/$name timed out (a stop condition)"
+  elif [ "${failed:-0}" = 0 ]; then
+    die 1 "slice/$name did not pass (${verdict:-no verdict}, rc $rc). One rework: append the reasons above to $spec and dispatch again"
+  else
+    die 1 "slice/$name did not pass its rework (${verdict:-no verdict}, rc $rc): a stop condition. Add 'stopped: $name failed after rework' to AUTO.md and report"
+  fi
+  ;;
+merge)
+  name="${1:-}"
+  msg="${2:-}"
+  [[ "$name" =~ $NAME ]] && [ -n "$msg" ] || die 2 "merge needs a slice name and a commit message"
+  find_run
+  S="$(tree_of "slice/$name")"
+  [ -n "$S" ] || die 2 "no worktree for slice/$name"
+  if [ ! -f "$STATE/$name.merged" ]; then
+    git -C "$S" add -A
+    [ -s "$STATE/$name.tree" ] && [ "$(git -C "$S" write-tree)" = "$(cat "$STATE/$name.tree")" ] ||
+      die 1 "slice/$name has no passing dispatch for what is in its worktree now. A change made after the sensors passed is a hand edit; a fix is a rework dispatch"
+    git -C "$S" diff --cached --quiet || git -C "$S" commit -q -m "$msg" || die 1 "the commit on slice/$name failed"
+    [ -n "$(git -C "$RUN" rev-list -n 1 "$BRANCH..slice/$name")" ] || die 1 "slice/$name changed nothing; an obsolete slice is a stop condition"
+    git -C "$RUN" merge --no-ff -q -m "Merge branch 'slice/$name' into $BRANCH" "slice/$name" || {
+      git -C "$RUN" merge --abort 2>/dev/null
+      die 1 "slice/$name does not merge cleanly into $BRANCH (a stop condition); the merge was aborted"
+    }
+    : >"$STATE/$name.merged"
+  fi
+  for merged in "$STATE"/*.merged; do cat "${merged%.merged}.tests"; done | sort -u >"$STATE/tests.all"
+  while IFS= read -r run_tests; do
+    echo "auto-slice: on $BRANCH: $run_tests" >&2
+    tick "the tests are still running"
+    (cd "$RUN" && bash -c "$run_tests") >"$STATE/tests.log" 2>&1 </dev/null
+    rc=$?
+    untick
+    [ "$rc" = 0 ] || {
+      tail -n 30 "$STATE/tests.log" >&2
+      die 1 "tests fail on $BRANCH after merging slice/$name: '$run_tests' exit $rc (a stop condition). The slice is merged and not ticked"
+    }
+  done <"$STATE/tests.all"
+  sha="$(git -C "$RUN" rev-parse --short HEAD)"
+  (cd "$RUN" && wt remove -y --foreground "slice/$name") >&2 || echo "auto-slice: wt remove failed for slice/$name; it is merged, so remove it by hand" >&2
+  git -C "$RUN" show-ref -q --verify "refs/heads/slice/$name" && git -C "$RUN" branch -q -d "slice/$name"
+  awk -v n="$name" '{ if ($0 ~ ("^- \\[ \\] [0-9]+\\. " n ",")) sub(/\[ \]/, "[x]"); print }' "$RUN/AUTO.md" >"$STATE/AUTO.tmp"
+  printf 'slice %s: merge %s; %s\n' "$name" "$sha" "$(paste -sd ';' "$STATE/$name.runs" | sed 's/;/; /g')" >>"$STATE/AUTO.tmp"
+  cat "$STATE/AUTO.tmp" >"$RUN/AUTO.md"
+  rm -f "$STATE/AUTO.tmp"
+  grep -E '^- \[[ x]\] [0-9]+\. ' "$RUN/AUTO.md"
+  ;;
+review)
+  find_run
+  [ -s "$STATE/base" ] || die 2 "no base recorded for $BRANCH (the run was not started by auto-slice start). From $RUN run: scout --review <base-sha>"
+  open="$(grep -c '^- \[ \] [0-9][0-9]*\. ' "$RUN/AUTO.md" || true)"
+  [ "$open" = 0 ] || die 1 "$open slices are still unticked; the review comes after the last one"
+  tick "the review is still running"
+  (cd "$RUN" && "$SCOUT" --review "$(cat "$STATE/base")" "$@")
+  rc=$?
+  untick
+  exit "$rc"
+  ;;
+*)
+  usage >&2
+  exit 2
+  ;;
+esac

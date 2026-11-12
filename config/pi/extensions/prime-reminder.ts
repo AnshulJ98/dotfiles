@@ -18,12 +18,23 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { capFiring } from "../lib/compact-cap-state.ts";
+import { ownRun } from "./auto-run.ts";
 
 const REMINDER =
   "Post-compaction reminder: your core instructions survived intact and still bind. " +
   "Re-adhere before acting: lead with the answer, keep every change inside the " +
   "request, take the first option in Before Writing Code that holds, and delegate " +
-  "per the dispatch rule. If the repo root has an AUTO.md, re-read it before anything else.";
+  "per the dispatch rule.";
+
+/** The pointer back to an auto run's runbook; it sits in the run's worktree, which is rarely the session's checkout. */
+function autoRunPointer(sessionId: string): string {
+  try {
+    const run = ownRun(process.cwd(), sessionId);
+    return run ? ` You are orchestrating an auto run: re-read ${run}/AUTO.md before anything else.` : "";
+  } catch {
+    return ""; // the reminder still goes out
+  }
+}
 
 const RESUME =
   "A task was likely in progress when this compaction interrupted the run: resume it " +
@@ -96,13 +107,13 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  pi.on("before_agent_start", async () => {
+  pi.on("before_agent_start", async (_event, ctx) => {
     if (!pending) return;
     pending = false;
     return {
       message: {
         customType: "prime-reminder",
-        content: REMINDER,
+        content: REMINDER + autoRunPointer(ctx.sessionManager.getSessionId()),
         display: true,
       },
     };

@@ -1,12 +1,16 @@
 /**
  * Auto-run guard: what plan.md's auto mode asks for, enforced in the session that orchestrates it.
  *
- * An auto run is in progress while the checkout's root holds an AUTO.md (plan.md writes it;
- * config/git/bin/auto-guard keys on the same file). While it exists:
- *   - edit and write are blocked for every file in the repo or one of its worktrees except
- *     AUTO.md: a slice is done by a worker and fixed by a rework dispatch.
- *   - after a bash call, uncommitted changes in the checkout are named in the result. The
- *     orchestrator's checkout only takes merges, so they are a hand edit or a merge that stopped.
+ * An auto run is in progress in every worktree whose root holds an AUTO.md (plan.md writes it;
+ * config/git/bin/auto-guard keys on the same file). The run usually has its own worktree beside the
+ * repo (bin/auto-slice start), so the session's checkout is rarely the run's. While a run exists:
+ *   - edit and write are blocked for every file in a run's checkout except its AUTO.md, and in
+ *     every slice/* worktree: a slice is done by a worker and fixed by a rework dispatch. The rest
+ *     of the repo stays open, so another session in the main checkout is not caught.
+ * For the run this session owns (the one in its own checkout, else the one whose AUTO.md carries
+ * `session: <this session's id>`, stamped by bin/auto-slice):
+ *   - after a bash call, uncommitted changes in the run's checkout are named in the result. That
+ *     checkout only takes merges, so they are a hand edit or a merge that stopped.
  *   - a turn that ends with unticked slices and no `stopped:` line is sent back to them, at most
  *     MAX_NUDGES times in a row without a new tick, and never while a scout is still running.
  * With or without AUTO.md, `git worktree add` to a path inside the repo is blocked: worktrees go
@@ -73,29 +77,52 @@ function git(cwd: string, ...args: string[]): string | undefined {
 	}
 }
 
-/** The checkout's root and every worktree root of its repo, as physical paths. */
-function repoRoots(cwd: string): { top: string; roots: string[] } | undefined {
-	const top = git(cwd, "rev-parse", "--show-toplevel");
-	if (!top) return undefined;
-	const listed = (git(cwd, "worktree", "list", "--porcelain") ?? "").split("\n").filter((line) => line.startsWith("worktree ")).map((line) => line.slice(9));
-	return { top, roots: [...new Set([top, ...listed])] };
+interface Tree {
+	root: string;
+	branch: string;
 }
 
-/** The checkout's root when an auto run is in progress there. One git call, since it runs after every bash call. */
-function autoTop(cwd: string): string | undefined {
-	const top = git(cwd, "rev-parse", "--show-toplevel");
-	return top && existsSync(join(top, "AUTO.md")) ? top : undefined;
+/** Every worktree of the repo that holds `cwd`, as physical paths; undefined outside a repo. One git call, since it runs after every bash call. */
+function worktrees(cwd: string): Tree[] | undefined {
+	const listed = git(cwd, "worktree", "list", "--porcelain");
+	if (listed === undefined) return undefined;
+	const trees: Tree[] = [];
+	for (const line of listed.split("\n")) {
+		if (line.startsWith("worktree ")) trees.push({ root: physical(line.slice(9)), branch: "" });
+		else if (line.startsWith("branch refs/heads/") && trees.length) trees[trees.length - 1].branch = line.slice(18);
+	}
+	return trees;
 }
 
-/** Why an edit or write of `target` is refused during an auto run, or undefined when it is fine. */
+/** The roots that hold an AUTO.md: one auto run each. */
+const runsIn = (trees: Tree[]): string[] => trees.map((tree) => tree.root).filter((root) => existsSync(join(root, "AUTO.md")));
+
+/**
+ * The run this session orchestrates: the one in its own checkout, else the one whose AUTO.md names
+ * the session. Another session's run is closed to edits here but is not this session's to resume.
+ */
+export function ownRun(cwd: string, sessionId?: string): string | undefined {
+	const trees = worktrees(cwd);
+	if (!trees) return undefined;
+	const runs = runsIn(trees);
+	const here = physical(cwd);
+	const home = trees.map((tree) => tree.root).filter((root) => within(here, root)).sort((a, b) => b.length - a.length)[0];
+	if (home && runs.includes(home)) return home;
+	if (!sessionId) return undefined;
+	return runs.find((root) => readFileSync(join(root, "AUTO.md"), "utf8").split("\n").includes(`session: ${sessionId}`));
+}
+
+/** Why an edit or write of `target` is refused: it is in the checkout of an auto run, or in a slice worktree while one is on. */
 export function editRefusal(target: string, cwd: string): string | undefined {
-	const repo = autoTop(cwd) && repoRoots(cwd);
-	if (!repo) return undefined;
+	const trees = worktrees(cwd);
+	const runs = trees ? runsIn(trees) : [];
+	if (!trees || runs.length === 0) return undefined;
 	const path = physical(resolve(cwd, expandHome(target)));
-	if (path === join(repo.top, "AUTO.md") || !repo.roots.some((root) => within(path, root))) return undefined;
+	if (runs.some((root) => path === join(root, "AUTO.md"))) return undefined;
+	if (!trees.some((tree) => (runs.includes(tree.root) || tree.branch.startsWith("slice/")) && within(path, tree.root))) return undefined;
 	return (
-		`Blocked: an auto run is in progress (AUTO.md), and ${target} is repo code. Slices are done by a worker and fixed by a rework dispatch ` +
-		"(~/.pi/agent/bin/scout --rw --spec -), never by hand; the only file you edit is AUTO.md. If the run cannot go on, add `stopped: <condition>` to AUTO.md and report."
+		`Blocked: an auto run is in progress (AUTO.md), and ${target} is repo code in its checkout or a slice worktree. Slices are done by a worker and fixed by a rework dispatch ` +
+		"(~/.pi/agent/bin/auto-slice dispatch), never by hand; the only file you edit is AUTO.md. If the run cannot go on, add `stopped: <condition>` to AUTO.md and report."
 	);
 }
 
@@ -104,31 +131,31 @@ export function worktreeRefusal(command: string, cwd: string): string | undefine
 	const target = worktreeAddTarget(command);
 	if (!target) return undefined;
 	const base = resolve(cwd, expandHome(target.base ?? "."));
-	const repo = repoRoots(existsSync(base) ? base : cwd);
-	if (!repo) return undefined;
+	const trees = worktrees(existsSync(base) ? base : cwd);
+	if (!trees) return undefined;
 	const path = physical(resolve(base, expandHome(target.path)));
-	if (!repo.roots.some((root) => within(path, root))) return undefined;
+	if (!trees.some((tree) => within(path, tree.root))) return undefined;
 	return `Blocked: ${target.path} would put a worktree inside the repo. Worktrees go beside it: wt switch -c <branch> (it lands at ../<repo>.<branch>).`;
 }
 
-/** The checkout's uncommitted changes during an auto run, AUTO.md aside; "" when clean or no run. */
-export function dirtyDuringAuto(cwd: string): string {
-	const top = autoTop(cwd);
-	if (!top) return "";
-	return (git(top, "status", "--porcelain") ?? "").split("\n").filter((line) => line && line.slice(3) !== "AUTO.md").join("\n");
+/** The uncommitted changes in this session's run checkout, AUTO.md aside; "" when clean or no run. */
+export function dirtyDuringAuto(cwd: string, sessionId?: string): string {
+	const run = ownRun(cwd, sessionId);
+	if (!run) return "";
+	return (git(run, "status", "--porcelain") ?? "").split("\n").filter((line) => line && line.slice(3) !== "AUTO.md").join("\n");
 }
 
 /** The message that sends a settling orchestrator back to its slices, or undefined when it may stop. */
-export function nudge(cwd: string, scoutRunning: boolean): { open: number; content: string } | undefined {
-	const top = autoTop(cwd);
-	if (!top || scoutRunning) return undefined;
-	const autoMd = readFileSync(join(top, "AUTO.md"), "utf8");
+export function nudge(cwd: string, scoutRunning: boolean, sessionId?: string): { open: number; content: string } | undefined {
+	const run = ownRun(cwd, sessionId);
+	if (!run || scoutRunning) return undefined;
+	const autoMd = readFileSync(join(run, "AUTO.md"), "utf8");
 	const open = openSlices(autoMd);
 	if (isStopped(autoMd) || open.length === 0) return undefined;
 	return {
 		open: open.length,
 		content:
-			`AUTO.md still lists ${open.length} unticked slice${open.length === 1 ? "" : "s"}; the next is: ${open[0]}\n` +
+			`${join(run, "AUTO.md")} still lists ${open.length} unticked slice${open.length === 1 ? "" : "s"}; the next is: ${open[0]}\n` +
 			"The run is not finished and a progress note is not an ending. Carry on with that slice now: worktree, plan, dispatch, sensors, merge, tick. " +
 			"If a stop condition from AUTO.md holds, add the line `stopped: <condition>` to AUTO.md and report per Long Runs instead.",
 	};
@@ -152,9 +179,9 @@ export default function (pi: ExtensionAPI) {
 		return reason ? { block: true, reason } : undefined;
 	});
 
-	pi.on("tool_result", async (event) => {
+	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== "bash") return undefined;
-		const dirty = dirtyDuringAuto(process.cwd());
+		const dirty = dirtyDuringAuto(process.cwd(), ctx.sessionManager.getSessionId());
 		if (dirty === reportedDirty) return undefined;
 		reportedDirty = dirty;
 		if (!dirty) return undefined;
@@ -171,9 +198,9 @@ export default function (pi: ExtensionAPI) {
 		};
 	});
 
-	pi.on("agent_before_settle", async (event) => {
+	pi.on("agent_before_settle", async (event, ctx) => {
 		if (event.outcome !== "completed") return undefined;
-		const next = nudge(process.cwd(), scoutRunning());
+		const next = nudge(process.cwd(), scoutRunning(), ctx.sessionManager.getSessionId());
 		if (!next) return undefined;
 		if (next.open !== openAtLastNudge) nudges = 0;
 		if (nudges >= MAX_NUDGES) return undefined;

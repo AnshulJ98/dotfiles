@@ -12,6 +12,7 @@ const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) â†
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
 // args (prints the arguments scout passed),
+// blocked (a worker digest with a step left under Blocked on me),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
 # In a herdr tab, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
@@ -27,6 +28,7 @@ sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 args) echo "$args" ;;
 env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
+blocked) printf '%s\\n' '**Blocked on me**' '- step 2 needs src/b.ts, outside files-allowed' '' '**Changed**' '- a.txt' ;;
 error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
 esac
 `;
@@ -157,7 +159,7 @@ function reviewRepo(): string {
 	}
 	return repo;
 }
-const reviewRecords = (repo: string): string[] => (existsSync(join(repo, ".git", "pi-review")) ? readdirSync(join(repo, ".git", "pi-review")) : []);
+const reviewRecords = (repo: string): string[] => (existsSync(join(repo, ".git", "pi-review")) ? readdirSync(join(repo, ".git", "pi-review")).filter((name) => !name.endsWith(".findings")) : []);
 const headOf = (repo: string): string => spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
 
 test("--review runs review.md over BASE...HEAD read-only, with AGENTS.md and AUTO.md, and records the reviewed tip", () => {
@@ -192,6 +194,51 @@ test("--review records nothing for a dirty tree, an unknown base, --rw, or a run
 	assert.equal(dirty.status, 2);
 	assert.match(dirty.stderr, /needs a clean tree/);
 	assert.deepEqual(reviewRecords(repo), []);
+});
+
+test("--review: rounds 2 and 3 read only the diff since the round before, with its findings; a fourth is refused", () => {
+	const { env } = sandbox();
+	const repo = reviewRepo();
+	const base = spawnSync("git", ["rev-parse", "HEAD~1"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+	const review = () => spawnSync(SCOUT, ["--review", base], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
+	const fix = (text: string) => {
+		writeFileSync(join(repo, "a.txt"), text);
+		spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qam", text.trim(), "--no-verify"], { cwd: repo });
+	};
+	const record = () => readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8");
+	const first = headOf(repo);
+	assert.match(review().stdout, new RegExp(`git diff ${base}\\.\\.\\.HEAD`));
+	assert.match(record(), /^round=1$/m);
+	assert.match(review().stdout, /\.\.\.HEAD/, "the same tip again is the same round");
+	assert.match(record(), /^round=1$/m);
+
+	fix("three\n");
+	const second = review();
+	assert.match(second.stdout, new RegExp(`git diff ${first}\\.\\.HEAD\`, the fixes made since round 1`));
+	assert.match(second.stdout, /This is round 2 of 3/);
+	assert.match(second.stdout, new RegExp(`@\\S+/pi-review/${first}\\.findings`));
+	assert.match(record(), /^round=2$/m);
+
+	fix("four\n");
+	assert.equal(review().status, 0);
+	assert.match(record(), /^round=3$/m);
+	fix("five\n");
+	const fourth = review();
+	assert.equal(fourth.status, 2);
+	assert.match(fourth.stderr, /three review rounds are done/);
+	assert.equal(reviewRecords(repo).length, 3);
+	assert.equal(spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" }).status, 0, "another base is another review");
+});
+
+test("scout names its run folder and cost on stderr, and a worker's Blocked on me", async () => {
+	const { env, scoutRoot } = sandbox();
+	const read = await runScout(["look"], { ...env, FAKE_PI: "ok" });
+	assert.match(read.stderr, new RegExp(`^scout: dir=${scoutRoot}/\\d+ cost=\\$0\\.000$`, "m"));
+	const blocked = await runScout(["--spec", "-"], { ...env, FAKE_PI: "blocked" }, SPEC);
+	assert.match(blocked.stderr, /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=yes$/m);
+	assert.doesNotMatch(blocked.stdout, /^scout: dir=/m, "stdout stays the digest");
+	const clear = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
+	assert.match(clear.stderr, /blocked-on-me=no$/m);
 });
 
 test("a package.json without a type above scout does not refuse the spec", () => {
