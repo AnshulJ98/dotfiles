@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
+# session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
+#   zws new [--ask]      new workspace named after the current folder (--ask prompts for it)
+#   zws create NAME CWD  used by --ask
+#   zws switch N | next | prev
+set -u
+export PATH=/opt/homebrew/bin:$PATH
+DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
+mkdir -p "$DIR"
+self=$(realpath "$0")
+
+# Prints: active session, active pane's folder, then open workspaces in tab order, one per line.
+# kitty reports the folder of `zmx attach` for held panes, so ask the session's shell instead.
+state() {
+  kitten @ ls | /usr/bin/python3 -c '
+import json, subprocess, sys
+order, cur, cwd, holder = [], "", "", ""
+for o in json.load(sys.stdin):
+    for t in o["tabs"]:
+        for w in t["windows"]:
+            s = w.get("session_name", "")
+            if s and s not in order: order.append(s)
+            if o["is_active"] and t["is_active"] and w["is_active"]:
+                cur, cwd, holder = s, w["cwd"], w["user_vars"].get("holder", "")
+if holder:
+    out = subprocess.run(["zmx", "ls"], capture_output=True, text=True).stdout
+    pid = next((p.split("=")[1] for l in out.splitlines() if f"name={holder}\t" in l
+                for p in l.split("\t") if p.strip().startswith("pid=")), "")
+    live = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"], capture_output=True, text=True).stdout if pid else ""
+    cwd = next((l[1:] for l in live.splitlines() if l.startswith("n")), cwd)
+print(cur); print(cwd); print("\n".join(order))'
+}
+
+go() { kitten @ action goto_session "$DIR/$1.kitty-session"; }
+
+create() { # name cwd
+  printf 'cd %s\nlaunch\n' "$2" > "$DIR/$1.kitty-session"
+  go "$1"
+}
+
+case ${1:-} in
+  new)
+    st=$(state); cwd=$(sed -n 2p <<<"$st"); cwd=${cwd:-$HOME}; open=$(tail -n +3 <<<"$st")
+    base=$(basename "$cwd" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$cwd" = "$HOME" ] && base=home
+    name=$base; n=2
+    while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
+    if [ "${2:-}" = --ask ]; then
+      kitten @ launch --type=overlay --cwd "$cwd" bash -c \
+        'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$n" "$2"' "$self" "$name" "$cwd" >/dev/null
+    else
+      create "$name" "$cwd"
+    fi ;;
+  create) create "$2" "$3" ;;
+  switch|next|prev)
+    st=$(state); cur=$(sed -n 1p <<<"$st"); IFS=$'\n' read -d '' -r -a ws < <(tail -n +3 <<<"$st" | sed '/^$/d')
+    [ ${#ws[@]} -eq 0 ] && exit 0
+    i=0; for j in "${!ws[@]}"; do [ "${ws[$j]}" = "$cur" ] && i=$j; done
+    case $1 in
+      switch) i=$(( $2 - 1 )); [ "$i" -lt "${#ws[@]}" ] || exit 0 ;;
+      next) i=$(( (i + 1) % ${#ws[@]} )) ;;
+      prev) i=$(( (i - 1 + ${#ws[@]}) % ${#ws[@]} )) ;;
+    esac
+    go "${ws[$i]}" ;;
+  *) sed -n '2,6p' "$0" >&2; exit 2 ;;
+esac

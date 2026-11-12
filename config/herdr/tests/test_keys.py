@@ -49,6 +49,9 @@ class KeyConfigTests(unittest.TestCase):
         passthrough = ["cmd+t", "cmd+w", "cmd+shift+w", "cmd+d", "cmd+shift+d", "cmd+alt+f"]
         passthrough += [f"cmd+{n}" for n in range(1, 10)]
         passthrough += [f"cmd+opt+{d}" for d in ("left", "right", "up", "down")]
+        # kitty's own workspace keys must not shadow Herdr's
+        passthrough += ["cmd+alt+n", "cmd+alt+shift+n", "cmd+alt+w", "ctrl+alt+[", "ctrl+alt+]"]
+        passthrough += [f"cmd+alt+{n}" for n in range(1, 10)]
         for key in passthrough:
             with self.subTest(key=key):
                 self.assertEqual(scoped[key], [])
@@ -59,7 +62,8 @@ class KeyConfigTests(unittest.TestCase):
                 self.assertEqual(scoped[key], ["send_key", key])
         plain = {parts[1]: parts[2:] for parts in maps if parts[1] != "--when-focus-on"}
         self.assertEqual(plain["cmd+t"], ["new_tab_with_cwd"])
-        self.assertEqual(plain["cmd+w"], ["close_tab"])
+        self.assertEqual(plain["cmd+w"], ["close_window"])
+        self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
         self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
 
     def test_installer_and_aerospace_use_launcher(self):
@@ -68,7 +72,8 @@ class KeyConfigTests(unittest.TestCase):
         config = tomllib.loads((ROOT / "config/aerospace/aerospace.toml").read_text())
         bindings = config["mode"]["main"]["binding"]
         self.assertIn("$HOME/bin/herdr", bindings["ctrl-alt-enter"])
-        self.assertEqual(bindings["cmd-enter"], "exec-and-forget open -n /Applications/kitty.app")
+        self.assertEqual(bindings["cmd-enter"], "exec-and-forget $HOME/.config/kitty/bin/kmain")
+        self.assertEqual(bindings["cmd-alt-enter"], "exec-and-forget open -n /Applications/kitty.app")
 
 
 class LauncherTests(unittest.TestCase):

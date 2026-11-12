@@ -1,33 +1,19 @@
 #!/usr/bin/env bash
-# Full-tab picker for zmx sessions (every kitty pane lives in one, see zshell). Runs in a kitty
-# tab opened by zgoto. $1 = id of the window the user came from (split target).
-# Shows all sessions with detached ones marked; ctrl-t (or cmd+alt+g, forwarded by zgoto)
-# switches to detached only. `zpick --list` prints rows for the current view.
+# Go to: full-tab picker over this kitty's workspaces > tabs > panes, then zmx sessions no pane
+# holds and closed workspaces (zpick-rows). Runs in a tab opened by zgoto; $1 = id of the window
+# the user came from. ctrl-t (or cmd+alt+g, forwarded by zgoto) switches to detached and closed only.
 set -u
 export PATH=/opt/homebrew/bin:$PATH
-self=$(realpath "$0")
+self=$(realpath "$0"); here=$(dirname "$self")
+DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
 
-# The view (detached | all) lives in a file so fzf's reload and label commands can read it.
+# The view (all | detached) lives in a file so fzf's reload and label commands can read it.
 export ZPICK_VIEW=${ZPICK_VIEW:-${TMPDIR:-/tmp}/zpick-view.$$}
 view() { cat "$ZPICK_VIEW" 2>/dev/null || echo all; }
-
-list() {
-  zmx ls 2>/dev/null | awk -F'\t' -v now="$(date +%s)" -v home="$HOME" -v view="$(view)" '
-    { delete f
-      for (i = 1; i <= NF; i++) { k = $i; sub(/^ +/, "", k); v = k; sub(/=.*/, "", k); sub(/^[^=]*=/, "", v); f[k] = v }
-      det = f["clients"] == 0
-      if (!det && view != "all") next
-      cwd = f["cwd"]; sub(/^file:\/\/[^\/]*/, "", cwd); dir = cwd; sub("^" home, "~", dir)
-      age = now - f["created"]
-      a = age < 3600 ? int(age/60) "m" : (age < 86400 ? int(age/3600) "h" : int(age/86400) "d")
-      glyph = (view == "all" && det) ? "\033[2m◇\033[0m" : "\033[38;2;68;221;255m◆\033[0m"
-      tag = (view == "all" && det) ? " \033[38;2;255;170;68mdetached\033[0m" : ""
-      printf "%s\t%s\t%s\t%s \033[1m%-18s\033[0m \033[2m%-28s %4s\033[0m%s\n", f["name"], cwd, f["clients"], glyph, f["name"], dir, a, tag }' |
-    sort -t$'\t' -k2,2 -k1,1
-}
 toggle() { local next=all; [ "$(view)" = all ] && next=detached; echo "$next" > "$ZPICK_VIEW"; }
-label() { [ "$(view)" = all ] && echo ' Go to · all sessions ' || echo ' Go to · detached '; }
-ghost() { [ "$(view)" = all ] && echo 'search all sessions' || echo 'search detached sessions'; }
+label() { [ "$(view)" = all ] && echo ' Go to ' || echo ' Go to · detached and closed '; }
+ghost() { [ "$(view)" = all ] && echo 'search workspaces, tabs and panes' || echo 'search detached sessions'; }
+
 # Preview: the session's screen in colour, cut to the preview height. fzf only understands colour
 # codes, so cursor-forward gaps become spaces and other controls are dropped. Full-screen apps
 # (alternate screen) keep their top rows with blank runs squeezed, shells their last non-blank rows.
@@ -41,20 +27,43 @@ preview() { # name lines
     sed -e :a -e '/^\([[:space:]]\|\x1b\[[0-9;]*m\)*$/{$d;N;ba' -e '}' <<<"$vt" | tail -n "$2"
   fi
 }
+preview_row() { # kind target holder lines
+  case $1 in
+    closed) grep -o 'cd .*\|holder=[^ ]*' "$2" | sed 's/^holder=/  /' | head -n "$4" ;;
+    hdr) ;;
+    *) if [ -n "$3" ]; then preview "$3" "$4"
+       elif [ "$1" = pane ]; then kitten @ get-text --match "id:$2" --ansi | tail -n "$4"; fi ;;
+  esac
+}
+kill_rows() { # file of selected rows: kills the zmx session behind panes and detached sessions,
+  # and forgets closed workspaces (their sessions stay, as detached)
+  while IFS=$'\t' read -r kind target holder _; do
+    case $kind in
+      pane|det) [ -n "$holder" ] && zmx kill "$holder" >/dev/null 2>&1 ;;
+      closed) case $target in "$DIR"/*.kitty-session) rm -f "$target" ;; esac ;;
+    esac
+  done < "$1"
+}
+
 case ${1:-} in
-  --list) list; exit ;;
+  --list) "$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}"; exit ;;
   --toggle) toggle; exit ;;
   --label) label; exit ;;
   --ghost) ghost; exit ;;
+  --preview) preview_row "$2" "$3" "$4" "$5"; exit ;;
+  --kill) kill_rows "$2"; exit ;;
 esac
-[ "${1:-}" = --preview ] && { preview "$2" "$3"; exit; }
 from=${1:-}
+export ZPICK_FROM=$from
+ws=$(kitten @ ls --match "id:$from" 2>/dev/null | /usr/bin/python3 -c '
+import json, sys
+try: print(json.load(sys.stdin)[0]["tabs"][0]["windows"][0].get("session_name", ""))
+except (ValueError, IndexError, KeyError): pass')
 
-attach() { # name cwd where clients
-  # Already open in a pane here: go there instead of attaching a second client.
-  if [ "$4" != 0 ] && kitten @ focus-window --match "var:holder=$1" >/dev/null 2>&1; then return; fi
-  # No command: kitty runs its shell (the zmx wrapper), which reattaches the holder session.
+attach() { # name cwd where: reattach a detached session as a tab, or a split next to $from
+  # No command: kitty runs its shell (zshell), which reattaches the holder session.
   local args=(--cwd "$2" --var "holder=$1")
+  [ -n "$ws" ] && args+=(--add-to-session "$ws")
   if [ "$3" = split ] && [ -n "$from" ]; then
     # launch opens in the active tab (the picker) unless --match names the target window's tab.
     kitten @ focus-window --match "id:$from" >/dev/null 2>&1
@@ -63,26 +72,38 @@ attach() { # name cwd where clients
     kitten @ launch --type=tab "${args[@]}" >/dev/null
   fi
 }
+open_row() { # kind target holder cwd key
+  case $1 in
+    ws) [ -n "$2" ] && kitten @ action goto_session "$DIR/$2.kitty-session" ;;
+    tab) kitten @ focus-tab --match "id:$2" ;;
+    pane) kitten @ focus-window --match "id:$2" ;;
+    det) attach "$2" "$4" "$([ "$5" = ctrl-s ] && echo split || echo tab)" ;;
+    closed) kitten @ action goto_session "$2" ;;
+  esac >/dev/null 2>&1
+}
 
+rows=$("$self" --list)
+pos=$(awk -F'\t' -v w="$from" '$1 == "pane" && $2 == w { print NR; exit }' <<<"$rows")
 A='#44ddff'
-out=$(list | FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
-  --delimiter '\t' --with-nth 4 --nth 1 --no-sort --layout reverse \
+out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
+  --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
   --border rounded --border-label "$(label)" --border-label-pos 3 --margin 6%,10% --padding 1,2 \
   --prompt '/ ' --ghost "$(ghost)" --info inline-right --pointer '▌' --marker '+' --gutter ' ' \
   --input-border line --list-border none \
-  --preview "$self --preview {1} \$FZF_PREVIEW_LINES" \
-  --preview-window 'right,55%,border-left,nowrap,noinfo' --preview-label ' screen ' \
+  --preview "$self --preview {1} {2} {3} \$FZF_PREVIEW_LINES" \
+  --preview-window 'right,45%,border-left,nowrap,noinfo' --preview-label ' screen ' \
   --footer 'enter go · ^s split · ^t view · tab mark · ^x kill · esc' --footer-border line \
   --color "fg:-1,bg:-1,hl:$A,hl+:$A,fg+:-1:bold,bg+:#22313c,gutter:-1,border:$A,label:$A:bold" \
   --color "prompt:$A,pointer:$A,marker:$A,info:8,ghost:8,footer:8,separator:8,scrollbar:8" \
   --color "input-border:8,preview-border:8,preview-label:8,footer-border:8" \
-  --bind "ctrl-x:execute-silent(zmx kill {+1})+reload($self --list)" \
+  --bind "load:pos(${pos:-1})+unbind(load)" \
+  --bind "ctrl-x:execute-silent($self --kill {+f})+reload($self --list)" \
   --bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)" \
-  --bind 'zero:change-ghost(no sessions here · ctrl-t switches view)' \
-  --expect ctrl-s) || exit 0
+  --bind 'zero:change-ghost(nothing here · ctrl-t switches view)' \
+  --expect ctrl-s <<<"$rows") || { rm -f "$ZPICK_VIEW"; exit 0; }
 key=$(head -1 <<<"$out")
-tail -n +2 <<<"$out" | while IFS=$'\t' read -r name cwd clients _; do
-  [ -n "$name" ] && attach "$name" "$cwd" "$([ "$key" = ctrl-s ] && echo split || echo tab)" "$clients"
-done
+while IFS=$'\t' read -r kind target holder cwd _; do
+  [ -n "$kind" ] && open_row "$kind" "$target" "$holder" "$cwd" "$key"
+done < <(tail -n +2 <<<"$out")
 rm -f "$ZPICK_VIEW"
 exit 0

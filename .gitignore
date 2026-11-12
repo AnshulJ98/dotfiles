@@ -51,3 +51,6 @@ agent-eval/results/
 
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/
+
+# Python bytecode (kitty compiles its watcher next to it)
+__pycache__/

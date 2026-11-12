@@ -1,0 +1,12 @@
+#!/bin/sh
+# AeroSpace cmd-enter: focus the one workspace kitty, or start it on the main workspace.
+# Other kitties (cmd-alt-enter, the Dock, herdr) start plain, with no workspace.
+PATH=/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:$PATH
+sock=/tmp/kitty-main
+main=$HOME/.local/state/kitty/workspaces/main.kitty-session
+# kitty cannot raise itself from the background; AeroSpace can, and shares kitty's window ids.
+id=$(kitten @ --to "unix:$sock" ls 2>/dev/null | sed -n 's/.*"platform_window_id": \([0-9]*\).*/\1/p' | head -1)
+[ -n "$id" ] && exec aerospace focus --window-id "$id"
+rm -f "$sock"
+[ -e "$main" ] || { mkdir -p "$(dirname "$main")" && printf 'cd ~\nlaunch\n' > "$main"; }
+exec open -n /Applications/kitty.app --args --listen-on "unix:$sock" --session "$main"
