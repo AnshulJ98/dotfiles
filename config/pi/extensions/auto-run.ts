@@ -81,10 +81,16 @@ function repoRoots(cwd: string): { top: string; roots: string[] } | undefined {
 	return { top, roots: [...new Set([top, ...listed])] };
 }
 
+/** The checkout's root when an auto run is in progress there. One git call, since it runs after every bash call. */
+function autoTop(cwd: string): string | undefined {
+	const top = git(cwd, "rev-parse", "--show-toplevel");
+	return top && existsSync(join(top, "AUTO.md")) ? top : undefined;
+}
+
 /** Why an edit or write of `target` is refused during an auto run, or undefined when it is fine. */
 export function editRefusal(target: string, cwd: string): string | undefined {
-	const repo = repoRoots(cwd);
-	if (!repo || !existsSync(join(repo.top, "AUTO.md"))) return undefined;
+	const repo = autoTop(cwd) && repoRoots(cwd);
+	if (!repo) return undefined;
 	const path = physical(resolve(cwd, expandHome(target)));
 	if (path === join(repo.top, "AUTO.md") || !repo.roots.some((root) => within(path, root))) return undefined;
 	return (
@@ -107,17 +113,16 @@ export function worktreeRefusal(command: string, cwd: string): string | undefine
 
 /** The checkout's uncommitted changes during an auto run, AUTO.md aside; "" when clean or no run. */
 export function dirtyDuringAuto(cwd: string): string {
-	const repo = repoRoots(cwd);
-	if (!repo || !existsSync(join(repo.top, "AUTO.md"))) return "";
-	return (git(repo.top, "status", "--porcelain") ?? "").split("\n").filter((line) => line && line.slice(3) !== "AUTO.md").join("\n");
+	const top = autoTop(cwd);
+	if (!top) return "";
+	return (git(top, "status", "--porcelain") ?? "").split("\n").filter((line) => line && line.slice(3) !== "AUTO.md").join("\n");
 }
 
 /** The message that sends a settling orchestrator back to its slices, or undefined when it may stop. */
 export function nudge(cwd: string, scoutRunning: boolean): { open: number; content: string } | undefined {
-	const repo = repoRoots(cwd);
-	const file = repo && join(repo.top, "AUTO.md");
-	if (!file || !existsSync(file) || scoutRunning) return undefined;
-	const autoMd = readFileSync(file, "utf8");
+	const top = autoTop(cwd);
+	if (!top || scoutRunning) return undefined;
+	const autoMd = readFileSync(join(top, "AUTO.md"), "utf8");
 	const open = openSlices(autoMd);
 	if (isStopped(autoMd) || open.length === 0) return undefined;
 	return {

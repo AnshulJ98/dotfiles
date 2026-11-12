@@ -24,7 +24,9 @@
  * `g=git; $g push`). `tool_call` blocks edit/write outside files-allowed and
  * a short list of destructive bash (recursive delete, find -delete, package
  * changes, cloud calls); that scan is a tripwire, not a sandbox: bash can
- * still write files, and a command built from variables slips past it. The
+ * still write files, and a command built from variables slips past it. A
+ * bash call that changes a file outside files-allowed is told so in its own
+ * result (`tool_result`, lib/bash-changes.ts), so it can be undone early. The
  * settle check is the authority: before the run settles it reruns the tests
  * and diffs the tree against a snapshot taken at load, so bash writes,
  * dependency changes, size overruns, and weakened tests are all caught there.
@@ -52,6 +54,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, 
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { changedBy, snapshot as bashSnapshot, type Snapshot as BashSnapshot } from "../lib/bash-changes.ts";
 
 const DEFAULT_MAX_LINES = 400;
 const MAX_RETRIES = 1;
@@ -701,6 +704,7 @@ export default function (pi: ExtensionAPI) {
     setupError ??= `worker-sensors setup: ${error instanceof Error ? error.message : String(error)}`;
   }
 
+  const bashBefore = new Map<string, BashSnapshot>();
   let retriesUsed = 0;
   let verdict: { step: Exclude<Step, "retry">; reasons: string[] } | undefined;
 
@@ -710,13 +714,38 @@ export default function (pi: ExtensionAPI) {
     const input = event.input as Record<string, unknown>;
     if (event.toolName === "bash") {
       const reason = forbiddenBash(String(input.command ?? ""), spec.allowedCommands);
-      return reason ? { block: true, reason: `Blocked: ${reason}.` } : undefined;
+      if (reason) return { block: true, reason: `Blocked: ${reason}.` };
+      const before = bashSnapshot(process.cwd());
+      if (before) bashBefore.set(event.toolCallId, before);
+      return undefined;
     }
     const target = repoRelative(String(input.path ?? ""), process.cwd(), snap.root);
     if (isAllowed(target, spec.filesAllowed)) return undefined;
     return {
       block: true,
       reason: `${target} is outside files-allowed (${spec.filesAllowed.join(", ")}). If the spec needs it, stop and report it under Blocked on me.`,
+    };
+  });
+
+  // A bash call that changes files outside files-allowed is named in its own result, not only at settle.
+  pi.on("tool_result", async (event) => {
+    if (event.toolName !== "bash") return undefined;
+    const before = bashBefore.get(event.toolCallId);
+    bashBefore.delete(event.toolCallId);
+    if (!before || !spec) return undefined;
+    const allowed = spec.filesAllowed;
+    const after = bashSnapshot(process.cwd());
+    if (!after) return undefined;
+    const outside = changedBy(before, after).filter((c) => !isAllowed(c.path, allowed));
+    if (!outside.length) return undefined;
+    const note =
+      `\n[worker-sensors] this command changed ${outside.map((c) => c.path).join(", ")}, outside files-allowed (${allowed.join(", ")}). ` +
+      "Undo it now (git restore, or rm for a new file), or the run fails at settle.\n";
+    // Codemode scripts get structuredContent, not content: bash's declared result there is { output, ... } (pi 1.5.2).
+    const structured = event.structuredContent as { output?: unknown } | undefined;
+    return {
+      content: [...event.content, { type: "text" as const, text: note }],
+      structuredContent: structured && typeof structured.output === "string" ? { ...structured, output: structured.output + note } : event.structuredContent,
     };
   });
 

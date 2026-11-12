@@ -386,3 +386,27 @@ test("rules sensor: a warning past the snapshot's baseline fails, even when the 
 		assert.match((await settleContent(on)) ?? "", /ast-grep warning no-any: 2 hits, baseline 1 in \.ast-grep-baseline\.json/);
 	});
 });
+
+test("bash result: a change outside files-allowed gets a note naming it; one inside leaves the result alone", async () => {
+	// A later frontmatter key wins, so this narrows withWorker's files-allowed.
+	await withWorker({ "src/a.ts": "a\n", "docs/b.md": "b\n" }, "files-allowed: [\"src/**\"]\n", async (repo, handlers) => {
+		const result = { toolName: "bash", toolCallId: "", content: [{ type: "text", text: "ok" }], structuredContent: { output: "ok" } };
+
+		const inside = { toolName: "bash", toolCallId: "t1", input: { command: "sed -i" } };
+		assert.equal(await handlers.get("tool_call")?.(inside), undefined);
+		appendFileSync(join(repo, "src/a.ts"), "more\n");
+		assert.equal(await handlers.get("tool_result")?.({ ...result, toolCallId: "t1" }), undefined);
+
+		const outside = { toolName: "bash", toolCallId: "t2", input: { command: "python3 -" } };
+		assert.equal(await handlers.get("tool_call")?.(outside), undefined);
+		appendFileSync(join(repo, "docs/b.md"), "more\n");
+		const noted = (await handlers.get("tool_result")?.({ ...result, toolCallId: "t2" })) as { content: Array<{ text: string }>; structuredContent: { output: string } };
+		const note = "[worker-sensors] this command changed docs/b.md, outside files-allowed (src/**). Undo it now (git restore, or rm for a new file), or the run fails at settle.";
+		assert.equal(noted.content.length, 2);
+		assert.equal(noted.content[1].text.trim(), note);
+		assert.equal(noted.structuredContent.output, `ok\n${note}\n`);
+
+		// No matching snapshot: a no-op, not a throw.
+		assert.equal(await handlers.get("tool_result")?.({ ...result, toolCallId: "unknown" }), undefined);
+	});
+});
