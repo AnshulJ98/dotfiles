@@ -1,0 +1,14 @@
+{
+  "id": "booking-review",
+  "role": "review",
+  "repo": "~/Dev/pi-lab",
+  "rev": "e6189ea2fafd5e95d5f466d3a5c000743e6277e7",
+  "exclude": ["README.md", "log.md"],
+  "defects": [
+    {"id":"d1","text":"BookingStore.book rejects a booking that starts exactly when another booking in the same room ends: touching intervals are treated as overlapping.","hit":"book() uses inclusive comparisons (start <= b.end && end >= b.start), so a booking that starts exactly when another one ends counts as a conflict even though the intervals are half-open."},
+    {"id":"d2","text":"DELETE /bookings/:id answers 204 for an id that does not exist, because the result of cancel is ignored; it should answer 404.","hit":"The DELETE handler ignores the boolean returned by store.cancel and always sends 204, so cancelling an unknown id looks like a success instead of returning 404."},
+    {"id":"d3","text":"cancel removes the matching booking and every booking stored after it, because splice is called without a delete count.","hit":"cancel() calls this.bookings.splice(i) with no delete count, which deletes the cancelled booking and everything stored after it; it should be splice(i, 1)."},
+    {"id":"d4","text":"A POST /bookings body that is not valid JSON crashes the server instead of returning 400: JSON.parse throws inside the request's end handler, outside the promise, so the try/catch never sees it.","hit":"readJson calls JSON.parse inside the req 'end' callback, so a malformed body throws there instead of rejecting the promise; the handler's try/catch is bypassed, the exception is uncaught and the process dies rather than answering 400."},
+    {"id":"d5","text":"DELETE /bookings/:id accepts non-canonical ids such as \"01\", \"1.0\" or ones followed by extra path segments, because the id is converted with Number() without validation.","hit":"The route runs Number(id) on the raw path segment with no validation, so ids like \"01\", \"1.0\" or \"1e0\" (and URLs with extra segments after the id) are accepted as if they were canonical ids."}
+  ]
+}

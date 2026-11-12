@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # usage: validate.sh <task>|--all   (--all: every task.json under ${EVAL_TASKS_DIR:-agent-eval/tasks}; none is fine)
 # Hidden tests must fail on the base and pass once the fix commit's allowed files are applied; for expect
-# "blocked" the fix commit must change a non-test file outside allowed. No model calls.
+# "blocked" the fix commit must change a non-test file outside allowed. A review task (role review) is valid when
+# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
 set -euo pipefail
 
@@ -11,10 +12,36 @@ source "$EVAL_DIR/lib/task.sh"
 tmp="$(mktemp -d /tmp/agent-eval-validate.XXXXXX)"
 trap 'rm -rf "$tmp"' EXIT
 
+# Review task: print nothing when prompt.md names only files present in <ws> and defects are complete, else the reason.
+check_review() {
+  node -e '
+    const { existsSync, readFileSync } = require("node:fs");
+    const [task, prompt, ws] = process.argv.slice(1);
+    const defects = JSON.parse(readFileSync(task + "/task.json", "utf8")).defects;
+    const bad = (d) => typeof d !== "object" || d === null || ["id", "text", "hit"].some((k) => typeof d[k] !== "string" || d[k].trim() === "");
+    if (!Array.isArray(defects) || defects.length === 0 || defects.some(bad)) {
+      console.log("defects must be a non-empty list of {id, text, hit}");
+    } else if (new Set(defects.map((d) => d.id)).size !== defects.length) {
+      console.log("defect ids are not unique");
+    } else {
+      const named = readFileSync(prompt, "utf8").match(/[A-Za-z0-9_.\/-]+[.](?:tsx?|jsx?|mjs|cjs|json|py|sh|md|txt|go|rs)(?![A-Za-z0-9_])/g) ?? [];
+      const missing = named.filter((f) => !existsSync(ws + "/" + f));
+      if (named.length === 0) console.log("prompt.md names no file");
+      else if (missing.length) console.log("prompt.md names files missing from the workspace: " + [...new Set(missing)].join(", "));
+    }
+  ' "$1" "$1/prompt.md" "$2" 2>&1 | head -1
+}
+
 # Print nothing when valid, else the reason.
 check() {
   local task="$1" repo fix ws path hidden allowed
   repo="$(task_get "$task" repo)"
+  if [ "$(task_get "$task" role)" = review ]; then
+    ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+    make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the review workspace"; return 0; }
+    check_review "$task" "$ws"
+    return 0
+  fi
   fix="$(task_get "$task" fix)"
   if ! git -C "$repo" rev-parse --verify -q "$fix^" > /dev/null; then echo "cannot resolve $fix^ in $repo"; return 0; fi
   if [ "$(task_get "$task" expect)" = blocked ]; then
