@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""Rows for zpick: workspaces > tabs > panes of this kitty, then zmx sessions no pane holds,
+then closed workspaces (session files with no open tabs).
+
+usage: zpick-rows VIEW [WINDOW]   VIEW is all | detached (detached sessions and closed workspaces
+only); WINDOW is the pane the picker was opened from, whose workspace is marked current.
+Each row: kind, target, holder, cwd, clients, display; tab separated. kind is ws | tab | pane |
+det | closed; target is the session name, tab id, window id, zmx session or session file.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser('~')
+DIR = os.environ.get('ZWS_DIR', os.path.join(HOME, '.local/state/kitty/workspaces'))
+SHELLS = {'zsh', 'bash', 'fish', 'sh'}
+ACCENT = '\033[38;2;68;221;255m'
+STATUS = {'working': '\033[38;2;255;136;68m', 'blocked': '\033[38;2;255;85;85m',
+          'done': '\033[38;2;102;255;136m', 'running': '', 'idle': '\033[2m', 'shell': '\033[2m'}
+DIM, BOLD, OFF = '\033[2m', '\033[1m', '\033[0m'
+
+
+def run(*cmd: str) -> str:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ''
+
+
+def age(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f'{s // 60}m' if s < 3600 else (f'{s // 3600}h' if s < 86400 else f'{s // 86400}d')
+
+
+def short(path: str) -> str:
+    return '~' + path[len(HOME):] if path.startswith(HOME) else path
+
+
+def fit(text: str, width: int) -> str:
+    return text[:width - 1] + '…' if len(text) > width else text.ljust(width)
+
+
+def zmx_sessions() -> dict[str, dict[str, str]]:
+    out = {}
+    for line in run('zmx', 'ls').splitlines():
+        f = dict(p.strip().split('=', 1) for p in line.split('\t') if '=' in p)
+        if 'name' in f:
+            f['cwd'] = f.get('cwd', '').split('://', 1)[-1]
+            f['cwd'] = f['cwd'][f['cwd'].find('/'):] if '/' in f['cwd'] else ''
+            out[f['name']] = f
+    return out
+
+
+def live_cwds(pids: list[str]) -> dict[str, str]:
+    """pid -> current folder. zmx ls only knows the folder a session started in."""
+    out, pid = {}, ''
+    for line in run('lsof', '-a', '-d', 'cwd', '-p', ','.join(pids), '-Fn').splitlines() if pids else []:
+        if line.startswith('p'):
+            pid = line[1:]
+        elif line.startswith('n'):
+            out[pid] = line[1:]
+    return out
+
+
+def foreground() -> dict[int, str]:
+    """Session child pid -> name of the foreground program on its terminal."""
+    procs = {}
+    for line in run('ps', '-Ao', 'pid=,tpgid=,comm=').splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit():
+            procs[int(parts[0])] = (int(parts[1]) if parts[1].lstrip('-').isdigit() else 0, parts[2])
+    def name(pid: int) -> str:
+        tpgid, comm = procs.get(pid, (0, ''))
+        comm = procs.get(tpgid, (0, comm))[1] if tpgid > 0 else comm
+        return os.path.basename(comm).lstrip('-')
+    return {pid: name(pid) for pid in procs}
+
+
+def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: str) -> str:
+    return '\t'.join((kind, target, holder, cwd, clients, display))
+
+
+def pane_cols(label: str, proc: str, status: str, when: str, holder: str) -> str:
+    color = STATUS.get(status, '')
+    return (f'{fit(label, 22)} {fit(proc, 8)} {color}{fit(status, 8)}{OFF} {DIM}{when:>3}  '
+            f'{holder}{OFF}')
+
+
+def main() -> None:
+    view = sys.argv[1] if len(sys.argv) > 1 else 'all'
+    origin = sys.argv[2] if len(sys.argv) > 2 else ''
+    now = time.time()
+    zs = zmx_sessions()
+    cwds = live_cwds([z['pid'] for z in zs.values() if z.get('pid', '').isdigit()])
+    for z in zs.values():
+        z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
+    fg = foreground()
+    kitty = json.loads(run('kitten', '@', 'ls') or '[]')
+
+    def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
+        z = zs.get(holder)
+        if z:
+            proc = fg.get(int(z.get('pid', 0) or 0), '')
+            when = age(now - int(z.get('created', now)))
+        else:
+            fps = w.get('foreground_processes') or [{}]
+            proc = os.path.basename((fps[0].get('cmdline') or [''])[0]).lstrip('-')
+            when = age(now - w.get('created_at', now * 1e9) / 1e9)
+        st = (w.get('program_status') or [{}])[0].get('state', '') if w else ''
+        status = st or ('shell' if proc in SHELLS else 'running')
+        return proc, status, when
+
+    rows, held, open_ws = [], set(), []
+    workspaces: dict[str, list[dict]] = {}
+    current = ''
+    for o in kitty:
+        for t in o['tabs']:
+            ws = next((w.get('session_name', '') for w in t['windows'] if w.get('session_name')), '')
+            if any(w['user_vars'].get('role') == 'zgoto' for w in t['windows']):
+                continue
+            workspaces.setdefault(ws, []).append(t)
+            for w in t['windows']:
+                held.add(w['user_vars'].get('holder', ''))
+                if str(w['id']) == origin or (not origin and o['is_active'] and t['is_active'] and w['is_active']):
+                    current = ws
+    if view == 'all':
+        for ws, tabs in workspaces.items():
+            open_ws.append(ws)
+            first = next((w for t in tabs for w in t['windows'] if w['is_active']), tabs[0]['windows'][0])
+            mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
+            rows.append(row('ws', ws, first['user_vars'].get('holder', ''), first.get('cwd', ''), '',
+                            f'{mark} {BOLD}{ws or "(no workspace)"}{OFF} {DIM}{len(tabs)} tab'
+                            f'{"s" if len(tabs) > 1 else ""}{OFF}'))
+            for ti, t in enumerate(tabs):
+                last_t = ti == len(tabs) - 1
+                active = next((w for w in t['windows'] if w['is_active']), t['windows'][0])
+                rows.append(row('tab', str(t['id']), active['user_vars'].get('holder', ''), active.get('cwd', ''), '',
+                                f'  {"└─" if last_t else "├─"} {fit(t["title"], 40)}'))
+                for wi, w in enumerate(t['windows']):
+                    holder = w['user_vars'].get('holder', '')
+                    proc, status, when = proc_status(w, holder)
+                    stem = '   ' if last_t else '│  '
+                    branch = '└─' if wi == len(t['windows']) - 1 else '├─'
+                    rows.append(row('pane', str(w['id']), holder, w.get('cwd', ''), '1',
+                                    f'  {stem}{branch} ' + pane_cols(w['title'], proc, status, when, holder)))
+    else:
+        open_ws = list(workspaces)
+
+    det = [z for name, z in zs.items() if name not in held]
+    if det:
+        rows.append(row('hdr', '', '', '', '', f'{DIM}detached{OFF}'))
+        for i, z in enumerate(det):
+            proc, status, when = proc_status({}, z['name'])
+            other = z.get('clients', '0') != '0'
+            branch = '└─' if i == len(det) - 1 else '├─'
+            rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'),
+                            f'  {branch} ' + pane_cols(short(z['cwd']), proc, status, when,
+                                                         z['name'] + (' · other kitty' if other else ''))))
+    try:
+        files = sorted(f for f in os.listdir(DIR) if f.endswith('.kitty-session'))
+    except OSError:
+        files = []
+    closed = [f for f in files if f[:-len('.kitty-session')] not in open_ws]
+    if closed:
+        rows.append(row('hdr', '', '', '', '', f'{DIM}closed workspaces{OFF}'))
+        for i, f in enumerate(closed):
+            path = os.path.join(DIR, f)
+            text = open(path, errors='replace').read()
+            tabs = max(1, text.count('\nnew_tab') + text.startswith('new_tab'))
+            branch = '└─' if i == len(closed) - 1 else '├─'
+            rows.append(row('closed', path, '', '', '',
+                            f'  {branch} {fit(f[:-len(".kitty-session")], 22)} {DIM}{tabs} tab'
+                            f'{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path))}{OFF}'))
+    print('\n'.join(rows))
+
+
+if __name__ == '__main__':
+    main()
