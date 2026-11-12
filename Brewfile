@@ -97,6 +97,7 @@ brew "jq"
 brew "lazygit"
 # Syntax-highlighting pager for git, used by lazygit's diff renderers
 brew "git-delta"
+# GitHub-style diff review TUI
 brew "hunk"
 # Portable Foreign Function Interface library
 brew "libffi"
@@ -243,8 +244,6 @@ cask "codexbar"
 cask "discord"
 # Modern Go client + CLI for the Google Places API (New).
 cask "openclaw/tap/goplaces", trusted: true
-# Herdr desktop app; installs and updates its own herdr-core (hc)
-cask "herdr-app"
 # Open-source keystroke visualiser
 cask "keycastr"
 # GPU-based terminal emulator
