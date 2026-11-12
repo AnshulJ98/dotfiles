@@ -1,5 +1,5 @@
 ---
-files-allowed: [src/cube.ts, src/moves.ts]
+files-allowed: [src/cube.test.ts, src/cube.ts, src/moves.test.ts, src/moves.ts]
 tests: npm run check
 ---
 # cube: the model and the face turns

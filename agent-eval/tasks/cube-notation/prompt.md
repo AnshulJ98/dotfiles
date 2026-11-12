@@ -1,5 +1,5 @@
 ---
-files-allowed: [src/notation.ts, src/scramble.ts]
+files-allowed: [src/moves.test.ts, src/notation.test.ts, src/notation.ts, src/scramble.test.ts, src/scramble.ts]
 tests: npm run check
 ---
 # cube: notation and the seeded scramble

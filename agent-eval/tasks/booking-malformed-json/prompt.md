@@ -1,5 +1,5 @@
 ---
-files-allowed: [booking/src/http.ts]
+files-allowed: [booking/src/booking.test.ts, booking/src/http.ts]
 tests: cd booking && npm test
 ---
 # A body that isn't JSON kills the server

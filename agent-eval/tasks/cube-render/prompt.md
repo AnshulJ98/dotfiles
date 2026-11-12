@@ -1,5 +1,5 @@
 ---
-files-allowed: [src/render.ts]
+files-allowed: [src/render.test.ts, src/render.ts]
 tests: npm run check
 ---
 # cube: render the unfolded net

@@ -5,6 +5,7 @@
   "fix": "13d3eaf0143ae165ebf361b4194a36028f4b8908",
   "test": "npm run check",
   "allowed": [
+    "src/solve.test.ts",
     "src/solve.ts"
   ],
   "hidden": [
