@@ -15,6 +15,7 @@
  * PI_STREAM_STALL_MS overrides the limit (tests).
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { logEvent } from "../lib/events.ts";
 
 const MINUTE = 60_000;
 const RESUME = "The previous response stalled and was cut off. Continue where you stopped.";
@@ -46,6 +47,7 @@ export default function (pi: ExtensionAPI): void {
 			const note = `stream-watchdog: no model output for ${Math.round(ms / 1000)}s; aborting the response`;
 			if (ctx.hasUI) ctx.ui.notify(note, "warning");
 			else process.stderr.write(`${note}\n`);
+			logEvent("stream.stall", `no model output for ${Math.round(ms / 1000)}s`, ctx.sessionManager.getSessionId());
 			ctx.abort();
 		}, ms);
 		timer.unref();
@@ -73,6 +75,7 @@ export default function (pi: ExtensionAPI): void {
 			const note = "stream-watchdog: the model stream stalled again after one resume; stopping";
 			if (ctx.hasUI) ctx.ui.notify(note, "error");
 			else process.stderr.write(`${note}\n`);
+			logEvent("stream.stop", "stalled again after one resume", ctx.sessionManager.getSessionId());
 			resumed = false;
 			return;
 		}

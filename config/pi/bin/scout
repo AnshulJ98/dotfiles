@@ -104,6 +104,14 @@ SCOUT_ROOT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/sessions/scout"
 SESSIONS="$SCOUT_ROOT/$$"
 RUNNING="$SCOUT_ROOT/.running"
 DONE="$SCOUT_ROOT/.done"
+# One line in the events log for a refusal, a timeout, a stall and a review round (lib/events.ts
+# has the format and the kinds). The id is this scout's directory name, as the worker sensors use.
+event() {
+  local dir="${PI_LOG_DIR:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/logs}" role=scout
+  [ "${RW:-0}" = 1 ] && role=worker
+  [ -n "${REVIEW_BASE:-}" ] && role=review
+  { mkdir -p "$dir" && printf '%s %s %s %s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$role" "$$" "$1" "$2" >>"$dir/events.log"; } 2>/dev/null || true
+}
 MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
 WORKER_MODEL="anthropic/claude-sonnet-5-5" # --rw; tested too: github-copilot/kimi-k3
 MODEL_SET=0
@@ -230,6 +238,7 @@ if [ -n "$REVIEW_BASE" ]; then
     }
   done
   [ "$REVIEW_ROUND" -le 3 ] || {
+    event scout.refused "a fourth review round on $REVIEW_BASE (the last at ${REVIEW_PREV:0:9})"
     echo "scout: three review rounds are done on this range (the last at ${REVIEW_PREV:0:9}); a fourth is the user's call. Stop and report the open findings. Starting over means deleting the records in $REVIEW_DIR" >&2
     exit 2
   }
@@ -303,10 +312,12 @@ for m in "$RUNNING"/*.meta; do
     [ "$(meta_field "$m" repo)" = "$PI_SCOUT_GIT_DIR" ] && OPEN_WORKER="$(meta_field "$m" pid)"
 done
 if [ "$LIVE" -ge 2 ]; then
+  event scout.refused "$LIVE scouts already live"
   echo "scout: refusing — $LIVE scouts are already live (cap 2); wait for one to finish" >&2
   exit 75
 fi
 if [ "$RW" = 1 ] && [ -n "$OPEN_WORKER" ]; then
+  event scout.refused "worker $OPEN_WORKER is open on this repo"
   echo "scout: refusing — worker $OPEN_WORKER is open on this repo; merge or reject it first" >&2
   exit 75
 fi
@@ -342,6 +353,7 @@ if [ "$RW" = 1 ]; then
   SPEC_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$BRIEF_FILE")"
   if ! grep -Eq '^[[:space:]]*[0-9]+[.)][[:space:]]' <<<"$SPEC_BODY" || ! grep -q 'check:' <<<"$SPEC_BODY"; then
     [ -n "${SPEC_TMP:-}" ] && BRIEF_FILE="spec on stdin"
+    event scout.refused "no plan in the spec"
     echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps, each with a check: line (run /plan on the slice first)" >&2
     exit 2
   fi
@@ -459,9 +471,11 @@ conclude() {
   if [ -s "$STALLED" ]; then
     reason="model stream stalled (no session activity for $(cat "$STALLED")s)"
     echo "scout: $reason" >&2
+    event scout.stall "no session activity for $(cat "$STALLED")s"
   elif [ "$rc" -eq 124 ]; then
     reason="scout timed out after ${TIMEOUT}s; settle checks never ran"
     echo "scout: timed out after ${TIMEOUT}s" >&2
+    event scout.timeout "after ${TIMEOUT}s"
   elif [ "$rc" -ne 0 ] && [ ! -s "$OUT" ]; then
     { echo "scout: pi exited $rc with no digest. Last stderr lines:"; tail -n 20 "$ERR"; } >>"$OUT"
   fi
@@ -624,6 +638,7 @@ if [ -n "$REVIEW_BASE" ] && [ "$rc" = 0 ] && [ -s "$OUT" ]; then
     mkdir -p "$REVIEW_DIR"
     printf 'base=%s\nbase_sha=%s\nround=%s\nreviewed=%s\nrun=%s\n' "$REVIEW_BASE" "$REVIEW_BASE_SHA" "$REVIEW_ROUND" "$(date -u +%FT%TZ)" "$SESSIONS" >"$REVIEW_DIR/$REVIEW_TIP"
     cp "$OUT" "$REVIEW_DIR/$REVIEW_TIP.findings"
+    event review.round "$REVIEW_ROUND for ${REVIEW_TIP:0:9}, base $REVIEW_BASE"
     echo "scout: review round $REVIEW_ROUND recorded for ${REVIEW_TIP:0:9}" >&2
   else
     echo "scout: HEAD moved during the review; nothing recorded" >&2

@@ -109,6 +109,7 @@ check "bin/scout.prompt.md exists and is non-empty" "[ -s '$DOT/bin/scout.prompt
 check "~/.pi/agent/bin resolves to config/pi/bin" "[ \"\$(readlink -f '$AGENT/bin')\" = \"\$(readlink -f '$DOT/bin')\" ]"
 check "scout --help exits 0" "'$DOT/bin/scout' --help >/dev/null"
 check "auto-slice --help exits 0" "'$DOT/bin/auto-slice' --help >/dev/null"
+check "pi-health --help exits 0" "'$DOT/bin/pi-health' --help >/dev/null"
 check "scout refuses to nest" "! PI_SCOUT_DEPTH=1 '$DOT/bin/scout' x >/dev/null 2>&1"
 check "bin/worker.prompt.md exists and is non-empty" "[ -s '$DOT/bin/worker.prompt.md' ]"
 check "extensions/worker-sensors.ts exists" "[ -s '$DOT/extensions/worker-sensors.ts' ]"

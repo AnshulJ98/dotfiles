@@ -6,6 +6,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, re
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { EVENT_LINE } from "../lib/events.ts";
 
 // FAKE_SCOUT: pass (changes src/a.txt), fail, blocked (a PASS with a step left under Blocked on me), refuse (exit 75 before any run).
 // Every call is logged as "<cwd> <args>"; the spec on stdin is dropped.
@@ -68,6 +69,7 @@ function lab(): Lab {
 		PATH: `${join(root, "fake")}:${process.env.PATH}`,
 		FAKE_SCOUT_LOG: log,
 		PI_SESSION_ID: "s1",
+		PI_LOG_DIR: join(root, "logs"),
 		GIT_AUTHOR_NAME: "t",
 		GIT_AUTHOR_EMAIL: "t@t",
 		GIT_COMMITTER_NAME: "t",
@@ -143,6 +145,12 @@ test("start refuses the default branch", () => {
 	assert.equal(done.status, 1);
 	assert.match(done.stderr, /HEAD is the default branch \(main\)/);
 	assert.equal(existsSync(l.run), false);
+	const events = readFileSync(join(l.repo, "..", "logs", "events.log"), "utf8").trimEnd().split("\n");
+	assert.equal(events.length, 1, "a stop condition is one line in the events log; a usage error is none");
+	assert.match(events[0], EVENT_LINE);
+	assert.match(events[0], / auto s1 slice\.stop HEAD is the default branch \(main\)/);
+	assert.equal(l.slice(["start", "Bad Name"]).status, 2);
+	assert.equal(readFileSync(join(l.repo, "..", "logs", "events.log"), "utf8").trimEnd().split("\n").length, 1);
 });
 
 test("a slice from new to merge: the list order, the session stamp, one rework, no hand edit after PASS, tick and log", () => {

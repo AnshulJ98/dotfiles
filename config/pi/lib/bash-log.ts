@@ -1,16 +1,19 @@
 /**
- * The bash log: one line when a bash call starts and one when it ends, from every session,
- * scout and worker on the machine, in one file a pane can follow (`tail -F`).
+ * The bash log: one line when a tool call starts and one when it ends, from every session,
+ * scout and worker on the machine, in one file a pane can follow (`tail -F`). It began with
+ * bash and kept the name; a bash line carries the cwd, any other tool its name.
  *
  *   22:41:07 main a31835 #9f2c ▶ [~/Dev/dotfiles] git add -- config/pi (+2 lines)
  *   22:41:08 main a31835 #9f2c ✓ 0.4s · changed: src/a.ts (+3 −1)
+ *   22:41:09 main a31835 #c1/2 ▶ edit ~/Dev/dotfiles/src/a.ts
  *   22:43:10 worker 0c11d2 #77aa ✗ 91.2s exit 137 · [watchdog] killed: idle 90s (no output/CPU/network)
  *
- * A start line with no end line is a command still running, or a pi that died under it.
+ * A start line with no end line is a call still running, a call another extension blocked, or
+ * a pi that died under it.
  * Formatting is pure; append() and rotate() are the only I/O.
  */
 import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const MAX_COMMAND = 160;
@@ -42,8 +45,18 @@ export function roleOf(env: NodeJS.ProcessEnv): Role {
 	return (env.PI_SCOUT_DEPTH ?? "0") === "0" ? "main" : "scout";
 }
 
+/**
+ * Where the bash log, the events log and the live-state files go. `node --test` sets
+ * NODE_TEST_CONTEXT in every test process: a test run never writes into the real directory.
+ */
+export function logsDir(env: NodeJS.ProcessEnv = process.env): string {
+	if (env.PI_LOG_DIR) return env.PI_LOG_DIR;
+	if (env.NODE_TEST_CONTEXT) return join(tmpdir(), "pi-test-logs");
+	return join(env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "logs");
+}
+
 export function logPath(env: NodeJS.ProcessEnv = process.env): string {
-	return env.PI_BASH_LOG ?? join(env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "logs", "bash.log");
+	return env.PI_BASH_LOG ?? join(logsDir(env), "bash.log");
 }
 
 function prefix(at: Date, who: Who): string {
@@ -59,9 +72,31 @@ export function summarize(command: string): string {
 	return lines.length > 1 ? `${shown} (+${lines.length - 1} lines)` : shown;
 }
 
+function tilde(path: string, home: string): string {
+	return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+}
+
 export function startLine(at: Date, who: Who, cwd: string, command: string, home = homedir()): string {
-	const where = cwd === home || cwd.startsWith(`${home}/`) ? `~${cwd.slice(home.length)}` : cwd;
-	return `${prefix(at, who)} \u25b6 [${where}] ${summarize(command)}`;
+	return `${prefix(at, who)} \u25b6 [${tilde(cwd, home)}] ${summarize(command)}`;
+}
+
+/** The input fields that say what a call is pointed at, in the order tried. */
+const SUBJECT_KEYS = ["path", "command", "url", "urls", "query", "queries", "question", "code", "library", "id"];
+
+/** What a tool call is pointed at: its path, URL, query or a script's first line; else its first input field. */
+export function subjectOf(input: unknown, home = homedir()): string {
+	if (!input || typeof input !== "object") return "";
+	const fields = input as Record<string, unknown>;
+	const key = SUBJECT_KEYS.find((name) => fields[name] !== undefined) ?? Object.keys(fields)[0];
+	if (key === undefined) return "";
+	const value = fields[key];
+	const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+	return summarize(key === "path" ? tilde(text, home) : text);
+}
+
+/** The start line of a tool other than bash. */
+export function toolLine(at: Date, who: Who, tool: string, input: unknown, home = homedir()): string {
+	return `${prefix(at, who)} \u25b6 ${tool} ${subjectOf(input, home)}`.trimEnd();
 }
 
 export function endLine(at: Date, who: Who, ended: Ended): string {

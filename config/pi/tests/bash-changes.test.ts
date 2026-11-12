@@ -9,11 +9,15 @@ import { join } from "node:path";
 import { test } from "node:test";
 import bashChanges from "../extensions/bash-changes.ts";
 import { changedBy, describe, parsePorcelain, snapshot, type Change, type FileState, type Snapshot } from "../lib/bash-changes.ts";
-import { append, endLine, logPath, roleOf, rotate, startLine, summarize, type Who } from "../lib/bash-log.ts";
+import { append, endLine, logPath, logsDir, roleOf, rotate, startLine, subjectOf, summarize, toolLine, type Who } from "../lib/bash-log.ts";
+import type { Live } from "../lib/live.ts";
 
 // The extension appends to the bash log; keep the tests out of the real one.
 const LOG = join(realpathSync(mkdtempSync(join(tmpdir(), "bash-log-"))), "logs", "bash.log");
 process.env.PI_BASH_LOG = LOG;
+process.env.PI_LOG_DIR = join(LOG, "..");
+const LIVE = join(LOG, "..", "live", `${process.pid}.json`);
+const liveNow = (): Live => JSON.parse(readFileSync(LIVE, "utf8")) as Live;
 const logged = (): string[] => (existsSync(LOG) ? readFileSync(LOG, "utf8").split("\n").filter(Boolean) : []);
 
 function snap(files: Record<string, FileState>, head = "h1"): Snapshot {
@@ -95,7 +99,7 @@ function armed(hasUI = true): { on: Map<string, Handler>; notes: string[]; ctx: 
 	const on = new Map<string, Handler>();
 	bashChanges({ on: (name: string, handler: Handler) => on.set(name, handler) } as unknown as Parameters<typeof bashChanges>[0]);
 	const notes: string[] = [];
-	return { on, notes, ctx: { hasUI, ui: { notify: (text: string) => notes.push(text) }, sessionManager: { getSessionId: () => "01a1-session-abc123" } } };
+	return { on, notes, ctx: { hasUI, ui: { notify: (text: string) => notes.push(text) }, sessionManager: { getSessionId: () => "01a1-session-abc123", getSessionFile: () => "/s/abc123.jsonl" } } };
 }
 
 async function inRepo(body: (repo: string) => Promise<void>): Promise<void> {
@@ -131,8 +135,8 @@ test("handler: a bash call that changes nothing, or has no snapshot, or is not b
 		await on.get("tool_result")?.(event, ctx);
 		writeFileSync(join(repo, "src", "a.ts"), "changed\n");
 		await on.get("tool_result")?.({ toolName: "bash", toolCallId: "never-called" }, ctx);
-		await on.get("tool_call")?.({ toolName: "read", toolCallId: "c3" }, ctx);
-		await on.get("tool_result")?.({ toolName: "read", toolCallId: "c3" }, ctx);
+		await on.get("tool_call")?.({ toolName: "read", toolCallId: "c3", input: { path: "src/a.ts" } }, ctx);
+		await on.get("tool_result")?.({ toolName: "read", toolCallId: "c3", input: { path: "src/a.ts" } }, ctx);
 		assert.deepEqual(notes, []);
 	});
 });
@@ -165,6 +169,21 @@ test("bash log lines: start names the role, session, call, cwd and command; end 
 	for (const [ended, tail] of rows) assert.equal(endLine(AT, WHO, ended), `22:41:07 main abc123 #9f2c ${tail}`);
 });
 
+test("bash log lines: any other tool is named with what it is pointed at", () => {
+	const rows: Array<[tool: string, input: unknown, tail: string]> = [
+		["edit", { path: "/home/u/Dev/repo/a.ts", edits: [] }, "edit ~/Dev/repo/a.ts"],
+		["codemode", { code: "// @options: {}\nconst r = await tools.bash({});\nreturn r;" }, "codemode // @options: {} (+2 lines)"],
+		["fetch_content", { urls: ["https://a", "https://b"] }, 'fetch_content ["https://a","https://b"]'],
+		["web_search", { numResults: 5, queries: ["x"] }, 'web_search ["x"]'],
+		["bg_kill", { id: "bg3" }, "bg_kill bg3"],
+		["odd", { depth: 2 }, "odd 2"],
+		["bare", {}, "bare"],
+		["bare", undefined, "bare"],
+	];
+	for (const [tool, input, tail] of rows) assert.equal(toolLine(AT, WHO, tool, input, "/home/u"), `22:41:07 main abc123 #9f2c \u25b6 ${tail}`);
+	assert.equal(subjectOf({ path: "/elsewhere/a" }, "/home/u"), "/elsewhere/a");
+});
+
 test("bash log: role and path come from the environment; a log over 5 MB is rotated once; an unwritable path reports false", () => {
 	assert.equal(roleOf({}), "main");
 	assert.equal(roleOf({ PI_SCOUT_DEPTH: "0" }), "main");
@@ -172,6 +191,8 @@ test("bash log: role and path come from the environment; a log over 5 MB is rota
 	assert.equal(roleOf({ PI_SCOUT_DEPTH: "1", PI_WORKER_SPEC: "/s.md" }), "worker");
 	assert.equal(logPath({ PI_CODING_AGENT_DIR: "/agent" }), "/agent/logs/bash.log");
 	assert.equal(logPath({ PI_BASH_LOG: "/x.log", PI_CODING_AGENT_DIR: "/agent" }), "/x.log");
+	assert.equal(logsDir({ PI_LOG_DIR: "/logs", PI_CODING_AGENT_DIR: "/agent", NODE_TEST_CONTEXT: "child-v8" }), "/logs");
+	assert.equal(logsDir({ PI_CODING_AGENT_DIR: "/agent", NODE_TEST_CONTEXT: "child-v8" }), join(tmpdir(), "pi-test-logs"), "a test run stays out of the real logs");
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "bash-log-rotate-")));
 	const path = join(dir, "sub", "bash.log");
 	assert.equal(append(path, "one"), true);
@@ -185,19 +206,37 @@ test("bash log: role and path come from the environment; a log over 5 MB is rota
 	assert.equal(append(join(dir, "file", "bash.log"), "one"), false);
 });
 
-test("handler: every bash call gets a start and an end line in the log, with or without a UI, a repo or a change", async () => {
+test("handler: every tool call gets a start and an end line in the log and is the live state while it runs", async () => {
 	await inRepo(async (repo) => {
 		const { on, ctx } = armed(false);
 		const from = logged().length;
 		const event = { toolName: "bash", toolCallId: "call-aaaa", input: { command: "sed -i s/a/b/ src/a.ts" } };
+		await on.get("session_start")?.({}, ctx);
+		assert.deepEqual([liveNow().state, liveNow().role, liveNow().session, liveNow().cwd, liveNow().pid], ["idle", "main", "01a1-session-abc123", repo, process.pid]);
 		await on.get("tool_call")?.(event, ctx);
 		assert.match(logged().at(-1) ?? "", /^\d\d:\d\d:\d\d main abc123 #aaaa \u25b6 \[.*\] sed -i s\/a\/b\/ src\/a\.ts$/);
+		assert.deepEqual([liveNow().state, liveNow().what], ["tool", "bash sed -i s/a/b/ src/a.ts"]);
 		writeFileSync(join(repo, "src", "a.ts"), "changed\n");
 		const killed = [{ type: "text", text: "partial\n[watchdog] killed: idle 90s (no output/CPU/network)\n" }];
 		await on.get("tool_result")?.({ ...event, isError: true, content: killed, structuredContent: { exit_code: 137 } }, ctx);
 		assert.match(logged().at(-1) ?? "", /^\d\d:\d\d:\d\d main abc123 #aaaa \u2717 \d+\.\ds exit 137 \u00b7 \[watchdog\] killed: idle 90s \(no output\/CPU\/network\) \u00b7 changed: src\/a\.ts \(\+1 \u22123\)$/);
-		await on.get("tool_call")?.({ toolName: "read", toolCallId: "call-bbbb", input: { path: "a" } }, ctx);
-		assert.equal(logged().length, from + 2, "only bash is logged");
+		assert.deepEqual([liveNow().state, liveNow().what], ["model", ""]);
+		const script = { toolName: "codemode", toolCallId: "call-dddd", input: { code: "return 1;" } };
+		const read = { toolName: "read", toolCallId: "call-dddd/1", input: { path: "a" } };
+		await on.get("tool_call")?.(script, ctx);
+		await on.get("tool_call")?.(read, ctx);
+		assert.match(logged().at(-1) ?? "", /#dd\/1 \u25b6 read a$/);
+		assert.equal(liveNow().what, "codemode return 1; \u203a read a", "outermost first");
+		await on.get("tool_result")?.({ ...read, isError: true, content: [] }, ctx);
+		assert.match(logged().at(-1) ?? "", /#dd\/1 \u2717 \d+\.\ds$/);
+		assert.equal(liveNow().what, "codemode return 1;");
+		assert.equal(logged().length, from + 5);
+		await on.get("turn_end")?.({}, ctx);
+		assert.deepEqual([liveNow().state, liveNow().what], ["model", ""], "a blocked call gets no result; the turn's end closes it");
+		await on.get("agent_settled")?.({}, ctx);
+		assert.equal(liveNow().state, "idle");
+		await on.get("session_shutdown")?.({}, ctx);
+		assert.equal(existsSync(LIVE), false);
 	});
 	const outside = realpathSync(mkdtempSync(join(tmpdir(), "bash-log-norepo-")));
 	const cwd = process.cwd();

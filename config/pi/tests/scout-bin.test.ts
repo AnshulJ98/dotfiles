@@ -6,6 +6,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { EVENT_LINE } from "../lib/events.ts";
 
 const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
 const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) → check: true\n";
@@ -135,6 +136,10 @@ test("a spec whose body is not a plan (no numbered step, or no check: line) is r
 		assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
 	}
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
+	const events = readFileSync(join(scoutRoot, "..", "..", "logs", "events.log"), "utf8").trimEnd().split("\n");
+	assert.equal(events.length, 4, "each refusal is one line in the events log");
+	for (const line of events) assert.match(line, EVENT_LINE);
+	assert.match(events[0], / worker \d+ scout\.refused no plan in the spec$/);
 });
 
 test("a child loads background.ts for its bash tool and gets no bg_run; only a worker gets codemode", async () => {

@@ -25,6 +25,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { subjectOf } from "../lib/bash-log.ts";
+import { logEvent } from "../lib/events.ts";
 
 const MAX_NUDGES = 2;
 const DIRTY_LINES = 10;
@@ -171,11 +173,12 @@ export default function (pi: ExtensionAPI) {
 	let openAtLastNudge = -1;
 	let reportedDirty = "";
 
-	pi.on("tool_call", async (event) => {
+	pi.on("tool_call", async (event, ctx) => {
 		const input = event.input as { path?: unknown; command?: unknown };
 		let reason: string | undefined;
 		if (event.toolName === "edit" || event.toolName === "write") reason = editRefusal(String(input.path ?? ""), process.cwd());
 		else if (event.toolName === "bash") reason = worktreeRefusal(String(input.command ?? ""), process.cwd());
+		if (reason) logEvent("auto.block", `${event.toolName} ${subjectOf(input)}`, ctx.sessionManager.getSessionId());
 		return reason ? { block: true, reason } : undefined;
 	});
 
@@ -186,6 +189,7 @@ export default function (pi: ExtensionAPI) {
 		reportedDirty = dirty;
 		if (!dirty) return undefined;
 		const lines = dirty.split("\n");
+		logEvent("auto.dirty", lines.slice(0, 3).join("; "), ctx.sessionManager.getSessionId());
 		const note =
 			`\n[auto-run] the checkout has uncommitted changes after this command:\n${lines.slice(0, DIRTY_LINES).join("\n")}` +
 			(lines.length > DIRTY_LINES ? `\n… and ${lines.length - DIRTY_LINES} more` : "") +
@@ -206,6 +210,7 @@ export default function (pi: ExtensionAPI) {
 		if (nudges >= MAX_NUDGES) return undefined;
 		nudges += 1;
 		openAtLastNudge = next.open;
+		logEvent("auto.nudge", `${next.open} open, nudge ${nudges} of ${MAX_NUDGES}`, ctx.sessionManager.getSessionId());
 		return { entries: [{ type: "custom_message", customType: "auto-run", content: next.content, display: true }], continue: true };
 	});
 }

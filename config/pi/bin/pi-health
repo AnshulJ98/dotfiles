@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+// What every pi process on this machine is doing, and whether any has stopped moving.
+// usage: pi-health [--limit SECS] [--watch [SECS]]
+//
+// One line per live session, scout and worker (how long in its state, and the open tool calls),
+// its bg_run jobs, and each auto run in the repos those sessions are in. A line starting with
+// "!" is a problem:
+//   - a busy process with no tool or agent event for --limit seconds (default 1200, or
+//     PI_HEALTH_LIMIT): past every bound the harness puts on one call, so one of them failed
+//   - a main session that died without shutting down (reported by the run that finds it)
+//   - an auto run with open slices that nothing live is carrying
+// Exit 1 when there is a problem, else 0. --watch reprints every SECS seconds (default 30) and
+// rings the terminal bell on a new problem.
+//
+// Reads <logs>/live/*.json (lib/live.ts; extensions/bash-changes.ts writes them). A session not
+// reloaded since that extension landed has no file and is not listed.
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const HOME = os.homedir();
+const MAX_WHAT = 100;
+const tilde = (p) => (p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p);
+const cut = (text) => (text.length > MAX_WHAT ? text.slice(0, MAX_WHAT) + "\u2026" : text);
+const isRunning = (pid) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		return err.code === "EPERM";
+	}
+};
+const git = (cwd, ...args) => {
+	try {
+		return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 2000 }).trim();
+	} catch {
+		return undefined;
+	}
+};
+const commonDir = (cwd) => git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
+
+async function main() {
+	const { age, flagFor, readLive, runState, sweep } = await import(path.join(__dirname, "..", "lib", "live.ts"));
+	const args = process.argv.slice(2);
+	if (args.includes("-h") || args.includes("--help")) {
+		const header = fs.readFileSync(__filename, "utf8").split("\n").slice(1);
+		console.log(header.slice(0, header.findIndex((line) => !line.startsWith("//"))).map((line) => line.replace(/^\/\/ ?/, "")).join("\n"));
+		return 0;
+	}
+	const number = (flag, fallback) => {
+		const value = Number(args[args.indexOf(flag) + 1]);
+		return args.includes(flag) && value > 0 ? value : fallback;
+	};
+	const limitMs = number("--limit", Number(process.env.PI_HEALTH_LIMIT) || 1200) * 1000;
+	const head = (p) => `${p.role.padEnd(6)} ${p.session.slice(-6)}  ${tilde(p.cwd)}`;
+	// A dead main session's file is removed when it is found, so it is kept here while --watch runs
+	const gone = [];
+
+	const report = () => {
+		const now = Date.now();
+		gone.push(...sweep(isRunning, now - os.uptime() * 1000));
+		const live = readLive();
+		const lines = [];
+		const problems = [];
+		const add = (flag, key, text) => {
+			lines.push(flag ? `! ${text}  \u00b7 ${flag}` : `  ${text}`);
+			if (flag) problems.push(key);
+		};
+		for (const p of gone) {
+			const flag = flagFor(p, false, now, limitMs);
+			if (flag) add(flag, `gone ${p.pid}`, head(p));
+		}
+		for (const p of live) {
+			const childActive = live.some((child) => child.role !== "main" && child.parent === p.session && now - child.active <= limitMs);
+			const doing = p.state === "tool" ? p.what : p.state === "model" ? "waiting on the model" : "idle";
+			add(flagFor(p, true, now, limitMs, childActive), `quiet ${p.pid}`, `${head(p)}  ${age(now - p.since)}  ${cut(doing)}`);
+			for (const job of p.jobs ?? []) {
+				let quiet = "?";
+				try {
+					quiet = age(now - fs.statSync(job.log).mtimeMs);
+				} catch {
+					// The log is gone; the job line still shows.
+				}
+				lines.push(`      ${job.id}  running ${age(now - job.started)}, last output ${quiet} ago  ${cut(job.command)}`);
+			}
+		}
+		// Auto runs: every worktree with an AUTO.md at its root, in each repo a live process (or this shell) is in
+		const repos = new Map();
+		for (const p of live) {
+			const common = commonDir(p.cwd);
+			if (common && !repos.has(common)) repos.set(common, p.cwd);
+		}
+		const here = commonDir(process.cwd());
+		if (here && !repos.has(here)) repos.set(here, process.cwd());
+		const sessions = live.filter((p) => p.role === "main").map((p) => p.session);
+		const children = live.filter((p) => p.role !== "main").map((p) => p.cwd);
+		for (const cwd of repos.values()) {
+			const trees = (git(cwd, "worktree", "list", "--porcelain") ?? "").split("\n\n").map((block) => ({
+				root: /^worktree (.*)$/m.exec(block)?.[1] ?? "",
+				slice: /^branch refs\/heads\/slice\//m.test(block),
+			}));
+			// A worker runs in a slice's worktree and the review in the run's own
+			const inSlice = trees.some((tree) => tree.slice && children.includes(tree.root));
+			for (const { root } of trees) {
+				if (!root) continue;
+				let autoMd;
+				try {
+					autoMd = fs.readFileSync(path.join(root, "AUTO.md"), "utf8");
+				} catch {
+					continue;
+				}
+				const run = runState(autoMd, sessions, inSlice || children.includes(root));
+				const state = run.stopped ? "stopped" : run.open ? `${run.open} open, next: ${run.next}` : "every slice ticked";
+				add(run.flag, `run ${root}`, `auto   ${tilde(root)}  ${state}`);
+			}
+		}
+		if (!lines.length) lines.push("  no pi process has a live-state file");
+		return { lines, problems };
+	};
+
+	const watch = args.includes("--watch") ? number("--watch", 30) : 0;
+	if (!watch) {
+		const { lines, problems } = report();
+		console.log(lines.join("\n"));
+		return problems.length ? 1 : 0;
+	}
+	let seen = new Set();
+	const tick = () => {
+		const { lines, problems } = report();
+		const bell = problems.some((key) => !seen.has(key)) ? "\x07" : "";
+		seen = new Set(problems);
+		process.stdout.write(`\x1b[2J\x1b[H${bell}pi-health ${new Date().toTimeString().slice(0, 8)}, quiet limit ${age(limitMs)}\n${lines.join("\n")}\n`);
+	};
+	tick();
+	setInterval(tick, watch * 1000);
+	return undefined;
+}
+
+main().then(
+	(code) => {
+		if (code !== undefined) process.exitCode = code;
+	},
+	(err) => {
+		console.error(`pi-health: ${err.message}`);
+		process.exitCode = 2;
+	},
+);
