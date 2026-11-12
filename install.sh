@@ -93,6 +93,8 @@ link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 link "$DOT/config/borders"         "$HOME/.config/borders"
 link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
+# Hunk reuses the yazi syntax theme and the lazygit palette.
+link "$DOT/config/hunk"            "$HOME/.config/hunk"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
 # Git hooks guarding auto runs: home/.gitconfig's init.templateDir points at the template,
 # husky repos source the init.sh. Existing repos need: git-hooks-install <repo>...
@@ -109,12 +111,6 @@ link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit
 # herdr's folder also holds its sockets, logs and session.json, so link the file.
 link "$DOT/config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
 link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"
-# Herdr app (cask herdr-app, runs on herdr-core/hc). Its folder also holds
-# sockets, layouts, mods and an AGENTS.md it rewrites, so link the files. The
-# app's Settings write settings.json through the link.
-for f in settings.json keys.json themes/bearded-hc-midnightvoid.json; do
-  link "$DOT/config/herdr-app/$f" "$HOME/.config/herdr-app/$f"
-done
 # delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
 link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
 if command -v bat >/dev/null 2>&1; then

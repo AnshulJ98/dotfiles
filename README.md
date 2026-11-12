@@ -10,8 +10,8 @@ side, git sees the change.
 home/              → ~/                                  shell rcs, .gitconfig, .p10k.zsh
 config/nvim/       → ~/.config/nvim                      neovim (kickstart-based, lazy-lock committed)
 config/kitty/      → ~/.config/kitty                     terminal
-config/herdr/      → ~/.config/herdr/config.toml         herdr TUI (file; the folder holds sockets)
-config/herdr-app/  → ~/.config/herdr-app/*              Herdr app settings, keys, theme (files)
+config/herdr/      → ~/.config/herdr/config.toml         herdr TUI fallback (file; folder holds sockets)
+config/hunk/       → ~/.config/hunk                      diff review TUI
 config/aerospace/  → ~/.config/aerospace                 tiling window manager
 config/borders/    → ~/.config/borders                   window borders (JankyBorders)
 config/ccstatusline/ → ~/.config/ccstatusline            Claude Code statusline
