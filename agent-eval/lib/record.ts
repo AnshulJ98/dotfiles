@@ -1,8 +1,10 @@
 // Pure functions that build one worker-trial record, plus a thin CLI for trial.sh (flags: see main).
+// Roles: worker (default), review (--judge-file), scout (--task-file task.json with its expect list, --digest-file).
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { grade as gradeScout, parseExpect } from "./scout-grade.ts";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };
@@ -148,7 +150,7 @@ function main(argv: string[]): void {
 		args: argv,
 		options: {
 			task: str, role: str, model: str, thinking: str, trial: str, rc: str, seconds: str, expect: str,
-			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str,
+			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str,
 			needle: { type: "string", multiple: true, default: [] },
 		},
 	});
@@ -164,6 +166,17 @@ function main(argv: string[]): void {
 			pass: gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
 			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra, dir: v.dir,
+		}));
+		return;
+	}
+	if (v.role === "scout") {
+		const expect = parseExpect(asObject(parseLine(readText(v["task-file"])))?.expect);
+		const graded = typeof expect === "string" ? { hits: 0, of: 0, pass: false } : gradeScout(readText(v["digest-file"]), expect);
+		console.log(JSON.stringify({
+			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
+			pass: graded.pass, hits: graded.hits, of: graded.of,
+			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || typeof expect === "string", dir: v.dir,
 		}));
 		return;
 	}
