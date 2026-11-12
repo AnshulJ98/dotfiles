@@ -97,6 +97,7 @@ brew "jq"
 brew "lazygit"
 # Syntax-highlighting pager for git, used by lazygit's diff renderers
 brew "git-delta"
+brew "hunk"
 # Portable Foreign Function Interface library
 brew "libffi"
 # Library to render SVG files using Cairo

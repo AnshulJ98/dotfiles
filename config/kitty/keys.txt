@@ -36,8 +36,9 @@ cmd+shift+l	next layout
 # Tabs
 cmd+t	new tab in this folder
 cmd+shift+t	new tab
+cmd+shift+i	rename the tab
 cmd+alt+t	new tab with a plain shell, outside zmx
-cmd+alt+l	lazygit for this folder in a full tab (q closes)
+cmd+alt+l	Hunk diff review for this folder in a full tab (q closes)
 cmd+1..9	go to tab 1..9
 cmd+shift+w	close the tab
 cmd+shift+b	move the tab to a new window
@@ -47,6 +48,7 @@ cmd+n	new free-form window here (joins no workspace)
 cmd+alt+enter	a second, plain kitty with no workspaces	AeroSpace
 ctrl+alt+enter	kitty running herdr	AeroSpace
 # Screen and scrollback
+cmd+alt+e	scrollback in nvim
 ctrl+shift+h	scrollback in nvim
 ctrl+shift+g	the last command's output in nvim
 cmd+shift+e	open a URL by hint

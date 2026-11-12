@@ -39,7 +39,7 @@ class KeyConfigTests(unittest.TestCase):
                 # Herdr's help lists bindings in config order; the direct chord leads.
                 self.assertEqual((bindings if isinstance(bindings, list) else [bindings])[0], key)
         self.assertTrue(any(
-            command["key"] == "cmd+alt+l" and command["command"] == "lazygit"
+            command["key"] == "cmd+alt+l" and command["command"] == "hunk diff"
             for command in config["keys"]["command"]
         ))
 
@@ -48,7 +48,7 @@ class KeyConfigTests(unittest.TestCase):
         maps = [shlex.split(line) for line in text.splitlines() if line.startswith("map ")]
         scoped = {parts[3]: parts[4:] for parts in maps
                   if parts[1:3] == ["--when-focus-on", "var:herdr=1"]}
-        passthrough = ["cmd+t", "cmd+w", "cmd+shift+w", "cmd+shift+i", "cmd+d", "cmd+shift+d", "cmd+alt+f"]
+        passthrough = ["cmd+t", "cmd+w", "cmd+shift+w", "cmd+shift+i", "cmd+alt+e", "cmd+d", "cmd+shift+d", "cmd+alt+f"]
         passthrough += [f"cmd+{n}" for n in range(1, 10)]
         passthrough += [f"cmd+opt+{d}" for d in ("left", "right", "up", "down")]
         # kitty's own workspace keys must not shadow Herdr's
@@ -62,6 +62,16 @@ class KeyConfigTests(unittest.TestCase):
         for key in normalized:
             with self.subTest(key=key):
                 self.assertEqual(scoped[key], ["send_key", key])
+
+    def test_kitty_rename_and_scrollback_do_not_shadow_herdr(self):
+        maps = [shlex.split(line) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
+                if line.startswith("map ")]
+        # The scoped pass-through must follow the plain map for macOS menu shortcuts.
+        for key in ("cmd+shift+i", "cmd+alt+e"):
+            with self.subTest(key=key):
+                direct = next(i for i, parts in enumerate(maps) if parts[1] == key)
+                scoped = maps.index(["map", "--when-focus-on", "var:herdr=1", key])
+                self.assertLess(direct, scoped)
 
     def test_installer_and_aerospace_use_launcher(self):
         self.assertIn('link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"',
