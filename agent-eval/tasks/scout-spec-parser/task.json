@@ -1,0 +1,20 @@
+{
+  "id": "scout-spec-parser",
+  "role": "scout",
+  "repo": "~/Dev/dotfiles",
+  "rev": "39f0715b106fd501e2ba24f3b4d27ca7cb4a7608",
+  "paths": ["config/pi"],
+  "expect": [
+    {"file": "config/pi/bin/scout", "lines": [293, 305], "must": ["parseSpec"]},
+    {"at": [
+      {"file": "config/pi/bin/scout", "lines": [306, 312]},
+      {"file": "config/pi/bin/scout", "lines": [17, 18]},
+      {"file": "config/pi/prompts/plan.md", "lines": [94, 95]},
+      {"file": "config/pi/DESIGN.md", "lines": [38, 38]}
+    ], "must": ["check:"]},
+    {"at": [
+      {"file": "config/pi/extensions/worker-sensors.ts", "lines": [107, 151]},
+      {"file": "config/pi/extensions/worker-sensors.ts", "lines": [689, 697]}
+    ], "must": ["parseSpec"]}
+  ]
+}

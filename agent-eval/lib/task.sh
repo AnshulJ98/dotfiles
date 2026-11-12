@@ -3,7 +3,7 @@
 #   resolve_task <id|dir>   print the task dir, else return 1
 #   task_get <dir> <field>  a task.json field, arrays one item per line, leading ~ of repo expanded
 #   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix (a task with "rev": that commit, kind ignored),
-#                           "exclude" paths removed, fresh one-commit repo, links symlinked
+#                           "paths" (pathspecs after `--` of git archive) limit what is extracted, "exclude" paths removed, fresh one-commit repo, links symlinked
 #   overlay_hidden / apply_reference / run_test <dir> <ws>
 #   is_test_path <path>     true for .test. / .spec. / _test. names and files under tests/ or __tests__/
 # overlay_hidden copies a hidden test file beside the original as zz-hidden-<name>; a hidden file that is not a
@@ -29,14 +29,23 @@ task_get() {
 
 make_workspace() {
   local task="$1" dest="$2" rev path repo fix
+  local -a pathspecs=()
   repo="$(task_get "$task" repo)"
   rev="$(task_get "$task" rev)"
   if [ -z "$rev" ]; then
     fix="$(task_get "$task" fix)"
     case "$3" in base) rev="$fix^" ;; fix) rev="$fix" ;; *) echo "make_workspace: bad kind: $3" >&2; return 2 ;; esac
   fi
+  while IFS= read -r path; do
+    case "/$path/" in //*|*/../*) echo "make_workspace: bad paths entry: $path" >&2; return 2 ;; esac
+    pathspecs+=("$path")
+  done < <(task_get "$task" paths)
   mkdir -p "$dest"
-  git -C "$repo" archive "$rev" | tar -x -C "$dest" || return 1
+  if [ ${#pathspecs[@]} -gt 0 ]; then
+    git -C "$repo" archive "$rev" -- "${pathspecs[@]}" | tar -x -C "$dest" || return 1
+  else
+    git -C "$repo" archive "$rev" | tar -x -C "$dest" || return 1
+  fi
   while IFS= read -r path; do
     case "/$path/" in //*|*/../*) echo "make_workspace: bad exclude path: $path" >&2; return 2 ;; esac
     rm -rf "${dest:?}/$path"
