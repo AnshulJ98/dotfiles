@@ -68,6 +68,7 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 │   ├── scout                # child-pi scout wrapper (see Scout)
 │   ├── auto-slice           # the mechanical steps of an auto run: start, new, dispatch, merge, review
 │   ├── pi-health            # what every pi process is doing and whether one has stopped moving (reads logs/live/)
+│   ├── pi-watch             # kitty: pi-health --watch, the bash log and the events log in three panes beside the current one
 │   ├── scout.prompt.md      # its system prompt (replaces pi's base prompt in the child)
 │   └── worker.prompt.md     # the --rw worker's system prompt (scout.prompt.md forbids edits)
 ├── prompts/

@@ -2,7 +2,7 @@
 // The events log (lib/events.ts), the live-state files (lib/live.ts) and bin/pi-health over them.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -80,6 +80,27 @@ test("live files: patches merge per pid, partial files are not read, sweep remov
 	dropLive(dir, 14);
 	assert.equal(existsSync(join(dir, "14.json")), false);
 	setLive({ state: "idle" }, join(dir, "14.json", "under-a-file"), 15);
+});
+
+test("pi-watch: three panes beside the current one in kitty, each next to the last; the three commands anywhere else", () => {
+	const watch = resolve(import.meta.dirname, "../bin/pi-watch");
+	const fake = temp("watch");
+	const calls = join(fake, "calls");
+	writeFileSync(join(fake, "kitten"), `#!/bin/sh\nprintf '%s\\n' "$*" >>"${calls}"\necho $((40 + $(wc -l <"${calls}")))\n`);
+	chmodSync(join(fake, "kitten"), 0o755);
+	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${fake}:${process.env.PATH}`, PI_LOG_DIR: "/logs" };
+	delete env.KITTY_LISTEN_ON;
+	const plain = spawnSync(watch, [], { env, encoding: "utf8" });
+	assert.equal(plain.status, 0);
+	assert.match(plain.stdout, /^'\S+\/bin\/pi-health' --watch 5\ntail -n 40 -F '\/logs\/bash\.log'\ntail -n 20 -F '\/logs\/events\.log'\n$/);
+	assert.equal(existsSync(calls), false);
+	const inKitty = spawnSync(watch, [], { env: { ...env, KITTY_LISTEN_ON: "unix:/tmp/k", KITTY_WINDOW_ID: "7" }, encoding: "utf8" });
+	assert.equal(inKitty.status, 0, inKitty.stderr);
+	const launched = readFileSync(calls, "utf8").trimEnd().split("\n");
+	assert.equal(launched.length, 3);
+	assert.match(launched[0], /^@ launch --match window_id:7 --source-window id:7 --add-to-session \. --next-to id:7 --location vsplit .* --title pi-health \/bin\/zsh -lc exec '\S+pi-health' --watch 5$/);
+	assert.match(launched[1], /--next-to id:41 --location hsplit .* --title bash-log .*bash\.log'$/);
+	assert.match(launched[2], /--next-to id:42 --location hsplit .* --title events .*events\.log'$/);
 });
 
 function health(logs: string, cwd: string, ...args: string[]): { status: number | null; out: string } {

@@ -1,0 +1,37 @@
+#!/bin/sh
+# Opens the three views of what pi is doing, to the right of the current kitty pane:
+#   pi-health   every pi process, its state, and anything that has stopped moving (pi-health --watch)
+#   bash-log    every tool call of every session, scout and worker, as it happens
+#   events      each time a watchdog, guard or sensor trips
+# usage: pi-watch
+# Needs a kitty pane with remote control on (kitty sets KITTY_LISTEN_ON and KITTY_WINDOW_ID in
+# each pane). Anywhere else it prints the three commands, one per line, to run by hand.
+set -u
+case "${1:-}" in -h | --help)
+  sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+  exit 0
+  ;;
+esac
+LOGS="${PI_LOG_DIR:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/logs}"
+BIN="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+HEALTH="'$BIN/pi-health' --watch 5"
+BASH_LOG="tail -n 40 -F '$LOGS/bash.log'"
+EVENTS="tail -n 20 -F '$LOGS/events.log'"
+
+if [ -z "${KITTY_LISTEN_ON:-}" ] || [ -z "${KITTY_WINDOW_ID:-}" ] || ! command -v kitten >/dev/null 2>&1; then
+  printf '%s\n' "$HEALTH" "$BASH_LOG" "$EVENTS"
+  exit 0
+fi
+
+# pane <title> <beside window id> <vsplit|hsplit> <percent for the new pane> <command>; prints the new pane's id.
+# A login shell runs the command: kitty's own PATH has no node. The pane joins the source pane's workspace.
+pane() {
+  kitten @ launch --match "window_id:$KITTY_WINDOW_ID" --source-window "id:$KITTY_WINDOW_ID" --add-to-session . \
+    --next-to "id:$2" --location "$3" --bias "$4" --keep-focus --cwd current --title "$1" /bin/zsh -lc "exec $5"
+}
+top=$(pane pi-health "$KITTY_WINDOW_ID" vsplit 42 "$HEALTH") && [ -n "$top" ] || {
+  echo "pi-watch: kitty did not open a pane (is allow_remote_control on?)" >&2
+  exit 1
+}
+mid=$(pane bash-log "$top" hsplit 75 "$BASH_LOG") || exit 1
+pane events "$mid" hsplit 30 "$EVENTS" >/dev/null
