@@ -5,7 +5,10 @@
   "fix": "f486a3c461b9d09b2fac671936187c5b468bb6aa",
   "test": "npm run check",
   "allowed": [
+    "src/moves.test.ts",
+    "src/notation.test.ts",
     "src/notation.ts",
+    "src/scramble.test.ts",
     "src/scramble.ts"
   ],
   "hidden": [

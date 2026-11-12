@@ -72,13 +72,13 @@ const supportSha = commit(repo, "impl with support");
 
 const taskJson = (id: string) => JSON.parse(readFileSync(join(tasksDir, id, "task.json"), "utf8"));
 
-test("task.json: allowed is the non-test files, hidden the test files, test the package script", () => {
+test("task.json: allowed is the changed files incl. test files, hidden the test files, test the package script", () => {
 	const r = run("mk-task.sh", [repo, fixSha, "add-fix"]);
 	assert.equal(r.status, 0, r.stderr);
 	assert.equal(r.stdout.trim(), join(tasksDir, "add-fix"));
 	assert.deepEqual(taskJson("add-fix"), {
 		id: "add-fix", role: "worker", repo, fix: fixSha, test: "npm test",
-		allowed: ["docs/notes.md", "src/add.ts", "src/stale.ts"], hidden: ["src/add.more.test.ts"], link: [],
+		allowed: ["docs/notes.md", "src/add.more.test.ts", "src/add.ts", "src/stale.ts"], hidden: ["src/add.more.test.ts"], link: [],
 	});
 });
 
@@ -87,7 +87,7 @@ test("a package below the repo root runs as cd <dir> && npm test; tests/ and __t
 	const task = taskJson("nested");
 	assert.equal(task.test, "cd pkg && npm test");
 	assert.deepEqual(task.hidden, ["pkg/src/__tests__/x.ts", "pkg/tests/mul.ts"]);
-	assert.deepEqual(task.allowed, ["pkg/package.json", "pkg/src/mul.ts"]);
+	assert.deepEqual(task.allowed, ["pkg/package.json", "pkg/src/__tests__/x.ts", "pkg/src/mul.ts", "pkg/tests/mul.ts"]);
 });
 
 test("the id defaults to <repo name>-<short sha>; a repo under HOME is written with ~", () => {
@@ -110,7 +110,7 @@ test("the id defaults to <repo name>-<short sha>; a repo under HOME is written w
 test("prompt.md stub opens with the --- block carrying files-allowed and tests", () => {
 	const lines = readFileSync(join(tasksDir, "add-fix/prompt.md"), "utf8").split("\n");
 	assert.equal(lines[0], "---");
-	assert.equal(lines[1], "files-allowed: [docs/notes.md, src/add.ts, src/stale.ts]");
+	assert.equal(lines[1], "files-allowed: [docs/notes.md, src/add.more.test.ts, src/add.ts, src/stale.ts]");
 	assert.equal(lines[2], "tests: npm test");
 	assert.equal(lines[3], "---");
 	assert.match(lines.slice(4).join("\n"), /TODO/);
@@ -121,6 +121,22 @@ test("a commit that changes no test file exits 1 and writes nothing", () => {
 	assert.equal(r.status, 1);
 	assert.match(r.stderr, /no test file/);
 	assert.equal(existsSync(join(tasksDir, "docs")), false);
+});
+
+test("a commit changing src/a.ts and src/a.test.ts allows both and hides the test", () => {
+	const r2 = join(scratch, "pair-repo");
+	write(join(r2, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+	write(join(r2, "src/a.ts"), "1\n");
+	write(join(r2, "src/a.test.ts"), "1\n");
+	git(r2, "init", "-q");
+	commit(r2, "base");
+	write(join(r2, "src/a.ts"), "2\n");
+	write(join(r2, "src/a.test.ts"), "2\n");
+	const sha = commit(r2, "fix");
+	assert.equal(run("mk-task.sh", [r2, sha, "pair"]).status, 0);
+	const task = taskJson("pair");
+	assert.deepEqual(task.allowed, ["src/a.test.ts", "src/a.ts"]);
+	assert.deepEqual(task.hidden, ["src/a.test.ts"]);
 });
 
 test("an existing id exits 1 and leaves the task alone", () => {

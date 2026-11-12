@@ -5,6 +5,7 @@
   "fix": "293ee7718e2ced78a9fabdb451b0475bc7936620",
   "test": "npm run check",
   "allowed": [
+    "src/cli.test.ts",
     "src/cli.ts"
   ],
   "hidden": [

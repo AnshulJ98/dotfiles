@@ -2,7 +2,8 @@
 # usage: mk-task.sh <repo> <fix-sha> [id]
 # Turn a fix commit into a worker task: writes tasks/<id>/task.json and a prompt.md stub (the prompt is then
 # written by hand from the ticket). Tasks go to ${EVAL_TASKS_DIR:-agent-eval/tasks}.
-#   allowed = non-test files the commit changes (deleted ones too), hidden = test files it adds or changes,
+#   allowed = the files the commit changes (deleted ones too) except deleted test files, so the agent may edit the
+#             test files it touches (in path order), hidden = test files it adds or changes,
 #   test    = the package's test script, run as "npm test" from the nearest package.json above the first
 #             hidden test file ("cd <dir> && npm test" when that is not the repo root).
 # Test files: see is_test_path in lib/task.sh. Exit 1 when the commit changes no test file, has no package.json
@@ -25,7 +26,7 @@ allowed=() hidden=()
 while IFS=$'\t' read -r status path; do
   [ -n "$path" ] || continue
   if is_test_path "$path"; then
-    [ "$status" = D ] || hidden+=("$path")
+    [ "$status" = D ] || { hidden+=("$path"); allowed+=("$path"); }
   else
     allowed+=("$path")
   fi
