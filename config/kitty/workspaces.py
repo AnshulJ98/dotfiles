@@ -19,6 +19,7 @@ SIDEBAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zside
 WIDTH = '24'
 _save_pending = False
 _sync_pending = False
+_quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
@@ -42,15 +43,45 @@ def _names(boss) -> list[str]:
     return names
 
 
+def _place(path: str, own_window: bool) -> None:
+    """Start the file with new_os_window only for a workspace that has a window of its own.
+
+    kitty writes that line ahead of every OS window but the least recently focused one, so with
+    two windows open it depends on where the focus was, and a workspace saved with it reopens in
+    a new window."""
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and lines[0].strip() == 'new_os_window':
+        lines.pop(0)
+    if own_window:
+        lines.insert(0, 'new_os_window')
+    with open(path + '.tmp', 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+    os.replace(path + '.tmp', path)
+
+
 def _save(timer_id: int | None = None) -> None:
     global _save_pending
     _save_pending = False
+    if _quitting:
+        return
     boss = get_boss()
     names = _names(boss)
     os.makedirs(DIR, exist_ok=True)
+    where: dict[str, set[int]] = {}  # workspace -> its OS windows
+    for w in boss.all_windows:
+        if w.created_in_session_name:
+            where.setdefault(w.created_in_session_name, set()).add(w.os_window_id)
+    first = min((i for ids in where.values() for i in ids), default=0)  # the window workspaces share
     for name in names:
         boss.call_remote_control(None, ('action', 'save_as_session', '--save-only',
                                         f'--match=session:^{re.escape(name)}$', _file(name)))
+        _place(_file(name), first not in where.get(name, {first}))
     if _owner and names:
         with open(OPEN, 'w') as f:
             f.write('\n'.join(names) + '\n')
@@ -107,9 +138,13 @@ def _sync(timer_id: int | None = None) -> None:
             if len(recent) >= 3:
                 continue
             recent.append(time.monotonic())
+            # a renamed workspace keeps its name when the panes that carried it are gone
+            named = next((w.user_vars['ws_name'] for w in boss.all_windows
+                          if w.created_in_session_name == name and w.user_vars.get('ws_name')), '')
             boss.call_remote_control(None, (
                 'launch', '--type=tab-dock', f'--match=id:{tab.id}', '--dock-edge=left', f'--dock-size={WIDTH}',
-                '--dock-skip-focus', '--keep-focus', '--add-to-session', name, '--var', 'role=sidebar', SIDEBAR))
+                '--dock-skip-focus', '--keep-focus', '--add-to-session', name, '--var', 'role=sidebar',
+                *(('--var', f'ws_name={named}') if named else ()), SIDEBAR))
     _poke(boss)
 
 
@@ -146,10 +181,12 @@ def on_set_user_var(boss, window, data) -> None:
         # Drop the var again: a saved session would replay it as --var and toggle on restore.
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
         _sync()
-    else:
-        _poke(boss)
+    else:  # a rename (ws_name) or pi's model and context use
+        on_tab_bar_dirty(boss, window, data)
 
 
 def on_quit(boss, window, data) -> None:
+    global _quitting
     if data.get('confirmed'):
         _save()
+        _quitting = True

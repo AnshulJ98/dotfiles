@@ -2,6 +2,8 @@
 # Go to: full-tab picker over this kitty's workspaces > tabs > panes, then zmx sessions no pane
 # holds and closed workspaces (zpick-rows). Runs in a tab opened by zgoto; $1 = id of the window
 # the user came from. ctrl-t (or cmd+alt+g, forwarded by zgoto) switches to detached and closed only.
+# ctrl-x kills sessions: never the one the picker was opened from, and an attached one only when
+# pressed a second time.
 set -u
 export PATH=/opt/homebrew/bin:$PATH
 self=$(realpath "$0"); here=$(dirname "$self")
@@ -13,6 +15,22 @@ view() { cat "$ZPICK_VIEW" 2>/dev/null || echo all; }
 toggle() { local next=all; [ "$(view)" = all ] && next=detached; echo "$next" > "$ZPICK_VIEW"; }
 label() { [ "$(view)" = all ] && echo ' Go to ' || echo ' Go to · detached and closed '; }
 ghost() { [ "$(view)" = all ] && echo 'search workspaces, tabs and panes' || echo 'search detached sessions'; }
+footer() {
+  if [ -s "$ZPICK_VIEW.ask" ]; then echo "attached: $(tr '\n' ' ' < "$ZPICK_VIEW.ask")· ^x again kills"
+  else echo 'enter go · ^s split · ^t view · tab mark · ^x kill · esc'; fi
+}
+# fzf runs this for the list. It also notes the row of the pane the picker came from.
+list() {
+  local rows; rows=$("$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}")
+  awk -F'\t' -v w="${ZPICK_FROM:-}" '$1 == "pane" && $2 == w { print NR; exit }' <<<"$rows" > "$ZPICK_VIEW.pos"
+  echo "$rows"
+}
+# fzf only knows its width once it is up, so the first load (of nothing) asks for the list and
+# the second puts the cursor on the pane the picker came from.
+onload() {
+  if [ -e "$ZPICK_VIEW.pos" ]; then echo "pos($(grep . "$ZPICK_VIEW.pos" || echo 1))+unbind(load)"
+  else echo "reload($self --list)"; fi
+}
 
 # Preview: the session's screen in colour, cut to the preview height. fzf only understands colour
 # codes, so cursor-forward gaps become spaces and other controls are dropped. Full-screen apps
@@ -36,17 +54,25 @@ preview_row() { # kind target holder lines
   esac
 }
 kill_rows() { # file of selected rows: kills the zmx session behind panes and detached sessions,
-  # and forgets closed workspaces (their sessions stay, as detached)
-  while IFS=$'\t' read -r kind target holder _; do
+  # and forgets closed workspaces (their sessions stay, as detached). A session some terminal is
+  # attached to is only named in .ask the first time, for the footer, and killed the second.
+  local asked; asked=$(cat "$ZPICK_VIEW.ask" 2>/dev/null); : > "$ZPICK_VIEW.ask"
+  while IFS=$'\037' read -r kind target holder _ clients _; do  # tabs would swallow empty fields
     case $kind in
-      pane|det) [ -n "$holder" ] && zmx kill "$holder" >/dev/null 2>&1 ;;
+      pane|det)
+        [ -n "$holder" ] || continue
+        [ "$kind" = pane ] && [ "$target" = "${ZPICK_FROM:-}" ] && continue
+        if [ "$clients" != 0 ] && ! grep -qxF "$holder" <<<"$asked"; then echo "$holder" >> "$ZPICK_VIEW.ask"
+        else zmx kill "$holder" >/dev/null 2>&1; fi ;;
       closed) case $target in "$DIR"/*.kitty-session) rm -f "$target" ;; esac ;;
     esac
-  done < "$1"
+  done < <(tr '\t' '\037' < "$1")
 }
 
 case ${1:-} in
-  --list) "$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}"; exit ;;
+  --list) list; exit ;;
+  --onload) onload; exit ;;
+  --footer) footer; exit ;;
   --toggle) toggle; exit ;;
   --label) label; exit ;;
   --ghost) ghost; exit ;;
@@ -82,8 +108,6 @@ open_row() { # kind target holder cwd key
   esac >/dev/null 2>&1
 }
 
-rows=$("$self" --list)
-pos=$(awk -F'\t' -v w="$from" '$1 == "pane" && $2 == w { print NR; exit }' <<<"$rows")
 A='#44ddff'
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
@@ -92,18 +116,18 @@ out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --input-border line --list-border none \
   --preview "$self --preview {1} {2} {3} \$FZF_PREVIEW_LINES" \
   --preview-window 'right,45%,border-left,nowrap,noinfo' --preview-label ' screen ' \
-  --footer 'enter go · ^s split · ^t view · tab mark · ^x kill · esc' --footer-border line \
+  --footer "$(footer)" --footer-border line \
   --color "fg:-1,bg:-1,hl:$A,hl+:$A,fg+:-1:bold,bg+:#22313c,gutter:-1,border:$A,label:$A:bold" \
   --color "prompt:$A,pointer:$A,marker:$A,info:8,ghost:8,footer:8,separator:8,scrollbar:8" \
   --color "input-border:8,preview-border:8,preview-label:8,footer-border:8" \
-  --bind "load:pos(${pos:-1})+unbind(load)" \
-  --bind "ctrl-x:execute-silent($self --kill {+f})+reload($self --list)" \
+  --bind "load:transform($self --onload)" \
+  --bind "ctrl-x:execute-silent($self --kill {+f})+reload($self --list)+transform-footer($self --footer)" \
   --bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)" \
   --bind 'zero:change-ghost(nothing here · ctrl-t switches view)' \
-  --expect ctrl-s <<<"$rows") || { rm -f "$ZPICK_VIEW"; exit 0; }
+  --expect ctrl-s </dev/null) || { rm -f "$ZPICK_VIEW"*; exit 0; }
 key=$(head -1 <<<"$out")
 while IFS=$'\t' read -r kind target holder cwd _; do
   [ -n "$kind" ] && open_row "$kind" "$target" "$holder" "$cwd" "$key"
 done < <(tail -n +2 <<<"$out")
-rm -f "$ZPICK_VIEW"
+rm -f "$ZPICK_VIEW"*
 exit 0

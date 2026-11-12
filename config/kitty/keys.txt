@@ -5,12 +5,15 @@
 cmd+enter	the workspace kitty: focus it, or start it	AeroSpace
 cmd+alt+n	new workspace, named after this folder
 cmd+alt+shift+n	new workspace, ask for the name
+cmd+shift+n	new workspace in a window of its own
 cmd+alt+w	close the workspace (panes keep running)
 cmd+alt+1..9	switch to workspace 1..9
 ctrl+alt+[	previous workspace
 ctrl+alt+]	next workspace
+ctrl+alt+1..9	go to agent 1..9, as listed in the sidebar
 cmd+alt+b	hide or show the sidebar
 click	a sidebar row: go to that workspace or agent	sidebar
+right click	a sidebar space: rename, close, worktrees	sidebar
 cmd+alt+g	Go to: pick a workspace, tab, pane or session
 cmd+/	this list
 # In the Go to picker
@@ -18,7 +21,7 @@ enter	go to the row	picker
 ctrl+s	open a detached session in a split	picker
 ctrl+t	all, or detached and closed only	picker
 tab	mark several rows	picker
-ctrl+x	kill the session, or forget a closed workspace	picker
+ctrl+x	kill a session (twice if attached), forget closed	picker
 esc	close	picker
 # Panes
 cmd+d	split right
@@ -40,8 +43,7 @@ cmd+shift+w	close the tab
 cmd+shift+b	move the tab to a new window
 cmd+shift+j	move the tab to another window (asks which)
 # Windows
-cmd+n	new window here (joins no workspace)
-cmd+shift+n	new window
+cmd+n	new free-form window here (joins no workspace)
 cmd+alt+enter	a second, plain kitty with no workspaces	AeroSpace
 ctrl+alt+enter	kitty running herdr	AeroSpace
 # Screen and scrollback
