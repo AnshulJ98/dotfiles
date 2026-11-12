@@ -33,8 +33,13 @@
 set -uo pipefail
 
 usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+# A stop condition (exit 1) also goes to the events log; lib/events.ts has the format.
 die() {
   echo "auto-slice: $2" >&2
+  [ "$1" = 1 ] && {
+    local dir="${PI_LOG_DIR:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/logs}" id="${PI_SESSION_ID:--}"
+    mkdir -p "$dir" && printf '%s auto %s slice.stop %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${id:${#id}<6?0:-6}" "${2//$'\n'/ }" >>"$dir/events.log"
+  } 2>/dev/null
   exit "$1"
 }
 

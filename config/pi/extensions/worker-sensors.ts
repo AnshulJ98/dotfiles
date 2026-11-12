@@ -52,9 +52,11 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { changedBy, snapshot as bashSnapshot, type Snapshot as BashSnapshot } from "../lib/bash-changes.ts";
+import { subjectOf } from "../lib/bash-log.ts";
+import { logEvent } from "../lib/events.ts";
 
 const DEFAULT_MAX_LINES = 400;
 const MAX_RETRIES = 1;
@@ -711,6 +713,8 @@ export default function (pi: ExtensionAPI) {
   }
 
   const bashBefore = new Map<string, BashSnapshot>();
+  // Events carry the scout directory's name (sessions/scout/<pid>), as bin/scout's own do
+  const record = (kind: string, detail: string) => logEvent(kind, detail, process.env.PI_WORKER_REPORT ? basename(dirname(process.env.PI_WORKER_REPORT)) : "");
   let retriesUsed = 0;
   let verdict: { step: Exclude<Step, "retry">; reasons: string[] } | undefined;
 
@@ -720,6 +724,7 @@ export default function (pi: ExtensionAPI) {
     const input = event.input as Record<string, unknown>;
     if (event.toolName === "bash") {
       const reason = forbiddenBash(String(input.command ?? ""), spec.allowedCommands);
+      if (reason) record("worker.block", `bash ${subjectOf(input)}`);
       if (reason) return { block: true, reason: `Blocked: ${reason}.` };
       const before = bashSnapshot(process.cwd());
       if (before) bashBefore.set(event.toolCallId, before);
@@ -727,6 +732,7 @@ export default function (pi: ExtensionAPI) {
     }
     const target = repoRelative(String(input.path ?? ""), process.cwd(), snap.root);
     if (isAllowed(target, spec.filesAllowed)) return undefined;
+    record("worker.block", `${event.toolName} ${target}`);
     return {
       block: true,
       reason: `${target} is outside files-allowed (${spec.filesAllowed.join(", ")}). If the spec needs it, stop and report it under Blocked on me.`,
@@ -744,6 +750,7 @@ export default function (pi: ExtensionAPI) {
     if (!after) return undefined;
     const outside = changedBy(before, after).filter((c) => !isAllowed(c.path, allowed));
     if (!outside.length) return undefined;
+    record("worker.outside", outside.map((c) => c.path).join(", "));
     const note =
       `\n[worker-sensors] this command changed ${outside.map((c) => c.path).join(", ")}, outside files-allowed (${allowed.join(", ")}). ` +
       "Undo it now (git restore, or rm for a new file), or the run fails at settle.\n";
@@ -773,6 +780,7 @@ export default function (pi: ExtensionAPI) {
       return undefined;
     }
     retriesUsed += 1;
+    record("worker.retry", reasons.join("; "));
     const content =
       `The worker sensors reran the checks and they failed:\n- ${reasons.join("\n- ")}\n\n` +
       `Last ${OUTPUT_TAIL_LINES} lines of \`${spec.tests}\`:\n\`\`\`\n${tail(testOutput, OUTPUT_TAIL_LINES)}\n\`\`\`\n` +
@@ -784,6 +792,7 @@ export default function (pi: ExtensionAPI) {
     const final = verdict ?? { step: "cannot-run" as const, reasons: ["settle check never ran"] };
     const label = final.step.toUpperCase();
     process.stdout.write(`\nWORKER-SENSORS: ${label}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}\n`);
+    record("worker.verdict", `${label} retries=${retriesUsed}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}`);
     const reportPath = process.env.PI_WORKER_REPORT;
     if (reportPath) writeFileSync(reportPath, `${JSON.stringify({ verdict: label, reasons: final.reasons, retriesUsed })}\n`);
   });

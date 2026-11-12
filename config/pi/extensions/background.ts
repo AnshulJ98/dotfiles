@@ -35,6 +35,9 @@ import {
 	type Track,
 	WATCHDOG_TAG,
 } from "../lib/watchdog.ts";
+import { summarize } from "../lib/bash-log.ts";
+import { logEvent } from "../lib/events.ts";
+import { setLive } from "../lib/live.ts";
 
 const run = promisify(execFile);
 
@@ -93,6 +96,7 @@ interface Job {
 interface Foreground {
 	watch: Watched;
 	exempt: boolean;
+	command: string;
 	/** Set when the watchdog killed it; appended to the command's output. */
 	killed?: string;
 }
@@ -253,6 +257,8 @@ export default function (pi: ExtensionAPI) {
 	const jobs = new Map<string, Job>();
 	const ops = createLocalBashOperations();
 	let next = 1;
+	// For the events log
+	let sessionId = "";
 
 	// Steered, not a follow-up: a running turn sees the message before its next model call, instead of finishing (often
 	// after reading the exit with bg_status) and then taking a second turn just to repeat it. Idle, it starts a turn.
@@ -330,6 +336,8 @@ export default function (pi: ExtensionAPI) {
 	// "full" (the default), "compact" without the output, or "off", set with "background": { "jobs": ... } in pi's settings.json
 	const jobsLine = () => (pi.getSettings() as { background?: { jobs?: string } }).background?.jobs ?? "full";
 	const showJobs = () => {
+		// For bin/pi-health, with or without a UI
+		setLive({ jobs: running().map(({ id, command, log, started }) => ({ id, command, log, started })) });
 		if (!ui) return;
 		if (jobsLine() === "off" || running().length === 0) return ui.setWidget("background-jobs", undefined);
 		ui.setWidget("background-jobs", (tui, theme) => {
@@ -406,6 +414,7 @@ export default function (pi: ExtensionAPI) {
 		if (foregroundVerdict(fg.watch.track, { now, idleMs: FG_IDLE_MS, heartbeatAgeMs: beat, exempt: fg.exempt }) !== "kill") return;
 		const secs = FG_IDLE_MS / 1000;
 		fg.killed = beat !== undefined ? `killed: no $PI_HEARTBEAT touch for ${secs}s` : `killed: idle ${secs}s (no output/CPU/network)`;
+		logEvent("bash.kill", `${fg.killed}: ${summarize(fg.command)}`, sessionId);
 		try {
 			process.kill(-pgid, "SIGKILL");
 		} catch {
@@ -430,6 +439,7 @@ export default function (pi: ExtensionAPI) {
 		job.alerts = result.state;
 		if (!result.alert) return;
 		const last = result.state.wakes >= BG_MAX_ALERTS ? " This is the last watchdog alert for this job." : "";
+		logEvent("job.alert", `${job.id} ${result.alert}: ${summarize(job.command)}`, sessionId);
 		wake(
 			`Watchdog: background job ${job.id} is still running, but ${result.alert}. It was not stopped.${last}\n${summary(job)}\nLast lines:\n${tail(job.log, 5)}\nCheck it with bg_status and stop it with bg_kill if it is stuck; otherwise carry on.`,
 			{ headline: `${job.id} ${result.alert}`, last: job.lastLine ?? "", error: healthy === false },
@@ -461,7 +471,7 @@ export default function (pi: ExtensionAPI) {
 	const watchedOps: BashOperations = {
 		exec: async (command, cwd, options) => {
 			if (startsBackgroundJob(command)) return ops.exec(command, cwd, options);
-			const fg: Foreground = { watch: newWatch(`fg${++fgCount}`), exempt: isExempt(command) };
+			const fg: Foreground = { watch: newWatch(`fg${++fgCount}`), exempt: isExempt(command), command };
 			foreground.add(fg);
 			ensureSampler();
 			try {
@@ -645,6 +655,10 @@ export default function (pi: ExtensionAPI) {
 			job.controller.abort();
 			return { content: [{ type: "text", text: `Stopping ${job.id}` }], details: {} };
 		},
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		sessionId = ctx.sessionManager.getSessionId();
 	});
 
 	pi.on("session_shutdown", async () => {

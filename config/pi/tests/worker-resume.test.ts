@@ -44,7 +44,7 @@ test("worker stalls, is aborted, resumes exactly once, and ends PASS", async () 
 		workerSensors(pi as never);
 
 		const abort = test.mock.fn(() => {});
-		await fire("before_provider_request", {}, { hasUI: false, abort });
+		await fire("before_provider_request", {}, { hasUI: false, abort, sessionManager: { getSessionId: () => "01a1-session-abc123" } });
 		await new Promise((done) => setTimeout(done, 80));
 		assert.equal(abort.mock.callCount(), 1, "the silent stream was aborted once");
 		assert.equal(sendUserMessage.mock.callCount(), 0, "no resume before the run settles");
