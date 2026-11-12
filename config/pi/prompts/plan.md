@@ -32,7 +32,9 @@ covers, so the review has its yardstick in reach.
 
 Write about 300 words, skipping any section with nothing to say:
 
-1. **Goal**: one line.
+1. **Goal**: one line. Under it, `mechanism:` and one line on how the
+   change works (which function, which seam), so the result can be
+   checked against the route taken and not only against the tests.
 2. **Findings**: only facts that change the plan, each with
    `file:line`. For each unknown, the default you chose and why, in one
    line. An unknown that changes what gets built is a
@@ -89,7 +91,8 @@ Stop and wait.
   `git switch`, `checkout` and the rest. Then run
   `~/.pi/agent/bin/scout --rw --spec - <<'EOF'` with the closing block
   first and this plan after it, then the module's `docs/maps/*-map.md`
-  if one exists, then `EOF`. One open worker at a time.
+  if one exists, then `EOF`. Scout refuses a spec whose body has no
+  numbered step and no `check:` line. One open worker at a time.
   When it returns, the first line of the digest is
   `WORKER-SENSORS: PASS|FAIL|CANNOT-RUN`. Review the diff as `/review`
   does, with this plan as the yardstick: run `tests` yourself, then
@@ -100,7 +103,7 @@ Stop and wait.
   fix by hand.
 
 In a slice loop, after a ship on a branch, ask one question with
-`ask_user`: merge `--no-ff` to master, delete the branch (and
+`ask_user`: merge `--no-ff` to the base branch, delete the branch (and
 `wt remove` its worktree if it has one; never `--force`), plan slice
 n+1? On yes, do all three in one turn; the next plan starts from the
 slice list, with the merged slices ticked. A bare "ok" or "yes" while
@@ -130,36 +133,59 @@ Start, or resume when a root `AUTO.md` exists:
    `auto/<effort>` from the base (on resume, switch to it).
 
 `AUTO.md` holds this section verbatim with the grants resolved, the
-spec, the slice list with ticks, the base sha, and one line per slice:
+spec, the slice list as `- [ ] <n>. <name>, branch slice/<name>, …`
+lines (ticked `- [x]`; the harness reads them), the base sha, and one
+line per slice:
 verdict, merge sha, and its scout dir (the
 `~/.pi/agent/sessions/scout/<pid>/` created during the slice; cost is
 the sum of `usage.cost.total` in its jsonl). After a compaction,
 re-read it before anything else.
 
-Per slice: `git switch -c slice/<name> auto/<effort>`, plan it as above
-against the code as it is now, then dispatch and review as "dispatch"
-does, with a bash timeout no lower than scout's. For a bug fix, also
-judge by reading whether the new test fails without the fix. On ship:
-commit on the slice branch, merge `--no-ff` into `auto/<effort>`, run
-every merged slice's `tests` there, delete the slice branch, tick
-`AUTO.md`. On rework: one "rework" dispatch, never a hand fix.
+Per slice, in this order:
 
-Stop at the first of: FAIL or CANNOT-RUN after the rework; rework from
-two reviews in a row; anything under Blocked on me; an unknown in a
+1. `wt switch -y --no-cd -c slice/<name> --base auto/<effort>` makes the
+   slice's worktree beside the repo (`git worktree list` prints its
+   path). Never `git worktree add`, never a path inside the repo.
+2. Plan the slice as above against the code as it is now: read the
+   files it touches, then print the plan with its `mechanism:` line,
+   numbered steps and `check:` lines. A line of the slice list is not
+   a plan, and scout refuses a spec without steps and checks.
+3. Dispatch from the slice worktree (`cd <path> && ~/.pi/agent/bin/scout
+   --rw --spec -`), with a bash timeout no lower than scout's.
+4. The sensors gate the slice; there is no review per slice. On
+   `WORKER-SENSORS: PASS`: commit on the slice branch, merge `--no-ff`
+   into `auto/<effort>`, run every merged slice's `tests` there,
+   `wt remove -y slice/<name>`, tick `AUTO.md`. On FAIL: one "rework"
+   dispatch with the sensors' reasons appended to the spec.
+
+You never fix by hand in an auto run. The only file you edit is
+`AUTO.md`; the harness blocks the rest while it exists.
+
+Stop at the first of: FAIL or CANNOT-RUN after the rework; a first
+dispatch that FAILs on two slices in a row; anything under Blocked on
+me; an unknown in a
 slice plan that changes what gets built; a merge conflict; `tests`
 failing on `auto/<effort>`; a scout timeout (rc 124); `AUTO.md`
 changed during a dispatch (compare its sha before and after); a slice
 that turns out obsolete or missing (the list is frozen); the cap. On a
-stop, leave the slice branch unmerged, keep `AUTO.md`, report per Long
-Runs, and wait. "auto" resumes at the first unticked slice. "auto
-abandon" deletes `AUTO.md` and its exclude line, keeps the branches,
-and reports.
+stop, leave the slice branch and its worktree unmerged, add the line
+`stopped: <condition>` to `AUTO.md`, report per Long Runs, and wait.
+Without that line the harness sends you back to the unticked slices
+when you end a turn. "auto" removes the line and resumes at the first
+unticked slice. "auto abandon" deletes `AUTO.md` and its exclude line,
+keeps the branches, and reports.
 
-After the last slice, review `git diff <base-sha>...auto/<effort>` and
-`git log --first-parent <base-sha>..auto/<effort>` against the spec,
-following `review.md` from the prompts directory in
-`~/.pi/agent/settings.json` (else: your Reviews checklist, then attack
-your own findings). Report per Long Runs with cost per slice, ending
-with `git switch <base> && git merge --no-ff auto/<effort>`. Delete
-`AUTO.md` and its exclude line, then stop. Run that merge only if I
-granted it; after it succeeds, `git branch -d auto/<effort>`.
+After the last slice comes the run's one review, before any merge into
+the base: from the `auto/<effort>` checkout, run
+`~/.pi/agent/bin/scout --review <base-sha>`. It reviews `git diff
+<base-sha>...HEAD` and `git log --first-parent <base-sha>..HEAD`
+against the spec in `AUTO.md` as `review.md` does, checks by reading
+that each bug fix's new test fails without the fix, and records the
+tip it reviewed. The merge hook refuses to merge `auto/<effort>` into
+any branch until that record exists; a later commit needs a new
+review. Report per Long Runs with the review's verdict and findings and
+the cost per slice, ending with `git switch <base> && git merge --no-ff
+auto/<effort>`. On fix or rework, add `stopped: review` to `AUTO.md`
+and wait. On ship, delete `AUTO.md` and its exclude line, then stop.
+Run that merge only if I granted it; after it succeeds, `git branch -d
+auto/<effort>`.

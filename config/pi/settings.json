@@ -47,6 +47,7 @@
     "~/Dev/dotfiles/config/pi/extensions/polish-chrome.ts",
     "~/Dev/dotfiles/config/pi/extensions/context-bar.ts",
     "~/Dev/dotfiles/config/pi/extensions/background.ts",
+    "~/Dev/dotfiles/config/pi/extensions/auto-run.ts",
     "~/Dev/dotfiles/config/pi/extensions/stream-watchdog.ts",
     "~/Dev/dotfiles/config/pi/extensions/bedrock-reasoning.ts",
     "~/Dev/dotfiles/config/pi/extensions/split-diff.ts",
