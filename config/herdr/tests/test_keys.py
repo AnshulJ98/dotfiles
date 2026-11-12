@@ -50,7 +50,7 @@ class KeyConfigTests(unittest.TestCase):
         passthrough += [f"cmd+{n}" for n in range(1, 10)]
         passthrough += [f"cmd+opt+{d}" for d in ("left", "right", "up", "down")]
         # kitty's own workspace keys must not shadow Herdr's
-        passthrough += ["cmd+alt+n", "cmd+alt+shift+n", "cmd+alt+w", "cmd+alt+b", "ctrl+alt+[", "ctrl+alt+]"]
+        passthrough += ["cmd+alt+n", "cmd+alt+shift+n", "cmd+alt+w", "cmd+alt+b", "cmd+/", "cmd+alt+l", "ctrl+alt+[", "ctrl+alt+]"]
         passthrough += [f"cmd+alt+{n}" for n in range(1, 10)]
         for key in passthrough:
             with self.subTest(key=key):
@@ -65,6 +65,21 @@ class KeyConfigTests(unittest.TestCase):
         self.assertEqual(plain["cmd+w"], ["close_window"])
         self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
         self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
+
+    def test_keys_popup_lists_kitty_command_keys(self):
+        maps = [line.split(None, 2) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
+                if line.startswith("map ") and "--when-focus-on" not in line]
+        mapped = {m[1].replace("kitty_mod", "ctrl+shift") for m in maps
+                  if len(m) == 3 and not m[2].startswith("send_text")}
+        listed = set()
+        for line in (ROOT / "config/kitty/keys.txt").read_text().splitlines():
+            key, _, where = (line.split("\t") + ["", ""])[:3]
+            if not line or line.startswith("#") or where:
+                continue  # a heading, or a key bound outside kitty.conf
+            head, _, last = key.rpartition("+")
+            lasts = [str(n) for n in range(1, 10)] if last == "1..9" else last.split("|")
+            listed |= {f"{head}+{name}" for name in lasts}
+        self.assertEqual(listed, mapped)
 
     def test_installer_and_aerospace_use_launcher(self):
         self.assertIn('link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"',
