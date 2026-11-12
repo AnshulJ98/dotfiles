@@ -301,26 +301,20 @@ fi
 # Fan-out cap, checked before anything lands in the sessions tree. A meta whose
 # pid and pane (herdr child) are both dead is a SIGKILLed run the extension has
 # not swept yet; it does not count.
-meta_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
-# The count and the claim below are one step under a lock: two scouts started together (the
-# documented "&" pair, or two sessions) would each count the other as absent. mkdir is the
-# atomic part. The step takes milliseconds, so a lock still there after SCOUT_LOCK_TRIES tenths of
-# a second was left by a scout killed inside it, and is taken over.
-LOCK="$SCOUT_ROOT/.admit"
-mkdir -p "$SCOUT_ROOT"
-tries=0
-until mkdir "$LOCK" 2>/dev/null; do
-  tries=$((tries + 1))
-  if [ "$tries" -ge "${SCOUT_LOCK_TRIES:-50}" ]; then
-    rmdir "$LOCK" 2>/dev/null || true
-    tries=0
-  fi
-  sleep 0.1
-done
-trap 'rmdir "$LOCK" 2>/dev/null; rm -f "${SPEC_TMP:-}"' EXIT
+# A meta can go between the glob and the read (its scout finished, or was refused): that is an empty field, not an error
+meta_field() { { sed -n "s/^$2=//p" "$1" 2>/dev/null || true; } | head -n 1; }
+# The slot is claimed first and the others counted after: scouts started together (the documented
+# "&" pair, or two sessions) each see the other's claim, so a race can refuse one too many and
+# never admit one too many. No lock, so nothing to go stale. The full meta overwrites the claim
+# before pi starts; until then any exit removes it (and a spec still held in its temp file, which
+# the trap above this point covered).
+mkdir -p "$RUNNING"
+META="$RUNNING/$$.meta"
+printf 'pid=%s\nstarted=%s\nmode=%s\nrepo=%s\n' "$$" "$(($(date +%s) * 1000))" "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
+trap 'rm -f "$META" "${SPEC_TMP:-}"' EXIT
 LIVE=0 OPEN_WORKER=""
 for m in "$RUNNING"/*.meta; do
-  [ -f "$m" ] || continue
+  [ -f "$m" ] && [ "$m" != "$META" ] || continue
   m_pane="$(meta_field "$m" pane)"
   kill -0 "$(meta_field "$m" pid)" 2>/dev/null || { [ -n "$m_pane" ] && kill -0 "$m_pane" 2>/dev/null; } || continue
   LIVE=$((LIVE + 1))
@@ -337,14 +331,6 @@ if [ "$RW" = 1 ] && [ -n "$OPEN_WORKER" ]; then
   echo "scout: refusing — worker $OPEN_WORKER is open on this repo; merge or reject it first" >&2
   exit 75
 fi
-# Claim the slot now, so a scout started during the spec parse below sees this one as live. The
-# full meta overwrites it before pi starts; until then any exit removes it (and a spec still held
-# in its temp file, which the trap above this point covered).
-mkdir -p "$RUNNING"
-META="$RUNNING/$$.meta"
-printf 'pid=%s\nstarted=%s\nmode=%s\nrepo=%s\n' "$$" "$(($(date +%s) * 1000))" "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
-trap 'rm -f "$META" "${SPEC_TMP:-}"' EXIT
-rmdir "$LOCK" 2>/dev/null || true
 
 WORKER=()
 if [ "$RW" = 1 ]; then

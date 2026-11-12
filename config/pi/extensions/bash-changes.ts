@@ -31,6 +31,8 @@ import { append, endLine, logPath, roleOf, rotate, startLine, subjectOf, summari
 import { dropLive, setLive } from "../lib/live.ts";
 import { WATCHDOG_TAG } from "../lib/watchdog.ts";
 
+const STREAM_BEAT_MS = 30_000;
+
 interface Started {
 	at: number;
 	who: Who;
@@ -93,6 +95,14 @@ export default function (pi: ExtensionAPI) {
 		live(ctx, "idle");
 	});
 	pi.on("session_shutdown", async () => dropLive());
+	// Model output is activity too: without it a long answer reads as "no activity" in pi-health. One write per 30 s at most.
+	let streamed = 0;
+	pi.on("provider_stream_event", () => {
+		const now = Date.now();
+		if (now - streamed < STREAM_BEAT_MS) return;
+		streamed = now;
+		setLive({ active: now });
+	});
 
 	pi.on("tool_call", async (event, ctx) => {
 		const bash = event.toolName === "bash";

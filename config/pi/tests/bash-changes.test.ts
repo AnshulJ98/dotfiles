@@ -218,6 +218,13 @@ test("handler: every tool call gets a start and an end line in the log and is th
 		await on.get("tool_call")?.(event, ctx);
 		assert.match(logged().at(-1) ?? "", /^\d\d:\d\d:\d\d main abc123 #aaaa \u25b6 \[.*\] sed -i s\/a\/b\/ src\/a\.ts$/);
 		assert.deepEqual([liveNow().state, liveNow().what], ["tool", "bash sed -i s/a/b/ src/a.ts"]);
+		writeFileSync(LIVE, JSON.stringify({ ...liveNow(), active: 1 }));
+		await on.get("provider_stream_event")?.({}, ctx);
+		assert.ok(liveNow().active > 1, "model output counts as activity");
+		assert.equal(liveNow().what, "bash sed -i s/a/b/ src/a.ts", "and changes nothing else");
+		writeFileSync(LIVE, JSON.stringify({ ...liveNow(), active: 1 }));
+		await on.get("provider_stream_event")?.({}, ctx);
+		assert.equal(liveNow().active, 1, "at most one write per 30 s");
 		writeFileSync(join(repo, "src", "a.ts"), "changed\n");
 		const killed = [{ type: "text", text: "partial\n[watchdog] killed: idle 90s (no output/CPU/network)\n" }];
 		await on.get("tool_result")?.({ ...event, isError: true, content: killed, structuredContent: { exit_code: 137 } }, ctx);
