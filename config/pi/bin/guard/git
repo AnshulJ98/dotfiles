@@ -5,8 +5,9 @@
 #
 # Refuses history, stash, remote and tree-switching commands when the call
 # targets the scout's own repo (PI_SCOUT_GIT_DIR, set by bin/scout). Read mode
-# (PI_SCOUT_MODE=read) also refuses commit and add. A call aimed at another
-# repo (a temp test repo) passes.
+# (PI_SCOUT_MODE=read) also refuses commit and add, and both modes refuse
+# `worktree add` to a path inside the repo: worktrees go beside it, made with
+# `wt switch -c <branch>`. A call aimed at another repo (a temp test repo) passes.
 #
 # A tripwire, not a sandbox: an absolute /usr/bin/git, or an alias set with
 # `git -c alias.x=stash x`, still gets through.
@@ -52,7 +53,43 @@ sub="${1:-}"
 # $@ is now the subcommand's own arguments
 
 block=0
+why="belongs to the operator"
 case "$sub" in
+worktree)
+  if [ "${1:-}" = add ]; then
+    wt_path="" skip=0
+    for arg in "${@:2}"; do
+      if [ "$skip" = 1 ]; then
+        skip=0
+        continue
+      fi
+      case "$arg" in
+      -b | -B | --reason) skip=1 ;;
+      -*) ;;
+      *)
+        wt_path="$arg"
+        break
+        ;;
+      esac
+    done
+    top="$("$PI_SCOUT_REAL_GIT" ${gopts[@]+"${gopts[@]}"} rev-parse --show-toplevel 2>/dev/null)"
+    if [ -n "$wt_path" ] && [ -n "$top" ]; then
+      top="$(cd "$top" && pwd -P)"
+      case "$wt_path" in
+      /*) abs="$wt_path" ;;
+      *) abs="$top/$("$PI_SCOUT_REAL_GIT" ${gopts[@]+"${gopts[@]}"} rev-parse --show-prefix 2>/dev/null)$wt_path" ;;
+      esac
+      # The path does not exist yet: resolve its parent (which drops any ..), keep its name
+      parent="$(cd "$(dirname "$abs")" 2>/dev/null && pwd -P)" || parent="$(dirname "$abs")"
+      case "$parent/$(basename "$abs")/" in
+      "$top"/*)
+        block=1
+        why="would put a worktree inside the repo; they go beside it (wt switch -c <branch>)"
+        ;;
+      esac
+    fi
+  fi
+  ;;
 push | pull | merge | rebase | reset | clean | stash | checkout | switch | restore) block=1 ;;
 commit)
   [ "${PI_SCOUT_MODE:-}" = read ] && block=1
@@ -70,7 +107,7 @@ if [ "$block" = 1 ] && [ -n "${PI_SCOUT_GIT_DIR:-}" ]; then
   # Compare physical paths: /tmp and /private/tmp must not tell two repos apart
   canon() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"; }
   if [ -n "$target" ] && [ "$(canon "$target")" = "$(canon "$PI_SCOUT_GIT_DIR")" ]; then
-    echo "scout git guard: git $sub ... belongs to the operator" >&2
+    echo "scout git guard: git $sub ... $why" >&2
     exit 1
   fi
 fi

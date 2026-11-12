@@ -8,6 +8,11 @@
 #   pre-push                      on any branch
 # With no AUTO.md, or any other hook or branch, it exits 0 and prints nothing.
 #
+# With or without AUTO.md, pre-merge-commit also refuses to merge an auto/* branch
+# whose tip has no review record: <git-common-dir>/pi-review/<sha>, written by
+# `scout --review <base>` (config/pi/bin/scout). An auto run gets its one review
+# before it lands anywhere.
+#
 # Default branch: the target of refs/remotes/origin/HEAD minus "origin/"; without it,
 # master if that branch exists, else main.
 #
@@ -17,6 +22,20 @@
 # Never reads stdin: pre-push's ref list belongs to the hook body that follows.
 
 hook="${1:-}"
+
+# The merged names come from GIT_REFLOG_ACTION, which git merge sets to "merge <name>..."
+# (checked with git 2.56.1; hooks.test.ts fails if that changes). MERGE_HEAD is not
+# written until after this hook.
+if [ "$hook" = pre-merge-commit ]; then
+  for name in ${GIT_REFLOG_ACTION-}; do
+    case "$name" in auto/*) ;; *) continue ;; esac
+    sha=$(git rev-parse --verify -q "refs/heads/$name") || continue
+    common=$(git rev-parse --git-common-dir) || continue
+    [ -f "$common/pi-review/$sha" ] && continue
+    printf 'auto-guard: %s has no review recorded for its tip %.9s; run ~/.pi/agent/bin/scout --review <base> on it first (git merge --no-verify skips this check)\n' "$name" "$sha" >&2
+    exit 1
+  done
+fi
 
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$top/AUTO.md" ] || exit 0

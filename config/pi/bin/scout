@@ -7,12 +7,21 @@
 #   scout [--brief FILE] [--fork] [--ctx] [--rw] [--model PROVIDER/ID]
 #         [--thinking LEVEL] [--timeout SECONDS] "task"
 #   scout --rw --spec - ["task"] <<'EOF' ... EOF
+#   scout --review BASE ["focus"]
 #
 #   --brief FILE   Inject FILE as context (the parent writes what the scout
 #                  needs to know; this is the normal way to pass context).
 #   --spec -       Worker mode with the spec read from stdin, so no spec file
 #                  touches the repo. Stored under the run's session dir.
 #                  Implies --rw; the task defaults to "Implement the spec.".
+#                  Refused (exit 2) when the body has no numbered step or no
+#                  check: line: a worker gets a plan, not a title.
+#   --review BASE  The one review of a run: prompts/review.md over
+#                  BASE...HEAD, read-only, with review.prompt.md, AGENTS.md
+#                  (--ctx) and a root AUTO.md as the brief. Needs a clean
+#                  tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
+#                  sha>; config/git/bin/auto-guard refuses to merge an auto/*
+#                  branch whose tip has no such record. Thinking high, 900s.
 #   --fork         Child starts from a COPY of the parent session. Re-bills
 #                  the whole parent context; opt in only when the child must
 #                  see the conversation verbatim. Never the default.
@@ -38,6 +47,10 @@
 #
 # Fan-out: at most two scouts live at once, and one open worker per repo
 # (.running/<pid>.meta, dead pids ignored). A third is refused with exit 75.
+#
+# Bash: the child loads extensions/background.ts for its bash tool only: the
+# 2-minute default and 10-minute cap, the idle watchdog and $PI_HEARTBEAT.
+# bg_run stays off: pi -p exits when the turn ends, which kills the job.
 #
 # Stall guard: the child loads extensions/stream-watchdog.ts (aborts a silent
 # model stream, resumes once). As an outer layer, scout kills a child whose
@@ -94,6 +107,7 @@ TOOLS="read,grep,find,ls,bash"
 CTX=(-nc)
 BRIEF=()
 FORK=()
+REVIEW_BASE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -132,6 +146,11 @@ while [ $# -gt 0 ]; do
     RW=1
     shift
     ;;
+  --review)
+    REVIEW_BASE="${2:?scout: --review needs a base ref}"
+    CTX=()
+    shift 2
+    ;;
   --model)
     MODEL="${2:?scout: --model needs a value}"
     MODEL_SET=1
@@ -167,6 +186,37 @@ while [ $# -gt 0 ]; do
   *) break ;;
   esac
 done
+if [ -n "$REVIEW_BASE" ]; then
+  [ "$RW" = 0 ] || {
+    echo "scout: --review is read-only; drop --rw and --spec" >&2
+    exit 2
+  }
+  REVIEW_MD="$DIR/../prompts/review.md"
+  [ -r "$REVIEW_MD" ] || {
+    echo "scout: review prompt missing: $REVIEW_MD" >&2
+    exit 2
+  }
+  REVIEW_TIP="$(git rev-parse --verify -q HEAD 2>/dev/null)" && git rev-parse --verify -q "$REVIEW_BASE^{commit}" >/dev/null 2>&1 || {
+    echo "scout: --review needs a git repo and a base that resolves, got '$REVIEW_BASE'" >&2
+    exit 2
+  }
+  # The record names a commit, so what is reviewed has to be committed
+  [ -z "$(git status --porcelain)" ] || {
+    echo "scout: --review needs a clean tree; commit first, the record is for HEAD" >&2
+    exit 2
+  }
+  REVIEW_TARGET="\`git diff $REVIEW_BASE...HEAD\` and \`git log --first-parent $REVIEW_BASE..HEAD\`, every slice of the run at once"
+  REVIEW_TOP="$(git rev-parse --show-toplevel)"
+  if [ -z "${BRIEF_FILE:-}" ] && [ -f "$REVIEW_TOP/AUTO.md" ]; then
+    BRIEF_FILE="$REVIEW_TOP/AUTO.md"
+    BRIEF=("@$BRIEF_FILE")
+    REVIEW_TARGET="$REVIEW_TARGET, against the spec in the attached AUTO.md"
+  fi
+  REVIEW_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$REVIEW_MD")"
+  # Split on the literal $@ instead of ${body/..}: bash 5.2 expands & in a replacement
+  set -- "${REVIEW_BODY%%\$@*}$REVIEW_TARGET. For each bug fix in the range, check by reading that its new test fails without the fix. $*${REVIEW_BODY#*\$@}"
+  PROMPT="$DIR/review.prompt.md"
+fi
 if [ $# -lt 1 ]; then
   if [ "$RW" = 1 ] && [ -n "${BRIEF_FILE:-}" ]; then
     set -- "Implement the spec."
@@ -253,6 +303,13 @@ if [ "$RW" = 1 ]; then
     echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2
     exit 2
   }
+  # A spec is a plan, not a title: /plan numbers its steps and gives each a check.
+  SPEC_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$BRIEF_FILE")"
+  if ! grep -Eq '^[[:space:]]*[0-9]+[.)][[:space:]]' <<<"$SPEC_BODY" || ! grep -q 'check:' <<<"$SPEC_BODY"; then
+    [ -n "${SPEC_TMP:-}" ] && BRIEF_FILE="spec on stdin"
+    echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps, each with a check: line (run /plan on the slice first)" >&2
+    exit 2
+  fi
   if [ -n "${SPEC_TMP:-}" ]; then
     mkdir -p "$SESSIONS"
     mv "$SPEC_TMP" "$SESSIONS/spec.md"
@@ -266,6 +323,7 @@ if [ "$RW" = 1 ]; then
   export PI_WORKER_REPORT="$SESSIONS/verdict.json"
   : "${THINKING:=high}" "${TIMEOUT:=900}"
 fi
+[ -z "$REVIEW_BASE" ] || : "${THINKING:=high}" "${TIMEOUT:=900}"
 : "${THINKING:=low}" "${TIMEOUT:=300}"
 
 [ -r "$PROMPT" ] || {
@@ -277,7 +335,7 @@ fi
 # when present, otherwise pi's native auth (API key or auth.json) is used.
 EXT=()
 [ -f "$SHIM" ] && EXT=(-e "$SHIM")
-for ext in stream-watchdog bedrock-reasoning; do
+for ext in stream-watchdog bedrock-reasoning background; do
   [ -f "$DIR/../extensions/$ext.ts" ] && EXT+=(-e "$DIR/../extensions/$ext.ts")
 done
 if [ "$RW" = 1 ] || [ "$THINKING" = xhigh ]; then STALE_SECS="${SCOUT_STALE_SECS:-900}"; else STALE_SECS="${SCOUT_STALE_SECS:-600}"; fi
@@ -505,4 +563,13 @@ else
 fi
 [ -s "$STALLED" ] && rc=124
 conclude "$rc"
+if [ -n "$REVIEW_BASE" ] && [ "$rc" = 0 ] && [ -s "$OUT" ]; then
+  if [ "$("$PI_SCOUT_REAL_GIT" rev-parse HEAD 2>/dev/null)" = "$REVIEW_TIP" ]; then
+    mkdir -p "$PI_SCOUT_GIT_DIR/pi-review"
+    printf 'base=%s\nreviewed=%s\nrun=%s\n' "$REVIEW_BASE" "$(date -u +%FT%TZ)" "$SESSIONS" >"$PI_SCOUT_GIT_DIR/pi-review/$REVIEW_TIP"
+    echo "scout: review recorded for ${REVIEW_TIP:0:9}" >&2
+  else
+    echo "scout: HEAD moved during the review; nothing recorded" >&2
+  fi
+fi
 exit $rc

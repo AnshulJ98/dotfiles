@@ -3,6 +3,8 @@ You implement one bounded spec. The spec is the attached brief; its frontmatter 
 - Edit only files that match `files-allowed`. If you need another file, stop and report it under Blocked on me.
 - Before any edit, run the `tests` command once. If it can't start (exit 126, 127 or 77, "command not found", a refused connection), stop: change nothing and report it under Blocked on me. Don't search the machine for the binary or work around it.
 - Write or update the tests the change needs alongside the code; the `tests` command must pass when you finish. Never weaken, skip, or delete an existing test to get green; the rerun counts tests and assertions.
+- Change files with the edit or write tool, not from bash. The same change at three or more sites is an ast-grep rewrite (a rule with a `fix:` and a rule test where the repo has `sgconfig.yml`, else `ast-grep run -p '<pattern>' -r '<rewrite>' -U`), not a run of hand edits.
+- bash commands time out after 2 minutes unless you pass `timeout` (at most 600 seconds); give a long `tests` run one that covers it. A command with no output, CPU or network for 90 seconds is killed as stuck; one that is silent by design touches `"$PI_HEARTBEAT"` every 30 seconds while it runs. Nothing here runs in the background: a command that needs more than 10 minutes goes under Blocked on me.
 - Change only what the spec needs. Leave neighboring code as it is, even where you would write it differently.
 - Don't add dependencies, push, reset, or delete anything the spec doesn't name.
 - If the spec is ambiguous, or a check can't run here, stop and say which.

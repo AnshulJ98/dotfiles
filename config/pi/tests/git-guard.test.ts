@@ -92,6 +92,35 @@ ROWS.push(["rw", "guarded", "add a.txt", false], ["read", "guarded", "add a.txt"
 ROWS.push(["rw", "guarded", "commit --allow-empty -qm x", false], ["read", "guarded", "commit --allow-empty -qm x", true]);
 ROWS.push(["read", "other", "add a.txt", false], ["read", "other", "commit --allow-empty -qm x", false]);
 
+// [where the call runs, git args (S = a sibling path beside the repo), refused]
+const WORKTREE_ROWS: Array<[where: Where, args: string, blocked: boolean]> = [
+	["guarded", "worktree add .worktrees/x", true],
+	["guarded", "worktree add -b y sub/wt", true],
+	["guarded", "worktree add --detach G/inside", true],
+	["sub", "worktree add ../up", true],
+	["other", "-C G worktree add in-here", true],
+	["guarded", "worktree add S", false],
+	["sub", "worktree add ../../S", false],
+	["guarded", "worktree list", false],
+	["other", "worktree add inside-another-repo", false],
+];
+for (const [where, args, blocked] of WORKTREE_ROWS) {
+	test(`git guard (rw, in ${where}): git ${args} is ${blocked ? "refused" : "allowed"}`, () => {
+		const { guarded, other, env } = world("rw");
+		const cwd = where === "guarded" ? guarded : where === "sub" ? join(guarded, "sub") : other;
+		const sibling = `${guarded}.wt`;
+		const argv = args.split(" ").map((word) => word.replace(/^G(?=$|\/)/, guarded).replace(/^S$/, sibling).replace(/\/S$/, `/${sibling.split("/").pop()}`));
+		const run = spawnSync(GUARD, argv, { cwd, env, encoding: "utf8" });
+		if (blocked) {
+			assert.equal(run.status, 1, run.stderr);
+			assert.match(run.stderr, /scout git guard: git worktree \.\.\. would put a worktree inside the repo; they go beside it \(wt switch -c <branch>\)/);
+			assert.equal(spawnSync(REAL_GIT, ["worktree", "list"], { cwd: guarded, encoding: "utf8" }).stdout.trim().split("\n").length, 1);
+		} else {
+			assert.equal(run.status, 0, run.stderr);
+		}
+	});
+}
+
 for (const [mode, where, args, blocked] of ROWS) {
 	test(`git guard (${mode}, in ${where}): git ${args} is ${blocked ? "refused" : "allowed"}`, () => {
 		const { guarded, other, env } = world(mode);
