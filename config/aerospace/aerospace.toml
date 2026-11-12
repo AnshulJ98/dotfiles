@@ -3,6 +3,10 @@
 # - 2025-12-16: Cleaned file, grouped sections, removed inline reference noise.
 # - 2025-12-16: Moved full reference snippets to bottom of file for maintainability.
 
+config-version = 2
+# v1 inferred this list from the workspace bindings below; v2 defaults to none.
+persistent-workspaces = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+
 # Commands to run after AeroSpace fully starts (runs after after-login)
 after-startup-command = [
     'workspace 6',
