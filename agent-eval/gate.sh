@@ -2,7 +2,10 @@
 # Gate a steering-config change against a committed baseline.
 # usage: gate.sh <run-dir|trials.jsonl> [--update]
 # Prints baseline vs this run per role and cell (only those in both) and whether the steering config changed since the baseline
-# commit. Exit 1 if a cell is below baseline by more than its flaky-task count (the larger of the two); 2 if no baseline.
+# commit. Exit 1 if a cell counted fewer tasks than the baseline, or is below baseline by more than its flaky count (the
+# larger of the two; drop in baseline tasks, and for review cells defect recall, in defects); 2 if no baseline or no
+# role/cell pair in common with it. --update exits 2 while the steering paths have uncommitted changes (the recorded
+# commit would not describe them).
 # --update writes baseline.json (roles.<role>.<cell>) from the run and appends one line per role and cell to history.jsonl.
 # Env: EVAL_BASELINE (default agent-eval/baseline.json), EVAL_HISTORY (default agent-eval/history.jsonl).
 set -euo pipefail
@@ -32,6 +35,10 @@ fi
 STEERING=(config/pi/agents-md config/pi/extensions config/pi/prompts config/pi/settings.json agents/skills)
 root="$(git -C "$EVAL_DIR" rev-parse --show-toplevel)"
 config_sha="$(git -C "$root" log -1 --format=%H -- "${STEERING[@]}")"
+if [ "$update" -eq 1 ] && [ -n "$(git -C "$root" status --porcelain -- "${STEERING[@]}")" ]; then
+  echo "gate.sh: uncommitted changes under the steering paths; commit them before --update so the baseline commit describes them" >&2
+  exit 2
+fi
 
 steering="unknown (no baseline)"
 if [ -f "$baseline" ]; then
@@ -68,9 +75,17 @@ const baseline = JSON.parse(readFileSync(e.GATE_BASELINE, "utf8"));
 const rows = lib.gate(baseline.roles ?? {}, current);
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
 for (const r of rows) {
-	console.log(`${r.fail ? "FAIL" : "ok  "} ${r.role} ${r.cell}: baseline ${pct(r.baseline.passRate)} (flaky ${r.baseline.flaky}) -> now ${pct(r.current.passRate)} (flaky ${r.current.flaky}), drop ${r.drop.toFixed(2)} task(s), allowed ${r.allowed}`);
+	const [b, c] = [r.baseline, r.current];
+	const shown = r.unit === "defect"
+		? `recall ${pct(b.recall)} (flaky ${b.flakyDefects ?? 0}) -> now ${pct(c.recall)} (flaky ${c.flakyDefects ?? 0})`
+		: `${pct(b.passRate)} (flaky ${b.flaky}) -> now ${pct(c.passRate)} (flaky ${c.flaky})`;
+	const fewer = r.short ? `; counted ${c.tasks} task(s), baseline ${b.tasks}` : "";
+	console.log(`${r.fail ? "FAIL" : "ok  "} ${r.role} ${r.cell}: baseline ${shown}, drop ${r.drop.toFixed(2)} ${r.unit}(s), allowed ${r.allowed}${fewer}`);
 }
-if (rows.length === 0) console.log("no role/cell pairs in common with the baseline");
+if (rows.length === 0) {
+	console.error("gate.sh: no role/cell pairs in common with the baseline; nothing was compared");
+	process.exit(2);
+}
 console.log(e.GATE_STEERING);
 const failed = rows.filter((r) => r.fail).length;
 console.log(failed ? `gate: FAIL (${failed} role/cell pair(s) below baseline)` : "gate: pass");

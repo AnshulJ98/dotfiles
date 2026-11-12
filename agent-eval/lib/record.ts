@@ -77,16 +77,27 @@ export function outsideAllowed(changed: string[], allowed: string[]): string[] {
 	return changed.filter((f) => !ok.some((a) => (a.endsWith("/") ? clean(f).startsWith(a) : clean(f) === a)));
 }
 
-/** Paths from `git status --porcelain` output (the target of "a -> b"). */
+const C_ESCAPES: Record<string, number> = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '"': 34, "\\": 92 };
+
+/** A path as git prints it: unchanged unless wrapped in double quotes, which hold C escapes (\" \\ \n \t and octal bytes). */
+function unquotePath(path: string): string {
+	if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path;
+	const parts = [...path.slice(1, -1).matchAll(/\\([0-7]{3})|\\(.)|[^\\]+/gs)].map((m) =>
+		m[1] !== undefined ? Buffer.from([parseInt(m[1], 8)]) : m[2] !== undefined && C_ESCAPES[m[2]] !== undefined ? Buffer.from([C_ESCAPES[m[2]]]) : Buffer.from(m[2] ?? m[0]));
+	return Buffer.concat(parts).toString("utf8");
+}
+
+/** Paths from `git status --porcelain` output (the target of "a -> b"), with git's quoting around odd names removed. */
 export function parsePorcelain(porcelain: string): string[] {
 	return porcelain
 		.split("\n")
 		.filter((l) => l.length > 3)
-		.map((l) => l.slice(3).replace(/^.* -> /, ""));
+		.map((l) => unquotePath(l.slice(3).replace(/^.* -> /, "")));
 }
 
 /**
- * True when the digest has a "Blocked on me" section whose body is not "nothing" (an empty body is nothing).
+ * True when the digest has a "Blocked on me" section whose body is not "nothing", "none", "n/a" or "no blockers"
+ * (any case, optional trailing period; an empty body is nothing).
  * The section ends at the next heading or the next bold label of the same shape.
  */
 export function blocked(digest: string): boolean {
@@ -100,7 +111,7 @@ export function blocked(digest: string): boolean {
 		const body = [m[3]];
 		for (let j = i + 1; j < lines.length && !/^#{1,6} /.test(lines[j]) && !label.test(lines[j]); j++) body.push(lines[j]);
 		const text = body.join(" ").replace(/\s+/g, " ").trim().replace(/^[-*] +/, "").replace(/[. ]+$/, "").toLowerCase();
-		return text !== "" && text !== "nothing";
+		return !["", "nothing", "none", "n/a", "no blockers"].includes(text);
 	}
 	return false;
 }
@@ -165,7 +176,7 @@ function main(argv: string[]): void {
 			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
 			pass: gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra, dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra || Number(v.rc) === 124, dir: v.dir,
 		}));
 		return;
 	}

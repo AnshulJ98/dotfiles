@@ -6,8 +6,9 @@
 # in the workspace at rev, and is graded by lib/scout-grade.ts from the digest's file:line citations against the
 # task's expect list (record: pass, plus hits and of, the expect entries satisfied).
 # usage: trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>   (<task>: id under tasks/ or a dir)
-# Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI (default pi), EVAL_REAL_HOME (default $HOME);
-# judge.sh reads EVAL_JUDGE_PI.
+# Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI (default pi), EVAL_REAL_HOME (default $HOME),
+# EVAL_REVIEW_TIMEOUT (seconds for the review pi call, default 900; rc 124 is recorded as infra and not judged),
+# EVAL_TEST_TIMEOUT (seconds for the hidden tests, default 600; a timeout is a failing test); judge.sh reads EVAL_JUDGE_PI.
 # The temp dir (home/, ws/, digest.txt, stderr.txt, test.txt; review: review.jsonl, review.txt, judge/, judge.json)
 # is kept; the record's "dir" names it.
 set -euo pipefail
@@ -56,12 +57,13 @@ fi
 
 if [ "$role" = review ]; then
   reviewer="${EVAL_REVIEW_PI:-pi}"
+  tmo="$(timeout_bin)" || { echo "trial.sh: needs timeout (coreutils) on PATH" >&2; exit 2; }
   start="$(date +%s)"
-  (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$reviewer" -p --mode json --session-dir "$home/.pi/agent/sessions/review" \
+  (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$tmo" -k 10 "${EVAL_REVIEW_TIMEOUT:-900}" "$reviewer" -p --mode json --session-dir "$home/.pi/agent/sessions/review" \
     --model "$model" --thinking "$thinking" "$(cat "$task_dir/prompt.md")" < /dev/null > "$dir/review.jsonl" 2> "$dir/stderr.txt") || rc=$?
   seconds=$(( $(date +%s) - start ))
   node "$EVAL_DIR/lib/review.ts" final-reply "$dir/review.jsonl" > "$dir/review.txt"
-  "$EVAL_DIR/judge.sh" "$dir" "$task_dir" > /dev/null || true
+  [ "$rc" -eq 124 ] || "$EVAL_DIR/judge.sh" "$dir" "$task_dir" > /dev/null || true
   record="$(node "$EVAL_DIR/lib/record.ts" \
     --task "$(task_get "$task_dir" id)" --role "$role" --model "$model" --thinking "$thinking" --trial "$n" \
     --rc "$rc" --seconds "$seconds" --judge-file "$dir/judge.json" \
