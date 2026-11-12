@@ -159,6 +159,13 @@ case ":$PATH:" in *:"$HOME/.local/bin":*) ;; *) export PATH="$HOME/.local/bin:$P
 # worktrunk: lets `wt switch` cd into the worktree it opens.
 command -v wt >/dev/null && eval "$(wt config shell init zsh)"
 
+# Inside zmx (every kitty pane, see kitty/bin/zshell) the environment is frozen when the session
+# starts; after a reattach refresh it from the attaching client, so KITTY_WINDOW_ID is right.
+if [[ -n $ZMX_SESSION ]]; then
+  _zmx_env() { eval "$(zmx print-env -s . 2>/dev/null)" }
+  precmd_functions+=(_zmx_env)
+fi
+
 # zoxide: `z foo` jumps to the highest-ranked directory matching foo, `zi`
 # picks interactively with fzf. Its init must come last: it hooks chpwd and
 # wraps completion, so anything sourced after it can undo that.
