@@ -16,6 +16,18 @@ class KeyConfigTests(unittest.TestCase):
         self.assertEqual(plain["cmd+w"], ["close_window"])
         self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
         self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
+        self.assertEqual(plain["cmd+alt+l"], [
+            "launch", "--type=tab", "--tab-title", "hunk", "--add-to-session=!",
+            "--cwd=current", "/opt/homebrew/bin/hunk", "diff",
+        ])
+
+    def test_rename_and_scrollback(self):
+        maps = [shlex.split(line) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
+                if line.startswith("map ")]
+        plain = {parts[1]: parts[2:] for parts in maps if parts[1] != "--when-focus-on"}
+        self.assertEqual(plain.get("cmd+shift+i"), ["set_tab_title"])
+        self.assertEqual(plain.get("cmd+alt+e"), ["kitty_scrollback_nvim"])
+        self.assertEqual(plain["cmd+alt+e"], plain["kitty_mod+h"])
 
     def test_keys_popup_lists_kitty_command_keys(self):
         maps = [line.split(None, 2) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()

@@ -97,7 +97,7 @@ height = "90%"
 [[keys.command]]
 key = "cmd+alt+l"
 type = "popup"
-command = "lazygit"
+command = "hunk diff"
 width = "90%"
 height = "90%"
 
