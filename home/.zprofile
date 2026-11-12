@@ -1,5 +1,5 @@
 
-eval "$(/opt/homebrew/bin/brew shellenv)"
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
 
 ##
 # Your previous /Users/anshulj/.zprofile file was backed up as /Users/anshulj/.zprofile.macports-saved_2024-11-16_at_15:52:04
@@ -9,7 +9,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 # Finished adapting your PATH environment variable for use with MacPorts.
 
-eval "$(/opt/homebrew/bin/brew shellenv)"
+[ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
 
 
 # Added by Toolbox App

@@ -45,7 +45,7 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#666666,bold"
 source ~/.zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
 
 # zsh-autosuggestions
-source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+command -v brew >/dev/null && source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
 # === PATH & Environment ===
 export PATH="$HOME/bin:/opt/homebrew/bin:$PATH"
