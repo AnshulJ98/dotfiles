@@ -78,6 +78,25 @@ def foreground() -> dict[int, str]:
     return {pid: name(pid) for pid in procs}
 
 
+def git_ref(cwd: str) -> str:
+    """'branch', or 'branch · worktree of repo' in a linked worktree; read from .git, no subprocess."""
+    d = cwd
+    while d and d != '/':
+        git = os.path.join(d, '.git')
+        try:
+            of = ''
+            if os.path.isfile(git):  # "gitdir: <repo>/.git/worktrees/<name>"
+                git = os.path.join(d, open(git).read().split(':', 1)[1].strip())
+                if '/.git/worktrees/' in git:
+                    of = os.path.basename(git.split('/.git/worktrees/')[0])
+            head = open(os.path.join(git, 'HEAD')).read().strip()
+            name = head.rpartition('refs/heads/')[2] if head.startswith('ref:') else head[:7]
+            return name + (f' · worktree of {of}' if of else '')
+        except (OSError, IndexError):
+            d = os.path.dirname(d)
+    return ''
+
+
 def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: str) -> str:
     return '\t'.join((kind, target, holder, cwd, clients, display))
 
@@ -120,6 +139,7 @@ def main() -> None:
             ws = next((w.get('session_name', '') for w in t['windows'] if w.get('session_name')), '')
             if any(w['user_vars'].get('role') == 'zgoto' for w in t['windows']):
                 continue
+            t['windows'] = [w for w in t['windows'] if w['user_vars'].get('role') != 'sidebar'] or t['windows']
             workspaces.setdefault(ws, []).append(t)
             for w in t['windows']:
                 held.add(w['user_vars'].get('holder', ''))
@@ -130,9 +150,11 @@ def main() -> None:
             open_ws.append(ws)
             first = next((w for t in tabs for w in t['windows'] if w['is_active']), tabs[0]['windows'][0])
             mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
-            rows.append(row('ws', ws, first['user_vars'].get('holder', ''), first.get('cwd', ''), '',
+            holder = first['user_vars'].get('holder', '')
+            ref = git_ref(zs.get(holder, {}).get('cwd') or first.get('cwd', ''))
+            rows.append(row('ws', ws, holder, first.get('cwd', ''), '',
                             f'{mark} {BOLD}{ws or "(no workspace)"}{OFF} {DIM}{len(tabs)} tab'
-                            f'{"s" if len(tabs) > 1 else ""}{OFF}'))
+                            f'{"s" if len(tabs) > 1 else ""}{OFF}{"  " + ref if ref else ""}'))
             for ti, t in enumerate(tabs):
                 last_t = ti == len(tabs) - 1
                 active = next((w for w in t['windows'] if w['is_active']), t['windows'][0])
@@ -169,10 +191,11 @@ def main() -> None:
             path = os.path.join(DIR, f)
             text = open(path, errors='replace').read()
             tabs = max(1, text.count('\nnew_tab') + text.startswith('new_tab'))
+            ref = git_ref(next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), ''))
             branch = '└─' if i == len(closed) - 1 else '├─'
             rows.append(row('closed', path, '', '', '',
                             f'  {branch} {fit(f[:-len(".kitty-session")], 22)} {DIM}{tabs} tab'
-                            f'{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path))}{OFF}'))
+                            f'{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path))}{OFF}{"  " + ref if ref else ""}'))
     print('\n'.join(rows))
 
 

@@ -50,7 +50,7 @@ class KeyConfigTests(unittest.TestCase):
         passthrough += [f"cmd+{n}" for n in range(1, 10)]
         passthrough += [f"cmd+opt+{d}" for d in ("left", "right", "up", "down")]
         # kitty's own workspace keys must not shadow Herdr's
-        passthrough += ["cmd+alt+n", "cmd+alt+shift+n", "cmd+alt+w", "ctrl+alt+[", "ctrl+alt+]"]
+        passthrough += ["cmd+alt+n", "cmd+alt+shift+n", "cmd+alt+w", "cmd+alt+b", "ctrl+alt+[", "ctrl+alt+]"]
         passthrough += [f"cmd+alt+{n}" for n in range(1, 10)]
         for key in passthrough:
             with self.subTest(key=key):
