@@ -1,5 +1,5 @@
 ---
-files-allowed: [differ/src/format.ts]
+files-allowed: [differ/src/format.test.ts, differ/src/format.ts]
 tests: cd differ && npm test
 ---
 # differ: format(changes)

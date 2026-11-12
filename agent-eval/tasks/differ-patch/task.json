@@ -6,6 +6,8 @@
   "test": "cd differ && npm test",
   "allowed": [
     "differ/package.json",
+    "differ/src/diff.test.ts",
+    "differ/src/patch.test.ts",
     "differ/src/patch.ts",
     "differ/tsconfig.json"
   ],

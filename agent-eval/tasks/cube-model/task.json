@@ -5,7 +5,9 @@
   "fix": "bf976798c39564032110a7617b5497c813f8e62a",
   "test": "npm run check",
   "allowed": [
+    "src/cube.test.ts",
     "src/cube.ts",
+    "src/moves.test.ts",
     "src/moves.ts"
   ],
   "hidden": [

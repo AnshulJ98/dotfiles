@@ -1,5 +1,5 @@
 ---
-files-allowed: [booking/src/booking.ts, booking/src/http.ts]
+files-allowed: [booking/src/booking.test.ts, booking/src/booking.ts, booking/src/http.ts]
 tests: cd booking && npm test
 ---
 # Cancel removes one booking; DELETE rejects non-canonical ids

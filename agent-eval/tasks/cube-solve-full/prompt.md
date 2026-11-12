@@ -1,5 +1,5 @@
 ---
-files-allowed: [src/solve.ts]
+files-allowed: [src/solve.test.ts, src/solve.ts]
 tests: npm run check
 ---
 # cube: solver, steps 4 to 7
