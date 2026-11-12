@@ -62,6 +62,10 @@
 # session file has not changed for SCOUT_STALE_SECS (600; 900 with --rw or
 # xhigh) while no tool call is running, and exits 124.
 #
+# Kitty: in a kitty pane (SCOUT_KITTY not 0), a watchable tab joins the caller's workspace
+# without taking focus. Success closes its pane; failure/timeout holds it open. A zmx
+# reattach refreshes remote-control identity. No kitty or a failed launch falls back to -p.
+#
 # Herdr: inside a herdr pane (HERDR_PANE_ID set, SCOUT_HERDR not 0) the child
 # is an interactive pi in a new herdr tab, so it can be watched and steered.
 # extensions/scout-pane.ts writes the digest and exits when the run settles, as
@@ -527,7 +531,78 @@ on_signal() {
 PI_OPTS=(-ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns -np -t "$TOOLS" "${SESSION[@]}"
   --model "$MODEL" --thinking "$THINKING" --system-prompt "$(cat "$PROMPT")")
 if [ "$RW" = 1 ]; then KIND=worker; else KIND=scout; fi
-PANE="" TAB=""
+PANE="" TAB="" PANE_KIND=herdr
+PANE_EXT=()
+
+# Shared pane runner: preserve child env/digest/timeout semantics for either terminal.
+write_pane_script() {
+  local script="$SESSIONS/pane.sh" trust n
+  # A TUI pi blocks on its trust prompt in a folder it was not told to trust; -p
+  # proceeds untrusted. Decide it the way -p does: not under a trusted path -> -na.
+  trust="$(node -e '
+    try {
+      const t = JSON.parse(require("node:fs").readFileSync(process.argv[2], "utf8"));
+      const cwd = process.argv[1];
+      if (Object.entries(t).some(([k, v]) => v === true && (cwd === k || cwd.startsWith(k + "/")))) process.exit(0);
+    } catch {}
+    console.log("-na")' "$PWD" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/trust.json" 2>/dev/null)" || trust="-na"
+  # The pane's shell is the user's own: hand pi this scout's environment, minus
+  # the herdr and terminal identity, which must stay the new pane's. The script
+  # holds tokens, so it is 0600; the pane's herdr socket is dropped so the child
+  # cannot drive the session.
+  (umask 077
+  {
+    printf 'unset HERDR_SOCKET_PATH HERDR_ENV ZMX_SESSION\n'
+    printf 'echo $$ >%q\n' "$SESSIONS/pane.pid"
+    # The pane group dies with scout, SIGKILL included, which skips scout's trap.
+    printf '( while kill -0 %s 2>/dev/null && kill -0 $$ 2>/dev/null; do sleep 2; done\n' "$$"
+    printf '  kill -0 %s 2>/dev/null || { kill -TERM -- -$$ 2>/dev/null || pkill -TERM -P $$ 2>/dev/null; } ) &\n' "$$"
+    for n in $(compgen -e); do
+      case "$n" in ZMX_SESSION | HERDR_* | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
+      printf 'export %s=%q\n' "$n" "${!n}"
+    done
+    printf 'export PI_SCOUT_DEPTH=1 SCOUT_DIGEST=%q SCOUT_PANE_RC=%q\ncd %q || exit 2\n' "$OUT" "$SESSIONS/pane.rc" "$PWD"
+    printf 'timeout --foreground %q pi' "$TIMEOUT"
+    printf ' %q' "${PI_OPTS[@]}" ${trust:+"$trust"} -e "$DIR/../extensions/scout-pane.ts" "${PANE_EXT[@]}" "${BRIEF[@]}" "$TASK"
+    printf ' 2>%q\nrc=$?; [ -s %q ] || echo $rc >%q\n' "$ERR" "$SESSIONS/pane.rc" "$SESSIONS/pane.rc"
+  } >"$script")
+}
+
+close_pane() {
+  if [ "$PANE_KIND" = kitty ]; then
+    kitten @ --to "$KITTY_LISTEN_ON" close-window --match "id:$PANE" >/dev/null 2>&1
+  else
+    herdr tab close "$TAB" >/dev/null 2>&1
+  fi
+}
+
+kitty_launch() {
+  [ -z "${HERDR_PANE_ID:-}" ] && [ "${SCOUT_KITTY:-1}" != 0 ] && command -v kitten >/dev/null || return 1
+  local current source n
+  if [ -n "${ZMX_SESSION:-}" ]; then
+    current="$(node "$DIR/../lib/kitty.ts")" || return 1
+    KITTY_LISTEN_ON="$(printf '%s\n' "$current" | sed -n 1p)"
+    KITTY_WINDOW_ID="$(printf '%s\n' "$current" | sed -n 2p)"
+  fi
+  [ -n "${KITTY_LISTEN_ON:-}" ] && [[ "${KITTY_WINDOW_ID:-}" =~ ^[0-9]+$ ]] || return 1
+  # Validate the caller still exists before creating anything. Join its workspace even when
+  # a worker's cwd is a sibling worktree; --cwd below is the worker's, never the caller's.
+  source="$(kitten @ --to "$KITTY_LISTEN_ON" ls --match "id:$KITTY_WINDOW_ID" 2>/dev/null)" || return 1
+  [[ "$source" == *'"id"'* ]] || return 1
+  PANE_KIND=kitty
+  PANE_EXT=(-e "$DIR/../extensions/pi-holder.ts")
+  write_pane_script
+  PANE="$(kitten @ --to "$KITTY_LISTEN_ON" launch --type=tab --keep-focus --hold \
+    --match "window_id:$KITTY_WINDOW_ID" --source-window "id:$KITTY_WINDOW_ID" --add-to-session . \
+    --cwd "$PWD" --title "$KIND $$" --tab-title "$KIND $$" --var transient=1 \
+    /bin/bash "$SESSIONS/pane.sh")" || { PANE=""; return 1; }
+  [[ "$PANE" =~ ^[0-9]+$ ]] || { PANE=""; return 1; }
+  for n in $(seq 30); do [ -s "$SESSIONS/pane.pid" ] && break; sleep 1; done
+  CHILD="$(cat "$SESSIONS/pane.pid" 2>/dev/null)"
+  [ -n "$CHILD" ] || { close_pane; PANE=""; return 1; }
+}
+
+
 
 # Sets PANE, TAB and CHILD (the pane job's pid, which leads its process group:
 # bash, timeout and pi). The tab goes in the caller's workspace when the caller's
@@ -558,35 +633,9 @@ herdr_launch() {
       });' "$top" 2>/dev/null)"
   json="$(herdr tab create --workspace "${ws:-$HERDR_WORKSPACE_ID}" --cwd "$PWD" --label "$KIND $$" --no-focus)" || return 1
   read -r TAB PANE < <(node -e 'const r = JSON.parse(process.argv[1]).result; console.log(r.tab.tab_id, r.root_pane.pane_id)' "$json") || return 1
-  # A TUI pi blocks on its trust prompt in a folder it was not told to trust; -p
-  # proceeds untrusted. Decide it the way -p does: not under a trusted path -> -na.
-  trust="$(node -e '
-    try {
-      const t = JSON.parse(require("node:fs").readFileSync(process.argv[2], "utf8"));
-      const cwd = process.argv[1];
-      if (Object.entries(t).some(([k, v]) => v === true && (cwd === k || cwd.startsWith(k + "/")))) process.exit(0);
-    } catch {}
-    console.log("-na")' "$PWD" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/trust.json" 2>/dev/null)" || trust="-na"
-  # The pane's shell is the user's own: hand pi this scout's environment, minus
-  # the herdr and terminal identity, which must stay the new pane's. The script
-  # holds tokens, so it is 0600; the pane's herdr socket is dropped so the child
-  # cannot drive the session.
-  (umask 077
-  {
-    printf 'unset HERDR_SOCKET_PATH HERDR_ENV\n'
-    printf 'echo $$ >%q\n' "$SESSIONS/pane.pid"
-    # The pane group dies with scout, SIGKILL included, which skips scout's trap.
-    printf '( while kill -0 %s 2>/dev/null && kill -0 $$ 2>/dev/null; do sleep 2; done\n' "$$"
-    printf '  kill -0 %s 2>/dev/null || { kill -TERM -- -$$ 2>/dev/null || pkill -TERM -P $$ 2>/dev/null; } ) &\n' "$$"
-    for n in $(compgen -e); do
-      case "$n" in HERDR_* | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
-      printf 'export %s=%q\n' "$n" "${!n}"
-    done
-    printf 'export PI_SCOUT_DEPTH=1 SCOUT_DIGEST=%q SCOUT_PANE_RC=%q\ncd %q || exit 2\n' "$OUT" "$SESSIONS/pane.rc" "$PWD"
-    printf 'timeout --foreground %q pi' "$TIMEOUT"
-    printf ' %q' "${PI_OPTS[@]}" ${trust:+"$trust"} -e "$DIR/../extensions/scout-pane.ts" "${BRIEF[@]}" "$TASK"
-    printf ' 2>%q\nrc=$?; [ -s %q ] || echo $rc >%q\n' "$ERR" "$SESSIONS/pane.rc" "$SESSIONS/pane.rc"
-  } >"$script")
+  PANE_KIND=herdr
+  PANE_EXT=()
+  write_pane_script
   herdr pane run "$PANE" "bash $(printf %q "$script")" >/dev/null || {
     herdr tab close "$TAB" >/dev/null 2>&1
     return 1
@@ -600,7 +649,7 @@ herdr_launch() {
 }
 
 set +e
-if herdr_launch; then
+if kitty_launch || herdr_launch; then
   TARGET="-$CHILD"
   printf 'pane=%s\n' "$CHILD" >>"$META"
 else
@@ -625,11 +674,11 @@ trap on_signal TERM INT HUP
 if [ -n "$PANE" ]; then
   NAMED=""
   while [ ! -s "$SESSIONS/pane.rc" ] && kill -0 "$CHILD" 2>/dev/null; do
-    if [ -z "$NAMED" ] && herdr agent rename "$PANE" "$KIND-$$" >/dev/null 2>&1; then NAMED=1; fi
+    if [ "$PANE_KIND" = herdr ] && [ -z "$NAMED" ] && herdr agent rename "$PANE" "$KIND-$$" >/dev/null 2>&1; then NAMED=1; fi
     sleep 1
   done
   rc="$(cat "$SESSIONS/pane.rc" 2>/dev/null)" || rc=143 # the pane job died before writing it
-  [ "$rc" = 0 ] && herdr tab close "$TAB" >/dev/null 2>&1
+  [ "$rc" = 0 ] && close_pane
 else
   wait "$CHILD"
   rc=$?
