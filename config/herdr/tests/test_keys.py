@@ -21,7 +21,8 @@ class KeyConfigTests(unittest.TestCase):
         config = tomllib.loads((HERE / "config.toml").read_text())
         expected = {
             "new_tab": "cmd+t", "close_pane": "cmd+w",
-            "close_tab": "cmd+shift+w", "switch_tab": "cmd+1..9",
+            "close_tab": "cmd+shift+w", "rename_tab": "cmd+shift+i",
+            "switch_tab": "cmd+1..9",
             "switch_workspace": "cmd+alt+1..9", "focus_agent": "ctrl+alt+1..9",
             "split_vertical": "cmd+d", "split_horizontal": "cmd+shift+d",
             "zoom": "cmd+alt+f", "toggle_sidebar": "cmd+alt+b",
@@ -35,7 +36,8 @@ class KeyConfigTests(unittest.TestCase):
         for action, key in expected.items():
             with self.subTest(action=action):
                 bindings = config["keys"][action]
-                self.assertIn(key, bindings if isinstance(bindings, list) else [bindings])
+                # Herdr's help lists bindings in config order; the direct chord leads.
+                self.assertEqual((bindings if isinstance(bindings, list) else [bindings])[0], key)
         self.assertTrue(any(
             command["key"] == "cmd+alt+l" and command["command"] == "lazygit"
             for command in config["keys"]["command"]
@@ -46,7 +48,7 @@ class KeyConfigTests(unittest.TestCase):
         maps = [shlex.split(line) for line in text.splitlines() if line.startswith("map ")]
         scoped = {parts[3]: parts[4:] for parts in maps
                   if parts[1:3] == ["--when-focus-on", "var:herdr=1"]}
-        passthrough = ["cmd+t", "cmd+w", "cmd+shift+w", "cmd+d", "cmd+shift+d", "cmd+alt+f"]
+        passthrough = ["cmd+t", "cmd+w", "cmd+shift+w", "cmd+shift+i", "cmd+d", "cmd+shift+d", "cmd+alt+f"]
         passthrough += [f"cmd+{n}" for n in range(1, 10)]
         passthrough += [f"cmd+opt+{d}" for d in ("left", "right", "up", "down")]
         # kitty's own workspace keys must not shadow Herdr's
