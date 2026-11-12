@@ -2,7 +2,9 @@
 # usage: validate.sh <task>|--all   (--all: every task.json under ${EVAL_TASKS_DIR:-agent-eval/tasks}; none is fine)
 # Hidden tests must fail on the base and pass once the fix commit's allowed files are applied; for expect
 # "blocked" the fix commit must change a non-test file outside allowed. A review task (role review) is valid when
-# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. No model calls.
+# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. A scout task is
+# valid when its workspace builds and each expect entry's file exists there with at least lines[1] lines, every
+# must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range). No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
 set -euo pipefail
 
@@ -40,6 +42,13 @@ check() {
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
     make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the review workspace"; return 0; }
     check_review "$task" "$ws"
+    return 0
+  fi
+  if [ "$(task_get "$task" role)" = scout ]; then
+    ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+    make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the scout workspace"; return 0; }
+    [ -s "$task/prompt.md" ] || { echo "prompt.md is missing or empty"; return 0; }
+    node "$EVAL_DIR/lib/scout-grade.ts" check "$task/task.json" "$ws" 2>&1 | head -1
     return 0
   fi
   fix="$(task_get "$task" fix)"

@@ -1,0 +1,1 @@
+In this pi config (config/pi), while an auto run is in progress I can't edit repo files by hand, and I can't add a git worktree inside the repo. What makes each of those blocks happen, in which file, and why doesn't the edit block get in the way of the scout --rw workers that do edit files during an auto run? Cite the file and line for each answer.

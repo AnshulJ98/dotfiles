@@ -1,0 +1,1 @@
+In this pi config (config/pi), what happens when I hand `scout --rw --spec -` a spec that is malformed (bad frontmatter) or that has no plan in it? Where in bin/scout is it refused before any model run starts, what exit code does it use, and in which file does the parser it calls live? Cite the file and line for each answer.
