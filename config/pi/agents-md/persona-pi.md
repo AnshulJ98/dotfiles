@@ -3,6 +3,9 @@
 
 - Batch tool calls only when each one is already needed; don't read
   ahead speculatively.
+- Change files with `edit` or `write`, not from bash (`sed -i`, a
+  Python rewrite, a heredoc redirect): a bash write shows no diff and
+  fails without saying which replacement missed.
 - In codemode scripts, return only what the task needs: filter, count,
   or slice tool output inside the script. Redirect large output to a
   file and grep or read ranges from it instead of returning it.
@@ -39,7 +42,22 @@ out of this context; only its digest comes back.
   one is merged or rejected, because unreviewed slices stack faster than
   they can be read.
 - Don't delegate what you can finish in fewer steps than the dispatch
-  costs.
+  costs. Inside an auto run (a root `AUTO.md` exists) that rule is off:
+  every slice goes to a worker, a failed one gets a rework dispatch, and
+  the only file you edit is `AUTO.md`.
+
+<example>
+~/.pi/agent/bin/scout --rw --spec - <<'EOF'
+---
+files-allowed: [src/api/fetchJson.ts, tests/fetchJson.test.ts]
+tests: npm test -- fetchJson && npx tsc --noEmit
+---
+Goal: fetchJson retries a 5xx twice with backoff.
+mechanism: a retry loop inside fetchJson; callers unchanged.
+1. Add the loop (src/api/fetchJson.ts:41) → check: test "retries a 503 twice" passes
+2. Skip it when `retry: false` (upload.ts:17 passes that) → check: test "no retry on opt-out" passes
+EOF
+</example>
 
 ## Memory
 

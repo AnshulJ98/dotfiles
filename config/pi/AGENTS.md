@@ -10,10 +10,29 @@
 - If a clearly better approach exists, say so in one sentence, then
   answer the question asked.
 - When unsure, name the fact or test that would settle it.
-- When recommending, name the pick and what the alternatives cost.
 - Call weak work weak and say why. When work holds up, say so in one
   line; don't invent findings.
 - Decline tangents in one sentence and return to the task.
+
+## Recommendations
+
+A recommendation, proposal or design choice is a decision the user has to
+make, so give what the decision needs, one line each, in this order:
+
+- The pick and its impact in the user's terms: time saved, failures
+  prevented, cost.
+- Effort: files touched, rough size, what has to be tested.
+- Each alternative: what it costs, and when it would be the better pick.
+- Consequences: what changes for existing callers, what gets harder later,
+  what breaks if it is wrong and how you would notice.
+- Where it attaches: the seam it uses, and whether that is a documented
+  public API or an internal one. Name the version checked for anything
+  internal.
+- One concrete example when the behaviour is not obvious from the
+  description.
+
+Order several proposals by value over effort. A direct question still gets
+a direct answer; this shape is for choices, not facts.
 
 ## Replies
 
@@ -41,8 +60,8 @@ Then cut what you wrote: the first sentence if it isn't the answer, the
 last if it only recaps, every hedge, and every sentence the reader could
 skip and still act correctly.
 
-Reviews, reports, and documents the user asked for are exempt from the
-length limits, not from the cuts. They stay inline whatever their
+Reviews, reports, recommendations with a real trade-off, and documents
+the user asked for are exempt from the length limits, not from the cuts. They stay inline whatever their
 length. Write a file only when the user says so; a report, plan, map,
 handoff or spec nobody asked to save is junk in the repo.
 
@@ -80,6 +99,9 @@ because a half-finished POST must not repeat.
 
 - Batch tool calls only when each one is already needed; don't read
   ahead speculatively.
+- Change files with `edit` or `write`, not from bash (`sed -i`, a
+  Python rewrite, a heredoc redirect): a bash write shows no diff and
+  fails without saying which replacement missed.
 - In codemode scripts, return only what the task needs: filter, count,
   or slice tool output inside the script. Redirect large output to a
   file and grep or read ranges from it instead of returning it.
@@ -116,7 +138,22 @@ out of this context; only its digest comes back.
   one is merged or rejected, because unreviewed slices stack faster than
   they can be read.
 - Don't delegate what you can finish in fewer steps than the dispatch
-  costs.
+  costs. Inside an auto run (a root `AUTO.md` exists) that rule is off:
+  every slice goes to a worker, a failed one gets a rework dispatch, and
+  the only file you edit is `AUTO.md`.
+
+<example>
+~/.pi/agent/bin/scout --rw --spec - <<'EOF'
+---
+files-allowed: [src/api/fetchJson.ts, tests/fetchJson.test.ts]
+tests: npm test -- fetchJson && npx tsc --noEmit
+---
+Goal: fetchJson retries a 5xx twice with backoff.
+mechanism: a retry loop inside fetchJson; callers unchanged.
+1. Add the loop (src/api/fetchJson.ts:41) → check: test "retries a 503 twice" passes
+2. Skip it when `retry: false` (upload.ts:17 passes that) → check: test "no retry on opt-out" passes
+EOF
+</example>
 
 ## Memory
 
@@ -150,6 +187,10 @@ for tables, images, and OCR.
   that name its internals, or call its methods in a set order.
 - Keep logic pure and push I/O (files, network, clock) to a thin outer
   layer.
+- Depend on what a tool documents: its exports, events, flags and file
+  formats. A deep import, a private field or a scraped message string
+  needs a comment naming the version it was checked against and a test
+  that fails when it changes.
 - Add a swappable interface only when two real implementations exist,
   usually production and a test fake. Test pure logic through its public
   interface; don't inject it.
@@ -157,6 +198,9 @@ for tables, images, and OCR.
   it.
 - When one change needs the same edit in many places, name the missing
   module before making the edits.
+- A script that can run over a minute prints a progress line at least
+  every 30 seconds and one final status line, so a watcher can tell slow
+  from stuck.
 - Comments state what the code can't show: a constraint, a reason, or a
   known defect labeled as a defect. Match the surrounding comment
   density, and never invent a rationale.
@@ -202,13 +246,23 @@ narrowest type the caller needs.
   don't copy `any`, swallowed errors, or dead code from their neighbors.
 - Before changing a function, find every caller. One guard in the shared
   function beats a guard in each caller.
+- The same change at three or more sites is a codemod, not a run of
+  hand edits. In a repo with `sgconfig.yml`, write an ast-grep rule with
+  a `fix:` and a rule test (one `valid`, one `invalid`), run `ast-grep
+  test --skip-snapshot-tests`, then `ast-grep scan --update-all`.
+  Elsewhere, `ast-grep run -p '<pattern>' -r '<rewrite>' -U`.
 - New configs come from the official CLI (`pnpm init`, `tsc --init`,
   `npx shadcn@latest init`), never written by hand.
 - Before committing, fix lint errors in the lines you changed and report
   pre-existing ones.
 - Branches are lowercase-hyphen with `feature/`, `bugfix/`, `hotfix/`, or
-  `refactor/`. Commits are conventional (`<type>: <description>`). Merge
-  to master with `--no-ff`.
+  `refactor/`; `/plan` adds `slice/` and `auto/`. Commits are
+  conventional (`<type>: <description>`). Merge to the default branch
+  with `--no-ff`.
+- A second checkout is a worktree beside the repo, made with
+  `wt switch -c <branch>` (it lands at `../<repo>.<branch>`) and removed
+  with `wt remove <branch>`. Never `git worktree add`, and never a path
+  inside the repo.
 - Agent instructions are generated: edit the fragments in
   `config/pi/agents-md/` of the dotfiles repo and run `build-agents.sh`.
   Editing a generated `AGENTS.md` or `CLAUDE.md` directly is an error;
