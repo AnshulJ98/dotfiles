@@ -10,7 +10,7 @@ self=$(realpath "$0"); here=$(dirname "$self")
 DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
 
 # The view (all | detached) lives in a file so fzf's reload and label commands can read it.
-export ZPICK_VIEW=${ZPICK_VIEW:-${TMPDIR:-/tmp}/zpick-view.$$}
+export ZPICK_VIEW=${ZPICK_VIEW:-}
 view() { cat "$ZPICK_VIEW" 2>/dev/null || echo all; }
 toggle() { local next=all; [ "$(view)" = all ] && next=detached; echo "$next" > "$ZPICK_VIEW"; }
 label() { [ "$(view)" = all ] && echo ' Go to ' || echo ' Go to · detached and closed '; }
@@ -36,7 +36,7 @@ onload() {
 # codes, so cursor-forward gaps become spaces and other controls are dropped. Full-screen apps
 # (alternate screen) keep their top rows with blank runs squeezed, shells their last non-blank rows.
 preview() { # name lines
-  local raw vt; raw=$(zmx history "$1" --vt 2>/dev/null)
+  local raw vt; raw=$(timeout 3 zmx history "$1" --vt 2>/dev/null)
   vt=$(LC_ALL=C perl -pe 's/\e\[(\d*)C/" " x ($1||1)/ge; s/\e\[[0-9;?]*[A-Za-ln-z]|\e[()][0-9A-Za-z]|\e\][^\a\e]*(\a|\e\\)|\r//g' <<<"$raw")
   if [[ $raw == *$'\e[?1049h'* ]]; then
     # squeeze blank runs so a mostly-empty app (pi) still shows its bottom rows
@@ -79,6 +79,12 @@ case ${1:-} in
   --preview) preview_row "$2" "$3" "$4" "$5"; exit ;;
   --kill) kill_rows "$2"; exit ;;
 esac
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/zpick.XXXXXXXX") || exit 1
+export ZPICK_VIEW=$scratch/view
+trap 'rm -rf -- "$scratch"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 from=${1:-}
 export ZPICK_FROM=$from
 ws=$(kitten @ ls --match "id:$from" 2>/dev/null | /usr/bin/python3 -c '
@@ -124,10 +130,9 @@ out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --bind "ctrl-x:execute-silent($self --kill {+f})+reload($self --list)+transform-footer($self --footer)" \
   --bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)" \
   --bind 'zero:change-ghost(nothing here · ctrl-t switches view)' \
-  --expect ctrl-s </dev/null) || { rm -f "$ZPICK_VIEW"*; exit 0; }
+  --expect ctrl-s </dev/null) || exit 0
 key=$(head -1 <<<"$out")
 while IFS=$'\t' read -r kind target holder cwd _; do
   [ -n "$kind" ] && open_row "$kind" "$target" "$holder" "$cwd" "$key"
 done < <(tail -n +2 <<<"$out")
-rm -f "$ZPICK_VIEW"*
 exit 0

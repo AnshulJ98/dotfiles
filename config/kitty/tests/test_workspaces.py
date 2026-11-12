@@ -5,6 +5,7 @@ import importlib.util
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -108,6 +109,44 @@ class SavingTests(unittest.TestCase):
             saves = len(boss.calls)
             module._save()  # windows closing during the quit must not shrink .open
             self.assertEqual(len(boss.calls), saves)
+
+
+    def test_empty_owner_replaces_open_atomically_nonowner_leaves_it(self):
+        from unittest.mock import patch
+        for owner in (True, False):
+            with self.subTest(owner=owner), tempfile.TemporaryDirectory() as directory:
+                module = load(directory, Boss([], active=None, saved=""))
+                module._owner = owner
+                path = Path(directory) / ".open"
+                path.write_text("old\n")
+                replace = os.replace
+
+                def publish(source, target):
+                    self.assertEqual(path.read_text(), "old\n")
+                    self.assertEqual(Path(source).read_bytes(), b"")
+                    replace(source, target)
+
+                with patch.object(module.os, "replace", side_effect=publish) as atomic:
+                    module._save()
+                self.assertEqual(atomic.call_count, int(owner))
+                self.assertEqual(path.read_text(), "" if owner else "old\n")
+                self.assertFalse(Path(str(path) + ".tmp").exists())
+
+
+    def test_transient_scouts_are_not_replayed_from_saved_workspaces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a, scout = Window("a", 1), Window("a", 1)
+            scout.user_vars["transient"] = "1"
+            boss = Boss([a, scout], active=scout, saved="launch\n")
+            module = load(directory, boss)
+            module._owner = True
+            module._save()
+            # The action remote command joins and re-parses its argv: keep the match one argument.
+            action = shlex.split(" ".join(boss.calls[0][1:]))
+            self.assertIn("--match=session:^a$ and not var:transient=1", action)
+            boss.all_windows = [scout]
+            module._save()
+            self.assertEqual((Path(directory) / ".open").read_text(), "")
 
 
 class ContractTests(unittest.TestCase):

@@ -27,8 +27,9 @@ ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 args) echo "$args" ;;
-env) echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
+env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
+pass) echo '{"verdict":"PASS","reasons":[],"retriesUsed":0}' >"$PI_WORKER_REPORT"; echo "report body" ;;
 blocked) printf '%s\\n' '**Blocked on me**' '- step 2 needs src/b.ts, outside files-allowed' '' '**Changed**' '- a.txt' ;;
 error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
 esac
@@ -57,6 +58,9 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	delete env.PI_SESSION_FILE;
 	// Headless even when the suite runs inside a herdr pane; herdrSandbox sets it back
 	delete env.HERDR_PANE_ID;
+	delete env.KITTY_WINDOW_ID;
+	delete env.KITTY_LISTEN_ON;
+	delete env.ZMX_SESSION;
 	return { env, scoutRoot: join(root, "sessions", "scout") };
 }
 
@@ -472,7 +476,7 @@ test("pane.sh is 0600, drops the herdr socket, exports no HERDR_ var, and is gon
 	const { env, scoutRoot } = herdrSandbox("ok");
 	const seen = await capturePaneScript({ ...env, HERDR_SOCKET_PATH: "/tmp/herdr.sock", HERDR_ENV: "1" }, scoutRoot);
 	assert.equal(seen.mode, 0o600);
-	assert.match(seen.text, /^unset HERDR_SOCKET_PATH HERDR_ENV$/m);
+	assert.match(seen.text, /^unset HERDR_SOCKET_PATH HERDR_ENV ZMX_SESSION$/m);
 	assert.doesNotMatch(seen.text, /^export HERDR_/m);
 	assert.ok(seen.path);
 	assert.equal(existsSync(seen.path), false, "pane.sh outlived scout");
@@ -540,4 +544,75 @@ test("a reader that quits early (| head) does not kill the run", () => {
 	assert.match(doneMeta(scoutRoot), /^rc=0$/m);
 	const out = readdirSync(join(scoutRoot, ".done")).find((f) => f.endsWith(".out"));
 	assert.ok(out && statSync(join(scoutRoot, ".done", out)).size >= 300_000);
+});
+
+const FAKE_KITTY = "#!/usr/bin/python3\nimport json, os, subprocess, sys\nargs = sys.argv[1:]\nwith open(os.environ[\"FAKE_KITTY_LOG\"], \"a\") as f:\n    f.write(json.dumps(args) + \"\\n\")\nif \"ls\" in args:\n    print(json.dumps([{\"tabs\": [{\"windows\": [\n        {\"id\": 42, \"cwd\": os.getcwd(), \"session_name\": \"caller\"},\n        {\"id\": 43, \"cwd\": \"/other\", \"session_name\": \"other\"}]}]}]))\nelif \"launch\" in args:\n    if os.environ.get(\"FAKE_KITTY\") == \"broken\":\n        raise SystemExit(1)\n    script = args[-1]\n    env = dict(os.environ, KITTY_WINDOW_ID=\"99\", KITTY_LISTEN_ON=\"unix:/tmp/new-kitty\")\n    subprocess.Popen([\"/bin/bash\", script], env=env, start_new_session=True,\n                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n    print(99)\n";
+
+function kittySandbox(mode = "ok"): { env: NodeJS.ProcessEnv; log: string; scoutRoot: string } {
+  const { env, scoutRoot } = sandbox();
+  const root = String(env.PI_CODING_AGENT_DIR);
+  writeFileSync(join(root, "bin", "kitten"), FAKE_KITTY);
+  chmodSync(join(root, "bin", "kitten"), 0o755);
+  const log = join(root, "kitty.log");
+  return { env: { ...env, KITTY_WINDOW_ID: "42", KITTY_LISTEN_ON: "unix:/tmp/test-kitty",
+    FAKE_KITTY: mode, FAKE_KITTY_LOG: log }, log, scoutRoot };
+}
+function kittyCalls(log: string): string[][] {
+  return readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+}
+
+test("kitty: visible child joins the caller's workspace without taking focus; success closes only its pane", async () => {
+  const { env, log } = kittySandbox();
+  const run = await runScout(["look"], { ...env, FAKE_PI: "env" });
+  assert.equal(run.code, 0, run.stderr);
+  assert.match(run.stdout, /^kitty=99$/m);
+  assert.match(run.stdout, /^zmx=$/m);
+  const calls = kittyCalls(log);
+  const launch = calls.find((args) => args.includes("launch"));
+  assert.ok(launch);
+  for (const flag of ["--keep-focus", "--hold", "--source-window", "id:42", "--add-to-session", ".", "--type=tab"])
+    assert.ok(launch.includes(flag), flag);
+  assert.ok(calls.some((args) => args.includes("close-window") && args.includes("id:99")));
+});
+
+test("kitty: a visible worker loads sensors and returns their verdict before its digest", async () => {
+  const { env, log } = kittySandbox();
+  const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "pass" }, SPEC);
+  assert.equal(run.code, 0, run.stderr);
+  assert.match(run.stdout, /^WORKER-SENSORS: PASS\n\nreport body/);
+  assert.ok(kittyCalls(log).some((args) => args.some((arg) => /^worker \d+$/.test(arg))));
+});
+
+test("kitty: failure is returned and its pane remains available; timeout still returns 124", async () => {
+  for (const [mode, code] of [["error", 1], ["hang", 124]] as const) {
+    const { env, log } = kittySandbox();
+    const run = await runScout(["--timeout", "2", "look"], { ...env, FAKE_PI: mode });
+    assert.equal(run.code, code, run.stderr);
+    assert.ok(kittyCalls(log).some((args) => args.includes("--hold")));
+    assert.ok(!kittyCalls(log).some((args) => args.includes("close-window")));
+  }
+});
+
+test("kitty: launch failure and SCOUT_KITTY=0 fall back to headless", async () => {
+  for (const disabled of [false, true]) {
+    const { env, log } = kittySandbox(disabled ? "ok" : "broken");
+    const run = await runScout(["look"], { ...env, FAKE_PI: "args", ...(disabled ? { SCOUT_KITTY: "0" } : {}) });
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /-p /);
+    if (disabled) assert.equal(existsSync(log), false);
+  }
+});
+
+test("kitty: pane script keeps its secrets private, excludes old identities and is removed on termination", async () => {
+  const { env, scoutRoot } = kittySandbox();
+  writeFileSync(join(String(env.PI_CODING_AGENT_DIR), "bin", "zmx"), "#!/bin/sh\nexit 1\n");
+  chmodSync(join(String(env.PI_CODING_AGENT_DIR), "bin", "zmx"), 0o755);
+  const gone = await runScout(["look"], { ...env, ZMX_SESSION: "gone", FAKE_PI: "args" });
+  assert.equal(gone.code, 0, gone.stderr);
+  assert.match(gone.stdout, /-p /);
+  const captured = await capturePaneScript(env, scoutRoot);
+  assert.equal(captured.mode, 0o600);
+  assert.doesNotMatch(captured.text, /^export (KITTY_|HERDR_|ZMX_SESSION=)/m);
+  assert.match(captured.text, /extensions\/pi-holder\.ts/);
+  assert.equal(existsSync(captured.path), false);
 });

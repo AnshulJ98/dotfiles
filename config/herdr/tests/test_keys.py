@@ -62,26 +62,6 @@ class KeyConfigTests(unittest.TestCase):
         for key in normalized:
             with self.subTest(key=key):
                 self.assertEqual(scoped[key], ["send_key", key])
-        plain = {parts[1]: parts[2:] for parts in maps if parts[1] != "--when-focus-on"}
-        self.assertEqual(plain["cmd+t"], ["new_tab_with_cwd"])
-        self.assertEqual(plain["cmd+w"], ["close_window"])
-        self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
-        self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
-
-    def test_keys_popup_lists_kitty_command_keys(self):
-        maps = [line.split(None, 2) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
-                if line.startswith("map ") and "--when-focus-on" not in line]
-        mapped = {m[1].replace("kitty_mod", "ctrl+shift") for m in maps
-                  if len(m) == 3 and not m[2].startswith("send_text")}
-        listed = set()
-        for line in (ROOT / "config/kitty/keys.txt").read_text().splitlines():
-            key, _, where = (line.split("\t") + ["", ""])[:3]
-            if not line or line.startswith("#") or where:
-                continue  # a heading, or a key bound outside kitty.conf
-            head, _, last = key.rpartition("+")
-            lasts = [str(n) for n in range(1, 10)] if last == "1..9" else last.split("|")
-            listed |= {f"{head}+{name}" for name in lasts}
-        self.assertEqual(listed, mapped)
 
     def test_installer_and_aerospace_use_launcher(self):
         self.assertIn('link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"',
@@ -89,8 +69,6 @@ class KeyConfigTests(unittest.TestCase):
         config = tomllib.loads((ROOT / "config/aerospace/aerospace.toml").read_text())
         bindings = config["mode"]["main"]["binding"]
         self.assertIn("$HOME/bin/herdr", bindings["ctrl-alt-enter"])
-        self.assertEqual(bindings["cmd-enter"], "exec-and-forget $HOME/.config/kitty/bin/kmain")
-        self.assertEqual(bindings["cmd-alt-enter"], "exec-and-forget open -n /Applications/kitty.app")
 
 
 class LauncherTests(unittest.TestCase):

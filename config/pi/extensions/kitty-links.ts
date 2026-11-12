@@ -10,6 +10,7 @@
  * call, falls back to pi's own opener.
  */
 import { spawn } from "node:child_process";
+import { kittyEnvironment } from "../lib/kitty.ts";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { TuiAltScreen } from "@earendil-works/pi-tui";
 
@@ -29,7 +30,7 @@ export function kittyOpenArgs(url: string, env: Record<string, string | undefine
 
 function viaKitty(fallback: (url: string) => void): Open {
 	const open: Open = (url) => {
-		const args = kittyOpenArgs(url, process.env);
+		const args = kittyOpenArgs(url, kittyEnvironment());
 		if (!args) return fallback(url);
 		let failed = false;
 		const fail = () => {

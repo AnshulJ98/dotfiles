@@ -18,6 +18,13 @@ HEALTH="'$BIN/pi-health' --watch 5"
 BASH_LOG="tail -n 40 -F '$LOGS/bash.log'"
 EVENTS="tail -n 20 -F '$LOGS/events.log'"
 
+# A pi that survived a zmx reattach may still have the old pane's KITTY_* values.
+if [ -n "${ZMX_SESSION:-}" ]; then
+  current=$(node "$BIN/../lib/kitty.ts") || current=""
+  KITTY_LISTEN_ON=$(printf '%s\n' "$current" | sed -n 1p)
+  KITTY_WINDOW_ID=$(printf '%s\n' "$current" | sed -n 2p)
+  export KITTY_LISTEN_ON KITTY_WINDOW_ID
+fi
 if [ -z "${KITTY_LISTEN_ON:-}" ] || [ -z "${KITTY_WINDOW_ID:-}" ] || ! command -v kitten >/dev/null 2>&1; then
   printf '%s\n' "$HEALTH" "$BASH_LOG" "$EVENTS"
   exit 0

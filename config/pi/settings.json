@@ -74,14 +74,12 @@
     {
       "source": "npm:pi-tidy@0.4.12",
       "extensions": []
-    },
-    "npm:@narumitw/pi-herdr"
+    }
   ],
   "extensionChangelogVersions": {
     "{\"source\":\"npm:pi-rtk-optimizer\",\"scope\":\"user\"}": "0.9.0",
     "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.47.0",
     "{\"source\":\"npm:pi-usage-widget\",\"scope\":\"user\"}": "0.2.1",
-    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.4.4",
-    "{\"source\":\"npm:@narumitw/pi-herdr\",\"scope\":\"user\"}": "0.4.1"
+    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.4.4"
   }
 }

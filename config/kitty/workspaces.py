@@ -1,6 +1,7 @@
 # Watcher for workspaces (kitty sessions shown one at a time; bin/zws, bin/zpick):
 #  - keeps a session file per open workspace in ~/.local/state/kitty/workspaces, so goto_session
-#    reopens it with its tabs, splits and panes. Saves are debounced: the tab bar redraws on
+#    reopens it with its tabs, splits and panes (transient=1 scout panes are not saved).
+#    Saves are debounced: the tab bar redraws on
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
@@ -8,6 +9,7 @@
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
 import os
 import re
+import shlex
 import time
 
 # Not documented kitty API, checked against kitty 0.50.0: add_timer and get_boss here, and below
@@ -37,7 +39,8 @@ def _names(boss) -> list[str]:
     """Open workspaces, the active one last."""
     names: list[str] = []
     for w in boss.all_windows:
-        if w.created_in_session_name and w.created_in_session_name not in names:
+        if (w.created_in_session_name and w.user_vars.get('transient') != '1'
+                and w.created_in_session_name not in names):
             names.append(w.created_in_session_name)
     active = boss.active_window
     current = active.created_in_session_name if active else ''
@@ -79,16 +82,17 @@ def _save(timer_id: int | None = None) -> None:
     os.makedirs(DIR, exist_ok=True)
     where: dict[str, set[int]] = {}  # workspace -> its OS windows
     for w in boss.all_windows:
-        if w.created_in_session_name:
+        if w.created_in_session_name and w.user_vars.get('transient') != '1':
             where.setdefault(w.created_in_session_name, set()).add(w.os_window_id)
     first = min((i for ids in where.values() for i in ids), default=0)  # the window workspaces share
     for name in names:
         boss.call_remote_control(None, ('action', 'save_as_session', '--save-only',
-                                        f'--match=session:^{re.escape(name)}$', _file(name)))
+                                        '--match=' + shlex.quote(f'session:^{re.escape(name)}$ and not var:transient=1'),
+                                        _file(name)))
         _place(_file(name), first not in where.get(name, {first}))
-    if _owner and names:
+    if _owner:
         with open(OPEN + '.tmp', 'w') as f:
-            f.write('\n'.join(names) + '\n')
+            f.write(''.join(name + '\n' for name in names))
         os.replace(OPEN + '.tmp', OPEN)  # a crash mid-write must not empty the list
 
 
