@@ -49,7 +49,7 @@ outer.right = 10
 # Cmd+Enter: focus the one kitty that holds the workspaces, or start it (kitty/bin/kmain).
 # Cmd+Alt+Enter: a separate plain kitty with no workspace.
 cmd-enter = "exec-and-forget $HOME/.config/kitty/bin/kmain"
-cmd-alt-enter = 'exec-and-forget open -n /Applications/kitty.app'
+cmd-alt-enter = 'exec-and-forget open -n -a kitty'
 # alt-cmd-h = 'split horizontal'
 # alt-cmd-v = 'split vertical'
 

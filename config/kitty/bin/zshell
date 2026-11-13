@@ -2,7 +2,7 @@
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
 # The watcher (workspaces.py) supplies the session name over this pane's terminal: the saved
 # holder=<name>, or a new folder-based one. Without an answer or without zmx, run plain zsh.
-export PATH=/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:$PATH
+export PATH=/opt/homebrew/bin:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
 [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
