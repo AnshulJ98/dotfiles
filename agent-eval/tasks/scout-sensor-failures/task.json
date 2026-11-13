@@ -22,5 +22,16 @@
       {"file": "config/pi/AGENTS.md", "lines": [134, 136]},
       {"file": "config/pi/agents-md/persona-pi.md", "lines": [38, 40]}
     ], "must": ["WORKER-SENSORS"]}
+  ],
+  "facts": [
+    {"id":"f1","text":"The function depsChanged in worker-sensors.ts decides the dependency case by comparing package.json's dependency entries before and after the worker's change.","hit":"worker-sensors.ts uses depsChanged to detect dependency edits through a comparison of the original versus modified package.json dependency entries."},
+    {"id":"f2","text":"The function testWeakening in worker-sensors.ts decides the weakened-tests case: fewer test cases or assertions, or new skip, only or todo markers, in a changed test file.","hit":"worker-sensors.ts uses testWeakening to flag modified tests with reduced case/assertion counts or additional skip/only/todo markers."},
+    {"id":"f3","text":"runChecks in worker-sensors.ts turns each of the two decisions into a failure entry with a reason.","hit":"In worker-sensors.ts, runChecks records dependency-change or test-weakening decisions as failures carrying reasons."},
+    {"id":"f4","text":"The verdict is the first line of the digest that scout returns, a line starting WORKER-SENSORS:.","hit":"scout places the verdict at the top of its returned digest under the WORKER-SENSORS: prefix."}
+  ],
+  "decoys": [
+    "scout --review BASE needs a clean working tree.",
+    "isStopped in config/pi/extensions/auto-run.ts is true when AUTO.md has a line starting with stopped:.",
+    "The default model in config/pi/settings.json is claude-opus-5-5."
   ]
 }

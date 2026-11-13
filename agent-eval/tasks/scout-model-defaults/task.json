@@ -16,5 +16,16 @@
       {"file": "config/pi/DESIGN.md", "lines": [28, 28]},
       {"file": "config/pi/DESIGN.md", "lines": [145, 145]}
     ], "must": ["\\bhigh\\b"]}
+  ],
+  "facts": [
+    {"id":"f1","text":"The main pi session starts with anthropic claude-opus-5-5 at medium thinking, from defaultProvider, defaultModel and defaultThinkingLevel in config/pi/settings.json.","hit":"config/pi/settings.json sets the interactive session's defaults to the anthropic provider, model claude-opus-5-5 and thinking level medium."},
+    {"id":"f2","text":"A read-only scout run defaults to anthropic/claude-sonnet-5-5 (MODEL in bin/scout) with low thinking (THINKING defaults to low in bin/scout).","hit":"Without --rw, scout uses the MODEL variable in bin/scout, anthropic/claude-sonnet-5-5, and falls back to low thinking."},
+    {"id":"f3","text":"A scout --rw run defaults to WORKER_MODEL in bin/scout, which is also anthropic/claude-sonnet-5-5, with thinking raised to high.","hit":"In worker mode scout switches to WORKER_MODEL, again anthropic/claude-sonnet-5-5, and the default thinking becomes high instead of low."},
+    {"id":"f4","text":"Defaults are overridden for one call by passing --model PROVIDER/ID and --thinking LEVEL (low, medium, high or xhigh) to scout.","hit":"For a single invocation, give scout the --model flag with a provider/id value and/or the --thinking flag with low, medium, high or xhigh."}
+  ],
+  "decoys": [
+    "scout --fork starts the child from a copy of the parent session, which re-bills the whole parent context.",
+    "scout --review BASE needs a clean working tree.",
+    "The minimalist section of config/pi/settings.json excludes the edit and write tools."
   ]
 }
