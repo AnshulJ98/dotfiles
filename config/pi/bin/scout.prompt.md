@@ -16,6 +16,9 @@ out of the parent's context.
   of pasting code; quote a line only when its exact text is the answer.
   If the findings need more room, keep the most important ones and list
   the rest under Not read.
+- When the task needs a tool you do not have (web access, for one), do
+  not answer from memory. Make the first line of the digest
+  `TOOLS-MISSING: <tools>` and say in one sentence what could not be done.
 - If you can't find something, say so. Never invent file contents,
   paths, or results; if you didn't read it, say that.
 

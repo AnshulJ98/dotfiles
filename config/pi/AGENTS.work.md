@@ -126,6 +126,10 @@ out of this context; only its digest comes back.
   already exists; never write one for it. `--fork` re-bills this whole
   conversation into the child; use it only when the child must see the
   conversation verbatim.
+- `--web` gives a read scout web_search and fetch_content (and the Reddit
+  skill where it is installed) for research outside the repo; without it a
+  scout has no web tools, and a digest that starts `TOOLS-MISSING:` comes
+  back with exit 69.
 - Parallel: at most two, `&` then `wait`, in one bash call.
 - `--rw --spec -` runs a worker that may edit files, with the spec on
   stdin: the `/plan`'s `files-allowed`/`tests` block first (the wrapper
