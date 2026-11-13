@@ -5,17 +5,27 @@
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
-#  - gives every workspace tab a sidebar dock (bin/zside) and pokes the visible one to redraw.
+#  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
 import os
 import re
 import shlex
 import time
+import sys
+import traceback
+from functools import wraps
+
+FOLDER = os.path.dirname(os.path.abspath(__file__))
+if FOLDER not in sys.path:
+    sys.path.insert(0, FOLDER)
+import zcore
+import zkitty
 
 # Not documented kitty API, checked against kitty 0.50.0: add_timer and get_boss here, and below
 # boss.all_windows / all_tabs / active_window, window.created_in_session_name / os_window_id /
-# user_vars / write_to_child, tab.tab_manager_ref and its active_tab. tests/test_workspaces.py
-# fails when one of them goes. The on_* callbacks and boss.call_remote_control are documented.
+# user_vars / write_to_child / screen / program_status / cwd_of_child, tab.tab_manager_ref /
+# active_window and its manager's active_tab, Screen.last_reported_cwd, ProgramStatus.as_list.
+# tests/test_workspaces.py checks these. Callbacks and boss.call_remote_control are documented.
 from kitty.fast_data_types import add_timer, get_boss
 
 DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
@@ -29,6 +39,30 @@ _quitting = False  # windows close one by one on quit; saving then would drop wo
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
+_ready: set[int] = set()
+_sent: dict[int, bytes] = {}
+
+
+def _log(text):
+    try:
+        os.makedirs(DIR, exist_ok=True)
+        path = os.path.join(DIR, 'watcher.log')
+        mode = 'w' if os.path.exists(path) and os.path.getsize(path) > 256 * 1024 else 'a'
+        with open(path, mode) as f:
+            f.write(time.strftime('%Y-%m-%d %H:%M:%S ') + text + '\n')
+    except Exception:
+        pass  # There is nowhere left to report a failure to write the error log.
+
+
+def _safe(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            _log(traceback.format_exc())
+            return None
+    return wrapped
 
 
 def _file(name: str) -> str:
@@ -103,7 +137,7 @@ def _restore(timer_id: int | None = None) -> None:
     if not names:
         if not list(boss.all_windows) and _tries < 10:  # loaded before the first window exists
             _tries += 1
-            add_timer(_restore, 0.3, False)
+            add_timer(_safe(_restore), 0.3, False)
         return  # a plain kitty: no workspace at start
     try:
         saved = [n for n in open(OPEN).read().split('\n') if n]
@@ -121,12 +155,34 @@ def _docks(tab) -> list:
     return [w for w in tab if w.user_vars.get('role') == 'sidebar']
 
 
-def _poke(boss) -> None:
+def _push(boss) -> None:
+    view = zcore.view(zkitty.snapshot(boss))
+    existing = set()
+    for tab in boss.all_tabs:
+        for d in _docks(tab):
+            existing.add(d.id)
+            if d.id in _ready:
+                line = zcore.line(view, d.created_in_session_name or '', tab.id)
+                if line and line != _sent.get(d.id):
+                    d.write_to_child(line)
+                    _sent[d.id] = line
+    _ready.intersection_update(existing)
+    for wid in _sent.keys() - existing:
+        del _sent[wid]
+
+
+def _tick(boss) -> None:
     for tab in boss.all_tabs:
         tm = tab.tab_manager_ref()
         if tm is not None and tm.active_tab is tab:
             for w in _docks(tab):
-                w.write_to_child(b'r')
+                if w.id in _ready:
+                    w.write_to_child(b'\n')
+
+
+def _refresh(boss) -> None:
+    _push(boss)
+    _tick(boss)
 
 
 def _sync(timer_id: int | None = None) -> None:
@@ -154,32 +210,37 @@ def _sync(timer_id: int | None = None) -> None:
                 'launch', '--type=tab-dock', f'--match=id:{tab.id}', '--dock-edge=left', f'--dock-size={WIDTH}',
                 '--dock-skip-focus', '--keep-focus', '--add-to-session', name, '--var', 'role=sidebar',
                 *(('--var', f'ws_name={named}') if named else ()), SIDEBAR))
-    _poke(boss)
+    _refresh(boss)
 
 
+@_safe
 def on_load(boss, data) -> None:
-    add_timer(_restore, 1.0, False)
+    add_timer(_safe(_restore), 1.0, False)
 
 
+@_safe
 def on_tab_bar_dirty(boss, window, data) -> None:
     global _save_pending, _sync_pending
     if not _sync_pending:
         _sync_pending = True
-        add_timer(_sync, 0.05, False)
+        add_timer(_safe(_sync), 0.05, False)
     if not _save_pending:
         _save_pending = True
-        add_timer(_save, 2.0, False)
+        add_timer(_safe(_save), 2.0, False)
 
 
+@_safe
 def on_focus_change(boss, window, data) -> None:
     if data.get('focused'):
-        _poke(boss)
+        _refresh(boss)
 
 
+@_safe
 def on_program_status_change(boss, window, data) -> None:
-    _poke(boss)
+    _refresh(boss)
 
 
+@_safe
 def on_set_user_var(boss, window, data) -> None:
     if data.get('key') == 'zside' and data.get('value') == 'toggle':
         if os.path.exists(OFF):
@@ -190,10 +251,16 @@ def on_set_user_var(boss, window, data) -> None:
         # Drop the var again: a saved session would replay it as --var and toggle on restore.
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
         _sync()
+    elif data.get('key') == 'zside' and data.get('value') == 'ready':
+        _ready.add(window.id)
+        _sent.pop(window.id, None)
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
+        _push(boss)
     else:  # a rename (ws_name) or pi's model and context use
         on_tab_bar_dirty(boss, window, data)
 
 
+@_safe
 def on_quit(boss, window, data) -> None:
     global _quitting
     if data.get('confirmed'):
