@@ -1,0 +1,26 @@
+background #1c1c1c
+caret #c4a000
+caretText #1c1c1c
+foreground #d3d7cf
+name "Tango"
+selectedText #d3d7cf
+selection #292928
+
+ansiColors [
+    #1d1d1d
+    #ff7661
+    #66b332
+    #c4a000
+    #70a3e7
+    #bb93c2
+    #36b0b2
+    #d3d7cf
+    #888a85
+    #ff7669
+    #8ae234
+    #fce94f
+    #77a4d4
+    #c192bc
+    #34e2e2
+    #eeeeec
+]

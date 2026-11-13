@@ -1,0 +1,57 @@
+# Tango: Vicinae port of the palette kitty uses
+# (config/kitty/themes/tango.conf).
+# Alpha colours from bearded-theme-hc-tango.json are flattened onto
+# editor.background #1c1c1c, as in the kitty port.
+
+[meta]
+version = 1
+name = "Tango"
+description = "Tango: minimal dark theme with readable text."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#1c1c1c"            # editor.background
+foreground = "#d3d7cf"            # editor.foreground
+secondary_background = "#161616"  # sideBar.background
+border = "#292928"                # editorWidget.border
+accent = "#70a3e7"                # terminal.ansiBlue
+accent_foreground = "#1c1c1c"
+
+[colors.accents]
+blue = "#70a3e7"
+green = "#66b332"
+magenta = "#bb93c2"
+orange = "#c4a000"
+purple = "#bb93c2"
+red = "#ff7661"
+yellow = "#c4a000"
+cyan = "#36b0b2"
+
+[colors.text]
+muted = "#838581"        # descriptionForeground #d3d7cf80
+placeholder = "#a1a59c"  # input.placeholderForeground
+danger = "#ff7661"
+success = "#66b332"
+selection = { background = "#292928", foreground = "#d3d7cf" }
+
+[colors.text.links]
+default = "#d3d7cf"      # textLink.foreground
+
+[colors.input]
+border = "#424242"       # input.border
+border_focus = "#4e4e4e" # focusBorder
+border_error = "#ff7661"
+
+[colors.list.item.hover]
+foreground = "#d3d7cf"
+secondary_foreground = "#d3d7cf"
+
+[colors.list.item.selection]
+background = "#292928"   # list.activeSelectionBackground #82857e73
+foreground = "#d3d7cf"
+secondary_background = "#2e2e2e"
+secondary_foreground = "#d3d7cf"
+
+[colors.grid.item]
+background = "#303030"   # editorWidget.background

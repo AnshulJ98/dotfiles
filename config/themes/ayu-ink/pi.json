@@ -2,11 +2,11 @@
   "vars": {
     "bgMid": "#0c0b0a",
     "bgDark": "#070606",
-    "fgSoft": "#a89272",
+    "fgSoft": "#c1baad",
     "fgDim": "#8f8373",
     "primaryAlt": "#231f1a",
     "turquoise": "#95E6CB",
-    "fg": "#c8ad85",
+    "fg": "#d7d3ca",
     "yellow": "#FFB454",
     "blue": "#59C2FF",
     "salmon": "#E6B673",
@@ -24,7 +24,7 @@
     "panel": "#161514",
     "panelUser": "#1d1d1c",
     "panelError": "#29141a",
-    "line": "#2a2928",
+    "line": "#605f5e",
     "fgQuiet": "#928f89",
     "fgFaint": "#878480"
   },

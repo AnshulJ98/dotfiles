@@ -6,3 +6,4 @@ nvim --headless -u NONE -l config/nvim/tests/lsp.lua
 nvim --headless -u NONE -l config/nvim/tests/meatcode.lua
 nvim --headless -u NONE -l config/nvim/tests/themes.lua
 nvim --headless -u NONE -l config/nvim/tests/markdown.lua
+nvim --headless -u NONE -l config/nvim/tests/syntax.lua

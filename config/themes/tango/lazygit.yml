@@ -1,0 +1,13 @@
+# Tango: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#70a3e7', bold]
+    inactiveBorderColor: ['#666865']
+    searchingActiveBorderColor: ['#c4a000', bold]
+    optionsTextColor: ['#70a3e7']
+    selectedLineBgColor: ['#292928']
+    inactiveViewSelectedLineBgColor: ['#303030']
+    cherryPickedCommitFgColor: ['#bb93c2']
+    cherryPickedCommitBgColor: ['#292928']
+    unstagedChangesColor: ['#ff7661']
+    defaultFgColor: ['#d3d7cf']

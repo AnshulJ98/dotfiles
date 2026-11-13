@@ -1,0 +1,13 @@
+# Dark 2026: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#79c0ff', bold]
+    inactiveBorderColor: ['#606264']
+    searchingActiveBorderColor: ['#e5ba7d', bold]
+    optionsTextColor: ['#79c0ff']
+    selectedLineBgColor: ['#202122']
+    inactiveViewSelectedLineBgColor: ['#303233']
+    cherryPickedCommitFgColor: ['#d2a8ff']
+    cherryPickedCommitBgColor: ['#202122']
+    unstagedChangesColor: ['#f48771']
+    defaultFgColor: ['#bbbebf']

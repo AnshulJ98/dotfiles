@@ -19,7 +19,7 @@ vim.api.nvim_create_autocmd('FileType', {
       -- No latex parser is installed; checkhealth warned on every run.
       latex = { enabled = false },
       -- Paint the header background instead of drawing dark foreground blocks:
-      -- kitty's text contrast floor brightens those blocks into a grey stripe.
+      -- a kitty text contrast floor (text_fg_override_threshold) brightens those blocks into a grey stripe.
       code = { language_border = ' ', background_inset = 0 },
       -- As the reading view (markdown_reading.lua) draws headings: md-render's
       -- H1-H6 glyphs, every level at the left edge rather than indented by its

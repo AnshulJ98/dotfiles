@@ -1,0 +1,134 @@
+name "Dark2026"
+
+base {
+    appearance "dark"
+    background #121314
+    separator #282a2b
+    text #bbbebf
+}
+
+actionBar {
+    separator #282a2b
+
+    button {
+        background #191a1b
+        hotkey #79c0ff
+        text #969fa8
+    }
+}
+
+asyncProgressBar {
+    border #48494b
+    progress #79c0ff
+    itemProgress #7ee787
+}
+
+breadcrumbs {
+    color1 #121314
+    color2 #303233
+    color3 #202122
+    separator #555759
+    text #bbbebf
+}
+
+files {
+    background {
+        alternate #121314
+        current #202122
+        currentSelected #202122
+        selected #303233
+    }
+
+    dragDropSelection {
+        color #79c0ff
+        width 1
+    }
+
+    text {
+        current #bbbebf
+        currentSelected #d2a8ff
+        hidden #969fa8
+        matched #e5ba7d
+        selected #d2a8ff
+
+        highlighting1 #79c0ff
+        highlighting2 #7ee787
+        highlighting3 #d2a8ff
+        highlighting4 #e5ba7d
+    }
+}
+
+searchBar {
+    query {
+        border #48494b
+        placeholder #969fa8
+    }
+
+    results {
+        highlighting #79c0ff
+        selection #202122
+        subtitle #969fa8
+    }
+
+    rowSeparator {
+        color #303233
+        show true
+    }
+}
+
+statusBar {
+    background #191a1b
+    border #282a2b
+    text #bbbebf
+    quickSelectNoResultsHighlighting #f48771
+}
+
+tableHeader {
+    separator #282a2b
+    text #969fa8
+
+    pressed {
+        background #303233
+    }
+}
+
+tabs {
+    active {
+        text #bbbebf
+    }
+
+    inactive {
+        background #191a1b
+        text #929ba5
+    }
+}
+
+terminal {
+    caret {
+        background #e5ba7d
+        text #121314
+    }
+}
+
+textEditor {
+    error #f48771
+    warning #32291c
+    keyword #e5ba7d
+    comment #929ba5
+    identifier #79c0ff
+
+    literal {
+        string #7ee787
+        number #b5cea8
+        color #b5cea8
+    }
+
+    gutter {
+        background #121314
+        text #7c7e7f
+    }
+}
+
+titleBar {
+    text #bbbebf
+}

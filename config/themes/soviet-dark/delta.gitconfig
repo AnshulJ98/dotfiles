@@ -3,9 +3,9 @@
 	line-numbers = true
 	syntax-theme = soviet-dark
 	file-style = bold "#6ca0c6"
-	file-decoration-style = "#555452" ul
+	file-decoration-style = "#6e6d6b" ul
 	hunk-header-style = line-number syntax
-	hunk-header-decoration-style = "#555452" ol
+	hunk-header-decoration-style = "#6e6d6b" ol
 	plus-style = syntax "#33312a"
 	plus-emph-style = syntax "#35332a"
 	minus-style = syntax "#342929"
