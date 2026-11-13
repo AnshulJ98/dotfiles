@@ -9,7 +9,8 @@
 // "!" is a problem:
 //   - a busy process with no tool or agent event for --limit seconds (default 1200, or
 //     PI_HEALTH_LIMIT): past every bound the harness puts on one call, so one of them failed
-//   - a main session that died without shutting down (reported by the run that finds it)
+//   - a main session that died without shutting down (plain mode reports it once and removes
+//     its file; --json leaves it for other sessions to see, ignoring files from before this boot)
 //   - an auto run with open slices that nothing live is carrying
 // Exit 1 when there is a problem, else 0. --watch reprints every SECS seconds (default 30) and
 // rings the terminal bell on a new problem.
@@ -55,14 +56,17 @@ async function main() {
 		return args.includes(flag) && value > 0 ? value : fallback;
 	};
 	const limitMs = number("--limit", Number(process.env.PI_HEALTH_LIMIT) || 1200) * 1000;
+	const json = args.includes("--json") && !args.includes("--watch");
 	const head = (p) => `${p.role.padEnd(6)} ${p.session.slice(-6)}  ${tilde(p.cwd)}`;
 	// A dead main session's file is removed when it is found, so it is kept here while --watch runs
 	const gone = [];
 
 	const report = () => {
 		const now = Date.now();
-		gone.push(...sweep(isRunning, now - os.uptime() * 1000));
-		const live = readLive();
+		const bootMs = now - os.uptime() * 1000;
+		const dead = sweep(isRunning, bootMs, undefined, !json);
+		gone.push(...dead.filter((p) => !json || p.active >= bootMs));
+		const live = readLive().filter((p) => !json || !dead.some((d) => d.pid === p.pid));
 		const lines = [];
 		const problems = [];
 		const add = (flag, key, text, source) => {

@@ -356,7 +356,8 @@ class NamesTests(unittest.TestCase):
         from unittest.mock import patch
         for missing in ([], ['Boss.active_tab', 'Child.argv']):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
-                boss = Boss([], None, '')
+                window = Window('', 1)  # this check has a window ready for the error tab
+                boss = Boss([window], window, '')
                 module = load(directory, boss)
                 with patch.object(module, 'add_timer') as timer, patch.object(module, '_missing', return_value=missing):
                     module.on_load(boss, {})
@@ -365,6 +366,7 @@ class NamesTests(unittest.TestCase):
                     for call in timer.call_args_list:
                         self.assertEqual(call.args[1:], (1.0, False))
                     timer.call_args_list[1].args[0](0)
+                    self.assertEqual(timer.call_count, 2)  # clean or launched: no retry
                 log = Path(directory, 'watcher.log')
                 if missing:
                     self.assertEqual(boss.calls, [('launch', '--type=tab', '--tab-title',
@@ -374,6 +376,63 @@ class NamesTests(unittest.TestCase):
                 else:
                     self.assertEqual(boss.calls, [])
                     self.assertFalse(log.exists())
+
+
+    def test_check_waits_for_window_and_logs_missing_names_once(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            timers = []
+            with patch.object(module, 'add_timer', side_effect=lambda *args: timers.append(args)), \
+                 patch.object(module, '_missing', return_value=['Boss.active_tab']):
+                module._safe(module._check)(0)
+                self.assertEqual(boss.calls, [])
+                self.assertEqual(len(timers), 1)
+                timers[0][0](0)
+                self.assertEqual(boss.calls, [])
+                self.assertEqual(len(timers), 2)
+                boss.all_windows = [Window('', 1)]
+                timers[1][0](0)
+                self.assertEqual(len(boss.calls), 1)
+                self.assertEqual(boss.calls[0][:4], ('launch', '--type=tab', '--tab-title', 'watcher error'))
+                self.assertEqual([t[1:] for t in timers], [(0.3, False)] * 2)
+            log = Path(directory, 'watcher.log').read_text()
+            self.assertEqual(log.count('kitty no longer has:'), 1)
+            self.assertEqual(len(log.splitlines()), 1)
+
+    def test_check_retries_launch_ten_times_then_logs_last_error(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([Window('', 1)], None, '')
+            module = load(directory, boss)
+            timers = []
+            with patch.object(module, 'add_timer', side_effect=lambda *args: timers.append(args)), \
+                 patch.object(module, '_missing', return_value=['Boss.active_tab']), \
+                 patch.object(boss, 'call_remote_control', side_effect=RuntimeError('launch failed')) as launch:
+                module._safe(module._check)(0)
+                for i in range(10):
+                    self.assertEqual(len(timers), i + 1)
+                    self.assertNotIn('Traceback', Path(directory, 'watcher.log').read_text())
+                    timers[i][0](0)
+                self.assertEqual(len(timers), 10)
+                self.assertEqual(launch.call_count, 11)
+                self.assertEqual([t[1:] for t in timers], [(0.3, False)] * 10)
+            log = Path(directory, 'watcher.log').read_text()
+            self.assertEqual(log.count('kitty no longer has:'), 1)
+            self.assertEqual(log.count('Traceback'), 1)
+            self.assertIn('RuntimeError: launch failed', log)
+
+    def test_check_without_all_windows_launches_immediately(self):
+        from unittest.mock import Mock, patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = types.SimpleNamespace(call_remote_control=Mock())
+            module = load(directory, boss)
+            with patch.object(module, 'add_timer') as timer, \
+                 patch.object(module, '_missing', return_value=['Boss.all_windows']):
+                module._safe(module._check)(0)
+                boss.call_remote_control.assert_called_once()
+                timer.assert_not_called()
 
 
 class ContractTests(unittest.TestCase):
