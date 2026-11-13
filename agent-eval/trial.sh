@@ -4,14 +4,15 @@
 # the trial and is listed in the record's "outside"); wroteTest is true when a changed path is a test path.
 # A review task (role review, with "rev") runs plain pi -p --mode json on the prompt in the workspace at rev and is
 # graded by judge.sh (record: pass = every defect found, plus found, of, disagreements, judgeCost).
-# A scout task (role scout, with "rev" and usually "paths") runs `scout --model M --thinking L "<prompt.md>"` read-only
-# in the workspace at rev, and is graded by lib/scout-grade.ts from the digest's file:line citations against the
-# task's expect list (record: pass, plus hits and of, the expect entries satisfied).
+# A scout task (role scout, with "rev", usually "paths", and "facts") runs `scout --model M --thinking L "<prompt.md>"`
+# read-only in the workspace at rev, and is graded by judge.sh --kind facts on the digest (record: pass = every fact
+# stated, plus found, of, disagreements, judgeCost; an empty digest is not judged and finds nothing). The digest's
+# file:line citations are also graded by lib/scout-grade.ts against the task's expect list: cited and citable, secondary.
 # usage: trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>   (<task>: id under tasks/ or a dir)
 # Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI (default pi), EVAL_REAL_HOME (default $HOME),
 # EVAL_REVIEW_TIMEOUT (seconds for the review pi call, default 900; rc 124 or 137 is recorded as infra and not judged),
 # EVAL_TEST_TIMEOUT (seconds for the hidden tests, default 600; a timeout is a failing test); judge.sh reads EVAL_JUDGE_PI.
-# The temp dir (home/, ws/, digest.txt, stderr.txt, test.txt; review: review.jsonl, review.txt, judge/, judge.json)
+# The temp dir (home/, ws/, digest.txt, stderr.txt, test.txt; review and scout: judge/, judge.json; review: review.jsonl, review.txt)
 # is kept; the record's "dir" names it.
 set -euo pipefail
 
@@ -47,9 +48,10 @@ if [ "$role" = scout ]; then
   (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$scout" --model "$model" --thinking "$thinking" \
     "$(cat "$task_dir/prompt.md")" < /dev/null > "$dir/digest.txt" 2> "$dir/stderr.txt") || rc=$?
   seconds=$(( $(date +%s) - start ))
+  ! grep -q '[^[:space:]]' "$dir/digest.txt" || "$EVAL_DIR/judge.sh" "$dir" "$task_dir" --kind facts > /dev/null || true
   record="$(node "$EVAL_DIR/lib/record.ts" \
     --task "$(task_get "$task_dir" id)" --role "$role" --model "$model" --thinking "$thinking" --trial "$n" \
-    --rc "$rc" --seconds "$seconds" --task-file "$task_dir/task.json" --digest-file "$dir/digest.txt" \
+    --rc "$rc" --seconds "$seconds" --task-file "$task_dir/task.json" --digest-file "$dir/digest.txt" --judge-file "$dir/judge.json" \
     --sessions-dir "$home/.pi/agent/sessions" \
     --needle "$(task_get "$task_dir" repo)" --needle "$EVAL_REAL_HOME/.pi/agent/memory.md" \
     --needle "$EVAL_REAL_HOME/.pi/agent/sessions" --dir "$dir")"

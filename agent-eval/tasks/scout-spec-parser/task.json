@@ -16,5 +16,16 @@
       {"file": "config/pi/extensions/worker-sensors.ts", "lines": [107, 151]},
       {"file": "config/pi/extensions/worker-sensors.ts", "lines": [689, 697]}
     ], "must": ["parseSpec"]}
+  ],
+  "facts": [
+    {"id":"f1","text":"A spec with malformed frontmatter is refused by bin/scout before any model run starts, when parseSpec returns an error.","hit":"Before launching a model, bin/scout rejects malformed spec frontmatter on an error result from parseSpec."},
+    {"id":"f2","text":"A spec without a plan (no numbered step with a check: line) is refused by bin/scout before any model run starts.","hit":"bin/scout rejects a spec missing numbered plan steps with a check: line before launching the model."},
+    {"id":"f3","text":"Both refusals exit with code 2.","hit":"Malformed-frontmatter rejection or missing-plan rejection terminates scout with exit status 2."},
+    {"id":"f4","text":"The parser, parseSpec, lives in config/pi/extensions/worker-sensors.ts.","hit":"config/pi/extensions/worker-sensors.ts defines the parseSpec parser."}
+  ],
+  "decoys": [
+    "The default thinking level in config/pi/settings.json is medium.",
+    "scout --fork starts the child from a copy of the parent session, which re-bills the whole parent context.",
+    "worktreeRefusal in config/pi/extensions/auto-run.ts refuses git worktree add into a path inside the repo."
   ]
 }
