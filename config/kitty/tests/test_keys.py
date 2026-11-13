@@ -1,4 +1,4 @@
-"""Kitty's plain keymap and launcher; independent of Herdr."""
+"""Kitty's keymap and launcher."""
 from pathlib import Path
 import shlex
 import os
@@ -24,7 +24,7 @@ class KeyConfigTests(unittest.TestCase):
             "--cwd=current", "/opt/homebrew/bin/hunk", "diff",
         ])
 
-    def test_intent_maps_and_herdr_precedence(self):
+    def test_intent_maps(self):
         lines = (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
         expected = [
             *(f"map cmd+alt+{n} kitten zdo.py switch {n}" for n in range(1, 10)),
@@ -40,13 +40,7 @@ class KeyConfigTests(unittest.TestCase):
         for line in lines:
             if line.startswith("map "):
                 self.assertFalse(any("bin/zws " + word in line for word in ('switch', 'next', 'prev', 'agent', 'new')))
-        for key in ('cmd+t', 'cmd+alt+1', 'ctrl+alt+1'):
-            plain = next(i for i, line in enumerate(lines) if line.startswith(f"map {key} "))
-            guarded = [i for i, line in enumerate(lines)
-                       if line == f"map --when-focus-on var:herdr=1 {key}"
-                       or line.startswith(f"map --when-focus-on var:herdr=1 {key} ")]
-            self.assertTrue(guarded)
-            self.assertTrue(all(i > plain for i in guarded))
+        self.assertFalse([line for line in lines if "--when-focus-on" in line])
 
     def test_zws_retired_switch_is_usage_error_and_shell_syntax_is_valid(self):
         script = ROOT / "config/kitty/bin/zws"

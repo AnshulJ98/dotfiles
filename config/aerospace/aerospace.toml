@@ -50,9 +50,6 @@ outer.right = 10
 # Cmd+Alt+Enter: a separate plain kitty with no workspace.
 cmd-enter = "exec-and-forget $HOME/.config/kitty/bin/kmain"
 cmd-alt-enter = 'exec-and-forget open -n /Applications/kitty.app'
-# Ctrl+Alt+Enter: kitty attached to the default herdr session. The launcher marks the
-# window for Herdr-only keybindings.
-ctrl-alt-enter = "exec-and-forget open -n /Applications/kitty.app --args /bin/sh -c 'PATH=/opt/homebrew/bin:$PATH exec \"$HOME/bin/herdr\"'"
 # alt-cmd-h = 'split horizontal'
 # alt-cmd-v = 'split vertical'
 

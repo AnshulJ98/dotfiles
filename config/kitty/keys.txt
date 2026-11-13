@@ -1,5 +1,5 @@
 ## Keys shown by cmd+/ (bin/zkeys). Tab separated: key, what it does, and where it is bound when
-## that is not kitty.conf. "1..9" and "a|b" stand for one key each. config/herdr/tests/test_keys.py
+## that is not kitty.conf. "1..9" and "a|b" stand for one key each. config/kitty/tests/test_keys.py
 ## fails when a kitty.conf command key is missing here or a key here is not in kitty.conf.
 # Workspaces
 cmd+enter	the workspace kitty: focus it, or start it	AeroSpace
@@ -46,7 +46,6 @@ cmd+shift+j	move the tab to another window (asks which)
 # Windows
 cmd+n	new free-form window here (joins no workspace)
 cmd+alt+enter	a second, plain kitty with no workspaces	AeroSpace
-ctrl+alt+enter	kitty running herdr	AeroSpace
 # Screen and scrollback
 cmd+alt+e	scrollback in nvim
 ctrl+shift+h	scrollback in nvim

@@ -39,9 +39,6 @@ fi
 if [ -f "$DOT/Brewfile" ]; then
   log "Installing from Brewfile..."
   brew bundle --file="$DOT/Brewfile"
-  # Upgrading herdr restarts its server and ends every pane and agent, so it
-  # is pinned: `brew unpin herdr && brew upgrade herdr` when nothing is running.
-  brew pin herdr
   ok "Brewfile applied"
 fi
 
@@ -108,9 +105,6 @@ link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
-# herdr's folder also holds its sockets, logs and session.json, so link the file.
-link "$DOT/config/herdr/config.toml" "$HOME/.config/herdr/config.toml"
-link "$DOT/config/herdr/kitty-herdr" "$HOME/bin/herdr"
 # delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
 link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
 if command -v bat >/dev/null 2>&1; then

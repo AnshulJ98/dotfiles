@@ -1,6 +1,6 @@
 """workspaces.py's saving, and the undocumented kitty and zmx behaviour the workspace layer uses.
 
-Run by config/herdr/check.sh; re-run after a kitty or zmx upgrade."""
+Run by config/kitty/check.sh; re-run after a kitty or zmx upgrade."""
 import importlib.util
 import os
 from pathlib import Path

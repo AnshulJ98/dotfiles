@@ -187,7 +187,7 @@ export function scoutRunning(cwd: string): boolean {
 			return false;
 		}
 		const field = (key: string): string | undefined => new RegExp(`^${key}=(.*)$`, "m").exec(meta)?.[1];
-		// pid is the wrapper; in a herdr tab the child is the pane's (bin/scout counts a scout as live the same way)
+		// pid is the wrapper; in a kitty tab the child is the pane's (bin/scout counts a scout as live the same way)
 		if (!alive(field("pid")) && !alive(field("pane"))) return false;
 		const repo = field("repo");
 		return !repo || !common || repo === common;

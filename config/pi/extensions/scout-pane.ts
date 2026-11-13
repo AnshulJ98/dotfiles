@@ -1,6 +1,6 @@
 /**
  * Scout pane — loaded only by bin/scout when it runs the child as an
- * interactive pi in a kitty or herdr tab instead of `pi -p`. When the run settles idle,
+ * interactive pi in a kitty tab instead of `pi -p`. When the run settles idle,
  * it writes the last assistant text to SCOUT_DIGEST, the digest `pi -p` would
  * have printed, and exits. If the last turn errored or was aborted (or there is
  * none), it also writes 1 to SCOUT_PANE_RC, since exiting the TUI is rc 0.

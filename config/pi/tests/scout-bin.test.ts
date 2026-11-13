@@ -16,7 +16,7 @@ const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) â†
 // blocked (a worker digest with a step left under Blocked on me),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
-# In a herdr tab, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
+# In a pane, extensions/scout-pane.ts writes the digest to SCOUT_DIGEST; stand in for it
 [ -n "$SCOUT_DIGEST" ] && exec >"$SCOUT_DIGEST"
 args="$*"
 dir=""
@@ -60,36 +60,12 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	delete env.SCOUT_DIGEST;
 	delete env.PI_SCOUT_DEPTH;
 	delete env.PI_SESSION_FILE;
-	// Headless even when the suite runs inside a herdr pane; herdrSandbox sets it back
-	delete env.HERDR_PANE_ID;
 	delete env.KITTY_WINDOW_ID;
 	delete env.KITTY_LISTEN_ON;
 	delete env.ZMX_SESSION;
 	return { env, scoutRoot: join(root, "sessions", "scout") };
 }
 
-// FAKE_HERDR: ok, or broken (tab create fails). Every call is logged; `pane run` runs the command detached, as a pane would.
-// FAKE_HERDR_WORKTREE_WS names the workspace `worktree list` reports open for the repo; FAKE_HERDR_PANE_CWD is where w1's pane sits (none: pane list fails).
-const FAKE_HERDR = `#!/usr/bin/env bash
-echo "$*" >>"$FAKE_HERDR_LOG"
-case "$1 $2" in
-"tab create") [ "$FAKE_HERDR" = broken ] && exit 1; echo '{"result":{"tab":{"tab_id":"w1:t9"},"root_pane":{"pane_id":"w1:p9"}}}' ;;
-"worktree list") [ -n "$FAKE_HERDR_WORKTREE_WS" ] && echo '{"result":{"worktrees":[{"path":"'"$4"'","open_workspace_id":"'"$FAKE_HERDR_WORKTREE_WS"'"}]}}' ;;
-"pane list") [ "$FAKE_HERDR_PANE_CWD" = none ] && exit 1; echo '{"result":{"panes":[{"pane_id":"w1:p1","workspace_id":"w1","cwd":"'"\${FAKE_HERDR_PANE_CWD:-$PWD}"'"}]}}' ;;
-"pane run") (bash -c "$4" </dev/null >/dev/null 2>&1 &) ;;
-"agent rename") [ -n "$FAKE_HERDR_RENAME_OK" ] && exit 0; exit 1 ;;
-esac
-`;
-
-/** sandbox() as seen from inside herdr pane w1:p1, with a fake herdr on PATH. */
-function herdrSandbox(mode: "ok" | "broken"): { env: NodeJS.ProcessEnv; log: string; scoutRoot: string } {
-	const { env, scoutRoot } = sandbox();
-	const root = String(env.PI_CODING_AGENT_DIR);
-	writeFileSync(join(root, "bin", "herdr"), FAKE_HERDR);
-	chmodSync(join(root, "bin", "herdr"), 0o755);
-	const log = join(root, "herdr.log");
-	return { env: { ...env, HERDR_PANE_ID: "w1:p1", HERDR_WORKSPACE_ID: "w1", FAKE_HERDR: mode, FAKE_HERDR_LOG: log }, log, scoutRoot };
-}
 
 interface Run {
 	code: number | null;
@@ -490,38 +466,6 @@ test("a child whose session file goes stale is killed as a stall", async () => {
 	assert.match(report(scoutRoot).reasons[0], /model stream stalled/);
 });
 
-test("inside herdr the child runs in a new herdr tab, its digest comes back, and the tab closes on rc 0", async () => {
-	const { env, log } = herdrSandbox("ok");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 0);
-	assert.match(run.stdout, /^x{20}$/m);
-	const calls = readFileSync(log, "utf8");
-	assert.match(calls, /^tab create --workspace w1 --cwd \S+ --label scout \d+ --no-focus$/m);
-	assert.match(calls, /^pane run w1:p9 bash \S+\/pane\.sh$/m);
-	assert.match(calls, /^tab close w1:t9$/m);
-});
-
-test("a second workspace on the same repo does not steal the tab: the caller's workspace wins when it holds the repo", async () => {
-	const { env, log } = herdrSandbox("ok");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7" });
-	assert.equal(run.code, 0);
-	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w1 /m);
-});
-
-test("when pane list fails the tab still falls back to the worktree's workspace", async () => {
-	const { env, log } = herdrSandbox("ok");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7", FAKE_HERDR_PANE_CWD: "none" });
-	assert.equal(run.code, 0);
-	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w7 /m);
-});
-
-test("a worker dispatched into another worktree goes to that worktree's workspace", async () => {
-	const { env, log } = herdrSandbox("ok");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok", FAKE_HERDR_WORKTREE_WS: "w7", FAKE_HERDR_PANE_CWD: "/elsewhere" });
-	assert.equal(run.code, 0);
-	assert.match(readFileSync(log, "utf8"), /^tab create --workspace w7 /m);
-});
-
 const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** The run folder's file, once scout has made it (the folder is keyed by scout's pid). */
@@ -531,7 +475,7 @@ function runFile(scoutRoot: string, name: string): string | undefined {
 	return dir ? join(scoutRoot, dir, name) : undefined;
 }
 
-/** Runs a herdr-mode scout whose fake pi sleeps; reads pane.sh once the pane has started, then SIGTERMs scout. */
+/** Runs a pane-mode scout whose fake pi sleeps; reads pane.sh once the pane has started, then SIGTERMs scout. */
 async function capturePaneScript(env: NodeJS.ProcessEnv, scoutRoot: string): Promise<{ run: Run; text: string; mode: number; path: string }> {
 	const seen = { text: "", mode: -1, path: "" };
 	const run = await runScout(["look around"], { ...env, FAKE_PI: "sleep" }, "", (pid) => {
@@ -550,33 +494,8 @@ async function capturePaneScript(env: NodeJS.ProcessEnv, scoutRoot: string): Pro
 	return { run, ...seen };
 }
 
-test("a failed model run (extension writes rc 1) returns rc 1 with the reason, and the tab stays open", async () => {
-	const { env, log } = herdrSandbox("ok");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "error" });
-	assert.equal(run.code, 1);
-	assert.match(run.stdout, /404/);
-	assert.doesNotMatch(readFileSync(log, "utf8"), /^tab close/m);
-});
-
-test("pane.sh is 0600, drops the herdr socket, exports no HERDR_ var, and is gone after exit", async () => {
-	const { env, scoutRoot } = herdrSandbox("ok");
-	const seen = await capturePaneScript({ ...env, HERDR_SOCKET_PATH: "/tmp/herdr.sock", HERDR_ENV: "1" }, scoutRoot);
-	assert.equal(seen.mode, 0o600);
-	assert.match(seen.text, /^unset HERDR_SOCKET_PATH HERDR_ENV ZMX_SESSION$/m);
-	assert.doesNotMatch(seen.text, /^export HERDR_/m);
-	assert.ok(seen.path);
-	assert.equal(existsSync(seen.path), false, "pane.sh outlived scout");
-});
-
-test("a herdr child that times out returns 124 without a cat error", async () => {
-	const { env } = herdrSandbox("ok");
-	const run = await runScout(["--timeout", "2", "look around"], { ...env, FAKE_PI: "hang" });
-	assert.equal(run.code, 124);
-	assert.doesNotMatch(run.stderr, /cat:/);
-});
-
 test("SIGKILL of scout takes the pane child with it, and the pane still counts toward the cap until then", async () => {
-	const { env, scoutRoot } = herdrSandbox("ok");
+	const { env, scoutRoot } = kittySandbox();
 	const pidfile = join(scoutRoot, "..", "fake.pid");
 	const first = spawn(SCOUT, ["--rw", "--spec", "-"], { env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile }, stdio: ["pipe", "ignore", "ignore"] });
 	first.stdin.end(SPEC);
@@ -603,7 +522,7 @@ test("SIGKILL of scout takes the pane child with it, and the pane still counts t
 });
 
 test("pi gets -na unless the cwd is under a trusted path in trust.json", async () => {
-	const { env, scoutRoot } = herdrSandbox("ok");
+	const { env, scoutRoot } = kittySandbox();
 	const trustFile = join(String(env.PI_CODING_AGENT_DIR), "trust.json");
 	writeFileSync(trustFile, JSON.stringify({ "/some/other/place": true }));
 	assert.match((await capturePaneScript(env, scoutRoot)).text, / -na /);
@@ -611,14 +530,6 @@ test("pi gets -na unless the cwd is under a trusted path in trust.json", async (
 	const trusted = await capturePaneScript(env, scoutRoot);
 	assert.ok(trusted.text.includes("timeout --foreground"));
 	assert.doesNotMatch(trusted.text, / -na /);
-});
-
-test("when herdr cannot open a tab, scout falls back to pi -p", async () => {
-	const { env, log } = herdrSandbox("broken");
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 0);
-	assert.match(run.stdout, /^x{20}$/m);
-	assert.doesNotMatch(readFileSync(log, "utf8"), /^pane run/m);
 });
 
 test("a reader that quits early (| head) does not kill the run", () => {
@@ -698,7 +609,7 @@ test("kitty: pane script keeps its secrets private, excludes old identities and 
   assert.match(gone.stdout, /-p /);
   const captured = await capturePaneScript(env, scoutRoot);
   assert.equal(captured.mode, 0o600);
-  assert.doesNotMatch(captured.text, /^export (KITTY_|HERDR_|ZMX_SESSION=)/m);
+  assert.doesNotMatch(captured.text, /^export (KITTY_|ZMX_SESSION=)/m);
   assert.match(captured.text, /extensions\/pi-holder\.ts/);
   assert.equal(existsSync(captured.path), false);
 });
