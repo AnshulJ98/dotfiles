@@ -3,8 +3,6 @@
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
 #   zws new [--ask | --window]  new workspace on the current folder (--ask prompts for a name,
 #                               --window opens it in an OS window of its own)
-#   zws switch N | next | prev
-#   zws agent N                 focus the Nth agent, in the sidebar's order
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -103,32 +101,6 @@ case ${1:-} in
       [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && { kitten @ action goto_session "$f"; exit; }
     done
     create "$(unique "$PWD")" "$PWD" ;;
-  switch|next|prev)
-    st=$(state); cur=$(sed -n 1p <<<"$st"); IFS=$'\n' read -d '' -r -a ws < <(tail -n +3 <<<"$st" | sed '/^$/d')
-    [ ${#ws[@]} -eq 0 ] && exit 0
-    i=0; for j in "${!ws[@]}"; do [ "${ws[$j]}" = "$cur" ] && i=$j; done
-    case $1 in
-      switch) i=$(( $2 - 1 )); [ "$i" -lt "${#ws[@]}" ] || exit 0 ;;
-      next) i=$(( (i + 1) % ${#ws[@]} )) ;;
-      prev) i=$(( (i - 1 + ${#ws[@]}) % ${#ws[@]} )) ;;
-    esac
-    go "${ws[$i]}" ;;
-  agent) # panes that report a program status, in tab order: the sidebar's agents list
-    read -r ws id cur < <(kitten @ ls | /usr/bin/python3 -c '
-import json, sys
-agents, cur = [], "-"
-for o in json.load(sys.stdin):
-    for t in o["tabs"]:
-        for w in t["windows"]:
-            if o["is_active"] and t["is_active"] and w["is_active"]: cur = w.get("session_name") or "-"
-            if w["program_status"] and w.get("session_name") and w["user_vars"].get("role") != "sidebar":
-                agents.append((w["session_name"], w["id"]))
-n = int(sys.argv[1]) - 1
-if 0 <= n < len(agents): print(*agents[n], cur)' "$2")
-    [ -n "${id:-}" ] || exit 0
-    # switch first, or the tab bar keeps showing the old workspace's tabs
-    [ "$ws" != "$cur" ] && go "$ws"
-    kitten @ focus-window --match "id:$id" ;;
   rename) # empty answer: back to the folder's name
     overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2" ;;
   close) kitten @ action close_session "$2" ;;
@@ -137,5 +109,5 @@ if 0 <= n < len(agents): print(*agents[n], cur)' "$2")
       new) overlay "$3" 'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; wt switch -c "$b" --no-cd -x "$0" -- here '"$PAUSE" ;;
       open) overlay "$3" 'wt switch --no-cd -x "$0" -- here '"$PAUSE" ;;
     esac ;;
-  *) sed -n '2,11p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,8p' "$0" >&2; exit 2 ;;
 esac

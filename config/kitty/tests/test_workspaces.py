@@ -152,6 +152,55 @@ class SavingTests(unittest.TestCase):
             self.assertEqual((Path(directory) / ".open").read_text(), "")
 
 
+class IntentWatcherTests(unittest.TestCase):
+    def test_dispatch_clears_first_empty_callbacks_do_nothing_and_rename_schedules(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            window = NS(id=7)
+            pane = NS(id=41, created_in_session_name='beta', user_vars={},
+                      program_status=NS(as_list=lambda: []),
+                      screen=NS(last_reported_cwd=None), cwd_of_child='')
+            class Tab(list):
+                id, active_window = 8, pane
+            boss.all_tabs = [Tab([pane])]
+            run = module.zkitty.run
+            def intent(boss_arg, words):
+                self.assertIs(boss_arg, boss)
+                self.assertEqual(words, ['space', 'beta'])
+                self.assertEqual(boss.calls, [('set-user-vars', '--match=id:7', 'zdo')])
+                self.assertEqual(run(boss_arg, words), [('goto', 'beta')])
+            with patch.object(module.zkitty, 'run', side_effect=intent), patch.object(module, 'add_timer') as timer:
+                module.on_set_user_var(boss, window, {'key': 'zdo', 'value': 'space beta'})
+                self.assertEqual(boss.calls[-1], ('action', 'goto_session', module._file('beta')))
+                for key, value in [('zdo', ''), ('zside', ''), ('zside', 'junk')]:
+                    module.on_set_user_var(boss, window, {'key': key, 'value': value})
+                timer.assert_not_called()
+                module.on_set_user_var(boss, window, {'key': 'ws_name', 'value': 'Bee'})
+                self.assertEqual(timer.call_count, 2)
+                self.assertEqual([c.args[1] for c in timer.call_args_list], [0.05, 2.0])
+            with patch.object(module.zkitty, 'run', side_effect=RuntimeError('intent failed')):
+                self.assertIsNone(module.on_set_user_var(boss, window, {'key': 'zdo', 'value': 'next'}))
+            self.assertIn('intent failed', Path(directory, 'watcher.log').read_text())
+
+    def test_sync_uses_shared_dock_and_keeps_launch_guard(self):
+        from unittest.mock import patch
+        class Tab(list):
+            id = 8
+        with tempfile.TemporaryDirectory() as directory:
+            pane = Window('alpha', 1)
+            boss = Boss([pane], pane, '')
+            boss.all_tabs = [Tab([pane])]
+            module = load(directory, boss)
+            with patch.object(module.zkitty, 'dock') as dock, patch.object(module, '_refresh'):
+                for _ in range(4):
+                    module._sync()
+                self.assertEqual(dock.call_count, 3)
+                dock.assert_called_with(boss, 8, 'alpha')
+
+
 class PushTests(unittest.TestCase):
     def test_ready_views_dedup_status_ticks_and_pruning(self):
         import json
