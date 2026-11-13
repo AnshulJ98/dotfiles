@@ -10,6 +10,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import termios
 import tempfile
 import time
 import unittest
@@ -25,9 +26,11 @@ with (root / "calls").open("a") as log:
 mode = os.environ.get("MODE", "")
 if cmd == "timeout":
     assert args[0] == "3"
-    try: sys.exit(subprocess.run(args[1:], timeout=.2).returncode)
+    # Match the requested deadline: Python fake startup can exceed 0.2s under load.
+    try: sys.exit(subprocess.run(args[1:], timeout=float(args[0])).returncode)
     except subprocess.TimeoutExpired: sys.exit(124)
 if cmd == "zmx":
+    if mode == "slow-discovery" and args == ["ls", "--short"]: time.sleep(.4)
     if mode == "hang": time.sleep(30)
     if mode == "fail": sys.exit(1)
     if args == ["ls"]: print("name=old-1\tpid=123\tclients=0")
@@ -141,6 +144,12 @@ class ScriptTests(unittest.TestCase):
                 if not queried and query in output:
                     queried = True
                     if reply is not None:
+                        # Bash prints read's prompt before disabling echo. Wait for
+                        # read -s to be ready so an early reply isn't echoed or flushed.
+                        while termios.tcgetattr(master)[3] & termios.ECHO:
+                            self.assertIsNone(proc.poll(), bytes(output))
+                            self.assertLess(time.monotonic(), deadline, bytes(output))
+                            time.sleep(.001)
                         os.write(master, reply)
             self.assertTrue(queried, bytes(output))
             self.assertEqual(proc.wait(timeout=2), 0, bytes(output))
@@ -163,6 +172,26 @@ class ScriptTests(unittest.TestCase):
         commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
         self.assertEqual(commands, ["timeout", "zmx", "zmx"])
         self.assertNotIn(b"SetUserVar=holder", output)
+
+    def test_pane_reply_waits_for_silent_read_after_prompt(self):
+        script = self.root / "zshell"
+        prompt = r"$'\033]1337;SetUserVar=zq=MQ==\007'"
+        original = "IFS=' ' read -r -s -t 2 -p " + prompt + " a b c d"
+        delayed = ("{ printf '%s' " + prompt + "; " + shlex.quote(sys.executable) +
+                   " -c 'import time; time.sleep(.1)'; IFS=' ' read -r -s -t 2 a b c d; }")
+        source = script.read_text()
+        self.assertEqual(source.count(original), 1)
+        script.write_text(source.replace(original, delayed))
+        self.pane_start(b': zq saved%20name -\n')
+        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_pane_discovery_allows_slow_fake_startup_within_requested_timeout(self):
+        output = self.pane_start(b': zq saved%20name -\n', MODE="slow-discovery")
+        self.assertEqual(self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]])
+        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
+        self.assertEqual(self.calls("plain-shell"), [])
+        self.assertNotIn(b"discovery failed or timed out", output)
 
     def test_pane_query_missing_pi_file_does_not_resume(self):
         self.pane_start(b': zq old-1 %2Fno%2Fsuch%2Ffile\n')
@@ -327,11 +356,10 @@ class ScriptTests(unittest.TestCase):
     def test_hidden_folder_and_new_window_keep_session_syntax(self):
         result = self.run_script("zws", "create", ".config", "/cwd space")
         self.assertEqual(result.returncode, 0, result.stderr)
-        result = self.run_script("zws", "new", "--window")
+        result = self.run_script("zws", "new", "--window", "/cwd space")
         self.assertEqual(result.returncode, 0, result.stderr)
         destination = self.calls("kitten")[-1][-1]
-        self.assertEqual(Path(destination).read_text(),
-                         "new_os_window\ncd " + str(self.root / "cwd space") + "\nlaunch\n")
+        self.assertEqual(Path(destination).read_text(), "new_os_window\ncd /cwd space\nlaunch\n")
 
     def test_create_rejects_traversal_and_controls_without_navigation(self):
         for args in (("../escape", "/cwd"), ("..", "/cwd"), ("bad\nlaunch", "/cwd"),
@@ -341,21 +369,46 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(list(Path(self.env["ZWS_DIR"]).iterdir()), [])
         self.assertFalse((self.root / "calls").exists())
 
-    def test_state_missing_and_hung_probes_keep_kitty_cwd(self):
-        # Python raises OSError on an invalid executable; do not fall through to real tools.
-        for probe, mode in (("zmx", ""), ("lsof", ""), ("zmx", "hang"), ("lsof", "lsof-hang")):
-            with self.subTest(probe=probe, mode=mode):
-                path = self.root / probe
-                original = path.read_text()
-                if not mode: path.write_text("#!/nonexistent-interpreter\n")
-                try:
-                    result = self.run_script("zws", "new", HOLDER="old-1", MODE=mode)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    destination = self.calls("kitten")[-1][-1]
-                    self.assertEqual(Path(destination).read_text(),
-                                     "cd " + str(self.root / "cwd space") + "\nlaunch\n")
-                finally:
-                    path.write_text(original)
+    def test_new_uses_argument_and_open_file_without_live_probes(self):
+        directory = Path(self.env["ZWS_DIR"])
+        directory.mkdir()
+        (directory / ".open").write_text("cwd-space\n")
+        existing = directory / "cwd-space-2.kitty-session"
+        existing.write_text("keep\n")
+        result = self.run_script("zws", "new", "/cwd space", HOLDER="old-1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        destination = directory / "cwd-space-3.kitty-session"
+        self.assertEqual(destination.read_text(), "cd /cwd space\nlaunch\n")
+        self.assertEqual(existing.read_text(), "keep\n")
+        self.assertEqual(self.calls("kitten"), [["@", "action", "goto_session", str(destination)]])
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("lsof"), [])
+
+    def test_new_home_default_and_no_discovery_for_all_modes(self):
+        for flag in ((), ("--window",), ("--ask",)):
+            with self.subTest(flag=flag):
+                result = self.run_script("zws", "new", *flag)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                call = self.calls("kitten")[-1]
+                if flag == ("--ask",):
+                    self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", str(self.root)])
+                    self.assertEqual(call[-2:], ["home-3", str(self.root)])
+                else:
+                    prefix = "new_os_window\n" if flag else ""
+                    self.assertEqual(Path(call[-1]).read_text(),
+                                     prefix + "cd " + str(self.root) + "\nlaunch\n")
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("lsof"), [])
+        self.assertFalse(any("ls" in args for args in self.calls("kitten")))
+
+    def test_new_ask_passes_cwd_and_name_as_whole_overlay_arguments(self):
+        result = self.run_script("zws", "new", "--ask", "/cwd space")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call, = self.calls("kitten")
+        self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", "/cwd space"])
+        self.assertEqual(call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"])
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("lsof"), [])
 
     def test_picker_interrupt_cleans_only_owned_directory(self):
         neighbor = self.root / "zpick-view.neighbor"
