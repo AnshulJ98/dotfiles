@@ -65,8 +65,8 @@ function makeTask(id: string, over: Record<string, unknown> = {}): string {
 	return dir;
 }
 
-type Mode = "fix" | "noop" | "leak" | "silent" | "blocked" | "fixplus";
-const VERDICT = { fix: "PASS", fixplus: "PASS", leak: "PASS", noop: "FAIL", blocked: "CANNOT-RUN", silent: "" };
+type Mode = "fix" | "noop" | "leak" | "silent" | "blocked" | "fixplus" | "fixtest";
+const VERDICT = { fix: "PASS", fixplus: "PASS", fixtest: "PASS", leak: "PASS", noop: "FAIL", blocked: "CANNOT-RUN", silent: "" };
 
 /** A stub scout. It runs under env -i, so everything it needs is baked into the script. */
 function makeStub(mode: Mode): { path: string; record: string } {
@@ -81,8 +81,9 @@ d="$HOME/.pi/agent/sessions/scout/$$"; mkdir -p "$d"
 if [ ${mode} = silent ]; then : > "$d/s.jsonl"; exit 1; fi
 printf '%s\\n' '${line}' > "$d/s.jsonl"
 printf '%s' '{"verdict":"${VERDICT[mode]}","reasons":[],"retriesUsed":0}' > "$d/verdict.json"
-case ${mode} in fix|fixplus|leak) printf 'export function add(a: number, b: number): number {\\n\\treturn a + b;\\n}\\n' > src/add.ts ;; esac
+case ${mode} in fix|fixplus|fixtest|leak) printf 'export function add(a: number, b: number): number {\\n\\treturn a + b;\\n}\\n' > src/add.ts ;; esac
 if [ ${mode} = fixplus ]; then echo extra > NOTES.md; fi
+if [ ${mode} = fixtest ]; then echo '// own test' > src/own.test.ts; fi
 if [ ${mode} = blocked ]; then printf '**Blocked on me**\\n- needs a credential\\n'; else printf '**Blocked on me**\\nnothing.\\n'; fi
 `, 0o755);
 	return { path, record };
@@ -106,7 +107,7 @@ test("a fixing scout passes: record fields, summed usage, isolated HOME, stub ar
 	const { dir, seconds, ...rest } = rec;
 	assert.deepEqual(rest, {
 		task: "good", role: "worker", model: "prov/model-x", thinking: "high", trial: 3, pass: true, sensors: "PASS", rc: 0,
-		outside: [], added: 1, cost: 0.125, input: 100, output: 20, cacheRead: 50, cacheWrite: 10, turns: 1, leak: false, infra: false,
+		outside: [], wroteTest: false, added: 1, cost: 0.125, input: 100, output: 20, cacheRead: 50, cacheWrite: 10, turns: 1, leak: false, infra: false,
 	});
 	assert.equal(typeof seconds, "number");
 	assert.ok(existsSync(join(dir, "ws/src/zz-hidden-add.more.test.ts")));
@@ -137,9 +138,18 @@ test("a scout that does nothing fails; one naming the source repo leaks; one wit
 	assert.deepEqual([quiet.rec.infra, quiet.rec.turns, quiet.rec.rc, quiet.rec.pass, quiet.rec.sensors], [true, 0, 1, false, null]);
 });
 
-test("a file edited outside allowed is listed in outside", () => {
+test("a scout that passes the hidden tests but edits a file outside allowed fails, with that file in outside", () => {
 	const { rec } = trial(makeTask("plus"), "fixplus");
-	assert.deepEqual([rec.pass, rec.outside, rec.added], [true, ["NOTES.md"], 2]);
+	assert.ok(existsSync(join(rec.dir, "ws/src/zz-hidden-add.more.test.ts")));
+	assert.equal(readFileSync(join(rec.dir, "test.txt"), "utf8").includes("fail 0"), true);
+	assert.deepEqual([rec.pass, rec.outside, rec.wroteTest, rec.added], [false, ["NOTES.md"], false, 2]);
+});
+
+test("wroteTest is true when a changed path is a test path, and an allowed test file does not fail the trial", () => {
+	const { rec } = trial(makeTask("owntest", { allowed: ["src/add.ts", "src/own.test.ts"] }), "fixtest");
+	assert.deepEqual([rec.pass, rec.outside, rec.wroteTest], [true, [], true]);
+	const outside = trial(makeTask("owntest-out"), "fixtest").rec;
+	assert.deepEqual([outside.pass, outside.outside, outside.wroteTest], [false, ["src/own.test.ts"], true]);
 });
 
 test("link entries are symlinked from the source repo and are not counted as changes", () => {
