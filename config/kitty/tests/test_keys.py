@@ -31,13 +31,15 @@ class KeyConfigTests(unittest.TestCase):
             "map ctrl+alt+[ kitten zdo.py prev", "map ctrl+alt+] kitten zdo.py next",
             *(f"map ctrl+alt+{n} kitten zdo.py agent {n}" for n in range(1, 10)),
             "map cmd+t kitten zdo.py tab here", "map cmd+shift+t kitten zdo.py tab",
+            "map cmd+alt+n kitten zdo.py new", "map cmd+alt+shift+n kitten zdo.py new ask",
+            "map cmd+shift+n kitten zdo.py new window",
         ]
-        self.assertEqual(len(expected), 22)
+        self.assertEqual(len(expected), 25)
         for mapping in expected:
             self.assertEqual(lines.count(mapping), 1, mapping)
         for line in lines:
             if line.startswith("map "):
-                self.assertFalse(any("bin/zws " + word in line for word in ('switch', 'next', 'prev', 'agent')))
+                self.assertFalse(any("bin/zws " + word in line for word in ('switch', 'next', 'prev', 'agent', 'new')))
         for key in ('cmd+t', 'cmd+alt+1', 'ctrl+alt+1'):
             plain = next(i for i, line in enumerate(lines) if line.startswith(f"map {key} "))
             guarded = [i for i, line in enumerate(lines)
@@ -55,7 +57,8 @@ class KeyConfigTests(unittest.TestCase):
                                     env=dict(os.environ, ZWS_DIR=directory), timeout=10)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertEqual(result.stdout, '')
-        self.assertIn('zws new', result.stderr)
+        self.assertIn('zws new [--ask | --window] CWD', result.stderr)
+        self.assertIn('home if absent', result.stderr)
         self.assertNotIn('zws switch', result.stderr)
         self.assertNotIn('set -u', result.stderr)
 
