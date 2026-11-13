@@ -124,6 +124,8 @@ export function grade(g: { expect: string; testExit: number | null; changed: str
 export interface Judged {
 	found: number;
 	of: number;
+	/** judge.sh's verdict: every non-minor item met; a judge.json without it is not a pass */
+	pass: boolean;
 	disagreements: string[];
 	judgeCost: number;
 	infra: boolean;
@@ -131,11 +133,11 @@ export interface Judged {
 
 /** judge.sh's JSON line; anything unreadable is an infra result with nothing found. */
 export function parseJudged(text: string): Judged {
-	const none: Judged = { found: 0, of: 0, disagreements: [], judgeCost: 0, infra: true };
+	const none: Judged = { found: 0, of: 0, pass: false, disagreements: [], judgeCost: 0, infra: true };
 	const v = asObject(parseLine(text.trim()));
 	if (v === undefined || typeof v.found !== "number" || typeof v.of !== "number" || !Array.isArray(v.disagreements)) return none;
 	return {
-		found: v.found, of: v.of, disagreements: v.disagreements.filter((d): d is string => typeof d === "string"),
+		found: v.found, of: v.of, pass: v.pass === true, disagreements: v.disagreements.filter((d): d is string => typeof d === "string"),
 		judgeCost: num(v.judgeCost), infra: v.infra === true,
 	};
 }
@@ -145,9 +147,9 @@ export function isReviewTimeout(rc: number): boolean {
 	return rc === 124 || rc === 137;
 }
 
-/** A review passes when it found every defect and the judging itself worked. */
+/** A review passes when judge.sh says so (every non-minor defect found) and the judging itself worked. */
 export function gradeReview(j: Judged): boolean {
-	return !j.infra && j.of > 0 && j.found === j.of;
+	return !j.infra && j.of > 0 && j.pass;
 }
 
 function readText(path: string | undefined): string {
