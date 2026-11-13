@@ -42,81 +42,74 @@ def cwd_of(report: bytes | str | None, fallback: str) -> str:
 
 
 def view(panes: list[dict]) -> dict:
-    empty = {'spaces': [], 'agents': []}
     spaces, agents, tabs, states = {}, [], [], {}
-    try:
-        for pane in panes:
-            if not tabs or tabs[-1][0].get('tab', 0) != pane.get('tab', 0):
-                tabs.append([])
-            tabs[-1].append(pane)
-        for tab in tabs:
-            members = [p for p in tab if p.get('vars', {}).get('role') != 'sidebar']
-            name = members[0].get('session', '') if members else ''
-            if not name:
-                continue
-            if name not in spaces:
-                states[name] = []
-                spaces[name] = dict(name=name, tabs=0, cwd=members[0].get('cwd', ''),
-                                    shown='', state='')
-            space = spaces[name]
-            space['tabs'] += 1
-            space['shown'] = space['shown'] or next(
-                (p.get('vars', {}).get('ws_name') for p in tab
-                 if p.get('vars', {}).get('ws_name')), '')
-            for pane in members:
-                records = pane.get('status', [])
-                pane_states = [r.get('state', '') for r in records]
-                state = worst(pane_states)
-                states[name].extend(pane_states)
-                space['state'] = worst(states[name])
-                if records:
-                    variables = pane.get('vars', {})
-                    agents.append(dict(pane=pane.get('id', 0), space=name, tab=space['tabs'],
-                                       app=records[0].get('app') or 'agent', state=state,
-                                       model=variables.get('pi_model', ''), ctx=variables.get('pi_ctx', ''),
-                                       tab_id=pane.get('tab', 0), active=bool(pane.get('active', False))))
-        return {'spaces': list(spaces.values()), 'agents': agents}
-    except (AttributeError, TypeError, ValueError):
-        return empty
+    for pane in panes:
+        if not tabs or tabs[-1][0].get('tab', 0) != pane.get('tab', 0):
+            tabs.append([])
+        tabs[-1].append(pane)
+    for tab in tabs:
+        members = [p for p in tab if p.get('vars', {}).get('role') != 'sidebar']
+        name = members[0].get('session', '') if members else ''
+        if not name:
+            continue
+        if name not in spaces:
+            states[name] = []
+            spaces[name] = dict(name=name, tabs=0, cwd=members[0].get('cwd', ''),
+                                shown='', state='')
+        space = spaces[name]
+        space['tabs'] += 1
+        space['shown'] = space['shown'] or next(
+            (p.get('vars', {}).get('ws_name') for p in tab
+             if p.get('vars', {}).get('ws_name')), '')
+        for pane in members:
+            records = pane.get('status', [])
+            pane_states = [r.get('state', '') for r in records]
+            state = worst(pane_states)
+            states[name].extend(pane_states)
+            space['state'] = worst(states[name])
+            if records:
+                variables = pane.get('vars', {})
+                agents.append(dict(pane=pane.get('id', 0), space=name, tab=space['tabs'],
+                                   app=records[0].get('app') or 'agent', state=state,
+                                   model=variables.get('pi_model', ''), ctx=variables.get('pi_ctx', ''),
+                                   tab_id=pane.get('tab', 0), active=bool(pane.get('active', False))))
+    return {'spaces': list(spaces.values()), 'agents': agents}
 
 
 def line(view: dict, session: str, tab: int) -> bytes:
-    try:
-        agents = [dict({k: v for k, v in a.items() if k not in ('tab_id', 'active')},
-                       on=a.get('tab_id') == tab and bool(a.get('active', False)))
-                  for a in view.get('agents', [])]
-        obj = dict(v=1, current=session, spaces=view.get('spaces', []), agents=agents)
-        return json.dumps(obj, sort_keys=True, separators=(',', ':')).encode() + b'\n'
-    except (AttributeError, TypeError, ValueError):
-        return b''
+    agents = [dict({k: v for k, v in a.items() if k not in ('tab_id', 'active')},
+                   on=a.get('tab_id') == tab and bool(a.get('active', False)))
+              for a in view.get('agents', [])]
+    obj = dict(v=1, current=session, spaces=view.get('spaces', []), agents=agents)
+    return json.dumps(obj, sort_keys=True, separators=(',', ':')).encode() + b'\n'
 
 
 def intent(view: dict, current: str, words: list[str]) -> list[tuple]:
-    try:
-        spaces = [s.get('name', '') for s in view.get('spaces', [])]
-        agents = view.get('agents', [])
-        if len(words) == 1 and words[0] in ('next', 'prev') and spaces:
-            index = spaces.index(current) if current in spaces else 0
-            return [('goto', spaces[(index + (1 if words[0] == 'next' else -1)) % len(spaces)])]
-        if len(words) != 2:
-            return []
-        command, value = words
-        if command == 'space':
-            return [('goto', value)] if value in spaces else []
-        if command not in ('switch', 'agent', 'pane'):
-            return []
-        number = int(value)
-        if command == 'switch':
-            return [('goto', spaces[number - 1])] if 1 <= number <= len(spaces) else []
-        if command == 'agent':
-            agent = agents[number - 1] if 1 <= number <= len(agents) else None
-        else:
-            agent = next((a for a in agents if a.get('pane') == number), None)
-        if agent is None:
-            return []
-        space, pane = agent.get('space', ''), agent.get('pane')
-        if not space or not isinstance(pane, int):
-            return []
-        return ([] if space == current else [('goto', space)]) + [('focus', pane)]
-    except (AttributeError, TypeError, ValueError):
+    spaces = [s.get('name', '') for s in view.get('spaces', [])]
+    agents = view.get('agents', [])
+    if len(words) == 1 and words[0] in ('next', 'prev') and spaces:
+        index = spaces.index(current) if current in spaces else 0
+        return [('goto', spaces[(index + (1 if words[0] == 'next' else -1)) % len(spaces)])]
+    if len(words) != 2:
         return []
+    command, value = words
+    if command == 'space':
+        return [('goto', value)] if value in spaces else []
+    if command not in ('switch', 'agent', 'pane'):
+        return []
+    try:
+        number = int(value)
+    except ValueError:
+        return []
+    if command == 'switch':
+        return [('goto', spaces[number - 1])] if 1 <= number <= len(spaces) else []
+    if command == 'agent':
+        agent = agents[number - 1] if 1 <= number <= len(agents) else None
+    else:
+        agent = next((a for a in agents if a.get('pane') == number), None)
+    if agent is None:
+        return []
+    space, pane = agent.get('space', ''), agent.get('pane')
+    if not space or not isinstance(pane, int):
+        return []
+    return ([] if space == current else [('goto', space)]) + [('focus', pane)]

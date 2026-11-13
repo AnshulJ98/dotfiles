@@ -5,7 +5,8 @@
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
-#  - answers bin/zshell's zq query with the pane's holder and pi_session.
+#  - answers bin/zshell's zq query once per pane with its holder and pi_session.
+#  - accepts ready/zdo only from role=sidebar windows launched with bin/zside.
 #  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
 import os
@@ -22,7 +23,7 @@ import zkitty
 
 # Not documented kitty API, checked against kitty 0.50.0: add_timer and get_boss here, and below
 # boss.all_windows / all_tabs / active_window, window.created_in_session_name / os_window_id /
-# user_vars / write_to_child / screen / program_status / cwd_of_child, tab.tab_manager_ref /
+# user_vars / write_to_child / screen / program_status / cwd_of_child / child.argv, tab.tab_manager_ref /
 # active_window and its manager's active_tab, Screen.last_reported_cwd, ProgramStatus.as_list.
 # tests/test_workspaces.py checks these. Callbacks and boss.call_remote_control are documented.
 from kitty.fast_data_types import add_timer, get_boss
@@ -38,6 +39,7 @@ _quitting = False  # windows close one by one on quit; saving then would drop wo
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
+_named: set[int] = set()
 _ready: set[int] = set()
 _sent: dict[int, bytes] = {}
 
@@ -143,6 +145,7 @@ def _push(boss) -> None:
                 if line and line != _sent.get(d.id):
                     d.write_to_child(line)
                     _sent[d.id] = line
+    _named.intersection_update(w.id for tab in boss.all_tabs for w in tab)
     _ready.intersection_update(existing)
     for wid in _sent.keys() - existing:
         del _sent[wid]
@@ -223,15 +226,21 @@ def on_set_user_var(boss, window, data) -> None:
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
         _sync()
     elif data.get('key') == 'zside' and data.get('value') == 'ready':
-        _ready.add(window.id)
-        _sent.pop(window.id, None)
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
-        _push(boss)
+        if zkitty.is_sidebar(window):
+            _ready.add(window.id)
+            _sent.pop(window.id, None)
+            _push(boss)
     elif data.get('key') == 'zdo' and data.get('value'):
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zdo'))
-        zkitty.run(boss, data['value'].split())
+        if zkitty.is_sidebar(window):
+            zkitty.run(boss, data['value'].split())
     elif data.get('key') == 'zq' and data.get('value'):
-        zkitty.attach(boss, window)
+        if window.id not in _named:
+            _named.add(window.id)
+            zkitty.attach(boss, window)
+        else:
+            boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zq'))
     elif data.get('key') in ('zside', 'zdo', 'zq'):
         return
     else:  # a rename (ws_name) or pi's model and context use

@@ -104,6 +104,22 @@ class SideTests(unittest.TestCase):
             self.assertEqual(len(self.side.rows(obj, {'a': ('a', '', ''), 'b': ('b', '', '')},
                                                 '', 24, height)[0]), height)
 
+    def test_agent_in_unlisted_workspace_uses_its_name(self):
+        obj = view()
+        obj['agents'][0]['space'] = 'gone'
+        body, _ = self.side.rows(obj, {'a': ('A', '', ''), 'b': ('B', '', '')}, '', 32, 24)
+        self.assertTrue(any('pi · gone 1' in row for row in body))
+
+    def test_dirty_lines_find_first_view_and_preserve_partial_input(self):
+        split = self.side.split_input
+        wire = json.dumps(view()).encode() + b'\n'
+        for prefix in (b'x', b'\x1b[A', b'{', b'}{x', b'{}', b'{"v":2}'):
+            self.assertEqual(split(prefix + wire), (b'', [], view(), False))
+        rest, _, obj, _ = split(b'x')
+        self.assertIsNone(obj)
+        self.assertEqual(rest, b'x')
+        self.assertEqual(split(rest + wire), (b'', [], view(), False))
+
     def test_render_names_without_a_process_and_repo_each_draw(self):
         obj = view('/tmp/project')
         obj['spaces'] += [dict(name='empty', cwd='', shown='', state='', tabs=1),
@@ -141,6 +157,7 @@ class SideTests(unittest.TestCase):
 
     def test_git_queue_throttles_serializes_and_times_out(self):
         git = self.side.Git()
+        self.assertIsNone(git.top)
         git.request(['/a', '/b', '/a'], '/a', 0)
         self.assertEqual(git.queue, ['/a', '/b'])
         class Pipe:
