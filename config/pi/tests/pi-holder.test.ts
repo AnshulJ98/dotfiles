@@ -35,6 +35,9 @@ test("kitty notifications: settled completion and input prompts, not turns, abor
       assert.ok(note.endsWith("\x1b\\"));
       assert.doesNotMatch(note, /Choice|injection|my project/);
     }
+    // Done and blocked sound different: kitty plays its "info" and "question" system sounds.
+    assert.ok(notes[0].includes(`:s=${Buffer.from("info").toString("base64")};`));
+    assert.ok(notes[2].includes(`:s=${Buffer.from("question").toString("base64")};`));
     assert.equal(Buffer.from(notes[1].split(";").at(-1)!.slice(0, -2), "base64").toString(), "my project: ready for input");
     assert.match(Buffer.from(notes[3].split(";").at(-1)!.slice(0, -2), "base64").toString(), /Choice/);
   } finally {

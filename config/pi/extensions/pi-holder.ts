@@ -18,11 +18,11 @@ const setUsage = (ctx: ExtensionContext): void => {
 
 // Kitty's documented OSC 99: only notify when this pane is unfocused; clicking focuses it.
 // Base64 payloads cannot inject terminal controls through a folder or prompt title.
-const notify = (ctx: ExtensionContext, title: string, body: string): void => {
+const notify = (ctx: ExtensionContext, sound: "info" | "question", title: string, body: string): void => {
   if (ctx.mode !== "tui" || process.env.SCOUT_DIGEST) return;
   const id = "pi-" + ctx.sessionManager.getSessionId().replace(/[^a-zA-Z0-9_-]/g, "");
   const meta = `i=${id}:o=unfocused:a=focus:e=1`;
-  process.stdout.write(`\x1b]99;${meta}:d=0;${Buffer.from(title).toString("base64")}\x1b\\`);
+  process.stdout.write(`\x1b]99;${meta}:d=0:s=${Buffer.from(sound).toString("base64")};${Buffer.from(title).toString("base64")}\x1b\\`);
   process.stdout.write(`\x1b]99;${meta}:p=body;${Buffer.from(body).toString("base64")}\x1b\\`);
 };
 
@@ -35,10 +35,10 @@ export default function (pi: ExtensionAPI): void {
     setUsage(ctx);
   });
   pi.on("agent_settled", async (event, ctx) => {
-    if (!event.aborted) notify(ctx, "Pi", `${basename(ctx.cwd)}: ready for input`);
+    if (!event.aborted) notify(ctx, "info", "Pi", `${basename(ctx.cwd)}: ready for input`);
   });
   pi.on("ui_prompt_start", async (event, ctx) => {
-    notify(ctx, "Pi needs input", `${basename(ctx.cwd)}: ${event.title || "waiting for your answer"}`);
+    notify(ctx, "question", "Pi needs input", `${basename(ctx.cwd)}: ${event.title || "waiting for your answer"}`);
   });
   pi.on("model_select", async (event) => setVar("pi_model", event.model.id));
   pi.on("turn_end", async (_event, ctx) => setUsage(ctx));
