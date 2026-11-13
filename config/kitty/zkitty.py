@@ -37,6 +37,12 @@ def safe(fn):
     return wrapped
 
 
+def is_sidebar(window) -> bool:
+    argv = getattr(getattr(window, 'child', None), 'argv', None)
+    return (window.user_vars.get('role') == 'sidebar' and bool(argv)
+            and os.path.basename(argv[0]) == os.path.basename(SIDEBAR))
+
+
 def cwd(window) -> str:
     return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
 

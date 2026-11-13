@@ -23,39 +23,40 @@ def window_id():
 
 
 # Keep the lock inode: unlinking it would let another starter bypass the lock.
-with open(sock + ".lock", "a") as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    wid = window_id()
-    if wid:
-        subprocess.run(["aerospace", "focus", "--window-id", str(wid)], check=True)
-    elif subprocess.run(["pgrep", "-f", "--", "--listen-on unix:" + sock],
-                        stdout=subprocess.DEVNULL, timeout=2).returncode == 0:
-        pass  # still starting; never remove a potentially active socket
-    else:
-        # Leave socket ownership and stale-socket handling to kitty.
-        main.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with main.open("x") as session:
-                session.write("cd ~\nlaunch\n")
-        except FileExistsError:
-            pass
-        subprocess.run(["open", "-n", "/Applications/kitty.app", "--args",
-                        "--listen-on", "unix:" + sock, "--session", str(main)],
-                       check=True, timeout=5)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            if window_id():
-                break
-            time.sleep(0.1)
-
-# zmx 1.0.1 writes a crash report on every session exit (zmx #294).
-reports = Path.home() / "Library/Logs/DiagnosticReports"
 try:
-    for report in reports.glob("zmx-*.ips"):
-        try:
-            if report.is_file() and report.stat().st_mtime < time.time() - 60 * 60:
-                os.unlink(report)
-        except OSError:
-            pass
-except OSError:
-    pass  # The reports folder may not exist.
+    with open(sock + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        wid = window_id()
+        if wid:
+            subprocess.run(["aerospace", "focus", "--window-id", str(wid)], check=True)
+        elif subprocess.run(["pgrep", "-f", "--", "--listen-on unix:" + sock],
+                            stdout=subprocess.DEVNULL, timeout=2).returncode == 0:
+            pass  # still starting; never remove a potentially active socket
+        else:
+            # Leave socket ownership and stale-socket handling to kitty.
+            main.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with main.open("x") as session:
+                    session.write("cd ~\nlaunch\n")
+            except FileExistsError:
+                pass
+            subprocess.run(["open", "-n", "/Applications/kitty.app", "--args",
+                            "--listen-on", "unix:" + sock, "--session", str(main)],
+                           check=True, timeout=5)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if window_id():
+                    break
+                time.sleep(0.1)
+finally:
+    # zmx 1.0.1 writes a crash report on every session exit (zmx #294).
+    reports = Path.home() / "Library/Logs/DiagnosticReports"
+    try:
+        for report in reports.glob("zmx-*.ips"):
+            try:
+                if report.is_file() and report.stat().st_mtime < time.time() - 60 * 60:
+                    os.unlink(report)
+            except OSError:
+                pass
+    except OSError:
+        pass  # The reports folder may not exist.

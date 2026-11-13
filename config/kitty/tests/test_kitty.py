@@ -162,6 +162,16 @@ class IntentTests(unittest.TestCase):
 
 
 class KittyTests(unittest.TestCase):
+    def test_sidebar_requires_role_and_launch_argv(self):
+        for role, child, expected in [
+            ('sidebar', NS(argv=['/any/where/zside']), True),
+            ('sidebar', NS(argv=['/bin/zsh']), False),
+            ('sidebar', NS(argv=[]), False), ('sidebar', NS(), False),
+            ('sidebar', None, False), ('', NS(argv=[zkitty.SIDEBAR]), False),
+        ]:
+            self.assertEqual(zkitty.is_sidebar(NS(user_vars={'role': role}, child=child)), expected)
+        self.assertFalse(zkitty.is_sidebar(NS(user_vars={'role': 'sidebar'})))
+
     def test_attach_saved_and_fresh_order(self):
         import uuid
         for saved in ('saved', ''):
