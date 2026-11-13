@@ -1,4 +1,5 @@
 """Pure renderer checks and a real raw-pty draw-before-git regression."""
+import base64
 import fcntl
 import importlib.machinery
 import importlib.util
@@ -40,6 +41,23 @@ def view(cwd=''):
 class SideTests(unittest.TestCase):
     def setUp(self):
         self.side = load()
+
+    def test_left_clicks_emit_only_intents_and_menu_still_uses_zws(self):
+        with patch.object(self.side.subprocess, 'run', side_effect=AssertionError('process')), \
+             patch.object(self.side.subprocess, 'Popen', side_effect=AssertionError('process')), \
+             patch.object(self.side, 'write') as write:
+            for action, words in [(('space', 'beta'), 'space beta'), (('pane', 41, 'beta'), 'pane 41')]:
+                self.side.act(action)
+                wire = write.call_args.args[0]
+                encoded = base64.b64encode(words.encode()).decode()
+                self.assertEqual(wire, '\x1b]1337;SetUserVar=zdo=' + encoded + '\x07')
+                self.assertEqual(base64.b64decode(wire.split('zdo=')[1][:-1]).decode(), words)
+            self.assertEqual(write.call_count, 2)
+            self.side.act(None)
+            self.assertEqual(write.call_count, 2)
+        with patch.object(self.side, 'run') as run:
+            self.side.act(('menu', 'rename', 'beta', '/repo'))
+            run.assert_called_once_with(self.side.ZWS, 'rename', 'beta')
 
     def test_repo_directory_worktrees_detached_and_missing_head(self):
         with tempfile.TemporaryDirectory() as directory:

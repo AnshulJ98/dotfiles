@@ -1,6 +1,9 @@
 """Kitty's plain keymap and launcher; independent of Herdr."""
 from pathlib import Path
 import shlex
+import os
+import subprocess
+import tempfile
 import tomllib
 import unittest
 
@@ -12,7 +15,7 @@ class KeyConfigTests(unittest.TestCase):
         maps = [shlex.split(line) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
                 if line.startswith("map ")]
         plain = {parts[1]: parts[2:] for parts in maps if parts[1] != "--when-focus-on"}
-        self.assertEqual(plain["cmd+t"], ["new_tab_with_cwd"])
+        self.assertEqual(plain["cmd+t"], ["kitten", "zdo.py", "tab", "here"])
         self.assertEqual(plain["cmd+w"], ["close_window"])
         self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
         self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
@@ -20,6 +23,41 @@ class KeyConfigTests(unittest.TestCase):
             "launch", "--type=tab", "--tab-title", "hunk", "--add-to-session=!",
             "--cwd=current", "/opt/homebrew/bin/hunk", "diff",
         ])
+
+    def test_intent_maps_and_herdr_precedence(self):
+        lines = (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
+        expected = [
+            *(f"map cmd+alt+{n} kitten zdo.py switch {n}" for n in range(1, 10)),
+            "map ctrl+alt+[ kitten zdo.py prev", "map ctrl+alt+] kitten zdo.py next",
+            *(f"map ctrl+alt+{n} kitten zdo.py agent {n}" for n in range(1, 10)),
+            "map cmd+t kitten zdo.py tab here", "map cmd+shift+t kitten zdo.py tab",
+        ]
+        self.assertEqual(len(expected), 22)
+        for mapping in expected:
+            self.assertEqual(lines.count(mapping), 1, mapping)
+        for line in lines:
+            if line.startswith("map "):
+                self.assertFalse(any("bin/zws " + word in line for word in ('switch', 'next', 'prev', 'agent')))
+        for key in ('cmd+t', 'cmd+alt+1', 'ctrl+alt+1'):
+            plain = next(i for i, line in enumerate(lines) if line.startswith(f"map {key} "))
+            guarded = [i for i, line in enumerate(lines)
+                       if line == f"map --when-focus-on var:herdr=1 {key}"
+                       or line.startswith(f"map --when-focus-on var:herdr=1 {key} ")]
+            self.assertTrue(guarded)
+            self.assertTrue(all(i > plain for i in guarded))
+
+    def test_zws_retired_switch_is_usage_error_and_shell_syntax_is_valid(self):
+        script = ROOT / "config/kitty/bin/zws"
+        syntax = subprocess.run(['bash', '-n', str(script)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([str(script), 'switch', '1'], capture_output=True, text=True,
+                                    env=dict(os.environ, ZWS_DIR=directory), timeout=10)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('zws new', result.stderr)
+        self.assertNotIn('zws switch', result.stderr)
+        self.assertNotIn('set -u', result.stderr)
 
     def test_rename_and_scrollback(self):
         maps = [shlex.split(line) for line in (ROOT / "config/kitty/kitty.conf").read_text().splitlines()
