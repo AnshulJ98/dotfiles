@@ -80,7 +80,6 @@ brew "gotop"
 # Adblocker that creates a hosts file from multiple sources
 brew "hblock"
 # Agent multiplexer that lives in your terminal
-brew "herdr"
 # Improved top (interactive process viewer)
 brew "htop"
 # Run and Test HTTP Requests with plain text and curl

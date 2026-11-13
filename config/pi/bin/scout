@@ -68,14 +68,12 @@
 # without taking focus. Success closes its pane; failure/timeout holds it open. A zmx
 # reattach refreshes remote-control identity. No kitty or a failed launch falls back to -p.
 #
-# Herdr: inside a herdr pane (HERDR_PANE_ID set, SCOUT_HERDR not 0) the child
-# is an interactive pi in a new herdr tab, so it can be watched and steered.
+# The pane's child is an interactive pi, so it can be watched and steered.
 # extensions/scout-pane.ts writes the digest and exits when the run settles, as
 # pi -p would. The tab closes on rc 0 and stays open otherwise. The child's rc
 # comes from pane.rc: the extension writes 1 on an error or abort, else it is
 # pi's or timeout's. pane.sh holds the environment, so it is 0600 and deleted on
-# exit; the pane's process group dies when scout does. If herdr fails, scout
-# falls back to pi -p.
+# exit; the pane's process group dies when scout does.
 #
 # Exit codes: 0 ok, 2 usage or recursion refused, 69 tools missing, 75 fan-out refused,
 # 124 timeout or stall, 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
@@ -324,7 +322,7 @@ if [ "$RW" = 1 ] && [ -z "${BRIEF_FILE:-}" ]; then
 fi
 
 # Fan-out cap, checked before anything lands in the sessions tree. A meta whose
-# pid and pane (herdr child) are both dead is a SIGKILLed run the extension has
+# pid and pane child are both dead is a SIGKILLed run the extension has
 # not swept yet; it does not count.
 # A meta can go between the glob and the read (its scout finished, or was refused): that is an empty field, not an error
 meta_field() { { sed -n "s/^$2=//p" "$1" 2>/dev/null || true; } | head -n 1; }
@@ -562,7 +560,7 @@ on_signal() {
 PI_OPTS=(-ne "${EXT[@]}" "${WORKER[@]}" "${CTX[@]}" -ns "${SKILL[@]}" -np -t "$TOOLS" "${SESSION[@]}"
   --model "$MODEL" --thinking "$THINKING" --system-prompt "$SYSTEM_PROMPT")
 if [ "$RW" = 1 ]; then KIND=worker; else KIND=scout; fi
-PANE="" TAB="" PANE_KIND=herdr
+PANE=""
 PANE_EXT=()
 
 # Shared pane runner: preserve child env/digest/timeout semantics for either terminal.
@@ -578,18 +576,17 @@ write_pane_script() {
     } catch {}
     console.log("-na")' "$PWD" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/trust.json" 2>/dev/null)" || trust="-na"
   # The pane's shell is the user's own: hand pi this scout's environment, minus
-  # the herdr and terminal identity, which must stay the new pane's. The script
-  # holds tokens, so it is 0600; the pane's herdr socket is dropped so the child
-  # cannot drive the session.
+  # the terminal identity, which must stay the new pane's. The script holds
+  # tokens, so it is 0600.
   (umask 077
   {
-    printf 'unset HERDR_SOCKET_PATH HERDR_ENV ZMX_SESSION\n'
+    printf 'unset ZMX_SESSION\n'
     printf 'echo $$ >%q\n' "$SESSIONS/pane.pid"
     # The pane group dies with scout, SIGKILL included, which skips scout's trap.
     printf '( while kill -0 %s 2>/dev/null && kill -0 $$ 2>/dev/null; do sleep 2; done\n' "$$"
     printf '  kill -0 %s 2>/dev/null || { kill -TERM -- -$$ 2>/dev/null || pkill -TERM -P $$ 2>/dev/null; } ) &\n' "$$"
     for n in $(compgen -e); do
-      case "$n" in ZMX_SESSION | HERDR_* | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
+      case "$n" in ZMX_SESSION | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
       printf 'export %s=%q\n' "$n" "${!n}"
     done
     printf 'export PI_SCOUT_DEPTH=1 SCOUT_DIGEST=%q SCOUT_PANE_RC=%q\ncd %q || exit 2\n' "$OUT" "$SESSIONS/pane.rc" "$PWD"
@@ -600,15 +597,11 @@ write_pane_script() {
 }
 
 close_pane() {
-  if [ "$PANE_KIND" = kitty ]; then
-    kitten @ --to "$KITTY_LISTEN_ON" close-window --match "id:$PANE" >/dev/null 2>&1
-  else
-    herdr tab close "$TAB" >/dev/null 2>&1
-  fi
+  kitten @ --to "$KITTY_LISTEN_ON" close-window --match "id:$PANE" >/dev/null 2>&1
 }
 
 kitty_launch() {
-  [ -z "${HERDR_PANE_ID:-}" ] && [ "${SCOUT_KITTY:-1}" != 0 ] && command -v kitten >/dev/null || return 1
+  [ "${SCOUT_KITTY:-1}" != 0 ] && command -v kitten >/dev/null || return 1
   local current source n
   if [ -n "${ZMX_SESSION:-}" ]; then
     current="$(node "$DIR/../lib/kitty.ts")" || return 1
@@ -620,7 +613,6 @@ kitty_launch() {
   # a worker's cwd is a sibling worktree; --cwd below is the worker's, never the caller's.
   source="$(kitten @ --to "$KITTY_LISTEN_ON" ls --match "id:$KITTY_WINDOW_ID" 2>/dev/null)" || return 1
   [[ "$source" == *'"id"'* ]] || return 1
-  PANE_KIND=kitty
   PANE_EXT=(-e "$DIR/../extensions/pi-holder.ts")
   write_pane_script
   PANE="$(kitten @ --to "$KITTY_LISTEN_ON" launch --type=tab --keep-focus --hold \
@@ -634,53 +626,8 @@ kitty_launch() {
 }
 
 
-
-# Sets PANE, TAB and CHILD (the pane job's pid, which leads its process group:
-# bash, timeout and pi). The tab goes in the caller's workspace when the caller's
-# pane sits in this worktree; otherwise in the workspace herdr has open for the
-# worktree, else the caller's. (worktree list names one workspace per worktree,
-# so with two workspaces on one repo it would send every tab to the first.)
-herdr_launch() {
-  [ -n "${HERDR_PANE_ID:-}" ] && [ "${SCOUT_HERDR:-1}" != 0 ] && command -v herdr >/dev/null || return 1
-  local ws="" top caller json n script="$SESSIONS/pane.sh" trust
-  top="$("$PI_SCOUT_REAL_GIT" rev-parse --show-toplevel 2>/dev/null)" || top=""
-  if [ -n "$top" ]; then
-    caller="$(herdr pane list 2>/dev/null | node -e '
-      let s = "";
-      process.stdin.on("data", (d) => (s += d)).on("end", () => {
-        const p = JSON.parse(s || "{}").result?.panes?.find((p) => p.pane_id === process.argv[1]);
-        if (p?.cwd) console.log(p.cwd);
-      });' "$HERDR_PANE_ID" 2>/dev/null)" || caller=""
-    if [ -n "$caller" ] && [ "$("$PI_SCOUT_REAL_GIT" -C "$caller" rev-parse --show-toplevel 2>/dev/null)" = "$top" ]; then
-      ws="$HERDR_WORKSPACE_ID"
-    fi
-  fi
-  [ -n "$ws" ] || [ -z "$top" ] ||
-    ws="$(herdr worktree list --cwd "$top" 2>/dev/null | node -e '
-      let s = "";
-      process.stdin.on("data", (d) => (s += d)).on("end", () => {
-        const w = JSON.parse(s || "{}").result?.worktrees?.find((w) => w.path === process.argv[1]);
-        if (w?.open_workspace_id) console.log(w.open_workspace_id);
-      });' "$top" 2>/dev/null)"
-  json="$(herdr tab create --workspace "${ws:-$HERDR_WORKSPACE_ID}" --cwd "$PWD" --label "$KIND $$" --no-focus)" || return 1
-  read -r TAB PANE < <(node -e 'const r = JSON.parse(process.argv[1]).result; console.log(r.tab.tab_id, r.root_pane.pane_id)' "$json") || return 1
-  PANE_KIND=herdr
-  PANE_EXT=()
-  write_pane_script
-  herdr pane run "$PANE" "bash $(printf %q "$script")" >/dev/null || {
-    herdr tab close "$TAB" >/dev/null 2>&1
-    return 1
-  }
-  for n in $(seq 30); do [ -s "$SESSIONS/pane.pid" ] && break; sleep 1; done
-  CHILD="$(cat "$SESSIONS/pane.pid" 2>/dev/null)"
-  [ -n "$CHILD" ] || {
-    herdr tab close "$TAB" >/dev/null 2>&1
-    return 1
-  }
-}
-
 set +e
-if kitty_launch || herdr_launch; then
+if kitty_launch; then
   TARGET="-$CHILD"
   printf 'pane=%s\n' "$CHILD" >>"$META"
 else
@@ -703,11 +650,7 @@ MONITOR=$!
 trap '' PIPE
 trap on_signal TERM INT HUP
 if [ -n "$PANE" ]; then
-  NAMED=""
-  while [ ! -s "$SESSIONS/pane.rc" ] && kill -0 "$CHILD" 2>/dev/null; do
-    if [ "$PANE_KIND" = herdr ] && [ -z "$NAMED" ] && herdr agent rename "$PANE" "$KIND-$$" >/dev/null 2>&1; then NAMED=1; fi
-    sleep 1
-  done
+  while [ ! -s "$SESSIONS/pane.rc" ] && kill -0 "$CHILD" 2>/dev/null; do sleep 1; done
   rc="$(cat "$SESSIONS/pane.rc" 2>/dev/null)" || rc=143 # the pane job died before writing it
   [ "$rc" = 0 ] && close_pane
 else

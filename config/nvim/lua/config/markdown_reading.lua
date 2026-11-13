@@ -1,7 +1,7 @@
 -- Reading view for markdown, on md-render.nvim. <leader>mr swaps the window
--- between source and a read-only rendering with plain-size headings, the same
--- in kitty and herdr; <leader>mo opens it in a kitty overlay instead, with
--- scaled headings (kitty's text-sizing protocol), which herdr does not pass on.
+-- between source and a read-only rendering with plain-size headings;
+-- <leader>mo opens it in a kitty overlay instead, with scaled headings
+-- (kitty's text-sizing protocol).
 -- Unlike render-markdown's wrapped tables (virt_lines over conceal_lines), every
 -- screen row here is a buffer line, so j/k and <C-d> move one row at a time.
 local MARGIN = 3 -- columns each side, about VS Code's 26px preview padding
@@ -76,8 +76,7 @@ local function overlay(buf)
     '--env',
     'MD_READING_OVERLAY=1',
   }
-  -- Over the kitty window nvim runs in (herdr's, inside herdr), not over
-  -- whichever window has focus.
+  -- Over the kitty window nvim runs in, not over whichever window has focus.
   if vim.env.KITTY_WINDOW_ID then vim.list_extend(cmd, { '--match', 'id:' .. vim.env.KITTY_WINDOW_ID }) end
   if vim.env.NVIM_APPNAME then vim.list_extend(cmd, { '--env', 'NVIM_APPNAME=' .. vim.env.NVIM_APPNAME }) end
   vim.list_extend(cmd, {
@@ -107,14 +106,13 @@ vim.api.nvim_create_autocmd('FileType', {
       vim.g.md_reading_loaded = true
       vim.pack.add { { src = 'https://github.com/delphinus/md-render.nvim', version = vim.version.range '3.*' } }
       -- md-render leaves a link click to the terminal when it speaks OSC 8, but
-      -- with the mouse on, nvim gets the click and kitty never sees it (and
-      -- herdr sits in between). Claiming no OSC 8 makes md-render open the
+      -- with the mouse on, nvim gets the click and kitty never sees it.
+      -- Claiming no OSC 8 makes md-render open the
       -- link itself with vim.ui.open, so a plain click works everywhere.
       local ok_du, display_utils = pcall(require, 'md-render.display_utils')
       if ok_du then display_utils.supports_osc8 = function() return false end end
       local ok_ts, text_size = pcall(require, 'md-render.text_size')
-      -- In place, headings stay plain: herdr cannot show them scaled, and in
-      -- kitty each scroll drops them to plain size until md-render repaints.
+      -- In place, headings stay plain: in kitty each scroll drops them to plain size until md-render repaints.
       if ok_ts and not vim.env.MD_READING_OVERLAY then text_size.setup { enabled = false } end
       -- md-render scales # to ###### at 2, 1.75, 1.5, 1.4, 1.25 and 1.17x, so #
       -- and ## read as the same size. VS Code's preview steps 2, 1.5, 1.25 and
