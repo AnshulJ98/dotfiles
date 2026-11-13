@@ -2,7 +2,7 @@
 gui:
   theme:
     activeBorderColor: ['#59c2ff', bold]
-    inactiveBorderColor: ['#5a5958']
+    inactiveBorderColor: ['#686665']
     searchingActiveBorderColor: ['#ffb454', bold]
     optionsTextColor: ['#59c2ff']
     selectedLineBgColor: ['#2c2b2a']

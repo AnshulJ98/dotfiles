@@ -25,6 +25,16 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "\\uE0B0\n\\uE0B2\n")
 
+    def test_homebrew_repository_is_hidden_without_hiding_nested_repositories(self):
+        script = (f'source "{HOME / ".p10k.zsh"}"; '
+                  'for workdir in "~" /opt/homebrew /opt/homebrew/personal_programs/project; do '
+                  'if [[ $workdir == ${~POWERLEVEL9K_VCS_DISABLED_WORKDIR_PATTERN} ]]; then '
+                  'print hidden; else print visible; fi; done')
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_zsh(script, directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "hidden\nhidden\nvisible\n")
+
     def test_missing_cargo_does_not_print_a_startup_error(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_zsh(f'source "{HOME / ".zshenv"}"; print ready', directory)

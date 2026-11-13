@@ -2,7 +2,7 @@
 gui:
   theme:
     activeBorderColor: ['#59c2ff', bold]
-    inactiveBorderColor: ['#53514f']
+    inactiveBorderColor: ['#615f5d']
     searchingActiveBorderColor: ['#ffb454', bold]
     optionsTextColor: ['#59c2ff']
     selectedLineBgColor: ['#1f1d1b']
@@ -10,4 +10,4 @@ gui:
     cherryPickedCommitFgColor: ['#f29668']
     cherryPickedCommitBgColor: ['#1f1d1b']
     unstagedChangesColor: ['#f07178']
-    defaultFgColor: ['#c8ad85']
+    defaultFgColor: ['#d7d3ca']

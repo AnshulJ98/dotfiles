@@ -1,0 +1,19 @@
+# Coffee Steel Purple: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = coffee-steel-purple
+	file-style = bold "#6eddd6"
+	file-decoration-style = "#676663" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#676663" ol
+	plus-style = syntax "#262a1d"
+	plus-emph-style = syntax "#2b311f"
+	minus-style = syntax "#2d1f1e"
+	minus-emph-style = syntax "#3e2724"
+	plus-empty-line-marker-style = normal "#262a1d"
+	minus-empty-line-marker-style = normal "#2d1f1e"
+	line-numbers-left-style = "#968e85"
+	line-numbers-right-style = "#968e85"
+	line-numbers-minus-style = "#fe7069"
+	line-numbers-plus-style = "#9dcc57"
+	line-numbers-zero-style = "#968e85"

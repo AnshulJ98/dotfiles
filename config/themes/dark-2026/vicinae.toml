@@ -1,0 +1,57 @@
+# Dark 2026: Vicinae port of the palette kitty uses
+# (config/kitty/themes/dark-2026.conf).
+# Alpha colours from bearded-theme-hc-dark-2026.json are flattened onto
+# editor.background #121314, as in the kitty port.
+
+[meta]
+version = 1
+name = "Dark 2026"
+description = "Dark 2026: minimal dark theme with readable text."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#121314"            # editor.background
+foreground = "#bbbebf"            # editor.foreground
+secondary_background = "#191a1b"  # sideBar.background
+border = "#212325"                # editorWidget.border
+accent = "#79c0ff"                # terminal.ansiBlue
+accent_foreground = "#121314"
+
+[colors.accents]
+blue = "#79c0ff"
+green = "#7ee787"
+magenta = "#d2a8ff"
+orange = "#e5ba7d"
+purple = "#d2a8ff"
+red = "#f48771"
+yellow = "#e5ba7d"
+cyan = "#4ec9b0"
+
+[colors.text]
+muted = "#7c7e7f"        # descriptionForeground #bbbebf80
+placeholder = "#969fa8"  # input.placeholderForeground
+danger = "#f48771"
+success = "#7ee787"
+selection = { background = "#212223", foreground = "#bbbebf" }
+
+[colors.text.links]
+default = "#bbbebf"      # textLink.foreground
+
+[colors.input]
+border = "#3a3b3c"       # input.border
+border_focus = "#48494b" # focusBorder
+border_error = "#f48771"
+
+[colors.list.item.hover]
+foreground = "#bbbebf"
+secondary_foreground = "#bbbebf"
+
+[colors.list.item.selection]
+background = "#212325"   # list.activeSelectionBackground #787e8573
+foreground = "#bbbebf"
+secondary_background = "#2d2f30"
+secondary_foreground = "#bbbebf"
+
+[colors.grid.item]
+background = "#303233"   # editorWidget.background

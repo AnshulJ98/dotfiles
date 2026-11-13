@@ -1,9 +1,9 @@
 background #0e0d0c
 caret #ffb454
 caretText #0e0d0c
-foreground #c8ad85
+foreground #d7d3ca
 name "ayu-ink"
-selectedText #c8ad85
+selectedText #d7d3ca
 selection #292826
 
 ansiColors [
@@ -14,8 +14,8 @@ ansiColors [
     #59c2ff
     #f29668
     #95e6cb
-    #c8ad85
-    #9b8667
+    #d7d3ca
+    #9a9790
     #ef7278
     #a0e9d0
     #ffb657

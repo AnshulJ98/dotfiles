@@ -1,0 +1,19 @@
+# Dark 2026: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = dark-2026
+	file-style = bold "#79c0ff"
+	file-decoration-style = "#616264" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#616264" ol
+	plus-style = syntax "#1a251d"
+	plus-emph-style = syntax "#1b251e"
+	minus-style = syntax "#261d1b"
+	minus-emph-style = syntax "#29201e"
+	plus-empty-line-marker-style = normal "#1a251d"
+	minus-empty-line-marker-style = normal "#261d1b"
+	line-numbers-left-style = "#929ba5"
+	line-numbers-right-style = "#929ba5"
+	line-numbers-minus-style = "#f48771"
+	line-numbers-plus-style = "#7ee787"
+	line-numbers-zero-style = "#929ba5"

@@ -1,0 +1,13 @@
+# Coffee Steel: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#6eddd6', bold]
+    inactiveBorderColor: ['#686563']
+    searchingActiveBorderColor: ['#f7d979', bold]
+    optionsTextColor: ['#6eddd6']
+    selectedLineBgColor: ['#262323']
+    inactiveViewSelectedLineBgColor: ['#353332']
+    cherryPickedCommitFgColor: ['#e480ad']
+    cherryPickedCommitBgColor: ['#262323']
+    unstagedChangesColor: ['#fe7069']
+    defaultFgColor: ['#c2b7ab']

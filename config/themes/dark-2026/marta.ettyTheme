@@ -1,0 +1,26 @@
+background #121314
+caret #e5ba7d
+caretText #121314
+foreground #bbbebf
+name "Dark2026"
+selectedText #bbbebf
+selection #212223
+
+ansiColors [
+    #141516
+    #f48771
+    #7ee787
+    #e5ba7d
+    #79c0ff
+    #d2a8ff
+    #4ec9b0
+    #bbbebf
+    #8c8c8c
+    #ff9b8b
+    #96efa0
+    #f2d094
+    #a5d6ff
+    #e2c3ff
+    #7bdac7
+    #eeeeee
+]

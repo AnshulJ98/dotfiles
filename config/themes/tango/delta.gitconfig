@@ -1,0 +1,19 @@
+# Tango: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = tango
+	file-style = bold "#70a3e7"
+	file-decoration-style = "#686868" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#686868" ol
+	plus-style = syntax "#232b1e"
+	plus-emph-style = syntax "#232c20"
+	minus-style = syntax "#302323"
+	minus-emph-style = syntax "#352623"
+	plus-empty-line-marker-style = normal "#232b1e"
+	minus-empty-line-marker-style = normal "#302323"
+	line-numbers-left-style = "#9b9f96"
+	line-numbers-right-style = "#9b9f96"
+	line-numbers-minus-style = "#ff7661"
+	line-numbers-plus-style = "#66b332"
+	line-numbers-zero-style = "#9b9f96"

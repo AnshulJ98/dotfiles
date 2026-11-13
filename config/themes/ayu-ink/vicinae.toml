@@ -9,7 +9,7 @@ inherits = "vicinae-dark"
 
 [colors.core]
 background = "#0e0d0c"            # editor.background
-foreground = "#c8ad85"            # editor.foreground
+foreground = "#d7d3ca"            # editor.foreground
 secondary_background = "#0a0909"  # sideBar.background
 border = "#2a2927"                # editorWidget.border
 accent = "#59c2ff"                # terminal.ansiBlue
@@ -26,14 +26,14 @@ yellow = "#ffb454"
 cyan = "#95e6cb"
 
 [colors.text]
-muted = "#877964"        # descriptionForeground #c8ad8580
-placeholder = "#9b8667"  # input.placeholderForeground
+muted = "#84827d"        # descriptionForeground #c8ad8580
+placeholder = "#9a9790"  # input.placeholderForeground
 danger = "#f07178"
 success = "#aad94c"
-selection = { background = "#292826", foreground = "#c8ad85" }
+selection = { background = "#292826", foreground = "#d7d3ca" }
 
 [colors.text.links]
-default = "#ecd9b4"      # textLink.foreground
+default = "#f0eeea"      # textLink.foreground
 
 [colors.input]
 border = "#393836"       # input.border
@@ -41,14 +41,14 @@ border_focus = "#484644" # focusBorder
 border_error = "#f07178"
 
 [colors.list.item.hover]
-foreground = "#c8ad85"
-secondary_foreground = "#c8ad85"
+foreground = "#d7d3ca"
+secondary_foreground = "#d7d3ca"
 
 [colors.list.item.selection]
 background = "#242321"   # list.activeSelectionBackground #57565473
-foreground = "#c8ad85"
+foreground = "#d7d3ca"
 secondary_background = "#2c2b29"
-secondary_foreground = "#c8ad85"
+secondary_foreground = "#d7d3ca"
 
 [colors.grid.item]
 background = "#2f2e2c"   # editorWidget.background

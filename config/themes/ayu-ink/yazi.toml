@@ -8,12 +8,12 @@
 [mgr]
 cwd           = { fg = "#59c2ff" }
 border_symbol = "│"
-border_style  = { fg = "#484644" }
+border_style  = { fg = "#615f5d" }
 syntect_theme = "~/.config/themes/current/syntax.tmTheme"
 
 [tabs]
-active   = { fg = "#c8ad85", bg = "#1f1d1b", bold = true }
-inactive = { fg = "#968264", bg = "#0a0909" }
+active   = { fg = "#d7d3ca", bg = "#1f1d1b", bold = true }
+inactive = { fg = "#93908a", bg = "#0a0909" }
 
 [mode]
 normal_main = { fg = "#0a0909", bg = "#59c2ff", bold = true }
@@ -33,34 +33,34 @@ progress_normal = { fg = "#aad94c", bg = "#2f2e2c" }
 progress_error  = { fg = "#f07178", bg = "#2f2e2c" }
 
 [which]
-border          = { fg = "#53514f" }
+border          = { fg = "#615f5d" }
 cand            = { fg = "#59c2ff" }
-rest            = { fg = "#968264" }
+rest            = { fg = "#93908a" }
 desc            = { fg = "#f29668" }
-separator_style = { fg = "#53514f" }
+separator_style = { fg = "#615f5d" }
 
 [confirm]
-border = { fg = "#53514f" }
-title  = { fg = "#ecd9b4" }
+border = { fg = "#615f5d" }
+title  = { fg = "#f0eeea" }
 
 [spot]
-border = { fg = "#53514f" }
-title  = { fg = "#ecd9b4" }
+border = { fg = "#615f5d" }
+title  = { fg = "#f0eeea" }
 
 [pick]
-border = { fg = "#53514f" }
+border = { fg = "#615f5d" }
 
 [input]
-border = { fg = "#53514f" }
+border = { fg = "#615f5d" }
 
 [cmp]
-border = { fg = "#53514f" }
+border = { fg = "#615f5d" }
 
 [tasks]
-border = { fg = "#53514f" }
+border = { fg = "#615f5d" }
 
 [help]
-border = { fg = "#53514f" }
+border = { fg = "#615f5d" }
 
 # Same letters and colours as the neo-tree git column; staged edits are green
 # as in `git status`.
@@ -71,7 +71,7 @@ staged         = { fg = "#aad94c" }
 added          = { fg = "#aad94c" }
 deleted        = { fg = "#f07178" }
 updated        = { fg = "#f07178", bold = true }
-ignored        = { fg = "#968264" }
+ignored        = { fg = "#93908a" }
 untracked_sign = "U"
 unstaged_sign  = "M"
 staged_sign    = "M"

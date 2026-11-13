@@ -3,9 +3,9 @@
 	line-numbers = true
 	syntax-theme = ayu-neutral
 	file-style = bold "#59c2ff"
-	file-decoration-style = "#4f4d4b" ul
+	file-decoration-style = "#696764" ul
 	hunk-header-style = line-number syntax
-	hunk-header-decoration-style = "#4f4d4b" ol
+	hunk-header-decoration-style = "#696764" ol
 	plus-style = syntax "#292d1e"
 	plus-emph-style = syntax "#2e3320"
 	minus-style = syntax "#2e2121"

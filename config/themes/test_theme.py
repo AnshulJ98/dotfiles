@@ -2,6 +2,7 @@
 import json
 import os
 import plistlib
+import re
 import tomllib
 from pathlib import Path
 import shutil
@@ -11,8 +12,20 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent
-NAMES = ("ayu-ink", "ayu-neutral", "coffee-neutral", "midnightvoid",
-         "soviet-dark", "void-ink", "void-neutral")
+NAMES = ("ayu-ink", "ayu-neutral", "coffee-neutral", "coffee-sky", "coffee-slate", "coffee-steel",
+         "coffee-steel-purple", "dark-2026", "midnightvoid",
+         "soviet-dark", "tango", "void-ink", "void-neutral")
+
+
+def luminance(color):
+    channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in channels]
+    return sum(v * weight for v, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+
+def contrast(a, b):
+    x, y = sorted((luminance(a), luminance(b)))
+    return (y + 0.05) / (x + 0.05)
 
 
 class ThemeTests(unittest.TestCase):
@@ -74,6 +87,96 @@ class ThemeTests(unittest.TestCase):
                 self.assertLessEqual(max(channels) - min(channels), 6)
                 self.assertLessEqual(max(channels), 115)
                 self.assertNotEqual(active, settings["BORDER_INACTIVE"])
+
+    def test_decorations_are_visible_without_a_terminal_contrast_floor(self):
+        # No theme sets kitty's text_fg_override_threshold (it repaints prompt caps and
+        # borders), so every border and rule has to reach 3:1 in the theme files themselves.
+        patterns = {
+            "lazygit.yml": r"inactiveBorderColor: \['(#\w{6})'\]",
+            "delta.gitconfig": r"(?:file|hunk-header)-decoration-style = \"(#\w{6})\"",
+            "yazi.toml": r"(?m)^(?:border_style|border|separator_style)\s*=\s*\{ fg = \"(#\w{6})\"",
+            "hunk.toml": r"(?m)^border = \"(#\w{6})\"",
+            "btop.theme": r"theme\[(?:meter_bg|div_line)\]=\"(#\w{6})\"",
+            "tmux.conf": r"pane-border-style \"fg=(#\w{6})\"",
+        }
+        for name in NAMES:
+            if name == "midnightvoid":
+                continue
+            background = re.search(r"(?m)^background\s+(#\w{6})", (ROOT / name / "kitty.conf").read_text())[1]
+            pi = json.loads((ROOT / name / "pi.json").read_text())
+            colors = {"pi.json": [pi["vars"].get(pi["colors"][key], pi["colors"][key])
+                                  for key in ("border", "borderMuted", "mdHr", "mdCodeBlockBorder")]}
+            for file, pattern in patterns.items():
+                colors[file] = re.findall(pattern, (ROOT / name / file).read_text())
+            for file, found in colors.items():
+                with self.subTest(theme=name, file=file):
+                    self.assertTrue(found)
+                    for color in found:
+                        self.assertGreaterEqual(contrast(color, background), 3, color)
+            # p10k draws its frame in colour 238 on the background and its separators in 242 on its 234 fill.
+            kitty = dict(re.findall(r"(?m)^(color23[48]|color242)\s+(#\w{6})", (ROOT / name / "kitty.conf").read_text()))
+            with self.subTest(theme=name, file="kitty.conf"):
+                self.assertGreaterEqual(contrast(kitty["color238"], background), 3)
+                self.assertGreaterEqual(contrast(kitty["color242"], kitty["color234"]), 3)
+
+    def test_ayu_ink_default_text_is_white_in_the_terminal_and_the_editor(self):
+        settings = dict(line.split() for line in (ROOT / "ayu-ink" / "kitty.conf").read_text().splitlines()
+                        if line.strip() and not line.startswith("#") and len(line.split()) == 2)
+        channels = [int(settings["foreground"][i:i + 2], 16) for i in (1, 3, 5)]
+        self.assertLessEqual(max(channels) - min(channels), 16)
+        self.assertEqual(settings["color7"], settings["foreground"])
+        editor = (ROOT.parent / "nvim/colors/ayu-ink.lua").read_text()
+        self.assertIn("h(0, 'Normal', { fg = '%s' })" % settings["foreground"], editor)
+
+    def test_minimal_theme_text_is_legible_without_terminal_boosting(self):
+        for name in ("dark-2026", "tango"):
+            settings = dict(line.split() for line in (ROOT / name / "kitty.conf").read_text().splitlines()
+                            if line.strip() and not line.startswith("#") and len(line.split()) == 2)
+            for index in (*range(1, 8), *range(9, 16)):
+                for background in ("background", "selection_background"):
+                    with self.subTest(theme=name, color=index, background=background):
+                        self.assertGreaterEqual(contrast(settings[f"color{index}"], settings[background]), 4.5)
+            self.assertGreaterEqual(contrast(settings["color8"], settings["background"]), 4.5)
+            self.assertNotEqual(settings["color0"], settings["background"])
+
+    @unittest.skipUnless(shutil.which("bat"), "bat is not installed")
+    def test_minimal_syntax_themes_distinguish_json_keys_from_values(self):
+        config = self.base / "bat"
+        (config / "themes").mkdir(parents=True)
+        for name in ("dark-2026", "tango"):
+            shutil.copyfile(ROOT / name / "syntax.tmTheme", config / "themes" / f"{name}.tmTheme")
+        env = dict(os.environ, BAT_CONFIG_DIR=str(config), BAT_CACHE_PATH=str(config / "cache"),
+                   COLORTERM="truecolor")
+        built = subprocess.run([shutil.which("bat"), "cache", "--build"], env=env,
+                               capture_output=True, text=True, timeout=20)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        for name in ("dark-2026", "tango"):
+            syntax = plistlib.loads((ROOT / name / "syntax.tmTheme").read_bytes())
+            key = next(rule["settings"]["foreground"] for rule in syntax["settings"]
+                       if rule.get("name") == "JSON and YAML keys")
+            expected_key = tuple(int(key[i:i + 2], 16) for i in (1, 3, 5))
+            for language, sample in (("json", '{"label":"value"}\n'), ("yaml", "label: value\n")):
+                result = subprocess.run(
+                    [shutil.which("bat"), "--color=always", "--paging=never", "--style=plain",
+                     "--theme", name, "--language", language],
+                    input=sample, env=env, capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                foreground = None
+                colors = {}
+                for token in re.finditer(r"\x1b\[([0-9;]*)m|([^\x1b]+)", result.stdout):
+                    if token[1] is not None:
+                        color = re.search(r"38;2;(\d+);(\d+);(\d+)", token[1])
+                        if color:
+                            foreground = tuple(map(int, color.groups()))
+                    else:
+                        for word in ("label", "value"):
+                            if word in token[2]:
+                                colors[word] = foreground
+                with self.subTest(theme=name, language=language):
+                    self.assertEqual(colors.get("label"), expected_key)
+                    self.assertIsNotNone(colors.get("value"))
+                    self.assertNotEqual(colors["label"], colors["value"])
 
     def test_switches_every_theme_and_pi_link(self):
         for name in NAMES:
@@ -165,8 +268,7 @@ class ThemeTests(unittest.TestCase):
                 options = json.loads(result.stdout)
                 self.assertEqual(options["dim"], 0.6)
                 self.assertEqual(options["opacity"], 0.94)
-                if name != "midnightvoid":
-                    self.assertEqual(options["floor"], [3.0, "ratio"])
+                self.assertEqual(options["floor"][0], 0)
 
     def test_theme_data_parses(self):
         for name in NAMES:

@@ -1,0 +1,134 @@
+name "Tango"
+
+base {
+    appearance "dark"
+    background #1c1c1c
+    separator #303030
+    text #d3d7cf
+}
+
+actionBar {
+    separator #303030
+
+    button {
+        background #161616
+        hotkey #70a3e7
+        text #a1a59c
+    }
+}
+
+asyncProgressBar {
+    border #4e4e4e
+    progress #70a3e7
+    itemProgress #66b332
+}
+
+breadcrumbs {
+    color1 #1c1c1c
+    color2 #303030
+    color3 #292928
+    separator #595a58
+    text #d3d7cf
+}
+
+files {
+    background {
+        alternate #1c1c1c
+        current #292928
+        currentSelected #292928
+        selected #303030
+    }
+
+    dragDropSelection {
+        color #70a3e7
+        width 1
+    }
+
+    text {
+        current #d3d7cf
+        currentSelected #bb93c2
+        hidden #a1a59c
+        matched #c4a000
+        selected #bb93c2
+
+        highlighting1 #70a3e7
+        highlighting2 #66b332
+        highlighting3 #bb93c2
+        highlighting4 #c4a000
+    }
+}
+
+searchBar {
+    query {
+        border #4e4e4e
+        placeholder #a1a59c
+    }
+
+    results {
+        highlighting #70a3e7
+        selection #292928
+        subtitle #a1a59c
+    }
+
+    rowSeparator {
+        color #303030
+        show true
+    }
+}
+
+statusBar {
+    background #161616
+    border #303030
+    text #d3d7cf
+    quickSelectNoResultsHighlighting #ff7661
+}
+
+tableHeader {
+    separator #303030
+    text #a1a59c
+
+    pressed {
+        background #303030
+    }
+}
+
+tabs {
+    active {
+        text #d3d7cf
+    }
+
+    inactive {
+        background #161616
+        text #9b9f96
+    }
+}
+
+terminal {
+    caret {
+        background #c4a000
+        text #1c1c1c
+    }
+}
+
+textEditor {
+    error #ff7661
+    warning #2b2300
+    keyword #c4a000
+    comment #9b9f96
+    identifier #77a4d4
+
+    literal {
+        string #66b332
+        number #c192bc
+        color #c192bc
+    }
+
+    gutter {
+        background #1c1c1c
+        text #838482
+    }
+}
+
+titleBar {
+    text #d3d7cf
+}

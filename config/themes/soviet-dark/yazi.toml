@@ -8,7 +8,7 @@
 [mgr]
 cwd           = { fg = "#6ca0c6" }
 border_symbol = "│"
-border_style  = { fg = "#555452" }
+border_style  = { fg = "#6e6d6b" }
 syntect_theme = "~/.config/themes/current/syntax.tmTheme"
 
 [tabs]
@@ -33,34 +33,34 @@ progress_normal = { fg = "#b8ba73", bg = "#3c3a3a" }
 progress_error  = { fg = "#fb8070", bg = "#3c3a3a" }
 
 [which]
-border          = { fg = "#61615e" }
+border          = { fg = "#6e6e6a" }
 cand            = { fg = "#6ca0c6" }
 rest            = { fg = "#a3a187" }
 desc            = { fg = "#c58f9d" }
-separator_style = { fg = "#61615e" }
+separator_style = { fg = "#6e6e6a" }
 
 [confirm]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 title  = { fg = "#e9dfd0" }
 
 [spot]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 title  = { fg = "#e9dfd0" }
 
 [pick]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 
 [input]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 
 [cmp]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 
 [tasks]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 
 [help]
-border = { fg = "#61615e" }
+border = { fg = "#6e6e6a" }
 
 # Same letters and colours as the neo-tree git column; staged edits are green
 # as in `git status`.
