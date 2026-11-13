@@ -2,6 +2,7 @@
 import os
 import time
 import traceback
+import uuid
 from functools import wraps
 
 import zcore
@@ -38,6 +39,17 @@ def safe(fn):
 
 def cwd(window) -> str:
     return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
+
+
+def attach(boss, window) -> None:
+    saved = window.user_vars.get('holder', '')
+    name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
+                                str(uuid.uuid4()))
+    window.write_to_child(zcore.answer(name, window.user_vars.get('pi_session', '')))
+    match = f'--match=id:{window.id}'
+    boss.call_remote_control(None, ('set-user-vars', match, 'zq'))
+    if not saved:
+        boss.call_remote_control(None, ('set-user-vars', match, 'holder=' + name))
 
 
 def snapshot(boss) -> list[dict]:

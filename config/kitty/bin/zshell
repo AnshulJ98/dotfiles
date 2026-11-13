@@ -1,13 +1,24 @@
 #!/bin/bash
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
-# A pane tagged holder=<name> (session restore, the Go to picker) reattaches that session;
-# otherwise a new session is named after the folder. Without zmx it falls back to a plain zsh.
+# The watcher supplies holder=<name> or a new folder-based name over this pane's terminal.
+# Remote control is the fallback for kitty without workspaces.py; without zmx, run plain zsh.
 export PATH=/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
 [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
 
-# Window user vars (set by --var on launch) are only readable over remote control.
+answered=
+if [ -t 0 ] && [ -t 2 ]; then
+  if IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
+     [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
+    printf -v name '%b' "${c//%/\\x}"
+    pi_session=
+    [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
+    answered=1
+  fi
+fi
+
+if [ -z "$answered" ]; then
 vars=$(kitten @ ls --match "id:${KITTY_WINDOW_ID:-0}" 2>/dev/null | /usr/bin/python3 -c '
 import json, sys
 try:
@@ -18,17 +29,20 @@ try:
 except (ValueError, KeyError): pass' 2>/dev/null)
 name=$(printf '%s\n' "$vars" | sed -n 1p)
 pi_session=$(printf '%s\n' "$vars" | sed -n 2p)
+fi
 
 if ! existing=$(timeout 3 "$ZMX" ls --short 2>/dev/null); then
   echo "zshell: zmx discovery failed or timed out; starting plain shell" >&2
   exec "$SHELL_BIN" -il
 fi
+if [ -z "$answered" ]; then
 if [ -z "$name" ]; then
   base=$(basename "$PWD" | tr -c 'A-Za-z0-9._-\n' '-' | tr 'A-Z' 'a-z'); [ "$PWD" = "$HOME" ] && base=home
   name=$base-$(/usr/bin/python3 -c 'import uuid; print(uuid.uuid4())')
 fi
 # Tag the pane so kitty's saved session reattaches this name.
 printf '\033]1337;SetUserVar=holder=%s\007' "$(printf %s "$name" | base64)"
+fi
 
 # zmx's own detach key would steal ctrl+\ from programs; closing the pane already detaches.
 export ZMX_NO_DETACH_KEY=1
@@ -36,10 +50,12 @@ unset ZMX_SESSION
 # kitty only injects shell integration into a shell it starts itself.
 export KITTY_SHELL_INTEGRATION=enabled
 export ZDOTDIR=${KITTY_INSTALLATION_DIR:-/Applications/kitty.app/Contents/Resources/kitty}/shell-integration/zsh
-# zmx 1.0.1 writes a crash report on every session exit (zmx #294).
-( find "$HOME/Library/Logs/DiagnosticReports" -name 'zmx-*.ips' -mmin +60 -delete 2>/dev/null & )
+case $'\n'"$existing"$'\n' in
+  *$'\n'"$name"$'\n'*) present=1 ;;
+  *) present=0 ;;
+esac
 
-if ! printf '%s\n' "$existing" | grep -qxF "$name" && [ -n "$pi_session" ] && [ -f "$pi_session" ]; then
+if [ "$present" = 0 ] && [ -n "$pi_session" ] && [ -f "$pi_session" ]; then
   # The session is gone (reboot) but pi ran here: resume it in its own folder, then a shell.
   cwd=$(head -1 "$pi_session" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("cwd",""))' 2>/dev/null)
   exec "$ZMX" attach "$name" "$SHELL_BIN" -lc 'cd "$1" 2>/dev/null; pi --session "$2"; exec "$0" -il' "$SHELL_BIN" "${cwd:-$PWD}" "$pi_session"

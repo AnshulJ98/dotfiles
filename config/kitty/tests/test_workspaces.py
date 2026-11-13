@@ -153,6 +153,38 @@ class SavingTests(unittest.TestCase):
 
 
 class IntentWatcherTests(unittest.TestCase):
+    def test_pane_query_answers_and_empty_callback_is_ignored(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            events = []
+            original = boss.call_remote_control
+            def remote(window, args):
+                events.append(args)
+                original(window, args)
+            boss.call_remote_control = remote
+            window = NS(id=7, user_vars={}, cwd_of_child='/x/My Repo',
+                        write_to_child=events.append)
+            with patch.object(module, 'add_timer') as timer:
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                name = events[0].decode().split()[2]
+                self.assertTrue(name.startswith('my-repo-'))
+                self.assertEqual(events, [
+                    f': zq {name} -\n'.encode(),
+                    ('set-user-vars', '--match=id:7', 'zq'),
+                    ('set-user-vars', '--match=id:7', 'holder=' + name)])
+                window.user_vars = {'holder': 'saved', 'pi_session': '/p/s.jsonl'}
+                events.clear()
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                self.assertEqual(events, [b': zq saved %2Fp%2Fs.jsonl\n',
+                                          ('set-user-vars', '--match=id:7', 'zq')])
+                events.clear()
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': ''})
+                self.assertEqual(events, [])
+                timer.assert_not_called()
+
     def test_dispatch_clears_first_empty_callbacks_do_nothing_and_rename_schedules(self):
         from types import SimpleNamespace as NS
         from unittest.mock import patch
