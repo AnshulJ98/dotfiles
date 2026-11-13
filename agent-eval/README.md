@@ -24,7 +24,9 @@ workspace and grades the result mechanically or with judges. Three roles:
   `e6189ea`, which has five seeded defects. A haiku-5-5 extractor turns the
   review into findings; two judges, opus-5-5 and gpt-6.1-sol, each say
   yes/no per defect. A defect counts only when both say yes, and the trial
-  passes when all five are found.
+  passes when every defect not marked `"minor": true` is found (d5, the
+  id validation, is minor: it is still judged and counted in recall, but a
+  miss no longer fails the trial).
 - **scout** (4 tasks: `scout-*`). Each is a research question about
   `config/pi` at `39f0715`. The trial runs `scout` read-only and checks
   the file:line citations in its digest against the task's `expect` list.
@@ -61,7 +63,7 @@ summarize.ts <run-dir|trials.jsonl>
 gate.sh <run-dir|trials.jsonl> [--update] [--partial]
 mk-task.sh <repo> <fix-sha> [id]
 check-judges.sh <task>
-judge.sh <trial-dir> <task-dir> [--findings <file>]
+judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>]
 ```
 
 `matrix.sh` runs every task (or `--tasks`) for every cell, 3 trials each
@@ -159,7 +161,19 @@ If you change the extractor or judge prompts (`prompts/judge-*.txt`) or
 the judge models in `judge.sh`, run `./check-judges.sh booking-review`
 (about 1 minute, real model calls). For each defect, a finding made of its
 `hit` sample plus two decoys must get yes from both judges, and the decoys
-alone must get no from both. It exits 1 on any miss.
+alone must get no from both. It exits 1 on any miss. The decoys come from the
+task's `"decoys"` field: an array of at least two plain claim strings that are
+true but not among the items (exit 2 when a review or facts task has none).
+
+`judge.sh --kind`: the same two judges say yes/no per numbered item; an item is
+met only when both say yes, `met` lists those ids, `pass` needs every non-minor
+item met. `review` (default): subject `<trial>/review.txt`, items
+`task.defects`, extractor first. `facts`: subject `<trial>/digest.txt`, items
+`task.facts`. `rubric`: `--subject` and `--items` (`[{id, text}]`) required,
+`--context` optional. `--subject`/`--items` override the defaults. `"minor":
+true` items are judged and counted in `found`/`of` but cannot fail `pass`
+(d5 of booking-review is minor). Any role whose records carry `found` and
+`of` gets recall in the summary and the gate.
 
 ### Playbook mapping
 

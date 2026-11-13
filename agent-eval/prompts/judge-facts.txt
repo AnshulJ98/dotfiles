@@ -1,0 +1,15 @@
+You check whether an answer states specific known facts. You have no tools; use only the text below.
+
+Below are an answer to a question about a codebase and a numbered list of facts that a correct answer states. For each fact, decide whether the answer states it: the same claim, in any words, anywhere in the answer. It does not count when the answer only cites the place where the fact could be read, says something vaguer that does not commit to the fact, or contradicts the fact anywhere. Do not use your own knowledge of the codebase: a fact the answer does not state is "no" even if it is true.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the facts, exactly one entry per fact and nothing else (no prose, no code fence). For example, with three facts: ["yes","no","no"].
+
+Answer:
+
+<answer>
+{{SUBJECT}}
+</answer>
+
+Known facts:
+
+{{ITEMS}}

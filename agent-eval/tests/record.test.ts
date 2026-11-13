@@ -1,7 +1,7 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blocked, grade, isReviewTimeout, leaked, measure, outsideAllowed, parsePorcelain } from "../lib/record.ts";
+import { blocked, grade, gradeReview, isReviewTimeout, leaked, measure, outsideAllowed, parseJudged, parsePorcelain } from "../lib/record.ts";
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -88,6 +88,14 @@ test("grade: test exit decides unless expect is blocked, which needs no change a
 	assert.equal(grade({ expect: "blocked", testExit: null, changed: [], digest: yes }), true);
 	assert.equal(grade({ expect: "blocked", testExit: null, changed: ["a.ts"], digest: yes }), false);
 	assert.equal(grade({ expect: "blocked", testExit: 0, changed: [], digest: "**Blocked on me**\nnothing.\n" }), false);
+});
+
+test("a judge.json with found < of and pass true is a pass; without pass it is not, whatever found says", () => {
+	const minorMissed = parseJudged('{"found":4,"of":5,"met":["d1","d2","d3","d4"],"pass":true,"disagreements":[],"judgeCost":0.1,"infra":false}');
+	assert.deepEqual([minorMissed.found, minorMissed.of, minorMissed.pass, gradeReview(minorMissed)], [4, 5, true, true]);
+	const allFound = parseJudged('{"found":5,"of":5,"disagreements":[],"judgeCost":0.1,"infra":false}');
+	assert.deepEqual([allFound.found, allFound.of, gradeReview(allFound)], [5, 5, false]);
+	assert.equal(gradeReview(parseJudged('{"found":5,"of":5,"pass":true,"disagreements":[],"judgeCost":0,"infra":true}')), false);
 });
 
 test("a review timeout is rc 124, or 137 when the child ignored TERM and timeout -k killed it", () => {
