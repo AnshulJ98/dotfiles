@@ -1,10 +1,8 @@
 #!/usr/bin/python3
-"""Workspace sidebar for a kitty tab-dock: spaces on top, agents at the bottom, as in herdr.
+"""Render pushed workspace views: draw first, then refresh git counts asynchronously.
 
-workspaces.py starts one in every workspace tab and writes a byte to the visible one's stdin
-when something it shows changes; it redraws from 'kitten @ ls' only then. A click switches
-workspace or focuses an agent's pane; a right click on a space opens a menu under it (bin/zws
-does the work). Model and context use come from pi (pi-holder.ts).
+Kitty supplies ordered JSON lines after the raw-terminal readiness handshake. Folder and
+branch discovery read .git files only; clicks still use kitten and bin/zws.
 """
 from __future__ import annotations  # /usr/bin/python3 is 3.9
 
@@ -24,15 +22,17 @@ os.environ['PATH'] = '/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:'
 TO = os.environ.get('KITTY_LISTEN_ON', '')
 DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
 ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
-ME = int(os.environ.get('KITTY_WINDOW_ID', '0'))
-RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']  # least to most urgent
+GIT = shutil.which('git')
+if GIT in (None, '/usr/bin/git'):
+    GIT = next((p for p in ('/Applications/Xcode.app/Contents/Developer/usr/bin/git',
+                            '/Library/Developer/CommandLineTools/usr/bin/git')
+                if os.path.exists(p)), '/usr/bin/git')
 # glyph, SGR colour (terminal palette, so it follows the kitty theme)
 ICON = {'': ('·', '39'), 'idle': ('○', '32'), 'working': ('◐', '33'), 'done': ('●', '36'),
         'error': ('✗', '31'), 'blocked': ('◉', '31')}
 BAND = '48;5;8;'  # selected row
 MENU = (('Rename', 'rename'), ('Close', 'close'), ('New worktree', 'new'), ('Open worktree…', 'open'))
 MOUSE = re.compile(rb'\x1b\[<(\d+);(\d+);(\d+)([Mm])')
-_git: dict[str, tuple[float, str, str, str, str, str]] = {}
 
 
 def run(*cmd: str) -> str:
@@ -50,83 +50,108 @@ def fit(text: str, width: int) -> str:
     return text if len(text) <= width else text[:max(0, width - 1)] + '…'
 
 
-def worst(states: list[str]) -> str:
-    return max(states, key=lambda s: RANK.index(s) if s in RANK else 0, default='')
+def repo(cwd):
+    folder = os.path.abspath(cwd) if cwd else ''
+    for _ in range(40):
+        if not folder:
+            break
+        gitdir = os.path.join(folder, '.git')
+        if os.path.isfile(gitdir):
+            try:
+                with open(gitdir) as f:
+                    pointer = f.read().strip()
+                gitdir = os.path.join(folder, pointer[8:]) if pointer.startswith('gitdir: ') else ''
+            except OSError:
+                gitdir = ''
+        if os.path.isdir(gitdir):
+            try:
+                with open(os.path.join(gitdir, 'HEAD')) as f:
+                    head = f.read().strip()
+                branch = head[len('ref: refs/heads/'):] if head.startswith('ref: refs/heads/') else 'HEAD'
+            except OSError:
+                branch = ''
+            return folder, branch
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            break
+        folder = parent
+    return '', ''
 
 
-def live_cwd(holder: str, fallback: str) -> str:
-    """kitty reports the folder of 'zmx attach' for held panes, so ask the session's shell."""
-    if not holder:
-        return fallback
-    # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
-    pid = next((p.strip().split('=')[1] for line in run('zmx', 'ls').splitlines() if f'name={holder}\t' in line
-                for p in line.split('\t') if p.strip().startswith('pid=')), '')
-    out = run('lsof', '-a', '-d', 'cwd', '-p', pid, '-Fn') if pid else ''
-    return next((line[1:] for line in out.splitlines() if line.startswith('n')), fallback)
+def split_input(data):
+    mouse = [m.groups() for m in MOUSE.finditer(data)]
+    data = MOUSE.sub(b'', data)
+    parts = data.split(b'\n')
+    view, tick = None, False
+    for part in parts[:-1]:
+        if not part:
+            tick = True
+            continue
+        try:
+            obj = json.loads(part)
+            if (isinstance(obj, dict) and obj.get('v') == 1
+                    and isinstance(obj.get('current'), str)
+                    and isinstance(obj.get('spaces'), list) and isinstance(obj.get('agents'), list)):
+                view = obj
+        except (ValueError, UnicodeError):
+            pass
+    return parts[-1], mouse, view, tick
 
 
-def folder_info(name: str, sp: dict) -> tuple[str, str, str, str]:
-    """(folder name, branch, ahead and behind counts, folder) of a workspace's first pane.
+class Git:
+    def __init__(self):
+        self.cache, self.queue = {}, []
+        self.proc = None
 
-    The folder name is the repo's when inside one. Cached for 3 s, or until the pane's title
-    changes, which it does on cd."""
-    now = time.monotonic()
-    hit = _git.get(name)
-    if hit and now - hit[0] < 3 and hit[1] == sp['title']:
-        return hit[2:]
-    cwd = live_cwd(sp['holder'], sp['cwd'])
-    top = run('git', '-C', cwd, 'rev-parse', '--show-toplevel').strip()
-    branch = run('git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip() if top else ''
-    counts = run('git', '-C', cwd, 'rev-list', '--left-right', '--count', '@{u}...HEAD').split() if branch else []
-    behind, ahead = (counts + ['0', '0'])[:2]
-    status = ' '.join(x for x in ('↑' + ahead if ahead != '0' else '', '↓' + behind if behind != '0' else '') if x)
-    shown = 'home' if cwd == os.path.expanduser('~') else os.path.basename(top or cwd) or cwd
-    _git[name] = now, sp['title'], shown, branch, status, cwd
-    return shown, branch, status, cwd
+    def request(self, tops, current, now):
+        for top in dict.fromkeys(tops):
+            if (top and top not in self.queue and top != getattr(self, 'top', None)
+                    and now - self.cache.get(top, (-float('inf'), ''))[0] >= (3 if top == current else 30)):
+                self.queue.append(top)
 
+    def start(self, now):
+        if self.proc or not self.queue:
+            return
+        self.top = self.queue.pop(0)
+        self.started, self.output = now, b''
+        try:
+            self.proc = subprocess.Popen(
+                [GIT, '-C', self.top, 'rev-list', '--left-right', '--count', '@{u}...HEAD'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+            os.set_blocking(self.proc.stdout.fileno(), False)
+        except OSError:
+            self.cache[self.top] = now, ''
+            self.top = None
 
-def model() -> tuple[dict[str, dict], list[dict], str]:
-    """(spaces, agents, current space), all in tab order: the order 'zws switch N' and
-    'zws agent N' use."""
-    try:
-        oswins = json.loads(kitten('ls'))
-    except ValueError:
-        return {}, [], ''
-    spaces: dict[str, dict] = {}
-    agents: list[dict] = []
-    current = ''
-    for osw in oswins:
-        for tab in osw['tabs']:
-            panes = [w for w in tab['windows'] if w['user_vars'].get('role') != 'sidebar']
-            name = panes[0].get('session_name', '') if panes else ''
-            mine = any(w['id'] == ME for w in tab['windows'])
-            if mine:
-                current = name
-            if not name:
-                continue
-            sp = spaces.setdefault(name, {'states': [], 'tabs': 0, 'holder': panes[0]['user_vars'].get('holder', ''),
-                                          'cwd': panes[0]['cwd'], 'title': panes[0]['title'], 'named': ''})
-            sp['tabs'] += 1
-            # a rename marks the panes and sidebars of that moment, and those panes may close
-            sp['named'] = sp['named'] or next((w['user_vars']['ws_name'] for w in tab['windows']
-                                               if w['user_vars'].get('ws_name')), '')
-            for w in panes:
-                states = [r['state'] for r in w['program_status']]
-                sp['states'] += states
-                if states:
-                    v = w['user_vars']
-                    agents.append({'id': w['id'], 'state': worst(states), 'app': w['program_status'][0]['app'] or 'agent',
-                                   'space': name, 'tab': sp['tabs'], 'on': mine and w['is_active'],
-                                   'model': v.get('pi_model', ''), 'ctx': v.get('pi_ctx', '')})
-    for name, sp in spaces.items():
-        sp['folder'], sp['branch'], sp['status'], sp['live'] = folder_info(name, sp)
-        sp['shown'] = sp['named'] or sp['folder']
-    return spaces, agents, current
+    def collect(self, ready, now):
+        if not self.proc:
+            return False
+        p = self.proc
+        if p.stdout in ready:
+            self.output += os.read(p.stdout.fileno(), 65536)
+        if now - self.started > 3 and p.poll() is None:
+            p.kill()
+        code = p.poll()
+        if code is None:
+            return False
+        self.output += p.stdout.read() or b''
+        p.stdout.close()
+        status = ''
+        counts = self.output.split()
+        if code == 0 and len(counts) == 2 and all(c.isdigit() for c in counts):
+            behind, ahead = (int(c) for c in counts)
+            status = ' '.join(x for x in ('↑' + str(ahead) if ahead else '',
+                                          '↓' + str(behind) if behind else '') if x)
+        changed = status != self.cache.get(self.top, (0, ''))[1]
+        self.cache[self.top] = now, status
+        self.proc, self.top = None, None
+        return changed
 
 
-def render(clicks: list, menu: str) -> None:
-    cols, rows = shutil.get_terminal_size((24, 40))
-    spaces, agents, current = model()
+def rows(view, info, menu, cols, lines):
+    spaces = {s['name']: s for s in view['spaces']}
+    agents, current = view['agents'], view['current']
 
     def line(segs: list[tuple[str, str]], band: bool = False) -> str:
         out, used = [], 0
@@ -139,37 +164,57 @@ def render(clicks: list, menu: str) -> None:
 
     top: list[tuple[str, tuple | None]] = [(line([(' spaces', '1;97')]), None), (line([]), None)]
     for name, sp in spaces.items():
-        glyph, colour = ICON.get(worst(sp['states']), ICON[''])
+        shown, branch, status = info[name]
+        glyph, colour = ICON.get(sp['state'], ICON[''])
         on, go = name == current, ('space', name)
-        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(sp['shown'], cols - 4), '1;97' if on else '97')], on), go))
-        if sp['branch']:
-            room = cols - 4 - (len(sp['status']) + 1 if sp['status'] else 0)
-            segs = [('   ', ''), (fit(sp['branch'], room), '39')]
-            for part in sp['status'].split():
+        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(shown, cols - 4), '1;97' if on else '97')], on), go))
+        if branch:
+            room = cols - 4 - (len(status) + 1 if status else 0)
+            segs = [('   ', ''), (fit(branch, room), '39')]
+            for part in status.split():
                 segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
             top.append((line(segs, on), go))
         if name == menu:  # the worktree entries need a repo
-            for label, what in MENU if sp['branch'] else MENU[:2]:
-                top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['live'])))
+            for label, what in MENU if branch else MENU[:2]:
+                top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['cwd'])))
 
     bottom: list[tuple[str, tuple | None]] = []
     if agents:
         bottom += [(line([('─' * cols, '38;5;8')]), None), (line([(' agents', '1;97')]), None), (line([]), None)]
     for a in agents:  # same rows whichever workspace is shown
         glyph, colour = ICON.get(a['state'], ICON[''])
-        go = ('pane', a['id'], '' if a['space'] == current else a['space'])
-        label = fit(f"{a['app']} · {spaces[a['space']]['shown']} {a['tab']}", cols - 4)
+        go = ('pane', a['pane'], '' if a['space'] == current else a['space'])
+        label = fit(f"{a['app']} · {info[a['space']][0]} {a['tab']}", cols - 4)
         bottom.append((line([(' ', ''), (glyph + ' ', colour), (label, '1;97' if a['on'] else '97')], a['on']), go))
         if a['model'] or a['ctx']:
             tail = f" · {a['ctx']}" if a['model'] and a['ctx'] else a['ctx']
             bottom.append((line([('   ', ''), (fit(a['model'], cols - 4 - len(tail)) + tail, '39')], a['on']), go))
 
-    bottom = bottom[:max(0, rows - 3)]
-    top = top[:max(0, rows - len(bottom))]
-    body = top + [(line([]), None)] * (rows - len(top) - len(bottom)) + bottom
-    clicks[:] = [action for _, action in body]
-    sys.stdout.write('\x1b[?2026h\x1b[H' + '\r\n'.join(text for text, _ in body) + '\x1b[?2026l')
-    sys.stdout.flush()
+    bottom = bottom[:max(0, lines - 3)]
+    top = top[:max(0, lines - len(bottom))]
+    body = top + [(line([]), None)] * (lines - len(top) - len(bottom)) + bottom
+    return [text for text, _ in body], [action for _, action in body]
+
+
+def write(text):
+    data = text.encode()
+    while data:
+        data = data[os.write(sys.stdout.fileno(), data):]
+
+
+def render(view, git, menu):
+    info, tops = {}, {}
+    for sp in view['spaces']:
+        cwd, name = sp['cwd'], sp['name']
+        top, branch = repo(cwd)
+        folder = 'home' if cwd == os.path.expanduser('~') else os.path.basename(top or cwd)
+        shown = sp['shown'] or (folder if cwd else name)
+        info[name] = shown, branch, git.cache.get(top, (0, ''))[1]
+        tops[name] = top
+    body, clicks = rows(view, info, menu, *shutil.get_terminal_size((24, 40)))
+    write('\x1b[?2026h\x1b[H' + '\r\n'.join(body) + '\x1b[?2026l')
+
+    return clicks, tops
 
 
 def act(action: tuple | None) -> None:
@@ -189,39 +234,66 @@ def act(action: tuple | None) -> None:
 def main() -> None:
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
-    clicks: list = []
-    menu = ''  # the space whose right-click menu is open
-    wake_r, wake_w = os.pipe()  # a resize lands here, so select() returns and the loop redraws
+    clicks, menu, buffer, view = [], '', b'', None
+    git = Git()
+    wake_r, wake_w = os.pipe()
     os.set_blocking(wake_w, False)
-    signal.set_wakeup_fd(wake_w)
-    signal.signal(signal.SIGWINCH, lambda *_: None)
+    old_wake = signal.set_wakeup_fd(wake_w)
+    old_signal = signal.signal(signal.SIGWINCH, lambda *_: None)
     try:
         tty.setraw(fd)
-        sys.stdout.write('\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J')
-        render(clicks, menu)
+        write('\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J'
+              '\x1b]1337;SetUserVar=zside=cmVhZHk=\x07')
+
         while True:
-            ready, _, _ = select.select([fd, wake_r], [], [])
+            inputs = [fd, wake_r] + ([git.proc.stdout] if git.proc else [])
+            ready, _, _ = select.select(inputs, [], [], .1 if git.proc or git.queue else None)
+            draw, refresh = False, False
             if wake_r in ready:
                 os.read(wake_r, 4096)
+                draw = True
             if fd in ready:
-                time.sleep(0.05)  # let a burst of pokes arrive, then draw once
                 data = os.read(fd, 65536)
                 if not data:
                     return
-                for m in MOUSE.finditer(data):
-                    button, row = int(m[1]), int(m[3]) - 1
-                    if m[4] != b'M' or button not in (0, 2) or row >= len(clicks):
+                buffer, mouse, new_view, tick = split_input(buffer + data)
+                if new_view is not None:
+                    view = new_view
+                draw = refresh = new_view is not None or tick
+                for button, _, row, event in mouse:
+                    button, row = int(button), int(row) - 1
+                    if event != b'M' or button not in (0, 2) or not 0 <= row < len(clicks):
                         continue
                     action = clicks[row]
-                    if button == 2:  # right click: open the menu of that space, or close it
+                    if button == 2:
                         menu = action[1] if action and action[0] == 'space' and action[1] != menu else ''
                     else:
                         menu = ''
                         act(action)
-            render(clicks, menu)
+                    draw = True
+            draw = git.collect(ready, time.monotonic()) or draw
+            if view is not None and draw:
+                clicks, tops = render(view, git, menu)
+                if refresh:
+                    git.request(tops.values(), tops.get(view['current'], ''), time.monotonic())
+            git.start(time.monotonic())  # Only queued after a frame has been flushed.
+    except (OSError, termios.error):
+        pass  # A closed pty can fail both reads and terminal restoration.
     finally:
-        sys.stdout.write('\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h')
-        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        if git.proc:
+            if git.proc.poll() is None:
+                git.proc.kill()
+            git.proc.stdout.close()
+        signal.set_wakeup_fd(old_wake)
+        signal.signal(signal.SIGWINCH, old_signal)
+        os.close(wake_r)
+        os.close(wake_w)
+        try:
+            write('\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h')
+
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        except (OSError, termios.error):
+            pass
 
 
 if __name__ == '__main__':
