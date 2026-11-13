@@ -19,7 +19,7 @@ import termios
 import time
 import tty
 
-os.environ['PATH'] = '/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:' + os.environ.get('PATH', '')
+os.environ['PATH'] = '/opt/homebrew/bin:' + os.environ.get('PATH', '')
 ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
 GIT = shutil.which('git')
 if GIT in (None, '/usr/bin/git'):

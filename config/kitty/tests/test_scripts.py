@@ -40,6 +40,7 @@ if cmd == "lsof":
     if mode == "lsof-hang": time.sleep(30)
     print("n" + str(root / "live cwd"))
 if cmd == "kitten":
+    if "focus-window" in args and mode == "focus-fail-both": sys.exit(1)
     if "--to" in args:
         ready = root / "ready"
         if ready.exists() and time.time() >= float(ready.read_text()):
@@ -53,7 +54,7 @@ if cmd == "kitten":
         assert pathlib.Path(args[-1]).read_text().endswith("\n")
 if cmd == "open":
     (root / "ready").write_text(str(time.time() + .3))
-if cmd == "aerospace" and mode == "focus-fail": sys.exit(1)
+if cmd == "aerospace" and mode.startswith("focus-fail"): sys.exit(1)
 if cmd == "pgrep": sys.exit(0 if mode == "starting" else 1)
 if cmd == "fzf":
     view = pathlib.Path(os.environ["ZPICK_VIEW"])
@@ -267,10 +268,38 @@ class ScriptTests(unittest.TestCase):
         old = reports / "zmx-a.ips"
         old.touch()
         os.utime(old, (0, 0))
-        result = self.run_script("kmain", MODE="focus-fail")
+        result = self.run_script("kmain", MODE="focus-fail-both")
         self.assertEqual(result.returncode, 1)
         self.assertIn("CalledProcessError", result.stderr)
         self.assertFalse(old.exists())
+
+    def test_main_focuses_through_kitty_when_aerospace_cannot(self):
+        (self.root / "ready").write_text("0")
+        result = self.run_script("kmain", MODE="focus-fail")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
+        self.assertEqual(self.calls("kitten")[-1][-1], "focus-window")
+        (self.root / "calls").unlink()
+        (self.root / "aerospace").unlink()  # not installed at all
+        result = self.run_script("kmain", PATH=str(self.root) + ":/usr/bin:/bin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("kitten")[-1][-1], "focus-window")
+
+    def test_main_removes_a_dead_socket_but_never_a_live_one(self):
+        import socket
+        path = self.root / "socket"
+        with socket.socket(socket.AF_UNIX) as dead:
+            dead.bind(str(path))  # closed without unlinking: what a crashed kitty leaves
+        self.assertEqual(self.run_script("kmain").returncode, 0)
+        self.assertFalse(path.exists())
+        self.assertEqual(len(self.calls("open")), 1)
+        (self.root / "calls").unlink()
+        (self.root / "ready").unlink()
+        with socket.socket(socket.AF_UNIX) as live:
+            live.bind(str(path))
+            live.listen()
+            self.assertEqual(self.run_script("kmain").returncode, 0)
+            self.assertTrue(path.exists())
 
     def test_main_cleanup_ignores_each_file_error_outside_lock(self):
         import fcntl

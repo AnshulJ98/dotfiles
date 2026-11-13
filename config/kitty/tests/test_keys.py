@@ -83,7 +83,11 @@ class KeyConfigTests(unittest.TestCase):
         config = tomllib.loads((ROOT / "config/aerospace/aerospace.toml").read_text())
         bindings = config["mode"]["main"]["binding"]
         self.assertEqual(bindings["cmd-enter"], "exec-and-forget $HOME/.config/kitty/bin/kmain")
-        self.assertEqual(bindings["cmd-alt-enter"], "exec-and-forget open -n /Applications/kitty.app")
+        self.assertEqual(bindings["cmd-alt-enter"], "exec-and-forget open -n -a kitty")
+        # kitty puts its own folder on its children's PATH, and macOS finds the app by name.
+        for name in ("zshell", "zside"):
+            self.assertNotIn("Contents/MacOS", (ROOT / "config/kitty/bin" / name).read_text(), name)
+        self.assertIn('"open", "-n", "-a", "kitty"', (ROOT / "config/kitty/bin/kmain").read_text())
 
 
 if __name__ == "__main__":

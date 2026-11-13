@@ -4,10 +4,14 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import socket
+import stat
 import subprocess
 import time
 
-os.environ["PATH"] = "/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:" + os.environ["PATH"]
+# AeroSpace starts this outside kitty, so kitten is found on PATH or in either usual app folder.
+os.environ["PATH"] = ("/opt/homebrew/bin:" + os.environ["PATH"] + ":/Applications/kitty.app/Contents/MacOS:"
+                      + os.path.expanduser("~/Applications/kitty.app/Contents/MacOS"))
 sock = "/tmp/kitty-main"
 main = Path.home() / ".local/state/kitty/workspaces/main.kitty-session"
 
@@ -22,25 +26,52 @@ def window_id():
         return None
 
 
+def dead_socket():
+    # kitty 0.50.0 binds without unlinking, so the socket a crashed kitty left makes the next
+    # one start without remote control ("Invalid listen_on=..., ignoring").
+    try:
+        if not stat.S_ISSOCK(os.stat(sock).st_mode):
+            return False
+        with socket.socket(socket.AF_UNIX) as probe:
+            probe.settimeout(1)
+            probe.connect(sock)
+        return False
+    except ConnectionRefusedError:
+        return True
+    except OSError:
+        return False
+
+
+def focus(wid):
+    try:
+        if subprocess.run(["aerospace", "focus", "--window-id", str(wid)]).returncode == 0:
+            return
+    except OSError:
+        pass  # AeroSpace is not installed
+    # AeroSpace does not always list kitty's windows; kitty can raise its own.
+    subprocess.run(["kitten", "@", "--to", "unix:" + sock, "focus-window"], check=True, timeout=2)
+
+
 # Keep the lock inode: unlinking it would let another starter bypass the lock.
 try:
     with open(sock + ".lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         wid = window_id()
         if wid:
-            subprocess.run(["aerospace", "focus", "--window-id", str(wid)], check=True)
+            focus(wid)
         elif subprocess.run(["pgrep", "-f", "--", "--listen-on unix:" + sock],
                             stdout=subprocess.DEVNULL, timeout=2).returncode == 0:
             pass  # still starting; never remove a potentially active socket
         else:
-            # Leave socket ownership and stale-socket handling to kitty.
+            if dead_socket():
+                os.unlink(sock)
             main.parent.mkdir(parents=True, exist_ok=True)
             try:
                 with main.open("x") as session:
                     session.write("cd ~\nlaunch\n")
             except FileExistsError:
                 pass
-            subprocess.run(["open", "-n", "/Applications/kitty.app", "--args",
+            subprocess.run(["open", "-n", "-a", "kitty", "--args",
                             "--listen-on", "unix:" + sock, "--session", str(main)],
                            check=True, timeout=5)
             deadline = time.monotonic() + 10
