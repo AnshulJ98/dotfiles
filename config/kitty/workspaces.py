@@ -1,4 +1,4 @@
-# Watcher for workspaces (kitty sessions shown one at a time; bin/zws, bin/zpick):
+# Workspace watcher: zkitty runs key/sidebar intents; bin/zws and bin/zpick handle prompts.
 #  - keeps a session file per open workspace in ~/.local/state/kitty/workspaces, so goto_session
 #    reopens it with its tabs, splits and panes (transient=1 scout panes are not saved).
 #    Saves are debounced: the tab bar redraws on
@@ -12,8 +12,6 @@ import re
 import shlex
 import time
 import sys
-import traceback
-from functools import wraps
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
 if FOLDER not in sys.path:
@@ -28,11 +26,11 @@ import zkitty
 # tests/test_workspaces.py checks these. Callbacks and boss.call_remote_control are documented.
 from kitty.fast_data_types import add_timer, get_boss
 
-DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
+DIR = zkitty.folder()
+_log = zkitty.log
+_safe = zkitty.safe
 OPEN = os.path.join(DIR, '.open')
 OFF = os.path.join(DIR, '.sidebar-off')
-SIDEBAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zside')
-WIDTH = '24'
 _save_pending = False
 _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
@@ -41,28 +39,6 @@ _tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _ready: set[int] = set()
 _sent: dict[int, bytes] = {}
-
-
-def _log(text):
-    try:
-        os.makedirs(DIR, exist_ok=True)
-        path = os.path.join(DIR, 'watcher.log')
-        mode = 'w' if os.path.exists(path) and os.path.getsize(path) > 256 * 1024 else 'a'
-        with open(path, mode) as f:
-            f.write(time.strftime('%Y-%m-%d %H:%M:%S ') + text + '\n')
-    except Exception:
-        pass  # There is nowhere left to report a failure to write the error log.
-
-
-def _safe(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception:
-            _log(traceback.format_exc())
-            return None
-    return wrapped
 
 
 def _file(name: str) -> str:
@@ -203,13 +179,7 @@ def _sync(timer_id: int | None = None) -> None:
             if len(recent) >= 3:
                 continue
             recent.append(time.monotonic())
-            # a renamed workspace keeps its name when the panes that carried it are gone
-            named = next((w.user_vars['ws_name'] for w in boss.all_windows
-                          if w.created_in_session_name == name and w.user_vars.get('ws_name')), '')
-            boss.call_remote_control(None, (
-                'launch', '--type=tab-dock', f'--match=id:{tab.id}', '--dock-edge=left', f'--dock-size={WIDTH}',
-                '--dock-skip-focus', '--keep-focus', '--add-to-session', name, '--var', 'role=sidebar',
-                *(('--var', f'ws_name={named}') if named else ()), SIDEBAR))
+            zkitty.dock(boss, tab.id, name)
     _refresh(boss)
 
 
@@ -256,6 +226,11 @@ def on_set_user_var(boss, window, data) -> None:
         _sent.pop(window.id, None)
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
         _push(boss)
+    elif data.get('key') == 'zdo' and data.get('value'):
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zdo'))
+        zkitty.run(boss, data['value'].split())
+    elif data.get('key') in ('zside', 'zdo'):
+        return
     else:  # a rename (ws_name) or pi's model and context use
         on_tab_bar_dirty(boss, window, data)
 
