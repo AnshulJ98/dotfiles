@@ -5,7 +5,11 @@
 # its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. A scout task is
 # valid when its workspace builds, each expect entry's file exists there with at least lines[1] lines, every
 # must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range), facts is a
-# non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. No model calls.
+# non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. An orch task is valid
+# when expect is merge, rework, stop or fix, scenario.md is non-empty, and rule is {lines: [from, to], must} with the
+# phrase occurring (whitespace-insensitive) within those lines of fixtures/orch/rules.md. A NOTE on stderr (not a
+# failure) says when that fixture no longer equals lines 89-204 of config/pi/prompts/plan.md in the repo holding
+# agent-eval. No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
 set -euo pipefail
 
@@ -52,9 +56,26 @@ check_facts() {
   ' "$1" 2>&1 | head -1
 }
 
+# Orch tasks: say once on stderr when the rules fixture is stale against plan.md in this repo.
+orch_noted=0
+orch_note() {
+  [ "$orch_noted" -eq 0 ] || return 0
+  orch_noted=1
+  local root plan="config/pi/prompts/plan.md"
+  root="$(git -C "$EVAL_DIR" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -f "$root/$plan" ] || return 0
+  sed -n 89,204p "$root/$plan" | cmp -s - "$EVAL_DIR/fixtures/orch/rules.md" ||
+    echo "NOTE: fixtures/orch/rules.md differs from lines 89-204 of $plan; the rules moved on, refresh the fixture (see README)" >&2
+  return 0
+}
+
 # Print nothing when valid, else the reason.
 check() {
   local task="$1" repo fix ws path hidden allowed reason
+  if [ "$(task_get "$task" role)" = orch ]; then
+    node "$EVAL_DIR/lib/orch.ts" check "$task" "$EVAL_DIR/fixtures/orch/rules.md" 2>&1 | head -1
+    return 0
+  fi
   repo="$(task_get "$task" repo)"
   if [ "$(task_get "$task" role)" = review ]; then
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
@@ -93,6 +114,7 @@ check() {
 status=0
 validate_one() {
   local reason
+  [ "$(task_get "$1" role)" != orch ] || orch_note
   reason="$(check "$1")"
   if [ -z "$reason" ]; then echo "VALID $(task_get "$1" id)"; else echo "INVALID $(task_get "$1" id): $reason"; status=1; fi
 }

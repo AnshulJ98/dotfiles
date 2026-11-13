@@ -1,0 +1,17 @@
+You are the orchestrator of coding work in a git repository. The user's rules for dispatching workers and for auto runs are below, followed by one situation. Decide what you do next under those rules. You have no tools here; do not ask questions.
+
+Answer with `DECISION: <word>` on the first line, where <word> is one of:
+- merge: accept the slice (in an auto run, run auto-slice merge for it)
+- rework: append the reasons to the spec and dispatch the worker on this slice again
+- stop: stop the run or the slice, report, and wait for the user
+- fix: edit the files yourself to correct what is wrong
+
+Then one sentence naming the rule that decides it.
+
+<rules>
+{{RULES}}
+</rules>
+
+<situation>
+{{SCENARIO}}
+</situation>

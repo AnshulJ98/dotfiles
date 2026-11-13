@@ -218,6 +218,95 @@ exec sleep 60
 	assert.equal(existsSync(marker), false);
 });
 
+/** A stub orch pi. It runs under env -i, so everything it needs is baked into the script. */
+function makeOrchStub(name: string, reply: string, mode: "reply" | "silent" | "slow" = "reply"): { path: string; record: string } {
+	const path = join(scratch, `stub-orch-${name}`);
+	const record = `${path}.record`;
+	const usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: { total: 0.01 } };
+	const turn = JSON.stringify({ type: "message", message: { role: "assistant", usage, content: [] } });
+	const end = JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: reply }] } });
+	write(path, `#!/usr/bin/env bash
+{ echo "HOME=$HOME"; echo "PWD=$PWD"; echo "FILES=$(ls -A | wc -l | tr -d ' ')"; printf 'ARGC=%s\\n' "$#"; for a in "$@"; do printf 'ARG=%s\\n' "$a" | head -1; last="$a"; done; } > '${record}'
+printf '%s' "$last" > '${record}.prompt'
+d="$HOME/.pi/agent/sessions/orch/$$"; mkdir -p "$d"
+if [ ${mode} = silent ]; then : > "$d/s.jsonl"; exit 1; fi
+printf '%s\\n' '${turn}' > "$d/s.jsonl"
+if [ ${mode} = slow ]; then exec sleep 60; fi
+printf '%s\\n' '${end}'
+`, 0o755);
+	return { path, record };
+}
+
+function makeOrchTask(id: string, expect: string, scenario = "Slice 3 failed its first dispatch.\n"): string {
+	const dir = join(scratch, "tasks", id);
+	write(join(dir, "task.json"), JSON.stringify({ id, role: "orch", expect, rule: { lines: [86, 88], must: "a slice that does not pass its rework" } }));
+	write(join(dir, "scenario.md"), scenario);
+	return dir;
+}
+
+function orchTrial(id: string, expect: string, reply: string, mode: "reply" | "silent" | "slow" = "reply", extra: Record<string, string> = {}) {
+	const stub = makeOrchStub(id, reply, mode);
+	const out = join(scratch, `out-${counter++}.jsonl`);
+	const r = run("trial.sh", [makeOrchTask(id, expect, "Unique scenario text for " + id + ".\n"), "prov/model-x", "high", "2", out], { EVAL_ORCH_PI: stub.path, EVAL_REAL_HOME: realHome, ...extra });
+	const rec = existsSync(out) ? JSON.parse(readFileSync(out, "utf8").trim().split("\n").pop() ?? "null") : undefined;
+	if (rec) keep.push(rec.dir);
+	return { r, rec, stub };
+}
+
+test("trial.sh orch: a reply whose decision equals expect passes; record fields, empty workspace, -nt, isolated HOME", () => {
+	const { r, rec, stub } = orchTrial("o-stop", "stop", "DECISION: stop\nA slice that does not pass its rework stops the run.");
+	assert.equal(r.status, 0, r.stderr);
+	const { dir, seconds, ...rest } = rec;
+	assert.deepEqual(rest, {
+		task: "o-stop", role: "orch", model: "prov/model-x", thinking: "high", trial: 2, pass: true, decision: "stop", expect: "stop", rc: 0,
+		cost: 0.01, input: 100, output: 20, cacheRead: 0, cacheWrite: 0, turns: 1, leak: false, infra: false,
+	});
+	assert.equal(typeof seconds, "number");
+	const seen = readFileSync(stub.record, "utf8");
+	assert.match(seen, new RegExp(`^HOME=${join(dir, "home")}$`, "m"));
+	assert.match(seen, /^PWD=.*\/ws$/m);
+	assert.match(seen, /^FILES=0$/m);
+	const args = seen.split("\n").filter((l) => l.startsWith("ARG=")).map((l) => l.slice(4));
+	assert.ok(args.includes("-nt"), args.join(" "));
+	assert.deepEqual(args.slice(0, 3), ["-p", "--mode", "json"]);
+	assert.deepEqual(args.slice(args.indexOf("--model"), args.indexOf("--model") + 4), ["--model", "prov/model-x", "--thinking", "high"]);
+	const prompt = readFileSync(`${stub.record}.prompt`, "utf8");
+	assert.match(prompt, /^You are the orchestrator of coding work/);
+	assert.ok(prompt.includes("Unique scenario text for o-stop."));
+	assert.ok(prompt.includes(readFileSync(join(EVAL_DIR, "fixtures/orch/rules.md"), "utf8").split("\n")[0]));
+	assert.equal(readFileSync(join(dir, "prompt.txt"), "utf8").replace(/\n+$/, ""), prompt); // the argument comes from $(cat), which drops final newlines
+	assert.match(readFileSync(join(dir, "reply.txt"), "utf8"), /^DECISION: stop/);
+	assert.ok(existsSync(join(dir, "orch.jsonl")));
+});
+
+test("trial.sh orch: another decision fails and is recorded; a reply without a decision fails with decision null, not infra", () => {
+	const wrong = orchTrial("o-wrong", "stop", "DECISION: merge\nThe sensors passed.").rec;
+	assert.deepEqual([wrong.pass, wrong.decision, wrong.expect, wrong.infra], [false, "merge", "stop", false]);
+	const none = orchTrial("o-none", "stop", "I would stop here, because the rework failed.").rec;
+	assert.deepEqual([none.pass, none.decision, none.infra, none.turns], [false, null, false, 1]);
+	const loose = orchTrial("o-loose", "rework", "**DECISION: Rework** - append the reasons").rec;
+	assert.deepEqual([loose.pass, loose.decision], [true, "rework"]);
+});
+
+test("trial.sh orch: no turns is infra; a call that outlives EVAL_ORCH_TIMEOUT is infra with rc 124", () => {
+	const quiet = orchTrial("o-quiet", "stop", "", "silent");
+	assert.equal(quiet.r.status, 0, quiet.r.stderr);
+	assert.deepEqual([quiet.rec.infra, quiet.rec.turns, quiet.rec.rc, quiet.rec.pass, quiet.rec.decision], [true, 0, 1, false, null]);
+	const started = Date.now();
+	const slow = orchTrial("o-slow", "stop", "DECISION: stop", "slow", { EVAL_ORCH_TIMEOUT: "2" });
+	assert.equal(slow.r.status, 0, slow.r.stderr);
+	assert.ok(Date.now() - started < 40000, "the trial waited for pi");
+	assert.deepEqual([slow.rec.rc, slow.rec.infra, slow.rec.pass, slow.rec.turns], [124, true, false, 1]);
+});
+
+test("trial.sh orch: a task without scenario.md exits 2", () => {
+	const dir = makeOrchTask("o-noscn", "stop");
+	rmSync(join(dir, "scenario.md"));
+	const r = run("trial.sh", [dir, "m", "low", "1", join(scratch, "x.jsonl")]);
+	assert.equal(r.status, 2);
+	assert.match(r.stderr, /role not supported yet/);
+});
+
 test("usage errors and unsupported roles exit 2", () => {
 	assert.equal(run("trial.sh", []).status, 2);
 	assert.equal(run("trial.sh", ["no-such-task", "m", "low", "1", join(scratch, "x.jsonl")]).status, 2);
