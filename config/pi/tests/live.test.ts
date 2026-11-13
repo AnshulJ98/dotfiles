@@ -93,6 +93,7 @@ test("pi-watch: three panes beside the current one in kitty, each next to the la
 	chmodSync(join(fake, "kitten"), 0o755);
 	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${fake}:${process.env.PATH}`, PI_LOG_DIR: "/logs" };
 	delete env.KITTY_LISTEN_ON;
+	delete env.ZMX_SESSION; // set in every kitty pane; pi-watch would look up the real kitty
 	const plain = spawnSync(watch, [], { env, encoding: "utf8" });
 	assert.equal(plain.status, 0);
 	assert.match(plain.stdout, /^'\S+\/bin\/pi-health' --watch 5\ntail -n 40 -F '\/logs\/bash\.log'\ntail -n 20 -F '\/logs\/events\.log'\n$/);

@@ -83,7 +83,7 @@ test("extension: real child reports a dead sibling, clears clean state, and does
 
 test("extension: each poll replaces the status, with no held dead or quiet problems", async (t) => {
 	let problems: Problem[] = [gone];
-	t.mock.method(childProcess, "execFile", (_file, _args, _options, callback) => {
+	t.mock.method(childProcess, "execFile", (_file: string, _args: readonly string[], _options: object, callback: (error: Error | null, stdout: string) => void) => {
 		callback(null, JSON.stringify({ problems }));
 	});
 	syncBuiltinESMExports();
