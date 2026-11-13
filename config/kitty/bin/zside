@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Render pushed workspace views: draw first, then refresh git counts asynchronously.
 
-Kitty supplies ordered JSON lines after the raw-terminal readiness handshake. Folder and
+Kitty supplies framed JSON views after the raw-terminal readiness handshake. Folder and
 branch discovery read .git files only; row clicks send zdo intents, menus use bin/zws.
 """
 from __future__ import annotations  # /usr/bin/python3 is 3.9
@@ -31,7 +31,10 @@ ICON = {'': ('·', '39'), 'idle': ('○', '32'), 'working': ('◐', '33'), 'done
         'error': ('✗', '31'), 'blocked': ('◉', '31')}
 BAND = '48;5;8;'  # selected row
 MENU = (('Rename', 'rename'), ('Close', 'close'), ('New worktree', 'new'), ('Open worktree…', 'open'))
-MOUSE = re.compile(rb'\x1b\[<(\d+);(\d+);(\d+)([Mm])')
+REST_MAX = 1 << 20
+INPUT = re.compile(
+    rb'\x1b(?:_z([vt])([^\x1b]*)\x1b\\|\[<(\d+);(\d+);(\d+)([Mm])|'
+    rb'(?P<rest>(?:_z[vt][^\x1b]*\x1b?|_z?|_|\[(?:<(?:\d+(?:;(?:\d+(?:;\d*)?)?)?)?)?)?)\Z)')
 
 
 def run(*cmd: str) -> str:
@@ -74,27 +77,26 @@ def repo(cwd):
 
 
 def split_input(data):
-    mouse = [m.groups() for m in MOUSE.finditer(data)]
-    data = MOUSE.sub(b'', data)
-    parts = data.split(b'\n')
-    view, tick = None, False
-    for part in parts[:-1]:
-        if not part:
+    rest, mouse, view, tick = b'', [], None, False
+    for match in INPUT.finditer(data):
+        kind, body, button, col, row, event, partial = match.groups()
+        if partial is not None:
+            if len(data) - match.start() <= REST_MAX:
+                rest = data[match.start():]
+        elif button is not None:
+            mouse.append((button, col, row, event))
+        elif kind == b't':
             tick = True
-            continue
-        for start, byte in enumerate(part):
-            if byte != ord('{'):
-                continue
+        else:
             try:
-                obj = json.loads(part[start:])
+                obj = json.loads(body)
                 if (isinstance(obj, dict) and obj.get('v') == 1
                         and isinstance(obj.get('current'), str)
                         and isinstance(obj.get('spaces'), list) and isinstance(obj.get('agents'), list)):
                     view = obj
-                    break
             except (ValueError, UnicodeError):
                 pass
-    return parts[-1], mouse, view, tick
+    return rest, mouse, view, tick
 
 
 class Git:

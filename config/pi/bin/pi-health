@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // What every pi process on this machine is doing, and whether any has stopped moving.
-// usage: pi-health [--limit SECS] [--watch [SECS]]
+// usage: pi-health [--limit SECS] [--watch [SECS]] [--json]
+// --json (without --watch) prints one JSON line of problems, with the same exit codes.
 //
 // One line per live session, scout and worker (how long in its state, and the open tool calls),
 // its bg_run jobs, and each auto run in every repo a pi process has been seen in (<logs>/repos)
@@ -8,7 +9,8 @@
 // "!" is a problem:
 //   - a busy process with no tool or agent event for --limit seconds (default 1200, or
 //     PI_HEALTH_LIMIT): past every bound the harness puts on one call, so one of them failed
-//   - a main session that died without shutting down (reported by the run that finds it)
+//   - a main session that died without shutting down (plain mode reports it once and removes
+//     its file; --json leaves it for other sessions to see, ignoring files from before this boot)
 //   - an auto run with open slices that nothing live is carrying
 // Exit 1 when there is a problem, else 0. --watch reprints every SECS seconds (default 30) and
 // rings the terminal bell on a new problem.
@@ -54,28 +56,31 @@ async function main() {
 		return args.includes(flag) && value > 0 ? value : fallback;
 	};
 	const limitMs = number("--limit", Number(process.env.PI_HEALTH_LIMIT) || 1200) * 1000;
+	const json = args.includes("--json") && !args.includes("--watch");
 	const head = (p) => `${p.role.padEnd(6)} ${p.session.slice(-6)}  ${tilde(p.cwd)}`;
 	// A dead main session's file is removed when it is found, so it is kept here while --watch runs
 	const gone = [];
 
 	const report = () => {
 		const now = Date.now();
-		gone.push(...sweep(isRunning, now - os.uptime() * 1000));
-		const live = readLive();
+		const bootMs = now - os.uptime() * 1000;
+		const dead = sweep(isRunning, bootMs, undefined, !json);
+		gone.push(...dead.filter((p) => !json || p.active >= bootMs));
+		const live = readLive().filter((p) => !json || !dead.some((d) => d.pid === p.pid));
 		const lines = [];
 		const problems = [];
-		const add = (flag, key, text) => {
+		const add = (flag, key, text, source) => {
 			lines.push(flag ? `! ${text}  \u00b7 ${flag}` : `  ${text}`);
-			if (flag) problems.push(key);
+			if (flag) problems.push({ key, who: typeof source === "string" ? source : `${source.role} ${source.session.slice(-6)} ${tilde(source.cwd)}`, flag, session: typeof source === "string" ? "" : source.session });
 		};
 		for (const p of gone) {
 			const flag = flagFor(p, false, now, limitMs);
-			if (flag) add(flag, `gone ${p.pid}`, head(p));
+			if (flag) add(flag, `gone ${p.pid}`, head(p), p);
 		}
 		for (const p of live) {
 			const childActive = live.some((child) => child.role !== "main" && child.parent === p.session && now - child.active <= limitMs);
 			const doing = p.state === "tool" ? p.what : p.state === "model" ? "waiting on the model" : "idle";
-			add(flagFor(p, true, now, limitMs, childActive), `quiet ${p.pid}`, `${head(p)}  ${age(now - p.since)}  ${cut(doing)}`);
+			add(flagFor(p, true, now, limitMs, childActive), `quiet ${p.pid}`, `${head(p)}  ${age(now - p.since)}  ${cut(doing)}`, p);
 			for (const job of p.jobs ?? []) {
 				let quiet = "?";
 				try {
@@ -109,7 +114,7 @@ async function main() {
 				}
 				const run = runState(autoMd, sessions, carried);
 				const state = run.stopped ? "stopped" : run.open ? `${run.open} open, next: ${run.next}` : "every slice ticked";
-				add(run.flag, `run ${root}`, `auto   ${tilde(root)}  ${state}`);
+				add(run.flag, `run ${root}`, `auto   ${tilde(root)}  ${state}`, `auto ${tilde(root)}`);
 			}
 		}
 		if (!lines.length) lines.push("  no pi process has a live-state file");
@@ -119,14 +124,14 @@ async function main() {
 	const watch = args.includes("--watch") ? number("--watch", 30) : 0;
 	if (!watch) {
 		const { lines, problems } = report();
-		console.log(lines.join("\n"));
+		console.log(args.includes("--json") ? JSON.stringify({ problems }) : lines.join("\n"));
 		return problems.length ? 1 : 0;
 	}
 	let seen = new Set();
 	const tick = () => {
 		const { lines, problems } = report();
-		const bell = problems.some((key) => !seen.has(key)) ? "\x07" : "";
-		seen = new Set(problems);
+		const bell = problems.some(({ key }) => !seen.has(key)) ? "\x07" : "";
+		seen = new Set(problems.map(({ key }) => key));
 		process.stdout.write(`\x1b[2J\x1b[H${bell}pi-health ${new Date().toTimeString().slice(0, 8)}, quiet limit ${age(limitMs)}\n${lines.join("\n")}\n`);
 	};
 	tick();

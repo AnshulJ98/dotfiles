@@ -5,6 +5,7 @@ __doc__ = """Pure workspace rules, running on Python 3.9 and inside kitty."""
 import json
 import urllib.parse
 
+TICK = b'\x1b_zt\x1b\\'
 RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']
 
 
@@ -81,7 +82,7 @@ def line(view: dict, session: str, tab: int) -> bytes:
                    on=a.get('tab_id') == tab and bool(a.get('active', False)))
               for a in view.get('agents', [])]
     obj = dict(v=1, current=session, spaces=view.get('spaces', []), agents=agents)
-    return json.dumps(obj, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    return b'\x1b_zv' + json.dumps(obj, sort_keys=True, separators=(',', ':')).encode() + b'\x1b\\'
 
 
 def intent(view: dict, current: str, words: list[str]) -> list[tuple]:

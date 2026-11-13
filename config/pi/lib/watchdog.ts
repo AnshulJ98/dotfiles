@@ -4,9 +4,11 @@
  * rows the spikes established.
  *
  * Order of trust: exit, wake_on, declared signals ($PI_HEARTBEAT, a bg_run
- * health command), output, then CPU/network/process changes. Once a job has
- * declared a signal (touched the heartbeat once), that signal decides in both
- * directions. No evidence (ps or nettop failed) never kills and never wakes.
+ * health command), then inferred activity. Background jobs with no work for
+ * five minutes wake even while printing and even with wake_on; jobs that only
+ * wait should touch $PI_HEARTBEAT or pass health. Foreground activity still
+ * includes output and process changes. A touched heartbeat decides both ways.
+ * No evidence (ps or nettop failed) never kills and never wakes.
  *
  * Kept outside extensions/ so a machine that loads that directory wholesale
  * never mistakes this file for an extension.
@@ -28,6 +30,8 @@ export type Activity = "cpu" | "net" | "procs";
 export interface Track {
 	lastOut: number;
 	lastActive: number;
+	/** Last tick with at least 1% of a core or growing network bytes. */
+	lastWork: number;
 	lastTick: number;
 	/** Wall-clock ms of the start or the last gap reset; a heartbeat older than this counts from here. */
 	sinceWall: number;
@@ -42,13 +46,15 @@ export interface Track {
  * threshold killed it. ps reports 0.01s steps; this only absorbs float noise.
  */
 export const CPU_EPSILON = 1e-6;
+/** Background work must use at least this share of one core over a tick. */
+export const WORK_CPU_SHARE = 0.01;
 /** Starts the line background.ts adds to a bash result when it kills the command; the bash log reads it back. */
 export const WATCHDOG_TAG = "[watchdog]";
 /** A tick gap longer than this many ticks (Mac sleep, a blocked event loop) restarts the quiet clocks. */
 export const GAP_TICKS = 3;
 
 export function startTrack(now: number, wallNow: number): Track {
-	return { lastOut: now, lastActive: now, lastTick: now, sinceWall: wallNow, evidence: false };
+	return { lastOut: now, lastActive: now, lastWork: now, lastTick: now, sinceWall: wallNow, evidence: false };
 }
 
 export function noteOutput(track: Track, now: number): Track {
@@ -58,7 +64,7 @@ export function noteOutput(track: Track, now: number): Track {
 /** Fold one sampler tick into the track. `reading` undefined means ps failed or the group is gone. */
 export function observe(track: Track, reading: Reading | undefined, now: number, wallNow: number, tickMs: number): Track {
 	if (now - track.lastTick > GAP_TICKS * tickMs) {
-		return { lastOut: now, lastActive: now, lastTick: now, sinceWall: wallNow, prev: reading, evidence: false };
+		return { lastOut: now, lastActive: now, lastWork: now, lastTick: now, sinceWall: wallNow, prev: reading, evidence: false };
 	}
 	if (!reading) return { ...track, lastTick: now, evidence: false };
 	const prev = track.prev;
@@ -73,6 +79,9 @@ export function observe(track: Track, reading: Reading | undefined, now: number,
 		lastTick: now,
 		prev: reading,
 		lastActive: why ? now : track.lastActive,
+		// Allow only floating-point rounding at the CPU-share boundary.
+		lastWork: prev && (reading.cpu - prev.cpu + Number.EPSILON * Math.max(1, reading.cpu, prev.cpu) >= WORK_CPU_SHARE * (now - track.lastTick) / 1000 ||
+			(reading.net !== undefined && prev.net !== undefined && reading.net > prev.net)) ? now : track.lastWork,
 		why: why ?? track.why,
 		evidence: prev !== undefined && reading.net !== undefined,
 	};
@@ -118,8 +127,8 @@ export interface BackgroundInput {
 	heartbeatAgeMs: number | undefined;
 	/** Result of a health check run this tick; undefined when none ran. */
 	healthy: boolean | undefined;
-	/** Fall back to output/CPU/network; false when the job declared a signal or waits on wake_on. */
-	inferred: boolean;
+	/** The job has a health command, even if no result arrived this tick. */
+	health: boolean;
 }
 
 export interface BackgroundResult {
@@ -149,10 +158,12 @@ export function backgroundVerdict(track: Track, state: BackgroundState, input: B
 	if (input.heartbeatAgeMs !== undefined) {
 		return input.heartbeatAgeMs >= idleLimit ? wake(`no heartbeat for ${minutes(input.heartbeatAgeMs)}`) : { state: healthState };
 	}
-	if (!input.inferred || !track.evidence) return { state: healthState };
+	if (input.health || !track.evidence) return { state: healthState };
 	const quiet = input.now - Math.max(track.lastOut, state.lastWakeAt);
 	const idle = input.now - Math.max(track.lastActive, state.lastWakeAt);
 	if (quiet >= idleLimit && idle >= idleLimit) return wake(`no output, CPU or network for ${minutes(quiet)}`);
+	const noWork = input.now - Math.max(track.lastWork, state.lastWakeAt);
+	if (noWork >= idleLimit) return wake(`almost no CPU and no network for ${minutes(noWork)}`);
 	if (quiet >= input.busyMs * scale) return wake(`busy but no output for ${minutes(quiet)}`);
 	return { state: healthState };
 }

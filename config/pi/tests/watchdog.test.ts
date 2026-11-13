@@ -15,6 +15,7 @@ import {
 	type Reading,
 	startTrack,
 	type Track,
+	WORK_CPU_SHARE,
 } from "../lib/watchdog.ts";
 
 const TICK = 5_000;
@@ -86,6 +87,36 @@ test("foreground: a tick gap (Mac sleep) restarts the quiet clocks", () => {
 	assert.equal(fg(track, late + IDLE - 1), "keep");
 });
 
+test("observe: only CPU share or network growth moves the work clock", () => {
+	assert.equal(WORK_CPU_SHARE, 0.01);
+	const baseline = observe(startTrack(0, 0), { cpu: 0, pids: "1", net: 100 }, TICK, TICK, TICK);
+	const rows: Array<[Reading, number, number]> = [
+		[{ cpu: 0.05, pids: "1", net: 100 }, TICK, 2 * TICK],
+		[{ cpu: 0.01, pids: "1", net: 100 }, TICK, 0],
+		[{ cpu: 0.049999, pids: "1", net: 100 }, TICK, 0],
+		[{ cpu: 0, pids: "1,2", net: 100 }, TICK, 0],
+		[{ cpu: 0, pids: "1", net: 101 }, TICK, 2 * TICK],
+		[{ cpu: 0.05, pids: "1", net: 100 }, 2 * TICK, 0],
+		[{ cpu: 0.1, pids: "1", net: 100 }, 2 * TICK, 3 * TICK],
+	];
+	for (const [reading, elapsed, want] of rows) {
+		assert.equal(observe(baseline, reading, TICK + elapsed, TICK + elapsed, TICK).lastWork, want);
+	}
+});
+
+test("observe: start, first reading, failed ps and gap reset preserve work-clock rules", () => {
+	let track = startTrack(123, 123);
+	assert.equal(track.lastWork, 123);
+	track = observe(track, { cpu: 100, pids: "1", net: 100 }, TICK, TICK, TICK);
+	assert.equal(track.lastWork, 123);
+	track = observe(track, undefined, 2 * TICK, 2 * TICK, TICK);
+	assert.equal(track.lastWork, 123);
+	const late = 6 * TICK;
+	track = observe(track, { cpu: 100, pids: "1", net: 100 }, late, late, TICK);
+	assert.equal(track.lastWork, late);
+	assert.equal(track.evidence, false);
+});
+
 test("heartbeatAge: never touched is undefined; older than the start counts from the start", () => {
 	const track = startTrack(0, 5_000);
 	assert.equal(heartbeatAge(undefined, track, 9_000), undefined);
@@ -100,7 +131,7 @@ const fresh: BackgroundState = { wakes: 0, lastWakeAt: 0, unhealthy: false };
 function bgRun(
 	minutes: number,
 	tick: Tick,
-	opts: { heartbeatAgeMs?: (now: number) => number | undefined; healthy?: (i: number) => boolean | undefined; inferred?: boolean } = {},
+	opts: { heartbeatAgeMs?: (now: number) => number | undefined; healthy?: (i: number) => boolean | undefined; health?: boolean } = {},
 ): string[] {
 	let track = startTrack(0, 0);
 	let state = fresh;
@@ -113,8 +144,8 @@ function bgRun(
 		cpu += tick.cpu ?? 0;
 		net += tick.net ?? 0;
 		if (tick.out) track = noteOutput(track, now);
-		track = observe(track, tick.noPs ? undefined : { cpu, pids: "1", net }, now, now, TICK);
-		const result = backgroundVerdict(track, state, { ...BG, now, heartbeatAgeMs: opts.heartbeatAgeMs?.(now), healthy: opts.healthy?.(i), inferred: opts.inferred ?? true });
+		track = observe(track, tick.noPs ? undefined : { cpu, pids: tick.fork ? `1,${i}` : "1", net: tick.noNet ? undefined : net }, now, now, TICK);
+		const result = backgroundVerdict(track, state, { ...BG, now, heartbeatAgeMs: opts.heartbeatAgeMs?.(now), healthy: opts.healthy?.(i), health: opts.health ?? false });
 		state = result.state;
 		if (result.alert) alerts.push(`${Math.round(now / 60_000)}m ${result.alert}`);
 	}
@@ -129,20 +160,36 @@ test("background: busy but silent wakes at 30m only", () => {
 	assert.deepEqual(bgRun(60, { cpu: 2 }), ["30m busy but no output for 30m"]);
 });
 
-test("background: chatty job never wakes", () => {
-	assert.deepEqual(bgRun(120, { out: true }), []);
+for (const fork of [false, true]) {
+	test(`background: printing without work wakes at 5m, 20m and 65m (churn: ${fork})`, () => {
+		assert.deepEqual(bgRun(120, { out: true, fork }), [
+			"5m almost no CPU and no network for 5m",
+			"20m almost no CPU and no network for 15m",
+			"65m almost no CPU and no network for 45m",
+		]);
+	});
+}
+
+test("background: printing with 1% CPU or growing bytes never wakes", () => {
+	assert.deepEqual(bgRun(120, { out: true, cpu: 0.05 }), []);
+	assert.deepEqual(bgRun(120, { out: true, net: 1000 }), []);
+});
+
+test("background: silent polling below 1% CPU wakes at 5m", () => {
+	assert.deepEqual(bgRun(6, { cpu: 0.01 }), ["5m almost no CPU and no network for 5m"]);
 });
 
 test("background: download (bytes moving) never wakes before the busy limit", () => {
 	assert.deepEqual(bgRun(29, { net: 1000 }), []);
 });
 
-test("background: wake_on or declared jobs are not judged by CPU/network", () => {
-	assert.deepEqual(bgRun(120, {}, { inferred: false }), []);
+test("background: a health command with no result suppresses inference", () => {
+	assert.deepEqual(bgRun(120, {}, { health: true }), []);
 });
 
 test("background: no evidence never wakes", () => {
 	assert.deepEqual(bgRun(60, { noPs: true }), []);
+	assert.deepEqual(bgRun(60, { out: true, noNet: true }), []);
 });
 
 test("background: health failure wakes at once, once per failure streak", () => {
