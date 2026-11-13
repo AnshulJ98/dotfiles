@@ -73,6 +73,9 @@ test("live files: patches merge per pid, partial files are not read, sweep remov
 	setLive({ role: "worker", session: "s2", cwd: "/repo", state: "tool", what: "edit a.ts", since: NOW + 1, active: NOW + 1 }, dir, 12);
 	setLive({ jobs: [] }, dir, 13);
 	assert.deepEqual(readLive(dir).map((p) => [p.pid, p.state, p.jobs?.length]), [[11, "idle", 1], [12, "tool", undefined]]);
+	assert.deepEqual(sweep((pid) => pid === 11, NOW, dir, false).map((p) => p.pid), [12]);
+	assert.equal(existsSync(join(dir, "12.json")), true);
+	assert.equal(existsSync(join(dir, "13.json")), true, "non-removing sweep leaves stateless files too");
 	assert.deepEqual(sweep((pid) => pid === 11, NOW, dir).map((p) => p.pid), [12], "13 is gone too, and left no state");
 	assert.deepEqual(readLive(dir).map((p) => p.pid), [11]);
 	assert.deepEqual(sweep(() => true, NOW + 1, dir).map((p) => p.pid), [11], "written before this boot: the pid is not that process");
@@ -131,7 +134,7 @@ test("pi-health: lists each process and its jobs, exits 1 on a quiet one and on 
 	assert.equal(health(logs, cwd, "--help").status, 0);
 });
 
-test("pi-health --json: clean, quiet, dead main (once), and orphan run", () => {
+test("pi-health --json: clean, quiet, dead main until plain clears it, and orphan run", () => {
 	const logs = temp("health-json"), cwd = temp("health-json-cwd");
 	const json = (...args: string[]) => {
 		const result = health(logs, cwd, "--json", ...args);
@@ -147,8 +150,20 @@ test("pi-health --json: clean, quiet, dead main (once), and orphan run", () => {
 	dropLive(join(logs, "live"));
 	const dead = spawnSync("true").pid!;
 	setLive(live({ cwd, active: now, since: now }), join(logs, "live"), dead);
-	assert.deepEqual(json(), { status: 1, problems: [{ key: `gone ${dead}`, who: `main abc123 ${cwd}`, flag: "died without a clean shutdown", session }] });
+	const died = { status: 1, problems: [{ key: `gone ${dead}`, who: `main abc123 ${cwd}`, flag: "died without a clean shutdown", session }] };
+	assert.deepEqual(json(), died);
+	assert.deepEqual(json(), died);
+	assert.equal(existsSync(join(logs, "live", `${dead}.json`)), true);
+	const plain = health(logs, cwd);
+	assert.equal(plain.status, 1);
+	assert.match(plain.out, /main   abc123 .*died without a clean shutdown/);
+	assert.equal(existsSync(join(logs, "live", `${dead}.json`)), false);
 	assert.deepEqual(json(), { status: 0, problems: [] });
+	setLive(live({ cwd, active: 1, since: 1 }), join(logs, "live"), dead);
+	assert.deepEqual(json(), { status: 0, problems: [] });
+	assert.equal(existsSync(join(logs, "live", `${dead}.json`)), true);
+	assert.equal(health(logs, cwd).status, 1);
+	assert.equal(existsSync(join(logs, "live", `${dead}.json`)), false);
 	execFileSync("git", ["init", "-q", cwd]);
 	writeFileSync(join(cwd, "AUTO.md"), "session: absent\n- [ ] 1. parse, branch slice/parse\n");
 	assert.deepEqual(json(), { status: 1, problems: [{ key: `run ${cwd}`, who: `auto ${cwd}`, flag: "its session (absent) is not running", session: "" }] });
