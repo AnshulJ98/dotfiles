@@ -3,6 +3,9 @@ import concurrent.futures
 import json
 import os
 from pathlib import Path
+import pty
+import select
+import shutil
 import shlex
 import signal
 import subprocess
@@ -11,6 +14,7 @@ import tempfile
 import time
 import unittest
 import uuid
+from urllib.parse import quote
 
 BIN = Path(__file__).resolve().parents[1] / "bin"
 FAKE = r"""
@@ -28,6 +32,7 @@ if cmd == "zmx":
     if mode == "hang": time.sleep(30)
     if mode == "fail": sys.exit(1)
     if args == ["ls"]: print("name=old-1\tpid=123\tclients=0")
+    if args == ["ls", "--short"]: print(os.environ.get("SESSIONS", "old-1"))
     sys.exit(0)
 if cmd == "lsof":
     if mode == "lsof-hang": time.sleep(30)
@@ -92,6 +97,149 @@ class ScriptTests(unittest.TestCase):
     def calls(self, command):
         return [args for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())
                 if cmd == command]
+
+    def pane_start(self, reply, **env):
+        # Only these logging fakes are reachable from the pane's PATH.
+        for cmd in ("sed", "basename", "tr", "base64", "grep", "find", "head", "python3"):
+            real = sys.executable if cmd == "python3" else shutil.which(cmd)
+            self.assertIsNotNone(real, cmd)
+            path = self.root / cmd
+            path.write_text("#!" + sys.executable + "\n" +
+                            "import json, os, sys\n" +
+                            f"with open({str(self.root / 'calls')!r}, 'a') as log:\n" +
+                            f"    log.write(json.dumps([{cmd!r}, sys.argv[1:]]) + '\\n')\n" +
+                            f"os.execv({real!r}, [{real!r}] + sys.argv[1:])\n")
+            path.chmod(0o700)
+        script = self.root / "zshell"
+        script.write_text(script.read_text().replace("/usr/bin/python3", str(self.root / "python3")))
+        master, slave = pty.openpty()
+        proc = None
+        output = bytearray()
+        try:
+            proc = subprocess.Popen([str(script)], cwd=self.root,
+                                    env=dict(self.env, PATH=str(self.root), **env),
+                                    stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+            os.close(slave)
+            slave = None
+            deadline = time.monotonic() + 10
+            query = b'\x1b]1337;SetUserVar=zq=MQ==\x07'
+            queried = False
+            while True:
+                remaining = deadline - time.monotonic()
+                self.assertGreater(remaining, 0, bytes(output))
+                ready, _, _ = select.select([master], [], [], remaining)
+                self.assertTrue(ready, bytes(output))
+                try:
+                    chunk = os.read(master, 65536)
+                except OSError as error:
+                    if error.errno != 5:  # Linux PTYs report EIO at EOF.
+                        raise
+                    break
+                if not chunk:
+                    break
+                output.extend(chunk)
+                if not queried and query in output:
+                    queried = True
+                    if reply is not None:
+                        os.write(master, reply)
+            self.assertTrue(queried, bytes(output))
+            self.assertEqual(proc.wait(timeout=2), 0, bytes(output))
+            if reply is not None:
+                self.assertNotIn(reply.rstrip(b'\n'), output)
+            return bytes(output)
+        finally:
+            if proc is not None:
+                if proc.poll() is None:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait(timeout=5)
+            if slave is not None:
+                os.close(slave)
+            os.close(master)
+
+    def test_pane_query_fast_path_starts_only_discovery_and_attach(self):
+        output = self.pane_start(b': zq saved%20name -\n')
+        self.assertEqual(self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]])
+        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
+        commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
+        self.assertEqual(commands, ["timeout", "zmx", "zmx"])
+        self.assertNotIn(b"SetUserVar=holder", output)
+
+    def test_pane_query_missing_pi_file_does_not_resume(self):
+        self.pane_start(b': zq old-1 %2Fno%2Fsuch%2Ffile\n')
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "old-1"])
+        self.assertEqual(self.calls("python3"), [])
+        self.assertEqual(self.calls("head"), [])
+
+    def test_pane_query_lost_session_resumes_pi(self):
+        pi = self.root / "pi session.jsonl"
+        pi.write_text('{"cwd": "/tmp"}\n{"ignored": true}\n')
+        self.pane_start(f': zq lost {quote(str(pi), safe="")}\n'.encode())
+        self.assertEqual(self.calls("zmx")[-1], [
+            "attach", "lost", str(self.root / "plain-shell"), "-lc",
+            'cd "$1" 2>/dev/null; pi --session "$2"; exec "$0" -il',
+            str(self.root / "plain-shell"), "/tmp", str(pi)])
+        self.assertEqual(self.calls("head"), [["-1", str(pi)]])
+        self.assertEqual(len(self.calls("python3")), 1)
+        self.assertEqual(self.calls("kitten"), [])
+
+    def test_pane_query_existing_session_matches_literal_whole_line(self):
+        pi = self.root / "pi.jsonl"
+        pi.write_text('{"cwd": "/tmp"}\n')
+        self.pane_start(f': zq a%2Ab {quote(str(pi), safe="")}\n'.encode(),
+                        SESSIONS="prefix\na*b\nsuffix")
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
+        self.assertEqual(self.calls("python3"), [])
+
+    def test_pane_invalid_answer_uses_remote_control_fallback(self):
+        self.pane_start(b'hello\n', HOLDER="saved")
+        self.assertEqual(len(self.calls("kitten")), 1)
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "saved"])
+
+    def test_pane_query_timeout_uses_remote_control_fallback(self):
+        started = time.monotonic()
+        self.pane_start(None, HOLDER="saved")
+        self.assertGreaterEqual(time.monotonic() - started, 2)
+        self.assertEqual(len(self.calls("kitten")), 1)
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "saved"])
+
+    def test_main_removes_only_old_zmx_crash_reports_and_missing_folder_is_safe(self):
+        self.assertEqual(self.run_script("kmain", MODE="starting").returncode, 0)
+        reports = self.root / "Library/Logs/DiagnosticReports"
+        reports.mkdir(parents=True)
+        old, fresh, other = (reports / n for n in ("zmx-a.ips", "zmx-b.ips", "other.ips"))
+        for path in (old, fresh, other):
+            path.touch()
+        ago = time.time() - 2 * 60 * 60
+        os.utime(old, (ago, ago))
+        os.utime(other, (ago, ago))
+        self.assertEqual(self.run_script("kmain", MODE="starting").returncode, 0)
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists())
+        self.assertTrue(other.exists())
+
+    def test_main_cleanup_ignores_each_file_error_outside_lock(self):
+        import fcntl
+        import runpy
+        from unittest.mock import patch
+        reports = self.root / "Library/Logs/DiagnosticReports"
+        reports.mkdir(parents=True)
+        paths = [reports / name for name in ("zmx-a.ips", "zmx-b.ips")]
+        for path in paths:
+            path.touch()
+            os.utime(path, (0, 0))
+        attempted = []
+        def unlink(path):
+            # A separate open description can acquire the lock only after kmain releases it.
+            with (self.root / "socket.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            attempted.append(path)
+            raise OSError("cannot delete this report")
+        with patch.dict(os.environ, self.env), patch("subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, stdout='[]')
+            with patch("os.unlink", side_effect=unlink):
+                runpy.run_path(str(self.root / "kmain"))
+        self.assertCountEqual(attempted, paths)
+        self.assertTrue(all(path.exists() for path in paths))
 
     def test_fresh_holders_are_unique_and_saved_names_reattach(self):
         with concurrent.futures.ThreadPoolExecutor() as pool:

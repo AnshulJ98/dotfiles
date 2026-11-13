@@ -38,6 +38,27 @@ def snapshot():
 
 
 class CoreTests(unittest.TestCase):
+    def test_holder(self):
+        for cwd, expected in [
+            ('/Users/a/Dev/My Repo', 'my-repo-U'), ('/Users/a', 'home-U'),
+            ('/', '--U'), ('', '--U'), ('/x/My Repo/', 'my-repo-U'),
+            ('/x/a.b_c+d', 'a.b_c-d-U'), ('/x/Ä Z', '--z-U'),
+        ]:
+            with self.subTest(cwd=cwd):
+                self.assertEqual(core.holder(cwd, '/Users/a', 'U'), expected)
+
+    def test_answer(self):
+        for name, pi, expected in [
+            ('n', '', b': zq n -\n'),
+            ('my name', '/p/x y.jsonl', b': zq my%20name %2Fp%2Fx%20y.jsonl\n'),
+            ('a\nb% c', '/x\ny', b': zq a%0Ab%25%20c %2Fx%0Ay\n'),
+        ]:
+            with self.subTest(name=name):
+                data = core.answer(name, pi)
+                self.assertEqual(data, expected)
+                self.assertEqual(data.count(b' '), 3)
+                self.assertEqual(data.count(b'\n'), 1)
+
     def test_worst(self):
         rows = [([], ''), (['unknown'], 'unknown'), (['unknown', 'idle'], 'idle')]
         rows += [([state], state) for state in core.RANK]

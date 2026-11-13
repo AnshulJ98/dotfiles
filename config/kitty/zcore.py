@@ -8,6 +8,20 @@ import urllib.parse
 RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']
 
 
+def holder(cwd: str, home: str, unique: str) -> str:
+    folder = cwd.rstrip('/').rsplit('/', 1)[-1]
+    base = ''.join(c if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-'
+                   else '-' for c in folder).lower() or '-'
+    if cwd.rstrip('/') == home.rstrip('/'):
+        base = 'home'
+    return base + '-' + unique
+
+
+def answer(name: str, pi_session: str) -> bytes:
+    return (': zq ' + urllib.parse.quote(name, safe='') + ' ' +
+            (urllib.parse.quote(pi_session, safe='') if pi_session else '-') + '\n').encode()
+
+
 def worst(states: list[str]) -> str:
     return max(states, key=lambda s: RANK.index(s) if s in RANK else 0, default='')
 

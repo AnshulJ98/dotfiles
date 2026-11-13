@@ -162,6 +162,44 @@ class IntentTests(unittest.TestCase):
 
 
 class KittyTests(unittest.TestCase):
+    def test_attach_saved_and_fresh_order(self):
+        import uuid
+        for saved in ('saved', ''):
+            with self.subTest(saved=saved):
+                events = []
+                window = NS(id=7, user_vars={'holder': saved, 'pi_session': '/p/s.jsonl'},
+                            cwd_of_child='/x/My Repo',
+                            write_to_child=lambda data: events.append(('write', data)))
+                boss = NS(call_remote_control=lambda w, args: events.append((w, args)))
+                zkitty.attach(boss, window)
+                name = events[0][1].decode().split()[2]
+                if saved:
+                    self.assertEqual(name, 'saved')
+                else:
+                    self.assertTrue(name.startswith('my-repo-'))
+                    unique = uuid.UUID(name[len('my-repo-'):])
+                    self.assertEqual(unique.version, 4)
+                    self.assertEqual(str(unique), name[len('my-repo-'):])
+                self.assertEqual(events, [
+                    ('write', f': zq {name} %2Fp%2Fs.jsonl\n'.encode()),
+                    (None, ('set-user-vars', '--match=id:7', 'zq')),
+                ] + ([(None, ('set-user-vars', '--match=id:7', 'holder=' + name))]
+                     if not saved else []))
+
+    def test_attach_saved_does_not_read_cwd_and_missing_cwd_works(self):
+        writes = []
+        window = Pane()
+        window.user_vars = {'holder': 'saved'}
+        window.write_to_child = writes.append
+        boss = Boss()
+        zkitty.attach(boss, window)
+        self.assertEqual(writes, [b': zq saved -\n'])
+        with patch.object(zkitty.uuid, 'uuid4', return_value='U'):
+            window = NS(id=8, user_vars={}, cwd_of_child=None, write_to_child=writes.append)
+            zkitty.attach(boss, window)
+        self.assertEqual(writes[-1], b': zq --U -\n')
+        self.assertEqual(boss.calls[-1], (None, ('set-user-vars', '--match=id:8', 'holder=--U')))
+
     def test_snapshot_all_fields_and_lazy_cwd(self):
         w, dock = Pane(), Sidebar()
         tab = type('Tab', (list,), {})([w, dock])
