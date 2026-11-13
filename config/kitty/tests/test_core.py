@@ -106,12 +106,16 @@ class CoreTests(unittest.TestCase):
              {'spaces': [dict(name='x', tabs=1, cwd='', shown='', state='')],
               'agents': [dict(pane=0, space='x', tab=1, app='agent', state='',
                               model='', ctx='', tab_id=0, active=False)]}),
-            ([{'session': 'x', 'vars': None}], empty),
+            ([{'session': 'x', 'vars': None}], AttributeError),
         ]
         for panes, expected in rows:
             with self.subTest(panes=panes):
                 before = json.dumps(panes)
-                self.assertEqual(core.view(panes), expected)
+                if expected is AttributeError:
+                    with self.assertRaises(AttributeError):
+                        core.view(panes)
+                else:
+                    self.assertEqual(core.view(panes), expected)
                 self.assertEqual(json.dumps(panes), before)
 
     def test_line(self):
@@ -171,10 +175,19 @@ class CoreTests(unittest.TestCase):
         for view in [{}, {'spaces': [], 'agents': []}, {'spaces': None, 'agents': None}]:
             for words in [['next'], ['prev'], ['switch', '1'], ['agent', '1'], ['pane', '1']]:
                 with self.subTest(view=view, words=words):
-                    self.assertEqual(core.intent(view, '', words), [])
+                    if view.get('spaces', []) is None:
+                        with self.assertRaises(TypeError):
+                            core.intent(view, '', words)
+                    else:
+                        self.assertEqual(core.intent(view, '', words), [])
         self.assertEqual(json.loads(core.line({}, '', 0)),
                          dict(v=1, current='', spaces=[], agents=[]))
-        self.assertEqual(core.line({'agents': [None]}, '', 0), b'')
+        with self.assertRaises(AttributeError):
+            core.line({'agents': [None]}, '', 0)
+        with self.assertRaises(TypeError):
+            core.intent({'spaces': None, 'agents': None}, '', ['next'])
+        for words in (['switch', 'x'], ['agent', '1.5'], ['pane', '']):
+            self.assertEqual(core.intent(snapshot(), '', words), [])
 
     def test_additional_ordering(self):
         rows = [

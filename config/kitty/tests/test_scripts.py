@@ -51,6 +51,7 @@ if cmd == "kitten":
         assert pathlib.Path(args[-1]).read_text().endswith("\n")
 if cmd == "open":
     (root / "ready").write_text(str(time.time() + .3))
+if cmd == "aerospace" and mode == "focus-fail": sys.exit(1)
 if cmd == "pgrep": sys.exit(0 if mode == "starting" else 1)
 if cmd == "fzf":
     view = pathlib.Path(os.environ["ZPICK_VIEW"])
@@ -216,6 +217,18 @@ class ScriptTests(unittest.TestCase):
         self.assertFalse(old.exists())
         self.assertTrue(fresh.exists())
         self.assertTrue(other.exists())
+
+    def test_main_sweeps_even_when_focus_fails(self):
+        (self.root / "ready").write_text("0")
+        reports = self.root / "Library/Logs/DiagnosticReports"
+        reports.mkdir(parents=True)
+        old = reports / "zmx-a.ips"
+        old.touch()
+        os.utime(old, (0, 0))
+        result = self.run_script("kmain", MODE="focus-fail")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CalledProcessError", result.stderr)
+        self.assertFalse(old.exists())
 
     def test_main_cleanup_ignores_each_file_error_outside_lock(self):
         import fcntl
