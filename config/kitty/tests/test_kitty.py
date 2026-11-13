@@ -93,6 +93,40 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(zkitty.run(self.boss, ['agent', '1']), [('focus', 41)])
         self.assertEqual(self.boss.calls, [(None, ('focus-window', '--match=id:41'))])
 
+    def test_new_launches_once_with_live_cwd_and_whole_arguments(self):
+        for words, flag in [(['new'], ()), (['new', 'ask'], ('--ask',)),
+                            (['new', 'window'], ('--window',))]:
+            with self.subTest(words=words):
+                self.boss.calls.clear()
+                self.boss.active_window = Pane()
+                with patch.object(zkitty, 'snapshot', side_effect=AssertionError('snapshot read')):
+                    self.assertEqual(zkitty.run(self.boss, words), [('new', '/reported path')])
+                self.assertEqual(self.boss.calls, [(self.boss.active_window, (
+                    'launch', '--type=background', '--allow-remote-control',
+                    str(ROOT / 'bin/zws'), 'new', *flag, '/reported path'))])
+
+    def test_new_fallbacks_and_invalid_words(self):
+        for active, directory in [
+            (None, os.path.expanduser('~')),
+            (NS(created_in_session_name='', screen=NS(last_reported_cwd=None),
+                cwd_of_child=''), os.path.expanduser('~')),
+            (NS(created_in_session_name='', screen=NS(last_reported_cwd=None),
+                cwd_of_child='/child folder'), '/child folder'),
+        ]:
+            with self.subTest(active=active):
+                self.boss.active_window = active
+                self.boss.calls.clear()
+                self.assertEqual(zkitty.run(self.boss, ['new']), [('new', directory)])
+                self.assertEqual(self.boss.calls, [(active, (
+                    'launch', '--type=background', '--allow-remote-control',
+                    str(ROOT / 'bin/zws'), 'new', directory))])
+        for words in (['new', 'bogus'], ['new', '--ask'], ['new', 'ask', 'extra']):
+            self.boss.calls.clear()
+            with patch.object(zkitty, 'cwd', side_effect=AssertionError('cwd read')), \
+                    patch.object(zkitty, 'snapshot', side_effect=AssertionError('snapshot read')):
+                self.assertEqual(zkitty.run(self.boss, words), [])
+            self.assertEqual(self.boss.calls, [])
+
     def test_tab_here_launches_dock_immediately_with_live_cwd_and_name(self):
         active = self.boss.active_window
         self.boss.all_windows[1].created_in_session_name = 'alpha'
