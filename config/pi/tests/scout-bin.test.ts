@@ -27,6 +27,7 @@ ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 args) echo "$args" ;;
+missing) printf '%s\\n' "\${FAKE_DIGEST:-TOOLS-MISSING: web_search, fetch_content}" "Web research could not be done."; exit "\${FAKE_RC:-0}" ;;
 env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
 pass) echo '{"verdict":"PASS","reasons":[],"retriesUsed":0}' >"$PI_WORKER_REPORT"; echo "report body" ;;
@@ -53,7 +54,10 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	mkdirSync(bin);
 	writeFileSync(join(bin, "pi"), FAKE_PI);
 	chmodSync(join(bin, "pi"), 0o755);
-	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH}`, PI_CODING_AGENT_DIR: root };
+	// A suite launched by a worker must not reuse its digest or a sibling worktree's guard.
+	const path = process.env.PATH?.split(":").filter((dir) => !dir.endsWith("/bin/guard")).join(":");
+	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${path}`, PI_CODING_AGENT_DIR: root };
+	delete env.SCOUT_DIGEST;
 	delete env.PI_SCOUT_DEPTH;
 	delete env.PI_SESSION_FILE;
 	// Headless even when the suite runs inside a herdr pane; herdrSandbox sets it back
@@ -154,6 +158,88 @@ test("a child loads background.ts for its bash tool and gets no bg_run; only a w
 		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts -e \S+\/extensions\/bash-changes\.ts /);
 		assert.match(run.stdout, worker ? / -t read,grep,find,ls,bash,edit,write,codemode / : / -t read,grep,find,ls,bash /);
 		assert.equal(/ -e builtin:codemode /.test(run.stdout), worker);
+	}
+});
+
+function webFiles(env: NodeJS.ProcessEnv, skill: boolean): { extension: string; reddit: string } {
+	const root = String(env.PI_CODING_AGENT_DIR);
+	const extension = join(root, "npm/node_modules/pi-web-access/dist/index.js");
+	const reddit = join(root, "skills-local/reddit");
+	mkdirSync(join(extension, ".."), { recursive: true });
+	writeFileSync(extension, "");
+	if (skill) {
+		mkdirSync(reddit, { recursive: true });
+		writeFileSync(join(reddit, "SKILL.md"), "# Reddit\n");
+	}
+	return { extension, reddit };
+}
+
+test("--web appends the extension, tools, optional Reddit skill and web prompt", async () => {
+	for (const skill of [true, false]) {
+		const { env } = sandbox();
+		const { extension, reddit } = webFiles(env, skill);
+		const run = await runScout(["--web", "research"], { ...env, FAKE_PI: "args" });
+		assert.equal(run.code, 0, run.stderr);
+		assert.ok(run.stdout.includes(`-e ${extension} `));
+		assert.ok(run.stdout.indexOf("-e " + extension) > run.stdout.indexOf("/extensions/bash-changes.ts"));
+		assert.match(run.stdout, / -t read,grep,find,ls,bash,web_search,fetch_content,get_search_content /);
+		assert.equal(run.stdout.includes(`--skill ${reddit}`), skill);
+		assert.equal(run.stdout.includes("--skill"), skill);
+		assert.match(run.stdout, /You are a read-only scout\.[\s\S]*Web research \(--web\)/);
+	}
+});
+
+test("without --web, installed web tools and skill stay out of the child", async () => {
+	const { env } = sandbox();
+	const { extension, reddit } = webFiles(env, true);
+	const run = await runScout(["research"], { ...env, FAKE_PI: "args" });
+	assert.equal(run.code, 0, run.stderr);
+	assert.match(run.stdout, / -t read,grep,find,ls,bash /);
+	assert.ok(!run.stdout.includes(extension));
+	assert.ok(!run.stdout.includes(reddit));
+	assert.doesNotMatch(run.stdout, /--skill|Web research \(--web\)/);
+});
+
+test("--web usage errors precede the fan-out cap and leave no run folder", async () => {
+	for (const args of [["--web", "--rw", "x"], ["--spec", "-", "--web"], ["--web", "--review", "HEAD"], ["--web", "x"]]) {
+		const { env, scoutRoot } = sandbox();
+		const missing = args.length === 2;
+		const extension = join(String(env.PI_CODING_AGENT_DIR), "npm/node_modules/pi-web-access/dist/index.js");
+		if (!missing) webFiles(env, false);
+		runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
+		runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
+		const run = await runScout(args, env, SPEC);
+		assert.equal(run.code, 2, run.stderr);
+		assert.equal(run.stderr.trim().split("\n").length, 1);
+		assert.ok(run.stderr.includes(missing ? extension : "--web is read-only"));
+		assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
+	}
+});
+
+test("missing tools near the digest start fail with 69 and are named on the trailer", async () => {
+	for (const worker of [false, true]) {
+		const { env, scoutRoot } = sandbox();
+		const run = await runScout(worker ? ["--spec", "-"] : ["research"], { ...env, FAKE_PI: "missing" }, worker ? SPEC : "");
+		assert.equal(run.code, 69, run.stderr);
+		assert.match(run.stderr, worker
+			? /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=no tools-missing=web_search,fetch_content$/m
+			: /^scout: dir=\S+ cost=\$0\.000 tools-missing=web_search,fetch_content$/m);
+		assert.match(run.stdout, /TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done\.\n$/);
+		if (worker) assert.match(run.stdout, /^WORKER-SENSORS:/);
+		else assert.equal(run.stdout, "TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done.\n");
+		assert.match(doneMeta(scoutRoot), /^rc=69$/m);
+	}
+});
+
+test("only the first three digest lines and a successful child trigger missing-tools handling", async () => {
+	for (const [prefix, childCode, expected] of [["intro\n", "0", 69], ["one\ntwo\n", "0", 69], ["intro\n".repeat(9), "0", 0], ["", "1", 1]] as const) {
+		const { env, scoutRoot } = sandbox();
+		const run = await runScout(["research"], { ...env, FAKE_PI: "missing", FAKE_RC: childCode,
+			FAKE_DIGEST: prefix + "TOOLS-MISSING:   web_search, ,  fetch_content   " });
+		assert.equal(run.code, expected, run.stderr);
+		if (expected === 69) assert.match(run.stderr, /tools-missing=web_search,fetch_content$/m);
+		else assert.doesNotMatch(run.stderr, /tools-missing=/);
+		assert.match(doneMeta(scoutRoot), new RegExp(`^rc=${expected}$`, "m"));
 	}
 });
 

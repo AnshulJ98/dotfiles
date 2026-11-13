@@ -132,16 +132,22 @@ class CoreTests(unittest.TestCase):
                         {k: v for k, v in agent.items() if k not in ('tab_id', 'active')},
                         on=on))
                 expected = dict(v=1, current='a', spaces=view['spaces'], agents=expected_agents)
-                self.assertEqual(json.loads(data), expected)
-                self.assertEqual(data, json.dumps(expected, sort_keys=True,
-                                                  separators=(',', ':')).encode() + b'\n')
-                self.assertTrue(data.endswith(b'\n'))
-                self.assertEqual(data.count(b'\n'), 1)
+                self.assertEqual(json.loads(data[4:-2]), expected)
+                self.assertEqual(data, b'\x1b_zv' + json.dumps(expected, sort_keys=True,
+                                                  separators=(',', ':')).encode() + b'\x1b\\')
+                self.assertTrue(data.endswith(b'\x1b\\'))
+                self.assertEqual(data.count(b'\x1b'), 2)
                 messages.append([{k: v for k, v in a.items() if k != 'on'}
-                                 for a in json.loads(data)['agents']])
+                                 for a in json.loads(data[4:-2])['agents']])
         self.assertEqual(messages[0], messages[1])
         self.assertEqual(messages[1], messages[2])
         self.assertEqual(json.dumps(view), before)
+
+    def test_frame_escapes_names_and_tick(self):
+        data = core.line({'spaces': [{'name': '\x1b'}]}, '\x1b', 0)
+        self.assertNotIn(b'\x1b', data[4:-2])
+        self.assertEqual(json.loads(data[4:-2])['spaces'][0]['name'], '\x1b')
+        self.assertEqual(core.TICK, b'\x1b_zt\x1b\\')
 
     def test_intent(self):
         rows = [
@@ -180,7 +186,7 @@ class CoreTests(unittest.TestCase):
                             core.intent(view, '', words)
                     else:
                         self.assertEqual(core.intent(view, '', words), [])
-        self.assertEqual(json.loads(core.line({}, '', 0)),
+        self.assertEqual(json.loads(core.line({}, '', 0)[4:-2]),
                          dict(v=1, current='', spaces=[], agents=[]))
         with self.assertRaises(AttributeError):
             core.line({'agents': [None]}, '', 0)

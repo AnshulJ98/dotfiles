@@ -3,9 +3,10 @@
 // - bin/scout runs are exempt from the bash timeout cap (see UNCAPPED).
 // - A zero-token watchdog (decisions in lib/watchdog.ts). Foreground bash is overridden with the
 //   same tool plus wrapped operations: a command with no output, CPU or network for FG_IDLE_MS has
-//   its process group killed. bg_run jobs are never killed; a quiet one wakes Pi at most
-//   BG_MAX_ALERTS times. Commands get $PI_HEARTBEAT, and bg_run takes a health command; declared
-//   signals outrank inferred ones. Network evidence needs macOS nettop; without it nothing is killed.
+//   its process group killed. bg_run jobs are never killed; no work for five minutes wakes Pi,
+//   even while printing or with wake_on, at most BG_MAX_ALERTS times. Jobs that only wait should
+//   touch $PI_HEARTBEAT or pass health; these outrank inference. Network evidence needs macOS
+//   nettop; without it nothing is killed.
 // - bg_run instructions trimmed from ~4.1k to ~1.3k characters.
 import { execFile } from "node:child_process";
 import { createWriteStream, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -426,7 +427,6 @@ export default function (pi: ExtensionAPI) {
 		const healthy = job.healthResult;
 		job.healthResult = undefined;
 		if (job.health && !job.healthRunning && now - job.lastHealthAt >= HEALTH_EVERY_MS) runHealth(job, job.health);
-		const declared = beat !== undefined || job.health !== undefined;
 		const result = backgroundVerdict(job.watch.track, job.alerts, {
 			now,
 			idleMs: BG_IDLE_MS,
@@ -434,7 +434,7 @@ export default function (pi: ExtensionAPI) {
 			maxWakes: BG_MAX_ALERTS,
 			heartbeatAgeMs: beat,
 			healthy,
-			inferred: !declared && !job.watched,
+			health: job.health !== undefined,
 		});
 		job.alerts = result.state;
 		if (!result.alert) return;
@@ -525,7 +525,7 @@ export default function (pi: ExtensionAPI) {
 			"Use bg_run instead of bash for anything that may take longer than about 2 minutes: large downloads and installs, builds, full test suites, training, benchmarks, servers and watchers. Keep bash for quick commands whose output you need now.",
 			"After bg_run, continue with independent work or end your turn; the exit code and log tail arrive automatically. Never sleep, poll or tail a log to wait, in bash or bg_run; pass wake_on with a regex (such as 'listening on|Traceback') to be woken when a line appears.",
 			"Don't redirect a bg_run command's output (> file, 2>&1, nohup) or start long processes with & in bash: bg_run logs everything, and redirecting hides progress from the user and from wake_on.",
-			"Keepalive: a job that is silent for minutes by design should touch \"$PI_HEARTBEAT\" now and then, or pass health (a quick command that exits 0 while the job is fine); otherwise a quiet, idle job wakes you to check on it. A foreground bash command with no output, CPU or network for 90 seconds is killed.",
+			"Keepalive: no work for five minutes wakes you even while a job prints and even with wake_on. A job that only waits should touch \"$PI_HEARTBEAT\" or pass health (a quick command exiting 0 while fine). Foreground bash with no output, CPU or network for 90 seconds is killed.",
 			`bash commands time out after ${BASH_DEFAULT_TIMEOUT / 60} minutes unless you pass timeout (at most ${BASH_MAX_TIMEOUT / 60} minutes).`,
 			"bg_run starts after the other tool calls in the same reply finish. Use bg_status to check a job and bg_kill to stop one.",
 		],

@@ -16,29 +16,6 @@ sys.dont_write_bytecode = True  # config/kitty is kitty's live config folder
 KITTY_DIR = Path(__file__).resolve().parents[1]
 KITTY = shutil.which("kitty") or "/Applications/kitty.app/Contents/MacOS/kitty"
 
-# Every kitty internal workspaces.py touches. Checked against kitty 0.50.0.
-# No assert in here: kitty's Python strips them.
-CONTRACT = """
-from kitty.fast_data_types import add_timer, get_boss, Screen
-from kitty.program_status import ProgramStatus
-from kitty.boss import Boss
-from kitty.tabs import Tab, TabManager
-from kitty.window import Window
-from kitty.child import Child
-used = (
-    (Boss, "all_windows all_tabs active_window call_remote_control"),
-    (Window, "created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child"),
-    (Child, "argv"),
-    (Tab, "tab_manager_ref id __iter__ active_window"),
-    (Screen, "last_reported_cwd"),
-    (ProgramStatus, "as_list"),
-    (TabManager, "active_tab"),
-)
-missing = [f"{cls.__name__}.{name}" for cls, names in used for name in names.split()
-           if not hasattr(cls, name) and name not in cls.__init__.__code__.co_names]
-if missing or not (callable(add_timer) and callable(get_boss)):
-    raise SystemExit(f"kitty no longer has: {missing}")
-"""
 
 
 class Window:
@@ -298,7 +275,7 @@ class PushTests(unittest.TestCase):
             for wid in (2, 4):
                 module.on_set_user_var(boss, windows[wid], {'key': 'zside', 'value': 'ready'})
                 self.assertEqual(boss.calls[-1], ('set-user-vars', f'--match=id:{wid}', 'zside'))
-            va, vb = (json.loads(windows[i].written[-1]) for i in (2, 4))
+            va, vb = (json.loads(windows[i].written[-1][4:-2]) for i in (2, 4))
             self.assertEqual([va['current'], vb['current']], ['a', 'b'])
             self.assertEqual([va['agents'][0]['on'], vb['agents'][0]['on']], [True, False])
             self.assertEqual([s['name'] for s in va['spaces']], ['a', 'b'])
@@ -308,7 +285,7 @@ class PushTests(unittest.TestCase):
             module._push(boss)
             self.assertEqual([len(windows[i].written) for i in (2, 4)], [2, 2])
             module._tick(boss)
-            self.assertEqual(windows[2].written[-1], b'\n')
+            self.assertEqual(windows[2].written[-1], module.zcore.TICK)
             self.assertEqual(len(windows[4].written), 2)
             module._ready.discard(2)
             module._tick(boss)
@@ -332,7 +309,7 @@ class PushTests(unittest.TestCase):
             self.assertIn('broken tabs', path.read_text())
             with patch.object(module, 'add_timer') as timer:
                 module.on_load(None, {})
-                self.assertIsNone(timer.call_args.args[0](0))
+                self.assertIsNone(timer.call_args_list[0].args[0](0))
             self.assertIn('AttributeError', path.read_text())
             path.write_text('x' * (256 * 1024 + 1))
             module._log('rotated')
@@ -342,11 +319,133 @@ class PushTests(unittest.TestCase):
                 module._log('unwritable')  # The only deliberately dropped error.
 
 
+class NamesTests(unittest.TestCase):
+    def test_missing_names_imports_constants_and_functions(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            module = load(directory)
+            modules = {}
+            classes = {}
+            for path, names in module.INTERNALS:
+                mod, name = path.split(':')
+                stub = modules.setdefault(mod, types.ModuleType(mod))
+                cls = type(name, (), dict.fromkeys(names.split()))
+                setattr(stub, name, cls)
+                classes[name] = cls
+            def init(self):
+                self.argv = []
+            del classes['Child'].argv
+            classes['Child'].__init__ = init
+            modules['kitty.fast_data_types'].add_timer = lambda *a: None
+            modules['kitty.fast_data_types'].get_boss = lambda: None
+            modules['kitty.constants'] = types.SimpleNamespace(config_dir=directory)
+            with patch.dict(sys.modules, modules):
+                self.assertEqual(module._missing(), [])
+                del classes['Boss'].active_tab
+                sys.modules['kitty.child'] = None
+                del modules['kitty.constants'].config_dir
+                modules['kitty.fast_data_types'].add_timer = None
+                modules['kitty.fast_data_types'].get_boss = None
+                self.assertEqual(module._missing(), [
+                    'Boss.active_tab', 'Child.argv', 'kitty.constants.config_dir',
+                    'kitty.fast_data_types.add_timer', 'kitty.fast_data_types.get_boss'])
+                modules['kitty.constants'].config_dir = 1
+                self.assertIn('kitty.constants.config_dir', module._missing())
+
+    def test_load_checks_once_and_opens_only_one_error_tab(self):
+        from unittest.mock import patch
+        for missing in ([], ['Boss.active_tab', 'Child.argv']):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                window = Window('', 1)  # this check has a window ready for the error tab
+                boss = Boss([window], window, '')
+                module = load(directory, boss)
+                with patch.object(module, 'add_timer') as timer, patch.object(module, '_missing', return_value=missing):
+                    module.on_load(boss, {})
+                    self.assertEqual(timer.call_count, 2)
+                    self.assertEqual([c.args[0].__name__ for c in timer.call_args_list], ['_restore', '_check'])
+                    for call in timer.call_args_list:
+                        self.assertEqual(call.args[1:], (1.0, False))
+                    timer.call_args_list[1].args[0](0)
+                    self.assertEqual(timer.call_count, 2)  # clean or launched: no retry
+                log = Path(directory, 'watcher.log')
+                if missing:
+                    self.assertEqual(boss.calls, [('launch', '--type=tab', '--tab-title',
+                                     'watcher error', '/usr/bin/less', '+G', str(log))])
+                    self.assertEqual(len(log.read_text().splitlines()), 1)
+                    self.assertIn('kitty no longer has: ' + ', '.join(missing), log.read_text())
+                else:
+                    self.assertEqual(boss.calls, [])
+                    self.assertFalse(log.exists())
+
+
+    def test_check_waits_for_window_and_logs_missing_names_once(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            timers = []
+            with patch.object(module, 'add_timer', side_effect=lambda *args: timers.append(args)), \
+                 patch.object(module, '_missing', return_value=['Boss.active_tab']):
+                module._safe(module._check)(0)
+                self.assertEqual(boss.calls, [])
+                self.assertEqual(len(timers), 1)
+                timers[0][0](0)
+                self.assertEqual(boss.calls, [])
+                self.assertEqual(len(timers), 2)
+                boss.all_windows = [Window('', 1)]
+                timers[1][0](0)
+                self.assertEqual(len(boss.calls), 1)
+                self.assertEqual(boss.calls[0][:4], ('launch', '--type=tab', '--tab-title', 'watcher error'))
+                self.assertEqual([t[1:] for t in timers], [(0.3, False)] * 2)
+            log = Path(directory, 'watcher.log').read_text()
+            self.assertEqual(log.count('kitty no longer has:'), 1)
+            self.assertEqual(len(log.splitlines()), 1)
+
+    def test_check_retries_launch_ten_times_then_logs_last_error(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([Window('', 1)], None, '')
+            module = load(directory, boss)
+            timers = []
+            with patch.object(module, 'add_timer', side_effect=lambda *args: timers.append(args)), \
+                 patch.object(module, '_missing', return_value=['Boss.active_tab']), \
+                 patch.object(boss, 'call_remote_control', side_effect=RuntimeError('launch failed')) as launch:
+                module._safe(module._check)(0)
+                for i in range(10):
+                    self.assertEqual(len(timers), i + 1)
+                    self.assertNotIn('Traceback', Path(directory, 'watcher.log').read_text())
+                    timers[i][0](0)
+                self.assertEqual(len(timers), 10)
+                self.assertEqual(launch.call_count, 11)
+                self.assertEqual([t[1:] for t in timers], [(0.3, False)] * 10)
+            log = Path(directory, 'watcher.log').read_text()
+            self.assertEqual(log.count('kitty no longer has:'), 1)
+            self.assertEqual(log.count('Traceback'), 1)
+            self.assertIn('RuntimeError: launch failed', log)
+
+    def test_check_without_all_windows_launches_immediately(self):
+        from unittest.mock import Mock, patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = types.SimpleNamespace(call_remote_control=Mock())
+            module = load(directory, boss)
+            with patch.object(module, 'add_timer') as timer, \
+                 patch.object(module, '_missing', return_value=['Boss.all_windows']):
+                module._safe(module._check)(0)
+                boss.call_remote_control.assert_called_once()
+                timer.assert_not_called()
+
+
 class ContractTests(unittest.TestCase):
     @unittest.skipUnless(os.path.exists(KITTY), "kitty is not installed")
     def test_kitty_still_has_the_internals_workspaces_py_uses(self):
-        result = subprocess.run([KITTY, "+runpy", CONTRACT], capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        code = (f"import sys; sys.dont_write_bytecode = True; sys.path.insert(0, {str(KITTY_DIR)!r}); "
+                "import workspaces; missing = workspaces._missing(); "
+                "sys.exit('kitty no longer has: ' + ', '.join(missing) if missing else 0)")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([KITTY, "+runpy", code], capture_output=True, text=True,
+                                    env=dict(os.environ, ZWS_DIR=directory), timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
     @unittest.skipUnless(shutil.which("zmx"), "zmx is not installed")
     def test_zmx_ls_lines_keep_the_fields_the_scripts_parse(self):

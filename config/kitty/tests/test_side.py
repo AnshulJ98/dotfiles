@@ -38,6 +38,10 @@ def view(cwd=''):
                      model='sonnet', ctx='25%', on=True)])
 
 
+def frame(obj):
+    return b'\x1b_zv' + json.dumps(obj).encode() + b'\x1b\\'
+
+
 class SideTests(unittest.TestCase):
     def setUp(self):
         self.side = load()
@@ -110,15 +114,43 @@ class SideTests(unittest.TestCase):
         body, _ = self.side.rows(obj, {'a': ('A', '', ''), 'b': ('B', '', '')}, '', 32, 24)
         self.assertTrue(any('pi · gone 1' in row for row in body))
 
-    def test_dirty_lines_find_first_view_and_preserve_partial_input(self):
-        split = self.side.split_input
-        wire = json.dumps(view()).encode() + b'\n'
-        for prefix in (b'x', b'\x1b[A', b'{', b'}{x', b'{}', b'{"v":2}'):
-            self.assertEqual(split(prefix + wire), (b'', [], view(), False))
-        rest, _, obj, _ = split(b'x')
-        self.assertIsNone(obj)
-        self.assertEqual(rest, b'x')
-        self.assertEqual(split(rest + wire), (b'', [], view(), False))
+    def test_frames_at_every_cut_and_stray_bytes(self):
+        split, wire = self.side.split_input, frame(view())
+        for cut in range(len(wire) + 1):
+            rest, mouse, first, tick = split(wire[:cut])
+            tail, more, second, tock = split(rest + wire[cut:])
+            self.assertEqual([v for v in (first, second) if v is not None], [view()])
+            self.assertEqual((tail, mouse + more, tick or tock), (b'', [], False))
+        for junk in (b'letters', b'\x1b[A', b'\x1b', json.dumps(view()).encode() + b'\n', b'\n'):
+            self.assertEqual(split(junk)[1:], ([], None, False))
+            rest, mouse, obj, tick = split(junk + wire + junk + wire + junk)
+            self.assertEqual((mouse, obj, tick), ([], view(), False))
+            self.assertEqual(rest, b'\x1b' if junk == b'\x1b' else b'')
+        for invalid in ({}, [], dict(view(), v=2), dict(view(), current=0),
+                        dict(view(), spaces={}), dict(view(), agents={})):
+            self.assertIsNone(split(frame(invalid))[2])
+        self.assertIsNone(split(b'\x1b_zvnot json\x1b\\')[2])
+
+    def test_large_view_split_across_reads_is_returned_once(self):
+        obj = dict(view(), current='x' * (100 * 1024))
+        wire = frame(obj)
+        for cut in (70 * 1024, len(wire) - 1):
+            rest, mouse, first, tick = self.side.split_input(wire[:cut])
+            tail, more, second, tock = self.side.split_input(rest + wire[cut:])
+            self.assertEqual([v for v in (first, second) if v is not None], [obj])
+            self.assertEqual((tail, mouse + more, tick or tock), (b'', [], False))
+            self.assertEqual(self.side.split_input(tail), (b'', [], None, False))
+
+    def test_splitter_is_linear_and_bounds_trailing_sequences(self):
+        for data in (b'{' * 1048576, b'\x1b_zv{' * 209716, b'\x1b_zv' + b'{' * 1048576):
+            start = time.monotonic()
+            rest, mouse, obj, tick = self.side.split_input(data)
+            self.assertLess(time.monotonic() - start, .5)
+            self.assertLessEqual(len(rest), self.side.REST_MAX)
+            self.assertEqual((mouse, obj, tick), ([], None, False))
+        for size in (self.side.REST_MAX, self.side.REST_MAX + 1):
+            rest = self.side.split_input(b'\x1b_zv' + b'{' * (size - 4))[0]
+            self.assertEqual(len(rest), size if size <= self.side.REST_MAX else 0)
 
     def test_render_names_without_a_process_and_repo_each_draw(self):
         obj = view('/tmp/project')
@@ -140,7 +172,13 @@ class SideTests(unittest.TestCase):
         part = b'\x1b[<0;4;'
         rest, mouse, obj, tick = split(part)
         self.assertEqual((rest, mouse, obj, tick), (part, [], None, False))
-        wire = json.dumps(view()).encode() + b'\n'
+        report = b'\x1b[<0;4;3M'
+        for cut in range(len(report) + 1):
+            tail, first, _, _ = split(report[:cut])
+            remaining, second, _, _ = split(tail + report[cut:])
+            self.assertEqual(first + second, [(b'0', b'4', b'3', b'M')])
+            self.assertEqual(remaining, b'')
+        wire = frame(view())
         tail, _, partial, _ = split(wire[:10])
         self.assertIsNone(partial)
         self.assertEqual(split(tail + wire[10:])[2], view())
@@ -149,10 +187,11 @@ class SideTests(unittest.TestCase):
         self.assertEqual(obj, view())
         self.assertEqual(rest, b'')
         second = dict(view(), current='b')
-        rest, mouse, obj, tick = split(wire + json.dumps(second).encode() + b'\n\njunk\n[]\n{"v":2}\npartial')
+        rest, mouse, obj, tick = split(wire + frame(second) + b'\x1b_zt\x1b\\junk\n[]\n{"v":2}\npartial')
         self.assertEqual(obj, second)
         self.assertTrue(tick)
-        self.assertEqual(rest, b'partial')
+        self.assertEqual(rest, b'')
+        self.assertEqual(split(b'\x1b_zt\x1b\\'), (b'', [], None, True))
         self.assertEqual(split(b'junk\n')[1:], ([], None, False))
 
     def test_git_queue_throttles_serializes_and_times_out(self):
@@ -236,7 +275,7 @@ if pathlib.Path(sys.argv[0]).name == 'git':
                 until(lambda: b'zside=cmVhZHk=\x07' in output)
                 self.assertNotIn(b'\x1b[?2026h', output)
                 self.assertFalse((root / 'calls').exists())
-                os.write(master, json.dumps(view(str(repo))).encode() + b'\n')
+                os.write(master, frame(view(str(repo))))
                 until(lambda: b'feature' in output and b'example-repo' in output and b'\x1b[?2026l' in output)
                 self.assertNotIn('↑'.encode(), output)
                 self.assertFalse((root / 'release').exists())
@@ -244,7 +283,7 @@ if pathlib.Path(sys.argv[0]).name == 'git':
                 (root / 'release').touch()
                 until(lambda: '↑2'.encode() in output)
                 output.clear()
-                os.write(master, b'\n')
+                os.write(master, b'\x1b_zt\x1b\\')
                 until(lambda: b'\x1b[?2026l' in output)
                 self.assertEqual((root / 'calls').read_text().splitlines(), ['git'])
                 os.close(master)

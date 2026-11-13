@@ -14,6 +14,7 @@ import re
 import shlex
 import time
 import sys
+from importlib import import_module
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
 if FOLDER not in sys.path:
@@ -21,11 +22,7 @@ if FOLDER not in sys.path:
 import zcore
 import zkitty
 
-# Not documented kitty API, checked against kitty 0.50.0: add_timer and get_boss here, and below
-# boss.all_windows / all_tabs / active_window, window.created_in_session_name / os_window_id /
-# user_vars / write_to_child / screen / program_status / cwd_of_child / child.argv, tab.tab_manager_ref /
-# active_window and its manager's active_tab, Screen.last_reported_cwd, ProgramStatus.as_list.
-# tests/test_workspaces.py checks these. Callbacks and boss.call_remote_control are documented.
+# Undocumented kitty API names are checked by INTERNALS and _missing below.
 from kitty.fast_data_types import add_timer, get_boss
 
 DIR = zkitty.folder()
@@ -38,10 +35,67 @@ _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
+_check_tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _named: set[int] = set()
 _ready: set[int] = set()
 _sent: dict[int, bytes] = {}
+
+
+INTERNALS = (
+    ('kitty.boss:Boss', 'all_windows all_tabs active_window active_tab call_remote_control'),
+    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child'),
+    ('kitty.child:Child', 'argv'),
+    ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
+    ('kitty.fast_data_types:Screen', 'last_reported_cwd'),
+    ('kitty.program_status:ProgramStatus', 'as_list'),
+    ('kitty.tabs:TabManager', 'active_tab'),
+)
+
+
+def _missing() -> list[str]:
+    missing = []
+    for path, names in INTERNALS:
+        module, name = path.split(':')
+        try:
+            cls = getattr(import_module(module), name)
+        except (ImportError, AttributeError):
+            cls = None
+        assigned = getattr(getattr(getattr(cls, '__init__', None), '__code__', None), 'co_names', ())
+        missing.extend(name + '.' + attr for attr in names.split()
+                       if cls is None or not (hasattr(cls, attr) or attr in assigned))
+    try:
+        config_dir = import_module('kitty.constants').config_dir
+    except (ImportError, AttributeError):
+        config_dir = None
+    if not isinstance(config_dir, str):
+        missing.append('kitty.constants.config_dir')
+    for name in ('add_timer', 'get_boss'):
+        if not callable(getattr(import_module('kitty.fast_data_types'), name, None)):
+            missing.append('kitty.fast_data_types.' + name)
+    return missing
+
+
+def _check(timer_id: int | None = None) -> None:
+    global _check_tries
+    missing = _missing()
+    if not missing:
+        return
+    if _check_tries == 0:
+        _log('kitty no longer has: ' + ', '.join(missing))
+    boss = get_boss()
+    try:
+        windows = getattr(boss, 'all_windows', None)
+        if windows is not None and not list(windows):
+            raise RuntimeError('no window for watcher error tab')
+        boss.call_remote_control(None, ('launch', '--type=tab', '--tab-title',
+                                       'watcher error', '/usr/bin/less', '+G',
+                                       os.path.join(DIR, 'watcher.log')))
+    except Exception:
+        if _check_tries >= 10:
+            raise  # the timer's _safe wrapper logs the last failure
+        _check_tries += 1
+        add_timer(_safe(_check), 0.3, False)
 
 
 def _file(name: str) -> str:
@@ -157,7 +211,7 @@ def _tick(boss) -> None:
         if tm is not None and tm.active_tab is tab:
             for w in _docks(tab):
                 if w.id in _ready:
-                    w.write_to_child(b'\n')
+                    w.write_to_child(zcore.TICK)
 
 
 def _refresh(boss) -> None:
@@ -190,6 +244,7 @@ def _sync(timer_id: int | None = None) -> None:
 @_safe
 def on_load(boss, data) -> None:
     add_timer(_safe(_restore), 1.0, False)
+    add_timer(_safe(_check), 1.0, False)
 
 
 @_safe
