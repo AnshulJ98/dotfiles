@@ -47,6 +47,17 @@ class CoreTests(unittest.TestCase):
             with self.subTest(cwd=cwd):
                 self.assertEqual(core.holder(cwd, '/Users/a', 'U'), expected)
 
+    def test_holder_fits_a_zmx_socket_path_on_macos(self):
+        # zmx binds <dir>/<name>; macOS allows 103 bytes and its per-user temp folder is fixed-length.
+        directory = '/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/zmx-501'
+        for cwd in ('/x/observability', '/x/' + 'long-folder-name' * 8, '/Users/a'):
+            with self.subTest(cwd=cwd):
+                name = core.holder(cwd, '/Users/a', '0123456789ab')
+                self.assertLessEqual(len(directory + '/' + name), 103)
+                self.assertTrue(name.endswith('-0123456789ab'))
+        self.assertEqual(core.holder('/x/observability', '/Users/a', '0123456789ab'),
+                         'observability-0123456789ab')
+
     def test_answer(self):
         for name, pi, expected in [
             ('n', '', b': zq n -\n'),

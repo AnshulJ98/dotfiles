@@ -207,7 +207,6 @@ class KittyTests(unittest.TestCase):
         self.assertFalse(zkitty.is_sidebar(NS(user_vars={'role': 'sidebar'})))
 
     def test_attach_saved_and_fresh_order(self):
-        import uuid
         for saved in ('saved', ''):
             with self.subTest(saved=saved):
                 events = []
@@ -221,9 +220,8 @@ class KittyTests(unittest.TestCase):
                     self.assertEqual(name, 'saved')
                 else:
                     self.assertTrue(name.startswith('my-repo-'))
-                    unique = uuid.UUID(name[len('my-repo-'):])
-                    self.assertEqual(unique.version, 4)
-                    self.assertEqual(str(unique), name[len('my-repo-'):])
+                    # 12 random hex digits: a full UUID left 9 characters for the folder (zmx path limit)
+                    self.assertRegex(name[len('my-repo-'):], r'^[0-9a-f]{12}$')
                 self.assertEqual(events, [
                     ('write', f': zq {name} %2Fp%2Fs.jsonl\n'.encode()),
                     (None, ('set-user-vars', '--match=id:7', 'zq')),
@@ -238,7 +236,7 @@ class KittyTests(unittest.TestCase):
         boss = Boss()
         zkitty.attach(boss, window)
         self.assertEqual(writes, [b': zq saved -\n'])
-        with patch.object(zkitty.uuid, 'uuid4', return_value='U'):
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
             window = NS(id=8, user_vars={}, cwd_of_child=None, write_to_child=writes.append)
             zkitty.attach(boss, window)
         self.assertEqual(writes[-1], b': zq --U -\n')

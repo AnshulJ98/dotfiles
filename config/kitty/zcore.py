@@ -7,12 +7,15 @@ import urllib.parse
 
 TICK = b'\x1b_zt\x1b\\'
 RANK = ['', 'idle', 'working', 'done', 'error', 'blocked']
+# zmx binds a socket at <its dir>/<name>, and macOS allows 103 bytes with 57 taken by the
+# per-user temp folder. A longer name makes 'zmx attach' fail, so the new pane closes at once.
+BASE_MAX = 30
 
 
 def holder(cwd: str, home: str, unique: str) -> str:
     folder = cwd.rstrip('/').rsplit('/', 1)[-1]
     base = ''.join(c if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-'
-                   else '-' for c in folder).lower() or '-'
+                   else '-' for c in folder).lower()[:BASE_MAX] or '-'
     if cwd.rstrip('/') == home.rstrip('/'):
         base = 'home'
     return base + '-' + unique
