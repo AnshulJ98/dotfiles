@@ -35,9 +35,25 @@ workspace and grades the result mechanically or with judges. Three roles:
   id validation, is minor: it is still judged and counted in recall, but a
   miss no longer fails the trial).
 - **scout** (4 tasks: `scout-*`). Each is a research question about
-  `config/pi` at `39f0715`. The trial runs `scout` read-only and checks
-  the file:line citations in its digest against the task's `expect` list.
-  Right answer without a citation into the right line range does not pass.
+  `config/pi` at `39f0715`. The trial runs `scout` read-only, then the two
+  judges (as for review) say yes/no per fact: the task's `facts` are
+  sentences a correct answer states, and the trial passes when both judges
+  find every fact in the digest. The record has `found` and `of` (facts),
+  so the summary shows recall for scout. The file:line citations in the digest
+  are still graded against the task's `expect` list, but only as a secondary
+  number: `cited`/`citable` in the record and a `cited` column in the
+  summary. An answer with the right facts and no citations passes; a digest
+  full of right citations that states a fact wrongly or not at all does not.
+  An empty digest from a run that had turns fails with `found` 0; a digest the
+  judges could not rate is infra. A scout task also carries `decoys`, true
+  statements about `config/pi` unrelated to the question; `validate.sh`
+  requires non-empty `facts` ({id, text, hit}, unique ids) and at least two
+  decoys. To check the judges on a scout task (real model calls, once per
+  judge or prompt change), run `./check-judges.sh <task>`: each fact's `hit`
+  plus the decoys must get yes from both judges for that fact, and the
+  decoys alone must get no. The committed `baseline.json` has no scout
+  recall until the next `gate.sh --update`, so until then the gate reports
+  one-sided recall (run only) for scout and fails it.
 
 Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 `~/.pi/agent` except `memory.md`, sessions and run history, so trials

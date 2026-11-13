@@ -5,6 +5,8 @@ export interface TrialRecord {
 	pass: boolean; seconds: number; cost: number; leak: boolean; infra: boolean;
 	/** judged records (review): items met and items asked about in the trial */
 	found?: number; of?: number;
+	/** scout records: the digest's citation grade, expect entries cited and expect entries (secondary to found/of) */
+	cited?: number; citable?: number;
 	/** worker records: the agent changed a test path (see record.ts wroteTest) */
 	wroteTest?: boolean;
 }
@@ -32,6 +34,8 @@ export interface CellSummary {
 	found?: number; of?: number; flakyDefects?: number;
 	/** Cells whose counted records carry wroteTest: those with it true, out of the counted records that carry it. */
 	wroteTest?: number; wroteTestOf?: number;
+	/** Cells whose counted records carry cited/citable (scout): the sums over those records. */
+	cited?: number; citable?: number;
 }
 
 export interface RoleSummary {
@@ -73,6 +77,7 @@ function asRecord(value: unknown): TrialRecord | undefined {
 	return {
 		task, role, model, thinking, trial, pass, seconds: num(v.seconds), cost: num(v.cost), leak: v.leak === true, infra: v.infra === true,
 		...(count(v.found) && count(v.of) ? { found: v.found, of: v.of } : {}),
+		...(count(v.cited) && count(v.citable) ? { cited: v.cited, citable: v.citable } : {}),
 		...(typeof v.wroteTest === "boolean" ? { wroteTest: v.wroteTest } : {}),
 	};
 }
@@ -110,6 +115,11 @@ function wroteTestOf(counted: TrialRecord[]): Pick<CellSummary, "wroteTest" | "w
 	return carrying.length === 0 ? {} : { wroteTest: carrying.filter((r) => r.wroteTest).length, wroteTestOf: carrying.length };
 }
 
+function citedOf(counted: TrialRecord[]): Pick<CellSummary, "cited" | "citable"> {
+	const carrying = counted.filter((r) => r.cited !== undefined && r.citable !== undefined);
+	return carrying.length === 0 ? {} : { cited: carrying.reduce((n, r) => n + (r.cited ?? 0), 0), citable: carrying.reduce((n, r) => n + (r.citable ?? 0), 0) };
+}
+
 function summarizeCell(role: string, cell: string, records: TrialRecord[]): CellSummary {
 	const counted = records.filter((r) => !r.leak && !r.infra);
 	const byTask = new Map<string, boolean[]>();
@@ -129,6 +139,7 @@ function summarizeCell(role: string, cell: string, records: TrialRecord[]): Cell
 		infra: records.filter((r) => r.infra).length,
 		...recallOf(counted),
 		...wroteTestOf(counted),
+		...citedOf(counted),
 	};
 }
 
