@@ -1,7 +1,9 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { test } from "node:test";
-import { blocked, grade, gradeReview, isReviewTimeout, leaked, measure, outsideAllowed, parseJudged, parsePorcelain } from "../lib/record.ts";
+import { blocked, grade, gradeReview, isReviewTimeout, isTestPath, leaked, measure, outsideAllowed, parseJudged, parsePorcelain, wroteTest } from "../lib/record.ts";
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -81,14 +83,53 @@ const BLOCKED: [string, string, boolean][] = [
 for (const [name, digest, want] of BLOCKED) test(`blocked: ${name}`, () => assert.equal(blocked(digest), want));
 
 test("grade: test exit decides unless expect is blocked, which needs no change and a blocker", () => {
-	assert.equal(grade({ expect: "", testExit: 0, changed: ["a"], digest: "" }), true);
-	assert.equal(grade({ expect: "", testExit: 1, changed: [], digest: "" }), false);
-	assert.equal(grade({ expect: "", testExit: null, changed: [], digest: "" }), false);
+	assert.equal(grade({ expect: "", testExit: 0, changed: ["a"], outside: [], digest: "" }), true);
+	assert.equal(grade({ expect: "", testExit: 1, changed: [], outside: [], digest: "" }), false);
+	assert.equal(grade({ expect: "", testExit: null, changed: [], outside: [], digest: "" }), false);
 	const yes = "**Blocked on me**\n- need creds\n";
-	assert.equal(grade({ expect: "blocked", testExit: null, changed: [], digest: yes }), true);
-	assert.equal(grade({ expect: "blocked", testExit: null, changed: ["a.ts"], digest: yes }), false);
-	assert.equal(grade({ expect: "blocked", testExit: 0, changed: [], digest: "**Blocked on me**\nnothing.\n" }), false);
+	assert.equal(grade({ expect: "blocked", testExit: null, changed: [], outside: [], digest: yes }), true);
+	assert.equal(grade({ expect: "blocked", testExit: null, changed: ["a.ts"], outside: [], digest: yes }), false);
+	assert.equal(grade({ expect: "blocked", testExit: 0, changed: [], outside: [], digest: "**Blocked on me**\nnothing.\n" }), false);
 });
+
+const yesBlocker = "**Blocked on me**\n- need creds\n";
+const GRADE: [string, Parameters<typeof grade>[0], boolean][] = [
+	["tests pass, nothing outside", { expect: "", testExit: 0, changed: ["a.ts"], outside: [], digest: "" }, true],
+	["tests pass, a file outside allowed", { expect: "", testExit: 0, changed: ["a.ts", "NOTES.md"], outside: ["NOTES.md"], digest: "" }, false],
+	["tests fail, nothing outside", { expect: "", testExit: 1, changed: ["a.ts"], outside: [], digest: "" }, false],
+	["tests fail and a file outside", { expect: "", testExit: 1, changed: ["a.ts", "b.md"], outside: ["b.md"], digest: "" }, false],
+	["no test run, nothing outside", { expect: "", testExit: null, changed: [], outside: [], digest: "" }, false],
+	["blocked: nothing changed, blocker named", { expect: "blocked", testExit: null, changed: [], outside: [], digest: yesBlocker }, true],
+	["blocked: a change", { expect: "blocked", testExit: null, changed: ["x.ts"], outside: ["x.ts"], digest: yesBlocker }, false],
+	["blocked: no blocker named", { expect: "blocked", testExit: null, changed: [], outside: [], digest: "**Blocked on me**\nnothing.\n" }, false],
+];
+for (const [name, g, want] of GRADE) test(`grade: ${name}`, () => assert.equal(grade(g), want));
+
+const TEST_PATHS: [string, boolean][] = [
+	["tests/a.ts", true], ["src/tests/a.ts", true], ["a/b/tests/c/d.ts", true], ["__tests__/a.ts", true], ["x/__tests__/a.ts", true],
+	["tests/", true], ["a.test.ts", true], ["src/a.spec.js", true], ["src/a_test.go", true], [".test.ts", true], ["a.test.", true],
+	["src/tests", false], ["tests", false], ["mytests/a.ts", false], ["src/latest/a.ts", false], ["src/contest.ts", false], ["a.tests.ts", false],
+	["a.test", false], ["atest.ts", false], ["src/a.ts", false], ["test/a.ts", false], ["lib/spec/a.ts", false], ["a_tests.go", false],
+];
+test("isTestPath: the table", () => {
+	for (const [path, want] of TEST_PATHS) assert.equal(isTestPath(path), want, path);
+});
+test("isTestPath agrees with is_test_path in lib/task.sh on the same table", () => {
+	const script = 'source "$1"; shift; for p in "$@"; do if is_test_path "$p"; then echo 1; else echo 0; fi; done';
+	const r = spawnSync("bash", ["-c", script, "bash", resolve(import.meta.dirname, "../lib/task.sh"), ...TEST_PATHS.map(([p]) => p)], { encoding: "utf8" });
+	assert.equal(r.status, 0, r.stderr);
+	assert.deepEqual(r.stdout.trim().split("\n").map((x) => x === "1"), TEST_PATHS.map(([, want]) => want));
+});
+
+const WROTE: [string, string[], boolean][] = [
+	["nothing changed", [], false],
+	["only source", ["src/a.ts", "README.md"], false],
+	["a test file", ["src/a.ts", "src/a.test.ts"], true],
+	["a file under tests/", ["tests/helper.ts"], true],
+	["a new test beside the original", ["src/a_test.go"], true],
+	["a lookalike name", ["src/contest.ts", "docs/tests.md"], false],
+];
+for (const [name, changed, want] of WROTE) test(`wroteTest: ${name}`, () => assert.equal(wroteTest(changed), want));
 
 test("a judge.json with found < of and pass true is a pass; without pass it is not, whatever found says", () => {
 	const minorMissed = parseJudged('{"found":4,"of":5,"met":["d1","d2","d3","d4"],"pass":true,"disagreements":[],"judgeCost":0.1,"infra":false}');
