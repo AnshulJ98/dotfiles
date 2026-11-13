@@ -50,6 +50,8 @@ def fit(text: str, width: int) -> str:
 
 def repo(cwd):
     folder = os.path.abspath(cwd) if cwd else ''
+    # git's own setting: the search does not climb into these folders
+    ceilings = {os.path.abspath(p) for p in os.environ.get('GIT_CEILING_DIRECTORIES', '').split(':') if p}
     for _ in range(40):
         if not folder:
             break
@@ -70,7 +72,7 @@ def repo(cwd):
                 branch = ''
             return folder, branch
         parent = os.path.dirname(folder)
-        if parent == folder:
+        if parent == folder or parent in ceilings:
             break
         folder = parent
     return '', ''

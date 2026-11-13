@@ -52,7 +52,8 @@ if cmd == "kitten":
             "user_vars": {"holder": os.environ.get("HOLDER", "")}}]}]}]))
     if "goto_session" in args:
         assert pathlib.Path(args[-1]).read_text().endswith("\n")
-if cmd == "open":
+if cmd == "open" and mode == "no-app": sys.exit(1)
+if cmd in ("open", "kitty"):
     (root / "ready").write_text(str(time.time() + .3))
 if cmd == "aerospace" and mode.startswith("focus-fail"): sys.exit(1)
 if cmd == "pgrep": sys.exit(0 if mode == "starting" else 1)
@@ -79,7 +80,7 @@ class ScriptTests(unittest.TestCase):
                         ZWS_DIR=str(self.root / "workspaces"), FAKE_ROOT=str(self.root),
                         PATH=str(self.root) + ":" + os.environ["PATH"])
         for cmd in ("kitten", "zmx", "timeout", "lsof", "open", "pgrep", "aerospace",
-                    "fzf", "plain-shell", "find", "zpick-rows"):
+                    "fzf", "plain-shell", "find", "zpick-rows", "kitty"):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
@@ -87,7 +88,6 @@ class ScriptTests(unittest.TestCase):
             source = (BIN / name).read_text()
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
-            source = source.replace("/Applications/kitty.app/Contents/MacOS", str(self.root))
             source = source.replace("/bin/zsh", str(self.root / "plain-shell"))
             source = source.replace("/tmp/kitty-main", str(self.root / "socket"))
             if name == "zws":
@@ -284,6 +284,13 @@ class ScriptTests(unittest.TestCase):
         result = self.run_script("kmain", PATH=str(self.root) + ":/usr/bin:/bin")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls("kitten")[-1][-1], "focus-window")
+
+    def test_main_starts_kitty_from_path_when_the_app_is_not_found_by_name(self):
+        result = self.run_script("kmain", MODE="no-app")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        session = str(self.root / ".local/state/kitty/workspaces/main.kitty-session")
+        self.assertEqual(self.calls("kitty"), [["--listen-on", "unix:" + str(self.root / "socket"),
+                                                "--session", session]])
 
     def test_main_removes_a_dead_socket_but_never_a_live_one(self):
         import socket
