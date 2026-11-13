@@ -23,8 +23,8 @@
 
 	// Raycast pins one theme regardless of system appearance; this pins the kitty palette.
 	"theme": {
-		"light": { "name": "bearded-hc-midnightvoid" },
-		"dark": { "name": "bearded-hc-midnightvoid" }
+		"light": { "name": "midnightvoid" },
+		"dark": { "name": "midnightvoid" }
 	},
 
 	// Vicinae scans /Applications, /System/Applications and ~/Applications only. The work Mac installs

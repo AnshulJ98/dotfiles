@@ -15,6 +15,10 @@ bun.lock
 yarn.lock
 pnpm-lock.yaml
 
+# The active theme: links that `theme <name>` (config/themes/theme) repoints
+config/themes/current
+config/pi/themes/current.json
+
 # Restored from config/yazi/package.toml by `ya pkg install`
 config/yazi/plugins/
 

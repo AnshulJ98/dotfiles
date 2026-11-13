@@ -1,0 +1,26 @@
+background #0e0d0c
+caret #ffb454
+caretText #0e0d0c
+foreground #c8ad85
+name "ayu-ink"
+selectedText #c8ad85
+selection #292826
+
+ansiColors [
+    #0e0d0c
+    #f07178
+    #aad94c
+    #ffb454
+    #59c2ff
+    #f29668
+    #95e6cb
+    #c8ad85
+    #9b8667
+    #ef7278
+    #a0e9d0
+    #ffb657
+    #5cc3ff
+    #f7c2a7
+    #8fddc3
+    #ffffff
+]

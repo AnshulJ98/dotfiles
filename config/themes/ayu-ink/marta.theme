@@ -1,0 +1,134 @@
+name "ayu-ink"
+
+base {
+    appearance "dark"
+    background #0e0d0c
+    separator #272624
+    text #c8ad85
+}
+
+actionBar {
+    separator #272624
+
+    button {
+        background #0a0909
+        hotkey #59c2ff
+        text #9b8667
+    }
+}
+
+asyncProgressBar {
+    border #484644
+    progress #59c2ff
+    itemProgress #aad94c
+}
+
+breadcrumbs {
+    color1 #0e0d0c
+    color2 #2f2e2c
+    color3 #1f1d1b
+    separator #53514f
+    text #c8ad85
+}
+
+files {
+    background {
+        alternate #0e0d0c
+        current #1f1d1b
+        currentSelected #1f1d1b
+        selected #2f2e2c
+    }
+
+    dragDropSelection {
+        color #59c2ff
+        width 1
+    }
+
+    text {
+        current #ecd9b4
+        currentSelected #f29668
+        hidden #9b8667
+        matched #ffb454
+        selected #f29668
+
+        highlighting1 #59c2ff
+        highlighting2 #aad94c
+        highlighting3 #f29668
+        highlighting4 #ffb454
+    }
+}
+
+searchBar {
+    query {
+        border #484644
+        placeholder #9b8667
+    }
+
+    results {
+        highlighting #59c2ff
+        selection #1f1d1b
+        subtitle #9b8667
+    }
+
+    rowSeparator {
+        color #2f2e2c
+        show true
+    }
+}
+
+statusBar {
+    background #0a0909
+    border #272624
+    text #c8ad85
+    quickSelectNoResultsHighlighting #f07178
+}
+
+tableHeader {
+    separator #272624
+    text #9b8667
+
+    pressed {
+        background #2f2e2c
+    }
+}
+
+tabs {
+    active {
+        text #c8ad85
+    }
+
+    inactive {
+        background #0a0909
+        text #968264
+    }
+}
+
+terminal {
+    caret {
+        background #ffb454
+        text #0e0d0c
+    }
+}
+
+textEditor {
+    error #f07178
+    warning #382812
+    keyword #ffb454
+    comment #968264
+    identifier #e6b673
+
+    literal {
+        string #aad94c
+        number #ff8f40
+        color #ff8f40
+    }
+
+    gutter {
+        background #0e0d0c
+        text #7c7a78
+    }
+}
+
+titleBar {
+    text #c8ad85
+}

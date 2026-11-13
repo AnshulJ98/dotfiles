@@ -4,3 +4,5 @@ set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/../.."
 nvim --headless -u NONE -l config/nvim/tests/lsp.lua
 nvim --headless -u NONE -l config/nvim/tests/meatcode.lua
+nvim --headless -u NONE -l config/nvim/tests/themes.lua
+nvim --headless -u NONE -l config/nvim/tests/markdown.lua

@@ -13,7 +13,7 @@
   },
   "showCacheMissNotices": true,
   "cacheWarming": "idle",
-  "theme": "bearded-hc-midnightvoid",
+  "theme": "current",
   "quietStartup": true,
   "editorPaddingX": 2,
   "enabledModels": [

@@ -1,0 +1,19 @@
+# Void Neutral: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = void-neutral
+	file-style = bold "#7fd7f5"
+	file-decoration-style = "#505050" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#505050" ol
+	plus-style = syntax "#2c3126"
+	plus-emph-style = syntax "#2f3529"
+	minus-style = syntax "#312525"
+	minus-emph-style = syntax "#3f2d29"
+	plus-empty-line-marker-style = normal "#2c3126"
+	minus-empty-line-marker-style = normal "#312525"
+	line-numbers-left-style = "#969696"
+	line-numbers-right-style = "#969696"
+	line-numbers-minus-style = "#ff7b68"
+	line-numbers-plus-style = "#afea7b"
+	line-numbers-zero-style = "#969696"

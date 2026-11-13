@@ -1,0 +1,19 @@
+# Bearded HC Midnight Void: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = midnightvoid
+	file-style = bold "#7fd7f5"
+	file-decoration-style = "#395469" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#395469" ol
+	plus-style = syntax "#24332f"
+	plus-emph-style = syntax "#344838"
+	minus-style = syntax "#2c262b"
+	minus-emph-style = syntax "#432c2f"
+	plus-empty-line-marker-style = normal "#24332f"
+	minus-empty-line-marker-style = normal "#2c262b"
+	line-numbers-left-style = "#436179"
+	line-numbers-right-style = "#436179"
+	line-numbers-minus-style = "#fd604f"
+	line-numbers-plus-style = "#afea7b"
+	line-numbers-zero-style = "#436179"

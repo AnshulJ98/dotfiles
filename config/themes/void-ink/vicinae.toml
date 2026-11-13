@@ -1,0 +1,54 @@
+# Void Ink: Vicinae colours, matching kitty.conf in this directory.
+
+[meta]
+version = 1
+name = "Void Ink"
+description = "void-ink palette (generated; file and theme name kept so settings need no change)."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#141312"            # editor.background
+foreground = "#d8d1c9"            # editor.foreground
+secondary_background = "#100f0e"  # sideBar.background
+border = "#2e2c2a"                # editorWidget.border
+accent = "#7fd7f5"                # terminal.ansiBlue
+accent_foreground = "#141312"
+
+[colors.accents]
+blue = "#7fd7f5"
+green = "#afea7b"
+magenta = "#e4a3df"
+orange = "#f5df76"
+purple = "#e4a3df"
+red = "#ff6856"
+yellow = "#f5df76"
+cyan = "#22d3b1"
+
+[colors.text]
+muted = "#817d78"        # descriptionForeground #d8d1c980
+placeholder = "#96928c"  # input.placeholderForeground
+danger = "#ff6856"
+success = "#afea7b"
+selection = { background = "#2d2c2a", foreground = "#d8d1c9" }
+
+[colors.text.links]
+default = "#f0edea"      # textLink.foreground
+
+[colors.input]
+border = "#3e3c3a"       # input.border
+border_focus = "#4a4948" # focusBorder
+border_error = "#ff6856"
+
+[colors.list.item.hover]
+foreground = "#d8d1c9"
+secondary_foreground = "#d8d1c9"
+
+[colors.list.item.selection]
+background = "#282725"   # list.activeSelectionBackground #5e5c5a73
+foreground = "#d8d1c9"
+secondary_background = "#2e2d2b"
+secondary_foreground = "#d8d1c9"
+
+[colors.grid.item]
+background = "#31302e"   # editorWidget.background

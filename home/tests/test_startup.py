@@ -15,6 +15,16 @@ class StartupTests(unittest.TestCase):
             cwd=directory, timeout=10,
         )
 
+    def test_shell_colors_preserve_original_pointed_prompt_endcaps(self):
+        script = (f'typeset -A FAST_HIGHLIGHT_STYLES; source "{HOME / ".p10k.zsh"}"; '
+                  f'source "{HOME / ".zsh-colors.zsh"}"; '
+                  'print -r -- "$POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL"; '
+                  'print -r -- "$POWERLEVEL9K_RIGHT_PROMPT_FIRST_SEGMENT_START_SYMBOL"')
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_zsh(script, directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "\\uE0B0\n\\uE0B2\n")
+
     def test_missing_cargo_does_not_print_a_startup_error(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_zsh(f'source "{HOME / ".zshenv"}"; print ready', directory)

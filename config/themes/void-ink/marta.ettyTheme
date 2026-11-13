@@ -1,0 +1,26 @@
+background #141312
+caret #f5df76
+caretText #141312
+foreground #d8d1c9
+name "void-ink"
+selectedText #d8d1c9
+selection #2d2c2a
+
+ansiColors [
+    #141312
+    #ff6856
+    #afea7b
+    #f5df76
+    #7fd7f5
+    #e4a3df
+    #22d3b1
+    #d8d1c9
+    #96928c
+    #fe6a58
+    #adf169
+    #f5e079
+    #82d8f5
+    #efcaec
+    #21cbaa
+    #ffffff
+]

@@ -1,0 +1,134 @@
+name "void-ink"
+
+base {
+    appearance "dark"
+    background #141312
+    separator #2b2a28
+    text #d8d1c9
+}
+
+actionBar {
+    separator #2b2a28
+
+    button {
+        background #100f0e
+        hotkey #7fd7f5
+        text #96928c
+    }
+}
+
+asyncProgressBar {
+    border #4a4948
+    progress #7fd7f5
+    itemProgress #afea7b
+}
+
+breadcrumbs {
+    color1 #141312
+    color2 #31302e
+    color3 #262423
+    separator #565452
+    text #d8d1c9
+}
+
+files {
+    background {
+        alternate #141312
+        current #262423
+        currentSelected #262423
+        selected #31302e
+    }
+
+    dragDropSelection {
+        color #7fd7f5
+        width 1
+    }
+
+    text {
+        current #f0edea
+        currentSelected #e4a3df
+        hidden #96928c
+        matched #f5df76
+        selected #e4a3df
+
+        highlighting1 #7fd7f5
+        highlighting2 #afea7b
+        highlighting3 #e4a3df
+        highlighting4 #f5df76
+    }
+}
+
+searchBar {
+    query {
+        border #4a4948
+        placeholder #96928c
+    }
+
+    results {
+        highlighting #7fd7f5
+        selection #262423
+        subtitle #96928c
+    }
+
+    rowSeparator {
+        color #31302e
+        show true
+    }
+}
+
+statusBar {
+    background #100f0e
+    border #2b2a28
+    text #d8d1c9
+    quickSelectNoResultsHighlighting #ff6856
+}
+
+tableHeader {
+    separator #2b2a28
+    text #96928c
+
+    pressed {
+        background #31302e
+    }
+}
+
+tabs {
+    active {
+        text #d8d1c9
+    }
+
+    inactive {
+        background #100f0e
+        text #8f8b85
+    }
+}
+
+terminal {
+    caret {
+        background #f5df76
+        text #141312
+    }
+}
+
+textEditor {
+    error #ff6856
+    warning #36311a
+    keyword #f5df76
+    comment #8f8b85
+    identifier #ec7886
+
+    literal {
+        string #afea7b
+        number #ffaa7d
+        color #ffaa7d
+    }
+
+    gutter {
+        background #141312
+        text #7e7d7b
+    }
+}
+
+titleBar {
+    text #d8d1c9
+}

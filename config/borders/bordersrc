@@ -7,14 +7,17 @@
 # - Exclude common problematic apps (Finder, QuickTime, etc.) to prevent double/overlapping borders
 # - Order above windows (covers native shadows cleanly)
 
+# BORDER_ACTIVE and BORDER_INACTIVE (0xAARRGGBB) come from the active theme.
+source "$HOME/.config/themes/current/colors.sh"
+
 options=(
   style=round # Rounded corners (macOS-native feel); use 'square' for sharp i3 style
   width=5.0   # Thicker than default for better visibility on 4K monitors
   hidpi=on    # Off for performance; set 'on' if borders appear too thin on Retina
   order=above # Draws over native window shadows (cleaner look)
 
-  active_color=0xff8e857e   # Warm gray accent, 0xAARRGGBB like inactive_color
-  inactive_color=0xff414550 # Semi-transparent muted gray (dim, non-distracting)
+  active_color=$BORDER_ACTIVE
+  inactive_color=$BORDER_INACTIVE # Dim, non-distracting
 
   blacklist="Finder,QuickTime Player,ScreenRecorder" # Quote if needed; prevents borders on floating/system windows
 )

@@ -1,0 +1,54 @@
+# Void Neutral: Vicinae colours, matching kitty.conf in this directory.
+
+[meta]
+version = 1
+name = "Void Neutral"
+description = "void-neutral palette (generated; file and theme name kept so settings need no change)."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#1e1e1e"            # editor.background
+foreground = "#d1d1d1"            # editor.foreground
+secondary_background = "#181818"  # sideBar.background
+border = "#333333"                # editorWidget.border
+accent = "#7fd7f5"                # terminal.ansiBlue
+accent_foreground = "#1e1e1e"
+
+[colors.accents]
+blue = "#7fd7f5"
+green = "#afea7b"
+magenta = "#e4a3df"
+orange = "#f5df76"
+purple = "#e4a3df"
+red = "#ff7b68"
+yellow = "#f5df76"
+cyan = "#22d3b1"
+
+[colors.text]
+muted = "#858585"        # descriptionForeground #d1d1d180
+placeholder = "#9c9c9c"  # input.placeholderForeground
+danger = "#ff7b68"
+success = "#afea7b"
+selection = { background = "#333333", foreground = "#d1d1d1" }
+
+[colors.text.links]
+default = "#ededed"      # textLink.foreground
+
+[colors.input]
+border = "#424242"       # input.border
+border_focus = "#505050" # focusBorder
+border_error = "#ff7b68"
+
+[colors.list.item.hover]
+foreground = "#d1d1d1"
+secondary_foreground = "#d1d1d1"
+
+[colors.list.item.selection]
+background = "#2f2f2f"   # list.activeSelectionBackground #66666673
+foreground = "#d1d1d1"
+secondary_background = "#353535"
+secondary_foreground = "#d1d1d1"
+
+[colors.grid.item]
+background = "#373737"   # editorWidget.background

@@ -1,5 +1,5 @@
 -- Rounded panes, matching kitty's window_border_radius.
-require('full-border'):setup { type = ui.Border.ROUNDED }
+require('full-border'):setup { set = 'rounded' }
 
 require('git'):setup { order = 1500 }
 

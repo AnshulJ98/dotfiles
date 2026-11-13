@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# theme [name]: switch every themed tool to config/themes/<name>. With no name, list the themes.
+#
+# A theme is a directory of per-tool colour files, and config/themes/current is a symlink to the
+# active one. Each tool reads its file through that link: kitty and git by include, lazygit by
+# LG_CONFIG_FILE, yazi, hunk and Marta through symlinked config files, borders and the kitty
+# pickers by sourcing colors.sh. nvim loads colors/<name>.lua when the theme has one, else
+# Bearded (lua/config/colorscheme.lua). So a switch is a relink, then telling what is running
+# to reload.
+set -euo pipefail
+
+T=$(dirname "$(realpath "$0")")
+
+usage() {
+  cat <<'EOF'
+Usage: theme [name]
+       theme -h | --help
+
+With no name, list installed themes (* marks the active one).
+With a name, switch the shared theme and reload supported apps.
+
+Example: theme coffee-neutral
+
+Reloads kitty, nvim, tmux, JankyBorders and Vicinae; rebuilds bat's cache.
+Restart yazi, lazygit, hunk, btop and Marta. In pi, run /reload.
+Open a new shell after first installation for shell and lazygit settings.
+EOF
+}
+if [ $# -eq 1 ] && { [ "$1" = -h ] || [ "$1" = --help ]; }; then
+  usage
+  exit 0
+fi
+
+if [ $# -eq 0 ]; then
+  cur=$(basename "$(readlink "$T/current" 2>/dev/null || true)")
+  for f in "$T"/*/kitty.conf; do
+    n=$(basename "$(dirname "$f")")
+    [ "$n" = current ] && continue
+    [ "$n" = "$cur" ] && echo "* $n" || echo "  $n"
+  done
+  exit 0
+fi
+
+if [ $# -ne 1 ]; then
+  echo 'usage: theme [name]' >&2
+  exit 1
+fi
+name=$1
+case "$name" in
+  ''|*[!a-z0-9-]*) echo "theme: invalid name '$name'" >&2; exit 1 ;;
+esac
+if [ "$name" = current ] || [ ! -f "$T/$name/kitty.conf" ]; then
+  echo "theme: no theme named '$name' (run theme with no argument to list them)" >&2
+  exit 1
+fi
+
+# Rename the link atomically; -h keeps macOS mv from following the old directory link.
+next="$T/.current.$$"
+trap 'rm -f "$next"' EXIT
+ln -s "$name" "$next"
+mv -fh "$next" "$T/current"
+# pi watches its themes folder for the active theme's file, so that link is replaced on every
+# switch instead of going through current.
+mkdir -p "$HOME/.pi/agent/themes"
+ln -sfn "$T/$name/pi.json" "$HOME/.pi/agent/themes/current.json"
+
+warn() { echo "theme: $*" >&2; }
+pkill -USR1 -x kitty || true # kitty reloads its config on SIGUSR1; no process is fine.
+. "$T/$name/colors.sh"
+if pgrep -xq borders; then
+  borders active_color="$BORDER_ACTIVE" inactive_color="$BORDER_INACTIVE" || warn "borders did not reload"
+fi
+if command -v vicinae >/dev/null; then
+  vicinae theme set "$name" >/dev/null 2>&1 || warn "vicinae did not reload"
+fi
+if command -v bat >/dev/null; then
+  bat cache --build >/dev/null 2>&1 || warn "bat cache did not rebuild"
+fi
+if command -v tmux >/dev/null && tmux list-sessions >/dev/null 2>&1; then
+  tmux source-file "$T/current/tmux.conf" || warn "tmux did not reload"
+fi
+for s in "${TMPDIR:-/tmp}"/nvim."$USER"/*/nvim.*.0; do
+  [ -S "$s" ] || continue
+  # An nvim waiting at a prompt never answers, so each call gets three seconds.
+  (perl -e 'alarm 3; exec @ARGV' nvim --server "$s" --remote-expr "exists(':ThemeSync') ? execute('ThemeSync') : ''" >/dev/null 2>&1 || warn "nvim did not reload (busy or stale socket): $s") &
+done
+wait
+
+echo "theme: $name. Restart yazi, lazygit, hunk, btop and Marta to see it; in pi run /reload."

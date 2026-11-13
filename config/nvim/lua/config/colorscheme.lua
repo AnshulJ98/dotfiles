@@ -137,7 +137,17 @@ require('bearded').setup {
   end,
 }
 
-vim.cmd.colorscheme 'bearded'
+-- `theme <name>` (config/themes/theme) points ~/.config/themes/current at the active
+-- theme. One with a frozen colors/<name>.lua loads from that file; the rest (Midnight
+-- Void) load through Bearded as set up above. :ThemeSync re-reads the link, and the
+-- switcher runs it in every open nvim.
+local function apply()
+  local name = vim.fs.basename(vim.uv.fs_readlink(vim.fn.expand '~/.config/themes/current') or '')
+  local frozen = #vim.api.nvim_get_runtime_file('colors/' .. name .. '.lua', false) > 0
+  vim.cmd.colorscheme(frozen and name or 'bearded')
+end
+apply()
+vim.api.nvim_create_user_command('ThemeSync', apply, { desc = 'Load the theme ~/.config/themes/current points at' })
 
 vim.pack.add { 'https://github.com/folke/todo-comments.nvim' }
 require('todo-comments').setup { signs = false }

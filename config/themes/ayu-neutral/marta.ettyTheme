@@ -1,0 +1,26 @@
+background #1b1a19
+caret #ffb454
+caretText #1b1a19
+foreground #d7d3ca
+name "ayu-neutral"
+selectedText #d7d3ca
+selection #323130
+
+ansiColors [
+    #1b1a19
+    #f7777e
+    #aad94c
+    #ffb454
+    #59c2ff
+    #f29668
+    #95e6cb
+    #d7d3ca
+    #9a9790
+    #f67980
+    #a0e9d0
+    #ffb657
+    #5cc3ff
+    #f7c2a7
+    #8fddc3
+    #ffffff
+]

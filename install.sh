@@ -63,7 +63,7 @@ link() {
 }
 
 # 3. ~/ files (shell rcs, gitconfig, prompt) ---------------------------------
-for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .gitignore_global .p10k.zsh; do
+for f in .zshrc .zprofile .zshenv .bashrc .gitconfig .gitignore_global .p10k.zsh .zsh-colors.zsh; do
   [ -e "$DOT/home/$f" ] && link "$DOT/home/$f" "$HOME/$f"
 done
 
@@ -92,6 +92,15 @@ link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 # Hunk reuses the yazi syntax theme and the lazygit palette.
 link "$DOT/config/hunk"            "$HOME/.config/hunk"
+# One directory per theme. `theme <name>` repoints config/themes/current, and kitty, git,
+# lazygit, yazi, hunk, Marta, borders and the kitty pickers read their colours through it.
+link "$DOT/config/themes"          "$HOME/.config/themes"
+# Initialise before tools resolve their theme files, without reloading running apps.
+[ -e "$DOT/config/themes/current" ] || ln -sfn midnightvoid "$DOT/config/themes/current"
+link "$DOT/config/themes/theme"    "$HOME/.local/bin/theme"
+link "$DOT/config/btop/btop.conf"   "$HOME/.config/btop/btop.conf"
+mkdir -p "$HOME/.config/btop/themes"
+ln -sfn "$HOME/.config/themes/current/btop.theme" "$HOME/.config/btop/themes/current.theme"
 link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
 # Git hooks guarding auto runs: home/.gitconfig's init.templateDir points at the template,
 # husky repos source the init.sh. Existing repos need: git-hooks-install <repo>...
@@ -105,8 +114,17 @@ link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
-# delta reads syntax themes from bat's cache; the gitconfig delta feature names this one.
-link "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" "$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
+# delta reads syntax themes from bat's cache; each theme's delta.gitconfig names its own.
+# Replace only our old link: one dangling theme makes bat skip the whole folder.
+old_bat="$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
+if [ -L "$old_bat" ] && [ "$(readlink "$old_bat")" = "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" ]; then
+  link "$DOT/config/themes/midnightvoid/syntax.tmTheme" "$old_bat"
+fi
+for t in "$DOT"/config/themes/*/syntax.tmTheme; do
+  n=$(basename "$(dirname "$t")")
+  [ "$n" = current ] || link "$t" "$HOME/.config/bat/themes/$n.tmTheme"
+done
+link "$DOT/config/themes/current/syntax.tmTheme" "$HOME/.config/bat/themes/current.tmTheme"
 if command -v bat >/dev/null 2>&1; then
   bat cache --build >/dev/null || warn "bat cache build failed — run: bat cache --build"
 fi
@@ -124,8 +142,9 @@ link "/Applications/Marta.app/Contents/Resources/launcher" "$HOME/.local/bin/mar
 # Vicinae rewrites settings.json from its GUI, so only base.json and themes are
 # symlinked; settings.json is seeded once to import base.json.
 link "$DOT/config/vicinae/base.json" "$HOME/.config/vicinae/base.json"
-for theme in "$DOT"/config/vicinae/themes/*.toml; do
-  link "$theme" "$HOME/.local/share/vicinae/themes/$(basename "$theme")"
+for t in "$DOT"/config/themes/*/vicinae.toml; do
+  n=$(basename "$(dirname "$t")")
+  [ "$n" = current ] || link "$t" "$HOME/.local/share/vicinae/themes/$n.toml"
 done
 VICINAE_SETTINGS="$HOME/.config/vicinae/settings.json"
 if [ ! -f "$VICINAE_SETTINGS" ]; then
@@ -163,6 +182,9 @@ link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
 link "$DOT/config/pi/web-search.json" "$HOME/.pi/agent/web-search.json"   # pi-web-access: deferred tools, result cap
 link "$DOT/config/pi/bin"           "$HOME/.pi/agent/bin"   # scout wrapper, referenced by AGENTS.md
 link "$DOT/config/pi/themes"      "$HOME/.pi/agent/themes"
+# Ensure pi has its active file even on a re-run with an existing current link.
+active=$(basename "$(readlink "$DOT/config/themes/current")")
+link "$DOT/config/themes/$active/pi.json" "$HOME/.pi/agent/themes/current.json"
 mkdir -p "$HOME/.pi/agent/skills-local"   # settings.json names it; pi does not create it
 
 # 7. VSCode (macOS-specific paths) -------------------------------------------

@@ -4,7 +4,7 @@ environment {
 }
 
 behavior {
-    theme "BeardedHCMidnightVoid"
+    theme "Current"
 
     layout {
         alwaysShowTabBar false
@@ -24,7 +24,7 @@ behavior {
 }
 
 etty {
-    theme "BeardedHCMidnightVoid"
+    theme "Current"
 
     fonts {
         normal [ "Iosevka Term" 15 ]

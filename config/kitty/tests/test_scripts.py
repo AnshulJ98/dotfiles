@@ -71,6 +71,9 @@ class ScriptTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        colors = self.root / ".config/themes/current/colors.sh"
+        colors.parent.mkdir(parents=True)
+        colors.write_text("THEME_ACCENT=\'#aabbcc\'\nTHEME_SEL=\'#123456\'\n")
         self.env = dict(os.environ, HOME=str(self.root), TMPDIR=str(self.root),
                         ZWS_DIR=str(self.root / "workspaces"), FAKE_ROOT=str(self.root),
                         PATH=str(self.root) + ":" + os.environ["PATH"])
@@ -409,6 +412,12 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"])
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
+
+    def test_picker_uses_active_theme_colors(self):
+        result = self.run_script("zpick", "1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args, = self.calls("fzf")
+        self.assertIn("fg:-1,bg:-1,hl:#aabbcc,hl+:#aabbcc,fg+:-1:bold,bg+:#123456,gutter:-1,border:#aabbcc,label:#aabbcc:bold", args)
 
     def test_picker_interrupt_cleans_only_owned_directory(self):
         neighbor = self.root / "zpick-view.neighbor"
