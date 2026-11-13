@@ -7,11 +7,11 @@ from pathlib import Path
 import socket
 import stat
 import subprocess
+import sys
 import time
 
-# AeroSpace starts this outside kitty, so kitten is found on PATH or in either usual app folder.
-os.environ["PATH"] = ("/opt/homebrew/bin:" + os.environ["PATH"] + ":/Applications/kitty.app/Contents/MacOS:"
-                      + os.path.expanduser("~/Applications/kitty.app/Contents/MacOS"))
+# kitty and kitten come from PATH (Homebrew links both, wherever it puts the app); no install folder is named.
+os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ["PATH"]
 sock = "/tmp/kitty-main"
 main = Path.home() / ".local/state/kitty/workspaces/main.kitty-session"
 
@@ -52,6 +52,16 @@ def focus(wid):
     subprocess.run(["kitten", "@", "--to", "unix:" + sock, "focus-window"], check=True, timeout=2)
 
 
+def start():
+    args = ["--listen-on", "unix:" + sock, "--session", str(main)]
+    # macOS finds the app by name in any folder; elsewhere, or when it cannot, run kitty from PATH.
+    if sys.platform == "darwin" and subprocess.run(["open", "-n", "-a", "kitty", "--args", *args],
+                                                   timeout=5).returncode == 0:
+        return
+    subprocess.Popen(["kitty", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 # Keep the lock inode: unlinking it would let another starter bypass the lock.
 try:
     with open(sock + ".lock", "a") as lock:
@@ -71,9 +81,7 @@ try:
                     session.write("cd ~\nlaunch\n")
             except FileExistsError:
                 pass
-            subprocess.run(["open", "-n", "-a", "kitty", "--args",
-                            "--listen-on", "unix:" + sock, "--session", str(main)],
-                           check=True, timeout=5)
+            start()
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
                 if window_id():

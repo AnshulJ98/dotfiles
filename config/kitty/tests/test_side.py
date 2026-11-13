@@ -85,6 +85,26 @@ class SideTests(unittest.TestCase):
             self.assertEqual(self.side.repo(str(root)), ('', ''))
             self.assertEqual(self.side.repo(''), ('', ''))
 
+    def test_git_ceiling_directories_stop_the_search_like_git_does(self):
+        # Where a parent folder is itself a checkout (Homebrew's prefix), folders under it are not its repo.
+        loader = importlib.machinery.SourceFileLoader('zpick_rows_test', str(SCRIPT.parent / 'zpick-rows'))
+        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(rows)
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory).resolve() / 'outer'
+            (outer / '.git').mkdir(parents=True)
+            (outer / '.git/HEAD').write_text('ref: refs/heads/main\n')
+            inner = outer / 'mine/project'
+            inner.mkdir(parents=True)
+            self.assertEqual(self.side.repo(str(inner)), (str(outer), 'main'))
+            self.assertEqual(rows.git_ref(str(inner)), ('main', str(outer)))
+            with patch.dict(os.environ, GIT_CEILING_DIRECTORIES=f'/nowhere:{outer}/'):
+                self.assertEqual(self.side.repo(str(inner)), ('', ''))
+                self.assertEqual(rows.git_ref(str(inner)), ('', ''))
+                # git still finds a repo when started in the ceiling itself
+                self.assertEqual(self.side.repo(str(outer)), (str(outer), 'main'))
+                self.assertEqual(rows.git_ref(str(outer)), ('main', str(outer)))
+
     def test_rows_layout_actions_and_purity(self):
         obj = view('/repo')
         before = json.dumps(obj)
@@ -253,8 +273,7 @@ if pathlib.Path(sys.argv[0]).name == 'git':
                 path.write_text('#!/usr/bin/python3\n' + fake)
                 path.chmod(0o700)
             script = root / 'zside'
-            script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(root))
-                              .replace('/Applications/kitty.app/Contents/MacOS', str(root)))
+            script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(root)))
             master, slave = pty.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 40, 0, 0))
             proc = subprocess.Popen(['/usr/bin/python3', str(script)], stdin=slave, stdout=slave,

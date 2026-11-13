@@ -91,6 +91,8 @@ def git_ref(cwd: str) -> tuple[str, str]:
     """('branch' or 'branch · worktree of repo', the checkout's folder); read from .git, no
     subprocess. ('', '') outside a repo."""
     d = cwd
+    # git's own setting: the search does not climb into these folders
+    ceilings = {os.path.abspath(p) for p in os.environ.get('GIT_CEILING_DIRECTORIES', '').split(':') if p}
     while d and d != '/':
         git = os.path.join(d, '.git')
         try:
@@ -104,6 +106,8 @@ def git_ref(cwd: str) -> tuple[str, str]:
             return name + (f' · worktree of {of}' if of else ''), d
         except (OSError, IndexError):
             d = os.path.dirname(d)
+            if d in ceilings:
+                break
     return '', ''
 
 

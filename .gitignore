@@ -15,6 +15,9 @@ bun.lock
 yarn.lock
 pnpm-lock.yaml
 
+# Machine-only kitty settings (kitty.conf globincludes it)
+config/kitty/local.conf
+
 # The active theme: links that `theme <name>` (config/themes/theme) repoints
 config/themes/current
 config/pi/themes/current.json
