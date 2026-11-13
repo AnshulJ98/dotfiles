@@ -82,14 +82,18 @@ def split_input(data):
         if not part:
             tick = True
             continue
-        try:
-            obj = json.loads(part)
-            if (isinstance(obj, dict) and obj.get('v') == 1
-                    and isinstance(obj.get('current'), str)
-                    and isinstance(obj.get('spaces'), list) and isinstance(obj.get('agents'), list)):
-                view = obj
-        except (ValueError, UnicodeError):
-            pass
+        for start, byte in enumerate(part):
+            if byte != ord('{'):
+                continue
+            try:
+                obj = json.loads(part[start:])
+                if (isinstance(obj, dict) and obj.get('v') == 1
+                        and isinstance(obj.get('current'), str)
+                        and isinstance(obj.get('spaces'), list) and isinstance(obj.get('agents'), list)):
+                    view = obj
+                    break
+            except (ValueError, UnicodeError):
+                pass
     return parts[-1], mouse, view, tick
 
 
@@ -97,10 +101,11 @@ class Git:
     def __init__(self):
         self.cache, self.queue = {}, []
         self.proc = None
+        self.top = None
 
     def request(self, tops, current, now):
         for top in dict.fromkeys(tops):
-            if (top and top not in self.queue and top != getattr(self, 'top', None)
+            if (top and top not in self.queue and top != self.top
                     and now - self.cache.get(top, (-float('inf'), ''))[0] >= (3 if top == current else 30)):
                 self.queue.append(top)
 
@@ -179,7 +184,8 @@ def rows(view, info, menu, cols, lines):
     for a in agents:  # same rows whichever workspace is shown
         glyph, colour = ICON.get(a['state'], ICON[''])
         go = ('pane', a['pane'], '' if a['space'] == current else a['space'])
-        label = fit(f"{a['app']} · {info[a['space']][0]} {a['tab']}", cols - 4)
+        shown, _, _ = info.get(a['space'], (a['space'], '', ''))
+        label = fit(f"{a['app']} · {shown} {a['tab']}", cols - 4)
         bottom.append((line([(' ', ''), (glyph + ' ', colour), (label, '1;97' if a['on'] else '97')], a['on']), go))
         if a['model'] or a['ctx']:
             tail = f" · {a['ctx']}" if a['model'] and a['ctx'] else a['ctx']
