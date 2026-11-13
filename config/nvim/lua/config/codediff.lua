@@ -2,9 +2,11 @@
 -- highlights: the Source Control view's change list, "Open Changes" and
 -- GitLens' file history. Each opens in its own tab; `q` closes it. The
 -- plugin fetches a prebuilt C library on first use (`:CodeDiff install!`
--- forces a fresh download). The defaults need no setup call.
+-- forces a fresh download).
 
 vim.pack.add { 'https://github.com/esmuellert/codediff.nvim' }
+-- The default 1.4 multiplier makes subdued syntax disappear on changed characters.
+require('codediff').setup { highlights = { char_brightness = 1.1 } }
 
 vim.keymap.set('n', '<leader>gd', '<Cmd>CodeDiff<CR>', { desc = 'Git [D]iff: all changes' })
 vim.keymap.set('n', '<leader>gf', '<Cmd>CodeDiff file HEAD<CR>', { desc = 'Git diff this [F]ile against HEAD' })

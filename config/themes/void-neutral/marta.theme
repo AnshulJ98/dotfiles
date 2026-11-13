@@ -1,0 +1,134 @@
+name "void-neutral"
+
+base {
+    appearance "dark"
+    background #1e1e1e
+    separator #313131
+    text #d1d1d1
+}
+
+actionBar {
+    separator #313131
+
+    button {
+        background #181818
+        hotkey #7fd7f5
+        text #9c9c9c
+    }
+}
+
+asyncProgressBar {
+    border #505050
+    progress #7fd7f5
+    itemProgress #afea7b
+}
+
+breadcrumbs {
+    color1 #1e1e1e
+    color2 #373737
+    color3 #2e2e2e
+    separator #5c5c5c
+    text #d1d1d1
+}
+
+files {
+    background {
+        alternate #1e1e1e
+        current #2e2e2e
+        currentSelected #2e2e2e
+        selected #373737
+    }
+
+    dragDropSelection {
+        color #7fd7f5
+        width 1
+    }
+
+    text {
+        current #ededed
+        currentSelected #e4a3df
+        hidden #9c9c9c
+        matched #f5df76
+        selected #e4a3df
+
+        highlighting1 #7fd7f5
+        highlighting2 #afea7b
+        highlighting3 #e4a3df
+        highlighting4 #f5df76
+    }
+}
+
+searchBar {
+    query {
+        border #505050
+        placeholder #9c9c9c
+    }
+
+    results {
+        highlighting #7fd7f5
+        selection #2e2e2e
+        subtitle #9c9c9c
+    }
+
+    rowSeparator {
+        color #373737
+        show true
+    }
+}
+
+statusBar {
+    background #181818
+    border #313131
+    text #d1d1d1
+    quickSelectNoResultsHighlighting #ff7b68
+}
+
+tableHeader {
+    separator #313131
+    text #9c9c9c
+
+    pressed {
+        background #373737
+    }
+}
+
+tabs {
+    active {
+        text #d1d1d1
+    }
+
+    inactive {
+        background #181818
+        text #969696
+    }
+}
+
+terminal {
+    caret {
+        background #f5df76
+        text #1e1e1e
+    }
+}
+
+textEditor {
+    error #ff7b68
+    warning #36311a
+    keyword #f5df76
+    comment #969696
+    identifier #f4808d
+
+    literal {
+        string #afea7b
+        number #ffaa7d
+        color #ffaa7d
+    }
+
+    gutter {
+        background #1e1e1e
+        text #858585
+    }
+}
+
+titleBar {
+    text #d1d1d1
+}

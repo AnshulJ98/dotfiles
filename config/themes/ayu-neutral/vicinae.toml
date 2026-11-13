@@ -1,0 +1,54 @@
+# Ayu Neutral: Vicinae colours, matching kitty.conf in this directory.
+
+[meta]
+version = 1
+name = "Ayu Neutral"
+description = "ayu-neutral palette (generated; file and theme name kept so settings need no change)."
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+background = "#1b1a19"            # editor.background
+foreground = "#d7d3ca"            # editor.foreground
+secondary_background = "#161514"  # sideBar.background
+border = "#32312f"                # editorWidget.border
+accent = "#59c2ff"                # terminal.ansiBlue
+accent_foreground = "#1b1a19"
+
+[colors.accents]
+blue = "#59c2ff"
+green = "#aad94c"
+magenta = "#f29668"
+orange = "#ffb454"
+purple = "#f29668"
+red = "#f7777e"
+yellow = "#ffb454"
+cyan = "#95e6cb"
+
+[colors.text]
+muted = "#84827d"        # descriptionForeground #d7d3ca80
+placeholder = "#9a9790"  # input.placeholderForeground
+danger = "#f7777e"
+success = "#aad94c"
+selection = { background = "#323130", foreground = "#d7d3ca" }
+
+[colors.text.links]
+default = "#f0eeea"      # textLink.foreground
+
+[colors.input]
+border = "#41403e"       # input.border
+border_focus = "#4f4d4b" # focusBorder
+border_error = "#f7777e"
+
+[colors.list.item.hover]
+foreground = "#d7d3ca"
+secondary_foreground = "#d7d3ca"
+
+[colors.list.item.selection]
+background = "#2d2c2a"   # list.activeSelectionBackground #63615f73
+foreground = "#d7d3ca"
+secondary_background = "#343331"
+secondary_foreground = "#d7d3ca"
+
+[colors.grid.item]
+background = "#373634"   # editorWidget.background

@@ -39,7 +39,6 @@ zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # case-insensitive
 
 # === Plugins (fast, direct load) ===
 source ~/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#666666,bold"
 
 # Syntax highlighting (defer-loaded internally)
 source ~/.zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
@@ -131,6 +130,12 @@ source ~/.zsh/plugins/powerlevel10k/powerlevel10k.zsh-theme
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# Shell colours as ANSI indexes (LS_COLORS, suggestions, syntax highlighting, prompt), so they
+# follow the kitty theme. After the plugins and ~/.p10k.zsh, whose defaults they replace.
+[[ ! -f ~/.zsh-colors.zsh ]] || source ~/.zsh-colors.zsh
+# lazygit merges the active theme's colours over its own config; `theme <name>` switches themes.
+export LG_CONFIG_FILE="$HOME/Library/Application Support/lazygit/config.yml,$HOME/.config/themes/current/lazygit.yml"
 
 export PATH=$PATH:/Users/anshulj/.spicetify
 export PATH="/Users/anshulj/.bun/bin:$PATH"

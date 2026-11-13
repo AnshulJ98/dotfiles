@@ -1,0 +1,19 @@
+# Ayu Ink: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = ayu-ink
+	file-style = bold "#59c2ff"
+	file-decoration-style = "#484644" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#484644" ol
+	plus-style = syntax "#1e2112"
+	plus-emph-style = syntax "#252c15"
+	minus-style = syntax "#251717"
+	minus-emph-style = syntax "#382020"
+	plus-empty-line-marker-style = normal "#1e2112"
+	minus-empty-line-marker-style = normal "#251717"
+	line-numbers-left-style = "#968264"
+	line-numbers-right-style = "#968264"
+	line-numbers-minus-style = "#f07178"
+	line-numbers-plus-style = "#aad94c"
+	line-numbers-zero-style = "#968264"

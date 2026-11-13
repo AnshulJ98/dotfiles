@@ -1,0 +1,13 @@
+# Bearded HC Midnight Void: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#7fd7f5', bold]
+    inactiveBorderColor: ['#436179']
+    searchingActiveBorderColor: ['#F5DF76', bold]
+    optionsTextColor: ['#7fd7f5']
+    selectedLineBgColor: ['#253039']
+    inactiveViewSelectedLineBgColor: ['#1e2c38']
+    cherryPickedCommitFgColor: ['#e4a3df']
+    cherryPickedCommitBgColor: ['#253039']
+    unstagedChangesColor: ['#fd604f']
+    defaultFgColor: ['#c3d2de']

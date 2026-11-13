@@ -1,0 +1,13 @@
+# Ayu Ink: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#59c2ff', bold]
+    inactiveBorderColor: ['#53514f']
+    searchingActiveBorderColor: ['#ffb454', bold]
+    optionsTextColor: ['#59c2ff']
+    selectedLineBgColor: ['#1f1d1b']
+    inactiveViewSelectedLineBgColor: ['#2f2e2c']
+    cherryPickedCommitFgColor: ['#f29668']
+    cherryPickedCommitBgColor: ['#1f1d1b']
+    unstagedChangesColor: ['#f07178']
+    defaultFgColor: ['#c8ad85']

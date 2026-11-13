@@ -1,0 +1,13 @@
+# Void Ink: lazygit colours, merged after config/lazygit/config.yml through LG_CONFIG_FILE (home/.zshrc).
+gui:
+  theme:
+    activeBorderColor: ['#7fd7f5', bold]
+    inactiveBorderColor: ['#565452']
+    searchingActiveBorderColor: ['#f5df76', bold]
+    optionsTextColor: ['#7fd7f5']
+    selectedLineBgColor: ['#262423']
+    inactiveViewSelectedLineBgColor: ['#31302e']
+    cherryPickedCommitFgColor: ['#e4a3df']
+    cherryPickedCommitBgColor: ['#262423']
+    unstagedChangesColor: ['#ff6856']
+    defaultFgColor: ['#d8d1c9']

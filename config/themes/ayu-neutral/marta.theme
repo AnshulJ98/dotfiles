@@ -1,0 +1,134 @@
+name "ayu-neutral"
+
+base {
+    appearance "dark"
+    background #1b1a19
+    separator #302f2d
+    text #d7d3ca
+}
+
+actionBar {
+    separator #302f2d
+
+    button {
+        background #161514
+        hotkey #59c2ff
+        text #9a9790
+    }
+}
+
+asyncProgressBar {
+    border #4f4d4b
+    progress #59c2ff
+    itemProgress #aad94c
+}
+
+breadcrumbs {
+    color1 #1b1a19
+    color2 #373634
+    color3 #2c2b2a
+    separator #5a5958
+    text #d7d3ca
+}
+
+files {
+    background {
+        alternate #1b1a19
+        current #2c2b2a
+        currentSelected #2c2b2a
+        selected #373634
+    }
+
+    dragDropSelection {
+        color #59c2ff
+        width 1
+    }
+
+    text {
+        current #f0eeea
+        currentSelected #f29668
+        hidden #9a9790
+        matched #ffb454
+        selected #f29668
+
+        highlighting1 #59c2ff
+        highlighting2 #aad94c
+        highlighting3 #f29668
+        highlighting4 #ffb454
+    }
+}
+
+searchBar {
+    query {
+        border #4f4d4b
+        placeholder #9a9790
+    }
+
+    results {
+        highlighting #59c2ff
+        selection #2c2b2a
+        subtitle #9a9790
+    }
+
+    rowSeparator {
+        color #373634
+        show true
+    }
+}
+
+statusBar {
+    background #161514
+    border #302f2d
+    text #d7d3ca
+    quickSelectNoResultsHighlighting #f7777e
+}
+
+tableHeader {
+    separator #302f2d
+    text #9a9790
+
+    pressed {
+        background #373634
+    }
+}
+
+tabs {
+    active {
+        text #d7d3ca
+    }
+
+    inactive {
+        background #161514
+        text #93908a
+    }
+}
+
+terminal {
+    caret {
+        background #ffb454
+        text #1b1a19
+    }
+}
+
+textEditor {
+    error #f7777e
+    warning #382812
+    keyword #ffb454
+    comment #93908a
+    identifier #e6b673
+
+    literal {
+        string #aad94c
+        number #ff8f40
+        color #ff8f40
+    }
+
+    gutter {
+        background #1b1a19
+        text #848280
+    }
+}
+
+titleBar {
+    text #d7d3ca
+}
