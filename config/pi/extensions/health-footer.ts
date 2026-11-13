@@ -1,14 +1,12 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { keep, summary } from "../lib/health.ts";
-import type { Problem } from "../lib/health.ts";
+import { summary } from "../lib/health.ts";
 
 const health = fileURLToPath(new URL("../bin/pi-health", import.meta.url));
 
 export default function (pi: ExtensionAPI) {
 	let timer: ReturnType<typeof setInterval> | undefined;
-	let held: Array<Problem & { seen: number }> = [];
 	let busy = false;
 	let generation = 0;
 	let stopped = false;
@@ -30,8 +28,7 @@ export default function (pi: ExtensionAPI) {
 				p !== null && typeof p === "object" && ["key", "who", "flag", "session"].every((key) => typeof (p as Record<string, unknown>)[key] === "string")
 			)) throw new Error("invalid JSON problems");
 			if (stopped || started !== generation) return;
-			held = keep(held, data.problems, Date.now(), 10 * 60_000);
-			text = summary(held, ctx.sessionManager.getSessionId());
+			text = summary(data.problems, ctx.sessionManager.getSessionId());
 		} catch (err) {
 			text = `! pi-health failed: ${String(err instanceof Error ? err.message : err).replace(/\s+/g, " ").trim()}`.slice(0, 110);
 		} finally {

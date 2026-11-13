@@ -35,6 +35,7 @@ _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
+_check_tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _named: set[int] = set()
 _ready: set[int] = set()
@@ -76,12 +77,25 @@ def _missing() -> list[str]:
 
 
 def _check(timer_id: int | None = None) -> None:
+    global _check_tries
     missing = _missing()
-    if missing:
+    if not missing:
+        return
+    if _check_tries == 0:
         _log('kitty no longer has: ' + ', '.join(missing))
-        get_boss().call_remote_control(None, ('launch', '--type=tab', '--tab-title',
-                                            'watcher error', '/usr/bin/less', '+G',
-                                            os.path.join(DIR, 'watcher.log')))
+    boss = get_boss()
+    try:
+        windows = getattr(boss, 'all_windows', None)
+        if windows is not None and not list(windows):
+            raise RuntimeError('no window for watcher error tab')
+        boss.call_remote_control(None, ('launch', '--type=tab', '--tab-title',
+                                       'watcher error', '/usr/bin/less', '+G',
+                                       os.path.join(DIR, 'watcher.log')))
+    except Exception:
+        if _check_tries >= 10:
+            raise  # the timer's _safe wrapper logs the last failure
+        _check_tries += 1
+        add_timer(_safe(_check), 0.3, False)
 
 
 def _file(name: str) -> str:
