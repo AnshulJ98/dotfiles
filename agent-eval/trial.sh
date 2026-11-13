@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # One worker trial: scout --rw in an isolated HOME and a fresh workspace; appends a graded record.
+# Worker pass = the hidden tests exit 0 and every changed file is in the task's allowed list (an edit outside it fails
+# the trial and is listed in the record's "outside"); wroteTest is true when a changed path is a test path.
 # A review task (role review, with "rev") runs plain pi -p --mode json on the prompt in the workspace at rev and is
 # graded by judge.sh (record: pass = every defect found, plus found, of, disagreements, judgeCost).
 # A scout task (role scout, with "rev" and usually "paths") runs `scout --model M --thinking L "<prompt.md>"` read-only

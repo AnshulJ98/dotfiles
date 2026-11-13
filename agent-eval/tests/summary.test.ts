@@ -221,7 +221,27 @@ test("render: only the review table has a recall column, 80.0% (8/10) with flaky
 	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| recall \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){10}\n/);
 	assert.match(text, /\| p\/m:low \| 50\.0% \(1\/2\) \| 1\/1 \| 0\/1 \| 1 \(r1\) \| 80\.0% \(8\/10\), 2 flaky \| 0\.5000 \|/);
 	assert.match(text, /\| p\/n:low \| 0\.0% \(0\/2\) \| 0\/1 \| 0\/1 \| 0 \| 80\.0% \(8\/10\) \| 0\.5000 \|/);
-	// worker table unchanged, and a review cell without counts shows "-"
-	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){9}\n\| p\/x:low \| 100\.0% \(1\/1\) \| 1\/1 \| 1\/1 \| 0 \| 0\.5000 \|/);
+	// the worker table has no recall column (but its wrote test column, "-" without records carrying it), and a review cell without counts shows "-"
+	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| mean \$ \| mean s \| leak \| infra \| wrote test \|\n\|(---\|){10}\n\| p\/x:low \| 100\.0% \(1\/1\) \| 1\/1 \| 1\/1 \| 0 \| 0\.5000 \|/);
 	assert.match(render(summarize(grid("p/z", { a: [true] }, { role: "review" }))), /\| 0 \| - \| 0\.5000 \|/);
+});
+
+test("worker cells report the share of counted trials whose agent wrote a test, '-' when no record carries wroteTest; the gate ignores it", () => {
+	const wrote = (flags: (boolean | undefined)[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		flags.map((w, i) => rec(`t${i}`, "p/w", 1, true, { ...(w === undefined ? {} : { wroteTest: w }), ...over }));
+	const line = JSON.stringify({ task: "a", role: "worker", model: "p/m", thinking: "low", trial: 1, pass: true, wroteTest: true });
+	const { records } = parseRecords(`${line}\n${line.replace("true}", '"yes"}')}\n`);
+	assert.deepEqual(records.map((r) => r.wroteTest), [true, undefined]);
+	// the leak record is not counted; the record without the field is not in the denominator
+	const roles = summarize([...wrote([true, false, true, undefined]), ...wrote([true], { leak: true }), ...wrote([false], { model: "p/n" }), ...grid("p/o", { a: [true] })]);
+	const [n, o, w] = roles[0].cells;
+	assert.deepEqual([w.wroteTest, w.wroteTestOf, n.wroteTest, n.wroteTestOf, o.wroteTest, o.wroteTestOf], [2, 3, 0, 1, undefined, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| infra \| wrote test \|\n\|(---\|){10}\n/);
+	assert.match(text, /\| p\/w:low \| 100\.0% \(4\/4\) .* \| 1 \| 0 \| 66\.7% \(2\/3\) \|\n/);
+	assert.match(text, /\| p\/n:low \|.* \| 0 \| 0\.0% \(0\/1\) \|\n/);
+	assert.match(text, /\| p\/o:low \|.* \| 0 \| - \|\n/);
+	// nothing in the gate's view changes
+	assert.deepEqual(baselineCells(roles).worker["p/w:low"], { passRate: 1, tasks: 4, flaky: 0 });
+	assert.equal(render(summarize(wrote([true], { role: "scout" }))).includes("wrote test"), false);
 });
