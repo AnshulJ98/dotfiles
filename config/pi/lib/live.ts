@@ -64,10 +64,11 @@ export function dropLive(dir = liveDir(), pid = process.pid): void {
 }
 
 /**
- * Removes the files of processes that are gone and returns the states they left. Gone: the pid
- * is not running, or the file was last written before this boot (the pid is someone else's now).
+ * Returns the states of processes that are gone, removing their files unless remove is false.
+ * Gone: the pid is not running, or the file was last written before this boot (the pid is
+ * someone else's now).
  */
-export function sweep(isRunning: (pid: number) => boolean, bootMs: number, dir = liveDir()): Live[] {
+export function sweep(isRunning: (pid: number) => boolean, bootMs: number, dir = liveDir(), remove = true): Live[] {
 	let names: string[];
 	try {
 		names = readdirSync(dir);
@@ -84,7 +85,7 @@ export function sweep(isRunning: (pid: number) => boolean, bootMs: number, dir =
 			// Damaged: judged by its pid alone.
 		}
 		if (isRunning(Number.parseInt(name, 10)) && (live.active ?? bootMs) >= bootMs) continue;
-		rmSync(join(dir, name), { force: true });
+		if (remove) rmSync(join(dir, name), { force: true });
 		if (live.state) dead.push(live as Live);
 	}
 	return dead;

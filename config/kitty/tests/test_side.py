@@ -131,16 +131,26 @@ class SideTests(unittest.TestCase):
             self.assertIsNone(split(frame(invalid))[2])
         self.assertIsNone(split(b'\x1b_zvnot json\x1b\\')[2])
 
+    def test_large_view_split_across_reads_is_returned_once(self):
+        obj = dict(view(), current='x' * (100 * 1024))
+        wire = frame(obj)
+        for cut in (70 * 1024, len(wire) - 1):
+            rest, mouse, first, tick = self.side.split_input(wire[:cut])
+            tail, more, second, tock = self.side.split_input(rest + wire[cut:])
+            self.assertEqual([v for v in (first, second) if v is not None], [obj])
+            self.assertEqual((tail, mouse + more, tick or tock), (b'', [], False))
+            self.assertEqual(self.side.split_input(tail), (b'', [], None, False))
+
     def test_splitter_is_linear_and_bounds_trailing_sequences(self):
         for data in (b'{' * 1048576, b'\x1b_zv{' * 209716, b'\x1b_zv' + b'{' * 1048576):
             start = time.monotonic()
             rest, mouse, obj, tick = self.side.split_input(data)
             self.assertLess(time.monotonic() - start, .5)
-            self.assertLessEqual(len(rest), 65536)
+            self.assertLessEqual(len(rest), self.side.REST_MAX)
             self.assertEqual((mouse, obj, tick), ([], None, False))
-        for size in (65536, 65537):
+        for size in (self.side.REST_MAX, self.side.REST_MAX + 1):
             rest = self.side.split_input(b'\x1b_zv' + b'{' * (size - 4))[0]
-            self.assertEqual(len(rest), size if size <= 65536 else 0)
+            self.assertEqual(len(rest), size if size <= self.side.REST_MAX else 0)
 
     def test_render_names_without_a_process_and_repo_each_draw(self):
         obj = view('/tmp/project')

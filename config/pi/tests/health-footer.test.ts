@@ -6,28 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import footer from "../extensions/health-footer.ts";
-import { keep, summary } from "../lib/health.ts";
+import { summary } from "../lib/health.ts";
 import type { Problem } from "../lib/health.ts";
 import { setLive } from "../lib/live.ts";
 
 const gone: Problem = { key: "gone 42", who: "main abc123 ~/repo", flag: "died without a clean shutdown", session: "other" };
 const quiet: Problem = { ...gone, key: "quiet 43", flag: "no activity for 30m00s" };
-test("keep: first seen, refreshed details, transient removal, and strict gone expiry", () => {
-	const held = [{ ...gone, seen: 100 }, { ...quiet, seen: 200 }];
-	const rows: Array<[typeof held, Problem[], number, typeof held]> = [
-		[[], [gone, quiet], 300, [{ ...gone, seen: 300 }, { ...quiet, seen: 300 }]],
-		[held, [{ ...gone, flag: "updated" }], 300, [{ ...gone, flag: "updated", seen: 100 }]],
-		[held, [], 1099, [{ ...gone, seen: 100 }]],
-		[held, [], 1100, []],
-		[held, [quiet], 300, [{ ...quiet, seen: 200 }, { ...gone, seen: 100 }]],
-	];
-	for (const [held, found, now, expected] of rows) assert.deepEqual(keep(held, found, now, 1000), expected);
-});
-test("summary: empty, self excluded, auto, count, and 110 character cap", () => {
+test("summary: empty, self excluded, auto, count, single gone clear hint, and 110 character cap", () => {
 	const auto = { ...gone, key: "run /repo", who: "auto ~/repo", session: "" };
 	const rows: Array<[Problem[], string | undefined]> = [
 		[[], undefined], [[{ ...gone, session: "own" }], undefined],
-		[[gone], "! main abc123 ~/repo · died without a clean shutdown"],
+		[[gone], "! main abc123 ~/repo · died without a clean shutdown (run pi-health to clear)"],
+		[[{ ...gone, session: "own" }, gone], "! main abc123 ~/repo · died without a clean shutdown (run pi-health to clear)"],
+		[[quiet], "! main abc123 ~/repo · no activity for 30m00s"],
 		[[{ ...gone, session: "own" }, auto], "! auto ~/repo · died without a clean shutdown"],
 		[[gone, quiet, auto], "! main abc123 ~/repo · died without a clean shutdown (+2 more, run pi-health)"],
 		[[{ ...gone, who: "x".repeat(200) }], "! " + "x".repeat(108)],
@@ -63,10 +54,19 @@ test("extension: real child reports a dead sibling, clears clean state, and does
 				await pi.fire("session_start");
 				if (mode !== "headless") await pi.waitForStatus(1);
 				if (mode === "dead") {
-					assert.match(pi.statuses[0][1]!, /died without a clean shutdown/);
-					await pi.fire("agent_end");
-					await pi.waitForStatus(2);
-					assert.match(pi.statuses[1][1]!, /died without a clean shutdown/, "held after sweep");
+					const sibling = load(dir);
+					try {
+						await sibling.fire("session_start");
+						await sibling.waitForStatus(1);
+						for (const session of [pi, sibling]) {
+							assert.match(session.statuses[0][1]!, /died without a clean shutdown \(run pi-health to clear\)/);
+							await session.fire("agent_end");
+							await session.waitForStatus(2);
+							assert.deepEqual(session.statuses[1], session.statuses[0]);
+						}
+						assert.equal(existsSync(join(dir, "live", `${dead}.json`)), true);
+					} finally { await sibling.fire("session_shutdown"); }
+					rmSync(join(dir, "live", `${dead}.json`));
 				} else if (mode === "clean") assert.deepEqual(pi.statuses, [["health", undefined]]);
 				else {
 					await pi.fire("agent_end");
@@ -78,6 +78,34 @@ test("extension: real child reports a dead sibling, clears clean state, and does
 	} finally {
 		if (previous === undefined) delete process.env.PI_LOG_DIR; else process.env.PI_LOG_DIR = previous;
 		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("extension: each poll replaces the status, with no held dead or quiet problems", async (t) => {
+	let problems: Problem[] = [gone];
+	t.mock.method(childProcess, "execFile", (_file, _args, _options, callback) => {
+		callback(null, JSON.stringify({ problems }));
+	});
+	syncBuiltinESMExports();
+	const pi = load(tmpdir());
+	try {
+		await pi.fire("session_start");
+		await pi.waitForStatus(1);
+		assert.equal(pi.statuses[0][1], summary([gone], "own"));
+		problems = [];
+		await pi.fire("agent_end");
+		await pi.waitForStatus(2);
+		assert.deepEqual(pi.statuses[1], ["health", undefined]);
+		problems = [quiet];
+		await pi.fire("agent_end");
+		await pi.waitForStatus(3);
+		assert.equal(pi.statuses[2][1], summary([quiet], "own"));
+		problems = [];
+		await pi.fire("agent_end");
+		await pi.waitForStatus(4);
+		assert.deepEqual(pi.statuses[3], ["health", undefined]);
+	} finally {
+		await pi.fire("session_shutdown"); t.mock.restoreAll(); syncBuiltinESMExports();
 	}
 });
 
