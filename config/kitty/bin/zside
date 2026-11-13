@@ -2,10 +2,11 @@
 """Render pushed workspace views: draw first, then refresh git counts asynchronously.
 
 Kitty supplies ordered JSON lines after the raw-terminal readiness handshake. Folder and
-branch discovery read .git files only; clicks still use kitten and bin/zws.
+branch discovery read .git files only; row clicks send zdo intents, menus use bin/zws.
 """
 from __future__ import annotations  # /usr/bin/python3 is 3.9
 
+import base64
 import json
 import os
 import re
@@ -19,8 +20,6 @@ import time
 import tty
 
 os.environ['PATH'] = '/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:' + os.environ.get('PATH', '')
-TO = os.environ.get('KITTY_LISTEN_ON', '')
-DIR = os.environ.get('ZWS_DIR') or os.path.expanduser('~/.local/state/kitty/workspaces')
 ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
 GIT = shutil.which('git')
 if GIT in (None, '/usr/bin/git'):
@@ -40,10 +39,6 @@ def run(*cmd: str) -> str:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
     except (OSError, subprocess.SubprocessError):
         return ''
-
-
-def kitten(*args: str) -> str:
-    return run('kitten', '@', '--to', TO, *args)
 
 
 def fit(text: str, width: int) -> str:
@@ -225,10 +220,9 @@ def act(action: tuple | None) -> None:
         name, cwd = rest
         run(ZWS, *{'rename': ('rename', name), 'close': ('close', name)}.get(arg, ('worktree', arg, cwd)))
         return
-    if kind == 'space' or rest[0]:  # switch first, or the tab bar keeps showing the old workspace's tabs
-        kitten('action', 'goto_session', os.path.join(DIR, f"{arg if kind == 'space' else rest[0]}.kitty-session"))
-    if kind == 'pane':
-        kitten('focus-window', '--match', f'id:{arg}')
+    words = f'{kind} {arg}'
+    encoded = base64.b64encode(words.encode()).decode()
+    write(f'\x1b]1337;SetUserVar=zdo={encoded}\x07')
 
 
 def main() -> None:
