@@ -1,0 +1,1 @@
+{"id":"orch-two-first-fails","role":"orch","expect":"stop","rule":{"lines":[91,92],"must":"FAILs on two slices in a row"}}

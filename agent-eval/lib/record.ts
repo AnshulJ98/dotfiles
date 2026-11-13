@@ -1,7 +1,10 @@
 // Pure functions that build one worker-trial record, plus a thin CLI for trial.sh (flags: see main).
 // Worker pass: the hidden tests exit 0 and no changed file is outside the task's allowed list (the record's "outside");
 // wroteTest says whether a changed path is a test path.
-// Roles: worker (default), review (--judge-file), scout (--judge-file, --task-file task.json, --digest-file).
+// Roles: worker (default), review (--judge-file), scout (--judge-file, --task-file task.json, --digest-file),
+// orch (--reply-file, --expect).
+// Orch record: pass = the reply's DECISION word equals expect (lib/orch.ts), decision = that word or null; infra is
+// no turns or a timeout (rc 124 or 137); a reply without a decision is a fail, not infra.
 // Scout record: pass = judge.sh's verdict on the digest against the task's facts (found, of = facts, disagreements,
 // judgeCost); cited and citable are the secondary citation grade of the digest against the task's expect list
 // (lib/scout-grade.ts). An empty digest from a run with turns is a fail with found 0 (not infra); a non-empty digest
@@ -10,6 +13,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { gradeOrch, parseDecision } from "./orch.ts";
 import { grade as gradeScout, parseExpect } from "./scout-grade.ts";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -196,7 +200,7 @@ function main(argv: string[]): void {
 		args: argv,
 		options: {
 			task: str, role: str, model: str, thinking: str, trial: str, rc: str, seconds: str, expect: str,
-			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str,
+			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str, "reply-file": str,
 			needle: { type: "string", multiple: true, default: [] },
 		},
 	});
@@ -212,6 +216,16 @@ function main(argv: string[]): void {
 			pass: gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
 			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || judged.infra || isReviewTimeout(Number(v.rc)), dir: v.dir,
+		}));
+		return;
+	}
+	if (v.role === "orch") {
+		const reply = readText(v["reply-file"]);
+		console.log(JSON.stringify({
+			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
+			pass: gradeOrch(reply, v.expect ?? ""), decision: parseDecision(reply), expect: v.expect,
+			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || isReviewTimeout(Number(v.rc)), dir: v.dir,
 		}));
 		return;
 	}
