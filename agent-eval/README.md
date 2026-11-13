@@ -10,7 +10,7 @@ measures instruction adherence and recall, not model benchmarks.
 
 Probes below check what a model says about a fixture. The task suite
 checks what it does: each trial gives a model a real job in a scratch
-workspace and grades the result mechanically or with judges. Three roles:
+workspace and grades the result mechanically or with judges. Four roles:
 
 - **worker** (14 tasks: `booking-*`, `cube-*`, `differ-*`, `gate-missing-pairs`). Cut from fix
   commits in pi-lab and sim/cube (and this repo, below). The trial runs `scout --rw` on
@@ -54,6 +54,30 @@ workspace and grades the result mechanically or with judges. Three roles:
   decoys alone must get no. The committed `baseline.json` has no scout
   recall until the next `gate.sh --update`, so until then the gate reports
   one-sided recall (run only) for scout and fails it.
+- **orch** (11 tasks: `orch-*`). Tests whether a model, given the user's written
+  orchestration rules and one situation from a run, picks the action the rules
+  prescribe. A task is a directory with `task.json` ({id, role: "orch", expect,
+  rule}) and `scenario.md`. The trial renders `prompts/orch.txt` with
+  `fixtures/orch/rules.md` and the scenario and runs plain `pi -p -nt` (no
+  tools) in an empty directory under `lib/isolate.sh`. Grading is a pure
+  function (`lib/orch.ts`): the first line of the final reply that has a
+  `DECISION: <word>` (any case, bold or backticks allowed, trailing text
+  allowed) must carry the word in `expect`, one of `merge`, `rework`, `stop` or
+  `fix`. A reply with no such line or another word has `decision` null and fails;
+  it is not infra (no turns or a timeout, `EVAL_ORCH_TIMEOUT`, default 300 s,
+  is). There is no judge. `rule` is {lines: [from, to], must}: the lines of the
+  fixture that decide the task and a phrase from them; `validate.sh` checks that
+  the phrase occurs there (whitespace-insensitive) and that `expect` and
+  `scenario.md` are sound. The answer mix is merge 3, rework 3, stop 4, fix 1.
+  Each task is a single decision, not a long run: it does not show whether a
+  model keeps the rules over a whole auto run.
+  `fixtures/orch/rules.md` is a pinned copy of lines 89-204 of
+  `config/pi/prompts/plan.md`. `validate.sh` prints a NOTE (not a failure) when
+  the two differ. To refresh after the rules change, run
+  `sed -n 89,204p ../config/pi/prompts/plan.md > fixtures/orch/rules.md` (adjust
+  the line numbers if the section moved, and in `validate.sh`), then
+  `./validate.sh --all`: a task whose `rule` no longer matches is INVALID, and its
+  `expect` needs a fresh reading against the new rules.
 
 Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 `~/.pi/agent` except `memory.md`, sessions and run history, so trials

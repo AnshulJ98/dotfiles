@@ -8,11 +8,16 @@
 # read-only in the workspace at rev, and is graded by judge.sh --kind facts on the digest (record: pass = every fact
 # stated, plus found, of, disagreements, judgeCost; an empty digest is not judged and finds nothing). The digest's
 # file:line citations are also graded by lib/scout-grade.ts against the task's expect list: cited and citable, secondary.
+# An orch task (role orch, with "expect" and scenario.md) renders prompts/orch.txt with fixtures/orch/rules.md and the
+# scenario, runs plain `pi -p --mode json -nt` (no tools) on it in an empty directory, and passes when the final reply's
+# DECISION line (merge, rework, stop or fix) equals expect (lib/orch.ts; no judge). Record: pass, decision (the word or
+# null), expect; a reply without a decision is a fail, no turns or a timeout (rc 124 or 137) is infra.
 # usage: trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>   (<task>: id under tasks/ or a dir)
-# Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI (default pi), EVAL_REAL_HOME (default $HOME),
+# Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI and EVAL_ORCH_PI (default pi), EVAL_REAL_HOME (default $HOME),
+# EVAL_ORCH_TIMEOUT (seconds for the orch pi call, default 300; rc 124 or 137 is recorded as infra),
 # EVAL_REVIEW_TIMEOUT (seconds for the review pi call, default 900; rc 124 or 137 is recorded as infra and not judged),
 # EVAL_TEST_TIMEOUT (seconds for the hidden tests, default 600; a timeout is a failing test); judge.sh reads EVAL_JUDGE_PI.
-# The temp dir (home/, ws/, digest.txt, stderr.txt, test.txt; review and scout: judge/, judge.json; review: review.jsonl, review.txt)
+# The temp dir (home/, ws/, digest.txt, stderr.txt, test.txt; review and scout: judge/, judge.json; review: review.jsonl, review.txt; orch: prompt.txt, orch.jsonl, reply.txt)
 # is kept; the record's "dir" names it.
 set -euo pipefail
 
@@ -29,6 +34,7 @@ case "$role" in
   worker) ;;
   review) [ -n "$(task_get "$task_dir" rev)" ] || { echo "role not supported yet: review (task has no rev)" >&2; exit 2; } ;;
   scout) [ -n "$(task_get "$task_dir" rev)" ] || { echo "role not supported yet: scout (task has no rev)" >&2; exit 2; } ;;
+  orch) [ -f "$task_dir/scenario.md" ] || { echo "role not supported yet: orch (task has no scenario.md)" >&2; exit 2; } ;;
   *) echo "role not supported yet: $role" >&2; exit 2 ;;
 esac
 [ "$role" = scout ] || expect="$(task_get "$task_dir" expect)"
@@ -40,8 +46,26 @@ home="$dir/home" ws="$dir/ws"
 export EVAL_REAL_HOME="${EVAL_REAL_HOME:-$HOME}"
 scout="${EVAL_SCOUT:-$home/.pi/agent/bin/scout}"
 
-make_workspace "$task_dir" "$ws" base
 rc=0
+if [ "$role" = orch ]; then mkdir -p "$ws"; else make_workspace "$task_dir" "$ws" base; fi
+
+if [ "$role" = orch ]; then
+  orch_pi="${EVAL_ORCH_PI:-pi}"
+  tmo="$(timeout_bin)" || { echo "trial.sh: needs timeout (coreutils) on PATH" >&2; exit 2; }
+  node "$EVAL_DIR/lib/orch.ts" render "$EVAL_DIR/prompts/orch.txt" "$EVAL_DIR/fixtures/orch/rules.md" "$task_dir/scenario.md" > "$dir/prompt.txt"
+  start="$(date +%s)"
+  (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$tmo" -k 10 "${EVAL_ORCH_TIMEOUT:-300}" "$orch_pi" -p --mode json -nt --session-dir "$home/.pi/agent/sessions/orch" \
+    --model "$model" --thinking "$thinking" "$(cat "$dir/prompt.txt")" < /dev/null > "$dir/orch.jsonl" 2> "$dir/stderr.txt") || rc=$?
+  seconds=$(( $(date +%s) - start ))
+  node "$EVAL_DIR/lib/review.ts" final-reply "$dir/orch.jsonl" > "$dir/reply.txt"
+  record="$(node "$EVAL_DIR/lib/record.ts" \
+    --task "$(task_get "$task_dir" id)" --role "$role" --model "$model" --thinking "$thinking" --trial "$n" \
+    --rc "$rc" --seconds "$seconds" --expect "$expect" --reply-file "$dir/reply.txt" \
+    --sessions-dir "$home/.pi/agent/sessions" \
+    --needle "$EVAL_REAL_HOME/.pi/agent/memory.md" --needle "$EVAL_REAL_HOME/.pi/agent/sessions" --dir "$dir")"
+  printf '%s\n' "$record" | tee -a "$out"
+  exit 0
+fi
 
 if [ "$role" = scout ]; then
   start="$(date +%s)"
