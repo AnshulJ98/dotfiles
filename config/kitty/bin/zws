@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
-#   zws new [--ask | --window]  new workspace on the current folder (--ask prompts for a name,
-#                               --window opens it in an OS window of its own)
+#   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
+#                                  name, --window opens it in an OS window of its own)
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -12,37 +12,12 @@ DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
 mkdir -p "$DIR"
 self=$(realpath "$0")
 
-# Prints: active session, active pane's folder, then open workspaces in tab order, one per line.
-# kitty reports the folder of 'zmx attach' for held panes, so ask the session's shell instead.
-state() {
-  kitten @ ls | /usr/bin/python3 -c '
-import json, subprocess, sys
-order, cur, cwd, holder = [], "", "", ""
-for o in json.load(sys.stdin):
-    for t in o["tabs"]:
-        for w in t["windows"]:
-            s = w.get("session_name", "")
-            if s and s not in order: order.append(s)
-            if o["is_active"] and t["is_active"] and w["is_active"]:
-                cur, cwd, holder = s, w["cwd"], w["user_vars"].get("holder", "")
-if holder:
-    try:  # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
-        out = subprocess.run(["zmx", "ls"], capture_output=True, text=True, timeout=3).stdout
-        pid = next((p.split("=")[1] for l in out.splitlines() if f"name={holder}\t" in l
-                    for p in l.split("\t") if p.strip().startswith("pid=")), "")
-        live = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", pid, "-Fn"], capture_output=True, text=True, timeout=3).stdout if pid else ""
-        cwd = next((l[1:] for l in live.splitlines() if l.startswith("n")), cwd)
-    except (OSError, subprocess.TimeoutExpired):  # keep the folder kitty reported
-        pass
-print(cur); print(cwd); print("\n".join(order))'
-}
-
 go() { kitten @ action goto_session "$DIR/$1.kitty-session"; }
 
 # A free session name for a folder: its lower-cased name, then -2, -3...
 unique() { # cwd
-  local open base name n=2
-  open=$(state | tail -n +3)
+  local open= base name n=2
+  [ ! -f "$DIR/.open" ] || open=$(<"$DIR/.open")
   base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$1" = "$HOME" ] && base=home
   name=$base
   while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
@@ -89,8 +64,10 @@ PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
   new)
-    cwd=$(state | sed -n 2p); cwd=${cwd:-$HOME}; name=$(unique "$cwd")
-    case ${2:-} in
+    shift; mode=
+    case ${1:-} in --ask|--window) mode=$1; shift ;; esac
+    cwd=${1:-$HOME}; name=$(unique "$cwd")
+    case $mode in
       --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n"' "$name" "$cwd" ;;
       --window) create "$name" "$cwd" '' window ;;
       *) create "$name" "$cwd" ;;

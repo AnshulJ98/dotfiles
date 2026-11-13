@@ -8,6 +8,7 @@ from functools import wraps
 import zcore
 
 SIDEBAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zside')
+ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zws')
 WIDTH = '24'
 
 
@@ -91,6 +92,14 @@ def run(boss, words) -> list[tuple]:
         if current and not os.path.exists(os.path.join(folder(), '.sidebar-off')):
             dock(boss, boss.active_tab.id, current)
         return [('tab', current)]
+    if words and words[0] == 'new':
+        if words not in (['new'], ['new', 'ask'], ['new', 'window']):
+            return []
+        directory = (cwd(active) if active else '') or os.path.expanduser('~')
+        flag = ('--' + words[1],) if len(words) == 2 else ()
+        boss.call_remote_control(active, (
+            'launch', '--type=background', '--allow-remote-control', ZWS, 'new', *flag, directory))
+        return [('new', directory)]
     ops = zcore.intent(zcore.view(snapshot(boss)), current, words)
     for operation, value in ops:
         if operation == 'goto':
