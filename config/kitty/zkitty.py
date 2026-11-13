@@ -51,7 +51,7 @@ def cwd(window) -> str:
 def attach(boss, window) -> None:
     saved = window.user_vars.get('holder', '')
     name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
-                                str(uuid.uuid4()))
+                                uuid.uuid4().hex[:12])
     window.write_to_child(zcore.answer(name, window.user_vars.get('pi_session', '')))
     match = f'--match=id:{window.id}'
     boss.call_remote_control(None, ('set-user-vars', match, 'zq'))
