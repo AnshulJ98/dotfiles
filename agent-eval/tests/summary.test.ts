@@ -198,6 +198,22 @@ test("render: tables per role, saturated, comparisons, malformed note", () => {
 	assert.match(text, /skipped 2 malformed line/);
 	assert.equal(render([]).trim(), "no records");
 });
+test("any role whose counted records carry found and of gets recall, in baselineCells and in a recall column", () => {
+	const plan = (found: number[]): TrialRecord[] => found.map((f, i) => rec("p1", "p/m", i + 1, f === 4, { role: "plan", found: f, of: 4 }));
+	const roles = summarize([...plan([4, 3]), ...grid("p/x", { a: [true, false] }), ...grid("p/x", { s: [true] }, { role: "scout" })]);
+	const byRole = Object.fromEntries(roles.map((r) => [r.role, r.cells[0]]));
+	assert.deepEqual([byRole.plan.found, byRole.plan.of, byRole.plan.flakyDefects], [7, 8, 1]);
+	assert.equal("found" in byRole.worker, false);
+	assert.equal("found" in byRole.scout, false);
+	const base = baselineCells(roles);
+	assert.deepEqual(base.plan["p/m:low"], { passRate: 0.5, tasks: 1, flaky: 1, recall: 7 / 8, defects: 4, flakyDefects: 1 });
+	assert.deepEqual(base.worker["p/x:low"], { passRate: 0.5, tasks: 1, flaky: 1 });
+	assert.deepEqual(base.scout["p/x:low"], { passRate: 1, tasks: 1, flaky: 0 });
+	const text = render(roles);
+	assert.match(text, /## plan\n\n\| cell \| pass rate \| any \| all \| flaky \| recall \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){10}\n\| p\/m:low \| 50\.0% \(1\/2\) \| 1\/1 \| 0\/1 \| 1 \(p1\) \| 87\.5% \(7\/8\), 1 flaky \|/);
+	assert.match(text, /## scout\n\n\| cell \| pass rate \| any \| all \| flaky \| mean \$ \|/);
+});
+
 test("render: only the review table has a recall column, 80.0% (8/10) with flaky defects when non-zero", () => {
 	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
 		found.map((f, i) => rec("r1", "p/m", i + 1, f === 5, { role: "review", found: f, of: 5, ...over }));

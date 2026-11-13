@@ -3,7 +3,7 @@
 export interface TrialRecord {
 	task: string; role: string; model: string; thinking: string; trial: number;
 	pass: boolean; seconds: number; cost: number; leak: boolean; infra: boolean;
-	/** review records: defects found and defects asked about in the trial */
+	/** judged records (review): items met and items asked about in the trial */
 	found?: number; of?: number;
 }
 
@@ -23,7 +23,7 @@ export interface CellSummary {
 	flaky: string[];
 	meanCost: number; meanSeconds: number; leaks: number; infra: number;
 	/**
-	 * Review cells whose counted records carry found/of: defects found and asked about, summed over counted trials, and a
+	 * Cells whose counted records carry found/of (review; any judged role): items found and asked about, summed over counted trials, and a
 	 * lower bound on the defects whose judgement differs across a task's trials (most found minus least found, per task;
 	 * the record keeps counts, not which defects).
 	 */
@@ -37,7 +37,7 @@ export interface RoleSummary {
 	saturated: string[];
 }
 
-/** Review cells also carry defect recall (found/of), defects per trial and flakyDefects; the gate then compares those. */
+/** Cells with found/of records also carry defect recall (found/of), defects per trial and flakyDefects; the gate then compares those. */
 export interface BaselineCell { passRate: number; tasks: number; flaky: number; recall?: number; defects?: number; flakyDefects?: number }
 
 /** role -> cell -> numbers; one cell may appear under several roles. */
@@ -117,7 +117,7 @@ function summarizeCell(role: string, cell: string, records: TrialRecord[]): Cell
 		meanSeconds: mean(counted.map((r) => r.seconds)),
 		leaks: records.filter((r) => r.leak).length,
 		infra: records.filter((r) => r.infra).length,
-		...(role === "review" ? recallOf(counted) : {}),
+		...recallOf(counted),
 	};
 }
 

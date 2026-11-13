@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { gradeReview, parseJudged } from "../lib/record.ts";
-import { combine, finalReply, numberDefects, parseFindings, parseVerdicts, render } from "../lib/review.ts";
+import { combine, finalReply, metIds, normalizeItems, numberDefects, parseFindings, parseVerdicts, passes, render } from "../lib/review.ts";
 
 const EVAL_DIR = resolve(import.meta.dirname, "..");
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "review-test-")));
@@ -87,12 +87,54 @@ test("finalReply is the text of the last assistant message that has any", () => 
 	assert.equal(finalReply([]), "");
 });
 
-test("parseJudged reads judge.sh's line, anything else is infra; a review passes only when everything is found", () => {
-	const line = '{"found":3,"of":3,"disagreements":["d2"],"judgeCost":0.5,"infra":false}\n';
-	assert.deepEqual(parseJudged(line), { found: 3, of: 3, disagreements: ["d2"], judgeCost: 0.5, infra: false });
-	for (const bad of ["", "nope", '{"found":1}']) assert.deepEqual(parseJudged(bad), { found: 0, of: 0, disagreements: [], judgeCost: 0, infra: true });
-	const j = { found: 3, of: 3, disagreements: [], judgeCost: 0, infra: false };
-	assert.deepEqual([gradeReview(j), gradeReview({ ...j, found: 2 }), gradeReview({ ...j, infra: true }), gradeReview({ ...j, found: 0, of: 0 })], [true, false, false, false]);
+test("parseJudged reads judge.sh's line, anything else is infra; a review passes only when judge.sh says pass", () => {
+	const line = '{"found":3,"of":3,"met":["d1","d2","d3"],"pass":true,"disagreements":["d2"],"judgeCost":0.5,"infra":false}\n';
+	assert.deepEqual(parseJudged(line), { found: 3, of: 3, pass: true, disagreements: ["d2"], judgeCost: 0.5, infra: false });
+	for (const bad of ["", "nope", '{"found":1}']) assert.deepEqual(parseJudged(bad), { found: 0, of: 0, pass: false, disagreements: [], judgeCost: 0, infra: true });
+	assert.equal(parseJudged('{"found":3,"of":3,"disagreements":[],"judgeCost":0,"infra":false}').pass, false, "a judge.json without pass is not a pass");
+	const j = { found: 3, of: 3, pass: true, disagreements: [], judgeCost: 0, infra: false };
+	assert.deepEqual([gradeReview(j), gradeReview({ ...j, pass: false }), gradeReview({ ...j, infra: true }), gradeReview({ ...j, found: 0, of: 0 })], [true, false, false, false]);
+});
+
+const ITEMS: [string, unknown, unknown][] = [
+	["text and id only, minor false", [{ id: "a", text: "t" }], [{ id: "a", text: "t", minor: false }]],
+	["minor true only when the JSON says true", [{ id: "a", text: "t", minor: true }, { id: "b", text: "t", minor: "true" }, { id: "c", text: "t", minor: 1 }, { id: "d", text: "t", minor: false }],
+		[{ id: "a", text: "t", minor: true }, { id: "b", text: "t", minor: false }, { id: "c", text: "t", minor: false }, { id: "d", text: "t", minor: false }]],
+	["extra fields such as hit are dropped", [{ id: "a", text: "t", hit: "SECRET" }], [{ id: "a", text: "t", minor: false }]],
+	["an empty list", [], []],
+	["not a list", { id: "a", text: "t" }, undefined],
+	["an item that is not an object", ["t"], undefined],
+	["null item", [null], undefined],
+	["missing id", [{ text: "t" }], undefined],
+	["empty id", [{ id: "", text: "t" }], undefined],
+	["blank text", [{ id: "a", text: "  " }], undefined],
+	["numeric id", [{ id: 1, text: "t" }], undefined],
+	["numeric text", [{ id: "a", text: 2 }], undefined],
+];
+for (const [name, raw, want] of ITEMS) {
+	test("normalizeItems: " + name, () => {
+		if (want === undefined) assert.throws(() => normalizeItems(raw), Error);
+		else assert.deepEqual(normalizeItems(raw), want);
+	});
+}
+
+test("metIds lists the ids both judges said yes to, in item order; passes ignores minor items", () => {
+	const ids = ["d1", "d2", "d3"];
+	assert.deepEqual(metIds([true, true, false], [true, false, false], ids), ["d1"]);
+	assert.deepEqual(metIds([true, true, true], [true, true, true], ids), ids);
+	assert.throws(() => metIds([true], [true, false], ["d1", "d2"]), RangeError);
+	const items = [{ id: "d1", text: "t", minor: false }, { id: "d2", text: "t", minor: false }, { id: "d3", text: "t", minor: true }];
+	const table: [string, string[], boolean, boolean][] = [
+		["all met", ["d1", "d2", "d3"], false, true],
+		["only the minor one missed", ["d1", "d2"], false, true],
+		["a non-minor one missed", ["d1", "d3"], false, false],
+		["nothing met", [], false, false],
+		["infra is never a pass", ["d1", "d2", "d3"], true, false],
+	];
+	for (const [name, met, infra, want] of table) assert.equal(passes(items, met, infra), want, name);
+	assert.equal(passes([], [], false), false, "no items is not a pass");
+	assert.equal(passes([{ id: "m", text: "t", minor: true }], [], false), true, "only minor items, all missed, still passes");
+	assert.equal(passes(items.map((i) => ({ ...i, minor: false })), ["d1", "d2"], false), false, "without minor, a miss fails");
 });
 
 // ---- stubs and fixtures ----
@@ -117,10 +159,12 @@ git(source, "add", "-A");
 git(source, "commit", "-q", "-m", "two");
 
 const DEFECTS = [1, 2, 3].map((k) => ({ id: "d" + k, text: "defect text " + k, hit: "HITMARK-" + k + " finding that states defect " + k }));
+const DECOYS = ["decoy claim one", "decoy claim two"];
+const FACTS = [1, 2, 3].map((k) => ({ id: "f" + k, text: "fact text " + k, hit: "HITMARK-" + k + " answer sentence stating fact " + k }));
 const PROMPT = "Review booking/src/a.ts and booking/src/b.ts\n";
 function makeTask(id: string, over: Record<string, unknown> = {}, prompt = PROMPT): string {
 	const dir = join(scratch, "tasks", id);
-	write(join(dir, "task.json"), JSON.stringify({ id, role: "review", repo: source, rev: revSha, exclude: ["README.md", "log.md"], defects: DEFECTS, ...over }));
+	write(join(dir, "task.json"), JSON.stringify({ id, role: "review", repo: source, rev: revSha, exclude: ["README.md", "log.md"], defects: DEFECTS, decoys: DECOYS, ...over }));
 	write(join(dir, "prompt.md"), prompt);
 	return dir;
 }
@@ -169,10 +213,11 @@ function makePi(replies: Partial<Record<Role, string>>): { path: string; seen: (
 }
 const record = (path: string, role: Role): string => "{ printf 'HOME=%s\\0' \"$HOME\"; printf '%s\\0' \"$@\"; } > '" + path + "." + role + "'";
 
-function judge(replies: Partial<Record<Role, string>>, opts: { review?: string; args?: string[]; home?: string; task?: string } = {}) {
+function judge(replies: Partial<Record<Role, string>>, opts: { review?: string; args?: string[]; home?: string; task?: string; files?: Record<string, string> } = {}) {
 	const pi = makePi(replies);
 	const trial = join(scratch, "trial-" + counter++);
 	mkdirSync(trial, { recursive: true });
+	for (const [name, content] of Object.entries(opts.files ?? {})) write(join(trial, name), content);
 	if (!("review" in opts) || opts.review !== undefined) write(join(trial, "review.txt"), opts.review ?? "The review text.\n");
 	const task = opts.task ?? makeTask("jt-" + counter);
 	const r = run("judge.sh", [trial, task, ...(opts.args ?? [])], { EVAL_JUDGE_PI: pi.path, EVAL_REAL_HOME: opts.home ?? realHome });
@@ -264,6 +309,109 @@ test("judge.sh --findings skips the extraction; invalid findings are infra; usag
 	assert.equal(run("judge.sh", []).status, 2);
 	assert.equal(run("judge.sh", [scratch, join(scratch, "no-task")]).status, 2);
 	assert.equal(run("judge.sh", [scratch, makeTask("jt-usage"), "--findings"]).status, 2);
+});
+
+// ---- judge.sh kinds ----
+
+const factsTask = (id: string, over: Record<string, unknown> = {}) => makeTask(id, { defects: undefined, facts: FACTS, ...over });
+const ANSWER = "The answer says fact one and fact two.\n";
+
+test("judge.sh --kind facts: the digest is the subject, the task's facts are the items, no extractor call", () => {
+	const { r, pi, trial, out } = judge({ a: YES, b: '["yes","no","yes"]' }, { review: undefined, files: { "digest.txt": ANSWER }, task: factsTask("jf-1"), args: ["--kind", "facts"] });
+	assert.equal(r.status, 0, r.stderr);
+	assert.deepEqual(Object.keys(out).sort(), ["disagreements", "found", "infra", "judgeCost", "met", "of", "pass"]);
+	assert.deepEqual([out.found, out.of, out.met, out.disagreements, out.infra], [2, 3, ["f1", "f3"], ["f2"], false]);
+	near(out.judgeCost, 0.3);
+	assert.equal(pi.seen("extract"), undefined);
+	assert.equal(readFileSync(join(trial, "judge.json"), "utf8").trim(), JSON.stringify(out));
+	const prompt = pi.seen("a")!.at(-1)!;
+	assert.equal(prompt, pi.seen("b")!.at(-1)!);
+	assert.match(prompt, /The answer says fact one and fact two\./);
+	assert.match(prompt, /^1\. fact text 1$/m);
+	assert.match(prompt, /^3\. fact text 3$/m);
+	assert.match(prompt, /states specific known facts/);
+	assert.doesNotMatch(prompt, /HITMARK|\{\{/);
+});
+
+test("judge.sh --kind rubric: --subject and --items are required; the items come from the file, the context is in the prompt", () => {
+	const subject = join(scratch, "subject-" + counter++ + ".md");
+	const itemsFile = join(scratch, "items-" + counter++ + ".json");
+	const context = join(scratch, "context-" + counter++ + ".md");
+	write(subject, "PLAN BODY\n");
+	write(itemsFile, JSON.stringify([{ id: "c1", text: "criterion one" }, { id: "c2", text: "criterion two" }, { id: "c3", text: "criterion three", minor: true }]));
+	write(context, "BACKGROUND TEXT\n");
+	const withCtx = judge({ a: YES, b: YES }, { review: undefined, task: factsTask("jr-1"), args: ["--kind", "rubric", "--subject", subject, "--items", itemsFile, "--context", context] });
+	assert.deepEqual([withCtx.out.found, withCtx.out.of, withCtx.out.met, withCtx.out.infra, withCtx.out.pass], [3, 3, ["c1", "c2", "c3"], false, true]);
+	const prompt = withCtx.pi.seen("a")!.at(-1)!;
+	assert.match(prompt, /<background>\nBACKGROUND TEXT\n<\/background>/);
+	assert.match(prompt, /<document>\nPLAN BODY\n<\/document>/);
+	assert.match(prompt, /^2\. criterion two$/m);
+	assert.doesNotMatch(prompt, /fact text|\{\{/);
+	assert.equal(withCtx.pi.seen("extract"), undefined);
+	const noCtx = judge({ a: YES, b: YES }, { review: undefined, task: factsTask("jr-2"), args: ["--kind", "rubric", "--subject", subject, "--items", itemsFile] });
+	assert.match(noCtx.pi.seen("a")!.at(-1)!, /<background>\n\(none\)\n<\/background>/);
+	const minorMissed = judge({ a: '["yes","yes","no"]', b: YES }, { review: undefined, task: factsTask("jr-3"), args: ["--kind", "rubric", "--subject", subject, "--items", itemsFile] }).out;
+	assert.deepEqual([minorMissed.found, minorMissed.met, minorMissed.disagreements, minorMissed.pass], [2, ["c1", "c2"], ["c3"], true]);
+	const task = factsTask("jr-4");
+	for (const args of [["--kind", "rubric"], ["--kind", "rubric", "--subject", subject], ["--kind", "rubric", "--items", itemsFile]]) {
+		const t = join(scratch, "trial-" + counter++);
+		mkdirSync(t);
+		assert.equal(run("judge.sh", [t, task, ...args]).status, 2, args.join(" "));
+	}
+});
+
+test("judge.sh --items replaces the task's list for any kind; met follows item order for review too", () => {
+	const itemsFile = join(scratch, "items-" + counter++ + ".json");
+	write(itemsFile, JSON.stringify([{ id: "x1", text: "own one" }, { id: "x2", text: "own two" }]));
+	const r = judge({ a: '["no","yes"]', b: '["yes","yes"]' }, { review: undefined, files: { "digest.txt": ANSWER }, task: factsTask("ji-1"), args: ["--kind", "facts", "--items", itemsFile] });
+	assert.deepEqual([r.out.found, r.out.of, r.out.met, r.out.disagreements, r.out.pass], [1, 2, ["x2"], ["x1"], false]);
+	assert.match(r.pi.seen("a")!.at(-1)!, /^1\. own one$/m);
+	const review = judge({ extract: FOUND_ONE, a: '["no","yes","yes"]', b: '["yes","yes","yes"]' }).out;
+	assert.deepEqual([review.met, review.disagreements, review.pass], [["d2", "d3"], ["d1"], false]);
+});
+
+test("judge.sh: a review defect marked minor does not decide pass or fail", () => {
+	const minor = (id: string) => makeTask(id, { defects: DEFECTS.map((d, i) => (i === 2 ? { ...d, minor: true } : d)) });
+	const onlyMinor = judge({ extract: FOUND_ONE, a: '["yes","yes","no"]', b: '["yes","yes","yes"]' }, { task: minor("jm-1") }).out;
+	assert.deepEqual([onlyMinor.found, onlyMinor.of, onlyMinor.pass, onlyMinor.infra], [2, 3, true, false]);
+	const bothNo = judge({ extract: FOUND_ONE, a: '["yes","yes","no"]', b: '["yes","yes","no"]' }, { task: minor("jm-2") }).out;
+	assert.deepEqual([bothNo.found, bothNo.pass], [2, true]);
+	const nonMinor = judge({ extract: FOUND_ONE, a: '["no","yes","yes"]', b: '["yes","yes","yes"]' }, { task: minor("jm-3") }).out;
+	assert.deepEqual([nonMinor.found, nonMinor.pass], [2, false]);
+	const none = judge({ extract: FOUND_ONE, a: YES, b: YES }).out;
+	assert.deepEqual([none.found, none.pass], [3, true]);
+});
+
+test("judge.sh kinds: an empty or missing subject, a missing or empty or bad item list, is infra without a model call; unknown kind or flag exits 2", () => {
+	const noItems = factsTask("jx-1", { facts: undefined });
+	const cases: [string, Parameters<typeof judge>[1]][] = [
+		["empty digest", { review: undefined, files: { "digest.txt": " \n" }, task: factsTask("jx-0"), args: ["--kind", "facts"] }],
+		["no digest", { review: undefined, task: factsTask("jx-00"), args: ["--kind", "facts"] }],
+		["task without facts", { review: undefined, files: { "digest.txt": ANSWER }, task: noItems, args: ["--kind", "facts"] }],
+		["empty facts", { review: undefined, files: { "digest.txt": ANSWER }, task: factsTask("jx-2", { facts: [] }), args: ["--kind", "facts"] }],
+		["a fact without text", { review: undefined, files: { "digest.txt": ANSWER }, task: factsTask("jx-3", { facts: [{ id: "f1" }] }), args: ["--kind", "facts"] }],
+		["a --items file that is missing", { review: undefined, files: { "digest.txt": ANSWER }, task: factsTask("jx-4"), args: ["--kind", "facts", "--items", join(scratch, "nope.json")] }],
+	];
+	for (const [name, opts] of cases) {
+		const { r, pi, out } = judge({ a: YES, b: YES }, opts);
+		assert.equal(r.status, 0, name + ": " + r.stderr);
+		assert.deepEqual([out.found, out.met, out.pass, out.infra, out.judgeCost, pi.seen("a")], [0, [], false, true, 0, undefined], name);
+	}
+	const t = join(scratch, "trial-" + counter++);
+	mkdirSync(t);
+	for (const args of [["--kind", "nope"], ["--kind"], ["--bogus", "x"], ["--kind", "facts", "--findings", "x.json"], ["extra"]]) assert.equal(run("judge.sh", [t, makeTask("jx-u"), ...args]).status, 2, args.join(" "));
+});
+
+test("the facts and rubric prompts hold the subject and the numbered items and never a hit sample", () => {
+	const items = normalizeItems(FACTS);
+	const list = numberDefects(items);
+	assert.equal(list, "1. fact text 1\n2. fact text 2\n3. fact text 3");
+	for (const name of ["judge-facts.txt", "judge-rubric.txt"]) {
+		const text = render(readFileSync(join(EVAL_DIR, "prompts", name), "utf8"), { SUBJECT: "SUBJ", ITEMS: list, CONTEXT: "(none)" });
+		assert.match(text, /SUBJ/, name);
+		assert.ok(text.includes(list), name);
+		assert.doesNotMatch(text, /HITMARK|\{\{/, name);
+	}
 });
 
 // ---- trial.sh, review branch ----
@@ -361,4 +509,36 @@ test("check-judges.sh: a judge that always says yes, or one that cannot answer, 
 	assert.match(mute.stdout, /^d1 hit: a=yes b=none; decoys only: a=no b=none; MISS$/m);
 	assert.equal(run("check-judges.sh", []).status, 2);
 	assert.equal(run("check-judges.sh", ["no-such-task"]).status, 2);
+});
+
+test("check-judges.sh: a facts task and a review task each get one ok line per item; a judge that says yes to everything exits 1", () => {
+	const env2 = (pi: string) => ({ EVAL_JUDGE_PI: pi, EVAL_REAL_HOME: realHome });
+	const good = makePi({ a: SMART, b: SMART });
+	const factsPi = makePi({ a: SMART, b: SMART });
+	const facts = run("check-judges.sh", [factsTask("cjf-good")], env2(factsPi.path));
+	assert.equal(facts.status, 0, facts.stdout + facts.stderr);
+	const lines = facts.stdout.trim().split("\n");
+	assert.equal(lines.length, 3);
+	lines.forEach((line, i) => assert.equal(line, "f" + (i + 1) + " hit: a=yes b=yes; decoys only: a=no b=no; ok"));
+	const review = run("check-judges.sh", [makeTask("cjr-good")], env2(good.path));
+	assert.equal(review.status, 0, review.stdout + review.stderr);
+	assert.equal(review.stdout.trim().split("\n").filter((l) => l.endsWith("; ok")).length, 3);
+	// the facts hit run's subject is the hit text and the decoys, one per line; the decoys run's is the decoys alone
+	assert.match(factsPi.seen("a")!.at(-1)!, /<answer>\ndecoy claim one\ndecoy claim two\n<\/answer>/);
+	for (const task of [factsTask("cjf-yes"), makeTask("cjr-yes")]) {
+		const yes = run("check-judges.sh", [task], env2(makePi({ a: YES, b: YES }).path));
+		assert.equal(yes.status, 1, yes.stdout + yes.stderr);
+		assert.equal(yes.stdout.trim().split("\n").filter((l) => l.endsWith("; MISS")).length, 3);
+	}
+});
+
+test("check-judges.sh: decoys come from the task; fewer than two, or none, or a task with no items exits 2 with a message", () => {
+	for (const [name, over] of [["none", { decoys: undefined }], ["one", { decoys: ["only"] }], ["not strings", { decoys: ["a", 2] }]] as const) {
+		for (const make of [(id: string) => makeTask(id, over), (id: string) => factsTask(id, over)]) {
+			const r = run("check-judges.sh", [make("cjd-" + name + counter++)], { EVAL_JUDGE_PI: makePi({ a: SMART, b: SMART }).path, EVAL_REAL_HOME: realHome });
+			assert.equal(r.status, 2, name);
+			assert.match(r.stderr, /decoys/, name);
+		}
+	}
+	assert.equal(run("check-judges.sh", [makeTask("cjd-items", { defects: undefined })]).status, 2);
 });
