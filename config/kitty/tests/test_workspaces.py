@@ -19,14 +19,19 @@ KITTY = shutil.which("kitty") or "/Applications/kitty.app/Contents/MacOS/kitty"
 # Every kitty internal workspaces.py touches. Checked against kitty 0.50.0.
 # No assert in here: kitty's Python strips them.
 CONTRACT = """
-from kitty.fast_data_types import add_timer, get_boss
+from kitty.fast_data_types import add_timer, get_boss, Screen
+from kitty.program_status import ProgramStatus
 from kitty.boss import Boss
 from kitty.tabs import Tab, TabManager
 from kitty.window import Window
+from kitty.child import Child
 used = (
     (Boss, "all_windows all_tabs active_window call_remote_control"),
-    (Window, "created_in_session_name os_window_id user_vars id write_to_child"),
-    (Tab, "tab_manager_ref id __iter__"),
+    (Window, "created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child"),
+    (Child, "argv"),
+    (Tab, "tab_manager_ref id __iter__ active_window"),
+    (Screen, "last_reported_cwd"),
+    (ProgramStatus, "as_list"),
     (TabManager, "active_tab"),
 )
 missing = [f"{cls.__name__}.{name}" for cls, names in used for name in names.split()
@@ -147,6 +152,194 @@ class SavingTests(unittest.TestCase):
             boss.all_windows = [scout]
             module._save()
             self.assertEqual((Path(directory) / ".open").read_text(), "")
+
+
+class IntentWatcherTests(unittest.TestCase):
+    def test_pane_query_answers_and_empty_callback_is_ignored(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            events = []
+            original = boss.call_remote_control
+            def remote(window, args):
+                events.append(args)
+                original(window, args)
+            boss.call_remote_control = remote
+            window = NS(id=7, user_vars={}, cwd_of_child='/x/My Repo',
+                        write_to_child=events.append)
+            with patch.object(module, 'add_timer') as timer:
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                name = events[0].decode().split()[2]
+                self.assertTrue(name.startswith('my-repo-'))
+                self.assertEqual(events, [
+                    f': zq {name} -\n'.encode(),
+                    ('set-user-vars', '--match=id:7', 'zq'),
+                    ('set-user-vars', '--match=id:7', 'holder=' + name)])
+                events.clear()
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                self.assertEqual(events, [('set-user-vars', '--match=id:7', 'zq')])
+                window.id = 8
+                window.user_vars = {'holder': 'saved', 'pi_session': '/p/s.jsonl'}
+                events.clear()
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                self.assertEqual(events, [b': zq saved %2Fp%2Fs.jsonl\n',
+                                          ('set-user-vars', '--match=id:8', 'zq')])
+                events.clear()
+                module.on_set_user_var(boss, window, {'key': 'zq', 'value': ''})
+                self.assertEqual(events, [])
+                timer.assert_not_called()
+            boss.all_tabs = []
+            module._push(boss)
+            self.assertNotIn(7, module._named)
+
+    def test_dispatch_clears_first_empty_callbacks_do_nothing_and_rename_schedules(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            window = NS(id=7, user_vars={'role': 'sidebar'}, child=NS(argv=['/any/zside']))
+            pane = NS(id=41, created_in_session_name='beta', user_vars={},
+                      program_status=NS(as_list=lambda: []),
+                      screen=NS(last_reported_cwd=None), cwd_of_child='')
+            class Tab(list):
+                id, active_window = 8, pane
+            boss.all_tabs = [Tab([pane])]
+            run = module.zkitty.run
+            def intent(boss_arg, words):
+                self.assertIs(boss_arg, boss)
+                self.assertEqual(words, ['space', 'beta'])
+                self.assertEqual(boss.calls, [('set-user-vars', '--match=id:7', 'zdo')])
+                self.assertEqual(run(boss_arg, words), [('goto', 'beta')])
+            with patch.object(module.zkitty, 'run', side_effect=intent), patch.object(module, 'add_timer') as timer:
+                module.on_set_user_var(boss, window, {'key': 'zdo', 'value': 'space beta'})
+                self.assertEqual(boss.calls[-1], ('action', 'goto_session', module._file('beta')))
+                for key, value in [('zdo', ''), ('zside', ''), ('zside', 'junk')]:
+                    module.on_set_user_var(boss, window, {'key': key, 'value': value})
+                timer.assert_not_called()
+                module.on_set_user_var(boss, window, {'key': 'ws_name', 'value': 'Bee'})
+                self.assertEqual(timer.call_count, 2)
+                self.assertEqual([c.args[1] for c in timer.call_args_list], [0.05, 2.0])
+            with patch.object(module.zkitty, 'run', side_effect=RuntimeError('intent failed')):
+                self.assertIsNone(module.on_set_user_var(boss, window, {'key': 'zdo', 'value': 'next'}))
+            self.assertIn('intent failed', Path(directory, 'watcher.log').read_text())
+
+    def test_untrusted_sidebar_vars_are_only_cleared(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            module = load(directory)
+            window = NS(id=7, user_vars={'role': 'sidebar'}, child=NS(argv=['/bin/zsh']),
+                        written=[], created_in_session_name='a', cwd_of_child='',
+                        program_status=NS(as_list=lambda: []))
+            window.write_to_child = window.written.append
+            tab = type('Tab', (list,), {})([window])
+            tab.id, tab.active_window = 1, window
+            tab.tab_manager_ref = lambda: NS(active_tab=tab)
+            boss = Boss([window], window, '')
+            boss.all_tabs = [tab]
+            with patch.object(module.zkitty, 'run') as run:
+                for key, value in [('zdo', 'next'), ('zside', 'ready')]:
+                    boss.calls.clear()
+                    module.on_set_user_var(boss, window, {'key': key, 'value': value})
+                    self.assertEqual(boss.calls, [('set-user-vars', '--match=id:7', key)])
+                run.assert_not_called()
+            self.assertNotIn(7, module._ready)
+            module._refresh(boss)
+            self.assertEqual(window.written, [])
+            with patch.object(module.zkitty, 'snapshot', return_value=[{'session': 'x', 'vars': None}]):
+                self.assertIsNone(module.on_program_status_change(boss, window, {}))
+            self.assertIn('AttributeError', Path(directory, 'watcher.log').read_text())
+
+    def test_sync_uses_shared_dock_and_keeps_launch_guard(self):
+        from unittest.mock import patch
+        class Tab(list):
+            id = 8
+        with tempfile.TemporaryDirectory() as directory:
+            pane = Window('alpha', 1)
+            boss = Boss([pane], pane, '')
+            boss.all_tabs = [Tab([pane])]
+            module = load(directory, boss)
+            with patch.object(module.zkitty, 'dock') as dock, patch.object(module, '_refresh'):
+                for _ in range(4):
+                    module._sync()
+                self.assertEqual(dock.call_count, 3)
+                dock.assert_called_with(boss, 8, 'alpha')
+
+
+class PushTests(unittest.TestCase):
+    def test_ready_views_dedup_status_ticks_and_pruning(self):
+        import json
+        from types import SimpleNamespace as NS
+        with tempfile.TemporaryDirectory() as directory:
+            def pane(wid, name, dock=False):
+                return NS(id=wid, created_in_session_name=name,
+                          user_vars={'role': 'sidebar'} if dock else {},
+                          child=NS(argv=['/any/zside'] if dock else ['/bin/zsh']),
+                          program_status=NS(as_list=lambda: records if wid == 1 else []),
+                          screen=NS(last_reported_cwd=None), cwd_of_child='/tmp',
+                          written=[], write_to_child=lambda data: windows[wid].written.append(data))
+            records = [{'state': 'working', 'app': 'pi'}]
+            windows = {i: pane(i, 'a' if i < 3 else 'b', i in (2, 4)) for i in range(1, 5)}
+            class Tab(list):
+                pass
+            a, b = Tab([windows[1], windows[2]]), Tab([windows[3], windows[4]])
+            a.id, b.id = 11, 12
+            a.active_window, b.active_window = windows[1], windows[3]
+            manager = NS(active_tab=a)
+            a.tab_manager_ref = b.tab_manager_ref = lambda: manager
+            boss = Boss(list(windows.values()), windows[1], '')
+            boss.all_tabs = [a, b]
+            module = load(directory, boss)
+            module._refresh(boss)
+            self.assertEqual([w.written for w in windows.values()], [[], [], [], []])
+            for wid in (2, 4):
+                module.on_set_user_var(boss, windows[wid], {'key': 'zside', 'value': 'ready'})
+                self.assertEqual(boss.calls[-1], ('set-user-vars', f'--match=id:{wid}', 'zside'))
+            va, vb = (json.loads(windows[i].written[-1]) for i in (2, 4))
+            self.assertEqual([va['current'], vb['current']], ['a', 'b'])
+            self.assertEqual([va['agents'][0]['on'], vb['agents'][0]['on']], [True, False])
+            self.assertEqual([s['name'] for s in va['spaces']], ['a', 'b'])
+            module._push(boss)
+            self.assertEqual([len(windows[i].written) for i in (2, 4)], [1, 1])
+            records[0]['state'] = 'done'
+            module._push(boss)
+            self.assertEqual([len(windows[i].written) for i in (2, 4)], [2, 2])
+            module._tick(boss)
+            self.assertEqual(windows[2].written[-1], b'\n')
+            self.assertEqual(len(windows[4].written), 2)
+            module._ready.discard(2)
+            module._tick(boss)
+            self.assertEqual(len(windows[2].written), 3)
+            boss.all_tabs = []
+            module._push(boss)
+            self.assertEqual(module._ready, set())
+            self.assertEqual(module._sent, {})
+
+    def test_callbacks_and_timers_log_exceptions_and_log_rotates(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            module = load(directory)
+            class Broken:
+                @property
+                def all_tabs(self):
+                    raise RuntimeError('broken tabs')
+            self.assertIsNone(module.on_focus_change(Broken(), None, {'focused': True}))
+            path = Path(directory) / 'watcher.log'
+            self.assertIn('Traceback', path.read_text())
+            self.assertIn('broken tabs', path.read_text())
+            with patch.object(module, 'add_timer') as timer:
+                module.on_load(None, {})
+                self.assertIsNone(timer.call_args.args[0](0))
+            self.assertIn('AttributeError', path.read_text())
+            path.write_text('x' * (256 * 1024 + 1))
+            module._log('rotated')
+            self.assertIn('rotated', path.read_text())
+            self.assertLess(path.stat().st_size, 100)
+            with patch('builtins.open', side_effect=OSError):
+                module._log('unwritable')  # The only deliberately dropped error.
 
 
 class ContractTests(unittest.TestCase):
