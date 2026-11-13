@@ -13,7 +13,6 @@ import sys
 import tempfile
 import time
 import unittest
-import uuid
 from urllib.parse import quote
 
 BIN = Path(__file__).resolve().parents[1] / "bin"
@@ -191,17 +190,28 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
         self.assertEqual(self.calls("python3"), [])
 
-    def test_pane_invalid_answer_uses_remote_control_fallback(self):
-        self.pane_start(b'hello\n', HOLDER="saved")
-        self.assertEqual(len(self.calls("kitten")), 1)
-        self.assertEqual(self.calls("zmx")[-1], ["attach", "saved"])
+    def assert_plain_shell_only(self):
+        commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
+        self.assertEqual(commands, ["plain-shell"])
+        self.assertEqual(self.calls("plain-shell"), [["-il"]])
 
-    def test_pane_query_timeout_uses_remote_control_fallback(self):
+    def test_pane_invalid_answer_starts_plain_shell(self):
+        output = self.pane_start(b'hello\n', HOLDER="saved")
+        self.assertIn(b"watcher did not answer", output)
+        self.assert_plain_shell_only()
+
+    def test_pane_query_timeout_starts_plain_shell(self):
         started = time.monotonic()
-        self.pane_start(None, HOLDER="saved")
+        output = self.pane_start(None, HOLDER="saved")
         self.assertGreaterEqual(time.monotonic() - started, 2)
-        self.assertEqual(len(self.calls("kitten")), 1)
-        self.assertEqual(self.calls("zmx")[-1], ["attach", "saved"])
+        self.assertIn(b"watcher did not answer", output)
+        self.assert_plain_shell_only()
+
+    def test_without_a_terminal_starts_plain_shell(self):
+        result = self.run_script("zshell", HOLDER="saved")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("watcher did not answer", result.stderr)
+        self.assert_plain_shell_only()
 
     def test_main_removes_only_old_zmx_crash_reports_and_missing_folder_is_safe(self):
         self.assertEqual(self.run_script("kmain", MODE="starting").returncode, 0)
@@ -254,27 +264,12 @@ class ScriptTests(unittest.TestCase):
         self.assertCountEqual(attempted, paths)
         self.assertTrue(all(path.exists() for path in paths))
 
-    def test_fresh_holders_are_unique_and_saved_names_reattach(self):
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            results = list(pool.map(lambda _: self.run_script("zshell"), range(6)))
-        self.assertTrue(all(r.returncode == 0 for r in results))
-        names = [a[1] for a in self.calls("zmx") if a[0] == "attach"]
-        self.assertEqual(len(set(names)), 6)
-        for name in names:
-            self.assertTrue(name.startswith(self.root.name.lower() + "-"))
-            self.assertEqual(str(uuid.UUID(name[-36:])), name[-36:])
-        for holder in ("old-1", "saved-exact-name"):
-            self.assertEqual(self.run_script("zshell", HOLDER=holder).returncode, 0)
-            self.assertIn(["attach", holder], self.calls("zmx"))
-        self.assertTrue(all(a[1:] == [str(self.root / "zmx"), "ls", "--short"]
-                            for a in self.calls("timeout")))
-
     def test_failed_and_hung_discovery_falls_back(self):
         for mode in ("fail", "hang"):
-            result = self.run_script("zshell", MODE=mode)
-            self.assertEqual(result.returncode, 0)
-            self.assertIn("discovery failed or timed out", result.stderr)
+            output = self.pane_start(b': zq saved -\n', MODE=mode)
+            self.assertIn(b"discovery failed or timed out", output)
         self.assertEqual(self.calls("plain-shell"), [["-il"], ["-il"]])
+        self.assertEqual(self.calls("kitten"), [])
         self.assertFalse(any(a[0] == "attach" for a in self.calls("zmx")))
 
     def test_concurrent_main_starts_once_then_focuses_without_unlinking(self):

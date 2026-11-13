@@ -1,47 +1,27 @@
 #!/bin/bash
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
-# The watcher supplies holder=<name> or a new folder-based name over this pane's terminal.
-# Remote control is the fallback for kitty without workspaces.py; without zmx, run plain zsh.
+# The watcher (workspaces.py) supplies the session name over this pane's terminal: the saved
+# holder=<name>, or a new folder-based one. Without an answer or without zmx, run plain zsh.
 export PATH=/opt/homebrew/bin:/Applications/kitty.app/Contents/MacOS:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
 [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
 
-answered=
-if [ -t 0 ] && [ -t 2 ]; then
-  if IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
-     [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
-    printf -v name '%b' "${c//%/\\x}"
-    pi_session=
-    [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
-    answered=1
-  fi
+name= pi_session=
+if [ -t 0 ] && [ -t 2 ] &&
+   IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
+   [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
+  printf -v name '%b' "${c//%/\\x}"
+  [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
 fi
-
-if [ -z "$answered" ]; then
-vars=$(kitten @ ls --match "id:${KITTY_WINDOW_ID:-0}" 2>/dev/null | /usr/bin/python3 -c '
-import json, sys
-try:
-    for o in json.load(sys.stdin):
-        for t in o["tabs"]:
-            for w in t["windows"]:
-                v = w["user_vars"]; print(v.get("holder", "")); print(v.get("pi_session", "")); raise SystemExit
-except (ValueError, KeyError): pass' 2>/dev/null)
-name=$(printf '%s\n' "$vars" | sed -n 1p)
-pi_session=$(printf '%s\n' "$vars" | sed -n 2p)
+if [ -z "$name" ]; then
+  echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
+  exec "$SHELL_BIN" -il
 fi
 
 if ! existing=$(timeout 3 "$ZMX" ls --short 2>/dev/null); then
   echo "zshell: zmx discovery failed or timed out; starting plain shell" >&2
   exec "$SHELL_BIN" -il
-fi
-if [ -z "$answered" ]; then
-if [ -z "$name" ]; then
-  base=$(basename "$PWD" | tr -c 'A-Za-z0-9._-\n' '-' | tr 'A-Z' 'a-z'); [ "$PWD" = "$HOME" ] && base=home
-  name=$base-$(/usr/bin/python3 -c 'import uuid; print(uuid.uuid4())')
-fi
-# Tag the pane so kitty's saved session reattaches this name.
-printf '\033]1337;SetUserVar=holder=%s\007' "$(printf %s "$name" | base64)"
 fi
 
 # zmx's own detach key would steal ctrl+\ from programs; closing the pane already detaches.
