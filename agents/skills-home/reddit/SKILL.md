@@ -1,6 +1,6 @@
 ---
 name: reddit
-description: Read Reddit threads, comments and subreddit searches through the logged-in Brave session. Use when the user asks what Reddit or a community says, names a subreddit or a reddit.com URL, or asks for forum or community research. Home machine only; it needs the Brave login.
+description: Read Reddit threads, comments and subreddit searches through the logged-in Brave session. Use whenever Reddit comes up at all (the word "reddit", an r/ subreddit, a reddit.com URL) or the user asks what a community, a forum or other users say. Load it before the first search or fetch, and before briefing a scout on Reddit research. Home machine only; it needs the Brave login.
 ---
 
 # Reddit

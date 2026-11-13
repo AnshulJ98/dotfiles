@@ -10,11 +10,11 @@ side, git sees the change.
 home/              → ~/                                  shell rcs, .gitconfig, .p10k.zsh
 config/nvim/       → ~/.config/nvim                      neovim (kickstart-based, lazy-lock committed)
 config/kitty/      → ~/.config/kitty                     terminal
-config/herdr/      → ~/.config/herdr/config.toml         herdr TUI fallback (file; folder holds sockets)
 config/hunk/       → ~/.config/hunk                      diff review TUI
 config/aerospace/  → ~/.config/aerospace                 tiling window manager
 config/borders/    → ~/.config/borders                   window borders (JankyBorders)
 config/ccstatusline/ → ~/.config/ccstatusline            Claude Code statusline
+config/rootshell/  → iCloud Drive/rootshell (copied)     rootshell on the iPad (the file says how)
 config/pi/         → ~/.pi/agent/*                       pi coding agent (see below)
 claude/            → ~/.claude/*                         Claude Code settings, agents, skills
 agents/skills/     → ~/.agents/skills                    skills shared across harnesses
