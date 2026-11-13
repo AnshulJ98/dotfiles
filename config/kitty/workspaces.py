@@ -5,6 +5,7 @@
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
+#  - answers bin/zshell's zq query with the pane's holder and pi_session.
 #  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
 import os
@@ -229,7 +230,9 @@ def on_set_user_var(boss, window, data) -> None:
     elif data.get('key') == 'zdo' and data.get('value'):
         boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zdo'))
         zkitty.run(boss, data['value'].split())
-    elif data.get('key') in ('zside', 'zdo'):
+    elif data.get('key') == 'zq' and data.get('value'):
+        zkitty.attach(boss, window)
+    elif data.get('key') in ('zside', 'zdo', 'zq'):
         return
     else:  # a rename (ws_name) or pi's model and context use
         on_tab_bar_dirty(boss, window, data)
