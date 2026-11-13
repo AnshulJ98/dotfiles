@@ -12,13 +12,20 @@ Probes below check what a model says about a fixture. The task suite
 checks what it does: each trial gives a model a real job in a scratch
 workspace and grades the result mechanically or with judges. Three roles:
 
-- **worker** (13 tasks: `booking-*`, `cube-*`, `differ-*`). Cut from fix
-  commits in pi-lab and sim/cube. The trial runs `scout --rw` on
+- **worker** (14 tasks: `booking-*`, `cube-*`, `differ-*`, `gate-missing-pairs`). Cut from fix
+  commits in pi-lab and sim/cube (and this repo, below). The trial runs `scout --rw` on
   `prompt.md` (the ticket, without the fix) in a fresh copy of the commit's
   parent. The hidden tests are read from the fix commit at run time and laid
   over the workspace after the agent finishes; the trial passes when they
-  pass. Files changed outside `allowed` are recorded (`outside`) but do not
-  fail the trial. `booking-delete-404-scope` expects the agent to stop:
+  pass and no file outside `allowed` was changed (those files are listed in
+  `outside`; an edit there fails the trial). The record also carries
+  `wroteTest`, true when a changed path is a test path (the rule of
+  `is_test_path` in `lib/task.sh`); the worker table shows its share as the
+  **wrote test** column. It does not affect the pass or the gate.
+  `gate-missing-pairs` is a harder task: its ticket is three pre-merge review
+  findings about `gate.sh` (commit `cc67749` of this repo, workspace limited to
+  `agent-eval/` with `paths`) instead of a spelled-out spec, plus the names the
+  hidden tests need. `booking-delete-404-scope` expects the agent to stop:
   it passes only when nothing changed and the digest names a blocker.
 - **review** (`booking-review`). Plain `pi -p` reviews pi-lab at
   `e6189ea`, which has five seeded defects. A haiku-5-5 extractor turns the
@@ -61,7 +68,7 @@ matrix.sh <run-name> --cells "<provider/model:thinking> ..." [--tasks "<id> ..."
 trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>
 summarize.ts <run-dir|trials.jsonl>
 gate.sh <run-dir|trials.jsonl> [--update] [--partial]
-mk-task.sh <repo> <fix-sha> [id]
+mk-task.sh <repo> <fix-sha> [id] [--test "<cmd>"]
 check-judges.sh <task>
 judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>]
 ```
@@ -88,6 +95,9 @@ trials before launching a full grid.
   count. Leak and infra trials are not counted; they have their own columns.
 - **any / all** is tasks passed on at least one / on every counted trial,
   out of the tasks that cell ran. A wide gap means the cell is unreliable.
+- **wrote test** (worker table) is the share of counted trials whose agent
+  changed a test path, out of those whose record carries `wroteTest`; `-`
+  for records from before the field.
 - **flaky** is the number of tasks whose trials disagree, with their names.
   This is the noise floor: the comparison lines under the table say
   "no difference" when the gap, in tasks, is no larger than the flaky count.
@@ -140,6 +150,9 @@ changes, hidden = its test files, test = the package's `npm test`) and a
 the user would have written it: the behaviour the hidden tests assert,
 exact formats, messages and the names they import, never the fix itself.
 Add `link` entries (for example `node_modules`) if the tests need them.
+A repo with no `package.json` takes `--test "<cmd>"`, used as the task's
+test command (run at the workspace root) instead of the `npm test` search;
+`gate-missing-pairs` was made with it, then given `"paths": ["agent-eval"]`.
 Then run `./validate.sh <id>`; it must say `VALID`, meaning the hidden
 tests fail on the base and pass once the commit's `allowed` files are
 applied. It exits 1 if the commit has no test file, no `package.json` with

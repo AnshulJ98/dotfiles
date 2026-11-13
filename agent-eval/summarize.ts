@@ -18,14 +18,23 @@ const recallText = (c: CellSummary): string =>
 		? "-"
 		: `${pct(c.found / c.of)} (${c.found}/${c.of})${c.flakyDefects ? `, ${c.flakyDefects} flaky` : ""}`;
 
+/** Worker cells: the share of counted trials whose agent changed a test path, "37.5% (3/8)"; "-" when no record carries wroteTest. */
+const wroteTestText = (c: CellSummary): string =>
+	c.wroteTest === undefined || !c.wroteTestOf ? "-" : `${pct(c.wroteTest / c.wroteTestOf)} (${c.wroteTest}/${c.wroteTestOf})`;
+
 export function render(roles: RoleSummary[], malformed = 0): string {
 	const out: string[] = [];
 	if (roles.length === 0) out.push("no records");
 	for (const { role, cells, saturated } of roles) {
 		const review = role === "review" || cells.some((c) => c.found !== undefined && c.of !== undefined);
-		out.push(`## ${role}`, "", `| cell | pass rate | any | all | flaky |${review ? " recall |" : ""} mean $ | mean s | leak | infra |`, `|---|---|---|---|---|${review ? "---|" : ""}---|---|---|---|`);
+		const worker = role === "worker";
+		out.push(
+			`## ${role}`, "",
+			`| cell | pass rate | any | all | flaky |${review ? " recall |" : ""} mean $ | mean s | leak | infra |${worker ? " wrote test |" : ""}`,
+			`|---|---|---|---|---|${review ? "---|" : ""}---|---|---|---|${worker ? "---|" : ""}`,
+		);
 		for (const c of cells) {
-			out.push(`| ${c.cell} | ${pct(c.passRate)} (${c.passes}/${c.counted}) | ${c.tasksAny}/${c.tasks} | ${c.tasksAll}/${c.tasks} | ${c.flaky.length}${c.flaky.length ? ` (${c.flaky.join(", ")})` : ""} |${review ? ` ${recallText(c)} |` : ""} ${c.meanCost.toFixed(4)} | ${c.meanSeconds.toFixed(0)} | ${c.leaks} | ${c.infra} |`);
+			out.push(`| ${c.cell} | ${pct(c.passRate)} (${c.passes}/${c.counted}) | ${c.tasksAny}/${c.tasks} | ${c.tasksAll}/${c.tasks} | ${c.flaky.length}${c.flaky.length ? ` (${c.flaky.join(", ")})` : ""} |${review ? ` ${recallText(c)} |` : ""} ${c.meanCost.toFixed(4)} | ${c.meanSeconds.toFixed(0)} | ${c.leaks} | ${c.infra} |${worker ? ` ${wroteTestText(c)} |` : ""}`);
 		}
 		out.push("", `Saturated (${saturated.length}): ${saturated.join(", ") || "none"}`);
 		if (cells.length > 1) {
