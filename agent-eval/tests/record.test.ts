@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { blocked, grade, gradeReview, isReviewTimeout, isTestPath, leaked, measure, outsideAllowed, parseJudged, parsePorcelain, wroteTest } from "../lib/record.ts";
+import { blocked, grade, gradeReview, isReviewTimeout, isTestPath, judgeScout, leaked, measure, outsideAllowed, parseJudged, parsePorcelain, wroteTest } from "../lib/record.ts";
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -141,4 +141,17 @@ test("a judge.json with found < of and pass true is a pass; without pass it is n
 
 test("a review timeout is rc 124, or 137 when the child ignored TERM and timeout -k killed it", () => {
 	assert.deepEqual([124, 137, 0, 1, 143].map(isReviewTimeout), [true, true, false, false, false]);
+});
+
+test("judgeScout: judge.json is used for a non-empty digest; an empty digest is a fail with nothing found over the task's facts, not infra", () => {
+	const json = '{"found":3,"of":3,"met":["a","b","c"],"pass":true,"disagreements":["b"],"judgeCost":0.4,"infra":false}';
+	assert.deepEqual(judgeScout("The answer.\n", json, 3), { found: 3, of: 3, pass: true, disagreements: ["b"], judgeCost: 0.4, infra: false });
+	// an empty or blank digest ignores whatever judge.json says
+	for (const digest of ["", " \n\t\n"]) assert.deepEqual(judgeScout(digest, json, 3), { found: 0, of: 3, pass: false, disagreements: [], judgeCost: 0, infra: false });
+	assert.deepEqual(judgeScout("", "", 3), { found: 0, of: 3, pass: false, disagreements: [], judgeCost: 0, infra: false });
+	// a task with no facts has nothing to judge: infra either way
+	assert.equal(judgeScout("", "", 0).infra, true);
+	// a non-empty digest with a missing or unparseable judge.json is infra
+	for (const bad of ["", "nope", "{}"]) assert.deepEqual(judgeScout("The answer.", bad, 3), { found: 0, of: 0, pass: false, disagreements: [], judgeCost: 0, infra: true });
+	assert.equal(gradeReview(judgeScout("The answer.", json.replace('"pass":true,', ""), 3)), false);
 });

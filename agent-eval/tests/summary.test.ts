@@ -214,6 +214,25 @@ test("any role whose counted records carry found and of gets recall, in baseline
 	assert.match(text, /## scout\n\n\| cell \| pass rate \| any \| all \| flaky \| mean \$ \|/);
 });
 
+test("cells whose counted records carry cited/citable get a cited column, '-' for a cell without them; the gate ignores it", () => {
+	const scout = (cited: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		cited.map((c, i) => rec("s" + i, "p/m", 1, true, { role: "scout", found: 3, of: 3, cited: c, citable: 2, ...over }));
+	const line = JSON.stringify({ task: "a", role: "scout", model: "p/m", thinking: "low", trial: 1, pass: true, cited: 1, citable: "x" });
+	assert.equal(parseRecords(line).records[0].cited, undefined);
+	assert.equal(parseRecords(line.replace('"x"', "2")).records[0].citable, 2);
+	// the leak record and the infra record are not counted
+	const roles = summarize([...scout([2, 1, 0]), ...scout([2], { leak: true }), ...scout([2], { infra: true }), ...scout([2], { model: "p/n", cited: undefined, citable: undefined })]);
+	const [m, n] = roles[0].cells;
+	assert.deepEqual([m.cited, m.citable, n.cited, n.citable], [3, 6, undefined, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| flaky \| recall \| cited \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){11}\n/);
+	assert.match(text, /\| p\/m:low \| 100\.0% \(3\/3\) .* \| 100\.0% \(9\/9\) \| 3\/6 \| 0\.5000 \|/);
+	assert.match(text, /\| p\/n:low \| 100\.0% \(1\/1\) .* \| 100\.0% \(3\/3\) \| - \| 0\.5000 \|/);
+	assert.equal(render(summarize(grid("p/x", { a: [true] }))).includes("cited"), false);
+	assert.equal("cited" in baselineCells(roles).scout["p/m:low"], false);
+	assert.deepEqual(Object.keys(baselineCells(roles).scout["p/m:low"]).sort(), ["defects", "flaky", "flakyDefects", "passRate", "recall", "tasks"]);
+});
+
 test("render: only the review table has a recall column, 80.0% (8/10) with flaky defects when non-zero", () => {
 	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
 		found.map((f, i) => rec("r1", "p/m", i + 1, f === 5, { role: "review", found: f, of: 5, ...over }));

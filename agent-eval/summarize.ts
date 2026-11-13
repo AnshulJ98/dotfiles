@@ -22,19 +22,23 @@ const recallText = (c: CellSummary): string =>
 const wroteTestText = (c: CellSummary): string =>
 	c.wroteTest === undefined || !c.wroteTestOf ? "-" : `${pct(c.wroteTest / c.wroteTestOf)} (${c.wroteTest}/${c.wroteTestOf})`;
 
+/** Scout cells: citations hit out of expect entries, "3/6" summed over counted trials; "-" when no record carries cited/citable. */
+const citedText = (c: CellSummary): string => (c.cited === undefined || c.citable === undefined ? "-" : `${c.cited}/${c.citable}`);
+
 export function render(roles: RoleSummary[], malformed = 0): string {
 	const out: string[] = [];
 	if (roles.length === 0) out.push("no records");
 	for (const { role, cells, saturated } of roles) {
 		const review = role === "review" || cells.some((c) => c.found !== undefined && c.of !== undefined);
 		const worker = role === "worker";
+		const scout = cells.some((c) => c.cited !== undefined);
 		out.push(
 			`## ${role}`, "",
-			`| cell | pass rate | any | all | flaky |${review ? " recall |" : ""} mean $ | mean s | leak | infra |${worker ? " wrote test |" : ""}`,
-			`|---|---|---|---|---|${review ? "---|" : ""}---|---|---|---|${worker ? "---|" : ""}`,
+			`| cell | pass rate | any | all | flaky |${review ? " recall |" : ""}${scout ? " cited |" : ""} mean $ | mean s | leak | infra |${worker ? " wrote test |" : ""}`,
+			`|---|---|---|---|---|${review ? "---|" : ""}${scout ? "---|" : ""}---|---|---|---|${worker ? "---|" : ""}`,
 		);
 		for (const c of cells) {
-			out.push(`| ${c.cell} | ${pct(c.passRate)} (${c.passes}/${c.counted}) | ${c.tasksAny}/${c.tasks} | ${c.tasksAll}/${c.tasks} | ${c.flaky.length}${c.flaky.length ? ` (${c.flaky.join(", ")})` : ""} |${review ? ` ${recallText(c)} |` : ""} ${c.meanCost.toFixed(4)} | ${c.meanSeconds.toFixed(0)} | ${c.leaks} | ${c.infra} |${worker ? ` ${wroteTestText(c)} |` : ""}`);
+			out.push(`| ${c.cell} | ${pct(c.passRate)} (${c.passes}/${c.counted}) | ${c.tasksAny}/${c.tasks} | ${c.tasksAll}/${c.tasks} | ${c.flaky.length}${c.flaky.length ? ` (${c.flaky.join(", ")})` : ""} |${review ? ` ${recallText(c)} |` : ""}${scout ? ` ${citedText(c)} |` : ""} ${c.meanCost.toFixed(4)} | ${c.meanSeconds.toFixed(0)} | ${c.leaks} | ${c.infra} |${worker ? ` ${wroteTestText(c)} |` : ""}`);
 		}
 		out.push("", `Saturated (${saturated.length}): ${saturated.join(", ") || "none"}`);
 		if (cells.length > 1) {

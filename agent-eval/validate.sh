@@ -3,8 +3,9 @@
 # Hidden tests must fail on the base and pass once the fix commit's allowed files are applied; for expect
 # "blocked" the fix commit must change a non-test file outside allowed. A review task (role review) is valid when
 # its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. A scout task is
-# valid when its workspace builds and each expect entry's file exists there with at least lines[1] lines, every
-# must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range). No model calls.
+# valid when its workspace builds, each expect entry's file exists there with at least lines[1] lines, every
+# must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range), facts is a
+# non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
 set -euo pipefail
 
@@ -34,9 +35,26 @@ check_review() {
   ' "$1" "$1/prompt.md" "$2" 2>&1 | head -1
 }
 
+# Scout task: print nothing when facts and decoys are complete, else the reason.
+check_facts() {
+  node -e '
+    const { readFileSync } = require("node:fs");
+    const t = JSON.parse(readFileSync(process.argv[1] + "/task.json", "utf8"));
+    const bad = (d) => typeof d !== "object" || d === null || ["id", "text", "hit"].some((k) => typeof d[k] !== "string" || d[k].trim() === "");
+    const blank = (s) => typeof s !== "string" || s.trim() === "";
+    if (!Array.isArray(t.facts) || t.facts.length === 0 || t.facts.some(bad)) {
+      console.log("facts must be a non-empty list of {id, text, hit}");
+    } else if (new Set(t.facts.map((d) => d.id)).size !== t.facts.length) {
+      console.log("fact ids are not unique");
+    } else if (!Array.isArray(t.decoys) || t.decoys.length < 2 || t.decoys.some(blank)) {
+      console.log("decoys must be at least two non-empty strings");
+    }
+  ' "$1" 2>&1 | head -1
+}
+
 # Print nothing when valid, else the reason.
 check() {
-  local task="$1" repo fix ws path hidden allowed
+  local task="$1" repo fix ws path hidden allowed reason
   repo="$(task_get "$task" repo)"
   if [ "$(task_get "$task" role)" = review ]; then
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
@@ -48,7 +66,9 @@ check() {
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
     make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the scout workspace"; return 0; }
     [ -s "$task/prompt.md" ] || { echo "prompt.md is missing or empty"; return 0; }
-    node "$EVAL_DIR/lib/scout-grade.ts" check "$task/task.json" "$ws" 2>&1 | head -1
+    reason="$(node "$EVAL_DIR/lib/scout-grade.ts" check "$task/task.json" "$ws" 2>&1 | head -1)"
+    [ -n "$reason" ] || reason="$(check_facts "$task")"
+    [ -z "$reason" ] || echo "$reason"
     return 0
   fi
   fix="$(task_get "$task" fix)"

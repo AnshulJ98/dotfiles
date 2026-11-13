@@ -1,7 +1,11 @@
 // Pure functions that build one worker-trial record, plus a thin CLI for trial.sh (flags: see main).
 // Worker pass: the hidden tests exit 0 and no changed file is outside the task's allowed list (the record's "outside");
 // wroteTest says whether a changed path is a test path.
-// Roles: worker (default), review (--judge-file), scout (--task-file task.json with its expect list, --digest-file).
+// Roles: worker (default), review (--judge-file), scout (--judge-file, --task-file task.json, --digest-file).
+// Scout record: pass = judge.sh's verdict on the digest against the task's facts (found, of = facts, disagreements,
+// judgeCost); cited and citable are the secondary citation grade of the digest against the task's expect list
+// (lib/scout-grade.ts). An empty digest from a run with turns is a fail with found 0 (not infra); a non-empty digest
+// the judges could not rate, a task without facts, or a malformed expect list is infra.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -167,6 +171,15 @@ export function gradeReview(j: Judged): boolean {
 	return !j.infra && j.of > 0 && j.pass;
 }
 
+/**
+ * A scout's judged result. A blank digest is never judged: pass false, found 0 over the task's factCount facts, and infra
+ * only when the task has no facts. Otherwise judge.json as parseJudged reads it (unusable is infra).
+ */
+export function judgeScout(digest: string, judgeText: string, factCount: number): Judged {
+	if (digest.trim() === "") return { found: 0, of: factCount, pass: false, disagreements: [], judgeCost: 0, infra: factCount === 0 };
+	return parseJudged(judgeText);
+}
+
 function readText(path: string | undefined): string {
 	try {
 		return readFileSync(path ?? "", "utf8");
@@ -203,13 +216,17 @@ function main(argv: string[]): void {
 		return;
 	}
 	if (v.role === "scout") {
-		const expect = parseExpect(asObject(parseLine(readText(v["task-file"])))?.expect);
-		const graded = typeof expect === "string" ? { hits: 0, of: 0, pass: false } : gradeScout(readText(v["digest-file"]), expect);
+		const task = asObject(parseLine(readText(v["task-file"])));
+		const expect = parseExpect(task?.expect);
+		const digest = readText(v["digest-file"]);
+		const judged = judgeScout(digest, readText(v["judge-file"]), Array.isArray(task?.facts) ? task.facts.length : 0);
+		const cited = typeof expect === "string" ? { hits: 0, of: 0 } : gradeScout(digest, expect);
 		console.log(JSON.stringify({
 			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
-			pass: graded.pass, hits: graded.hits, of: graded.of,
+			pass: typeof expect !== "string" && gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
+			cited: cited.hits, citable: cited.of,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || typeof expect === "string", dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || typeof expect === "string" || judged.infra, dir: v.dir,
 		}));
 		return;
 	}
