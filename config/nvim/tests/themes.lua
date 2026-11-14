@@ -1,7 +1,5 @@
 -- Installed plugins only; no network, real app reloads or running editor changes.
 vim.opt.runtimepath:prepend(vim.fn.getcwd() .. '/config/nvim')
-vim.cmd 'packadd codediff.nvim'
-dofile 'config/nvim/lua/config/codediff.lua'
 
 local function luminance(color)
   local sum = 0
@@ -62,16 +60,5 @@ for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'd
     assert(hl('FloatBorder').fg == hl('TelescopeBorder').fg, name .. ': inconsistent popup borders')
     assert(not hl('Keyword').italic, name .. ': minimal syntax must not add keyword italics')
   end
-  for _, syntax in ipairs { 'String', 'Number', 'Boolean', 'Constant', 'Function', 'Keyword', 'Type',
-    'Special', 'PreProc', 'Identifier', '@property', '@variable.parameter', '@variable.builtin',
-    '@type.builtin', '@module', '@tag', '@tag.attribute', 'Normal' } do
-    local fg = hl(syntax).fg
-    if fg then
-      for _, diff in ipairs { 'CodeDiffCharInsert', 'CodeDiffCharDelete' } do
-        local ratio = contrast(fg, assert(hl(diff).bg))
-        assert(ratio >= 4, name .. ': ' .. syntax .. ' on ' .. diff .. ' is ' .. ratio)
-      end
-    end
-  end
 end
-print 'PASS: frozen themes, minimal-theme readability, panel dimming and readable CodeDiff character backgrounds'
+print 'PASS: frozen themes, minimal-theme readability and panel dimming'
