@@ -1,0 +1,12 @@
+diff --git a/src/moves.ts b/src/moves.ts
+--- a/src/moves.ts
++++ b/src/moves.ts
+@@ -64,7 +64,7 @@
+ }
+ 
+ export function invert(moves: readonly Move[]): Move[] {
+-  return moves.map(invertMove).reverse()
++  return moves.map(invertMove)
+ }
+ 
+ function invertMove(move: Move): Move {
