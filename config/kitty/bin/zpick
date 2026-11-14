@@ -4,25 +4,30 @@
 # the user came from. ctrl-t (or cmd+alt+g, forwarded by zgoto) switches to detached and closed only.
 # ctrl-x kills sessions: never the one the picker was opened from, and an attached one only when
 # pressed a second time.
+# zpick --zmx: the same picker over zmx sessions only, no kitty; prints the session to attach (a
+# typed name when nothing matches, or with ctrl-n), fails on esc. bin/../../zmx/zmx-pick loops on it.
 set -u
-export PATH=/opt/homebrew/bin:$PATH
+export PATH=/opt/homebrew/bin:$PATH:$HOME/.local/bin
 self=$(realpath "$0"); here=$(dirname "$self")
 DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
 
 # The view (all | detached) lives in a file so fzf's reload and label commands can read it.
 export ZPICK_VIEW=${ZPICK_VIEW:-}
-view() { cat "$ZPICK_VIEW" 2>/dev/null || echo all; }
+view() { [ "${ZPICK_MODE:-}" = zmx ] && echo zmx || cat "$ZPICK_VIEW" 2>/dev/null || echo all; }
 toggle() { local next=all; [ "$(view)" = all ] && next=detached; echo "$next" > "$ZPICK_VIEW"; }
-label() { [ "$(view)" = all ] && echo ' Go to ' || echo ' Go to · detached and closed '; }
-ghost() { [ "$(view)" = all ] && echo 'search workspaces, tabs and panes' || echo 'search detached sessions'; }
+label() { case $(view) in all) echo ' Go to ' ;; zmx) echo ' zmx ' ;; *) echo ' Go to · detached and closed ' ;; esac; }
+ghost() { case $(view) in all) echo 'search workspaces, tabs and panes' ;; zmx) echo 'search, or type a new name' ;; *) echo 'search detached sessions' ;; esac; }
 footer() {
   if [ -s "$ZPICK_VIEW.ask" ]; then echo "attached: $(tr '\n' ' ' < "$ZPICK_VIEW.ask")· ^x again kills"
+  elif [ "$(view)" = zmx ]; then echo 'enter attach · ^n new · ^x kill · ^\ back · esc'
   else echo 'enter go · ^s split · ^t view · tab mark · ^x kill · esc'; fi
 }
 # fzf runs this for the list. It also notes the row of the pane the picker came from.
 list() {
   local rows; rows=$("$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}")
-  awk -F'\t' -v w="${ZPICK_FROM:-}" '$1 == "pane" && $2 == w { print NR; exit }' <<<"$rows" > "$ZPICK_VIEW.pos"
+  # the pane the picker came from; in zmx mode the first session, below its header
+  awk -F'\t' -v w="${ZPICK_FROM:-}" -v zmx="$([ "$(view)" = zmx ] && echo 1)" \
+    '($1 == "pane" && $2 == w) || (zmx && $1 == "det") { print NR; exit }' <<<"$rows" > "$ZPICK_VIEW.pos"
   echo "$rows"
 }
 # fzf only knows its width once it is up, so the first load (of nothing) asks for the list and
@@ -78,6 +83,7 @@ case ${1:-} in
   --ghost) ghost; exit ;;
   --preview) preview_row "$2" "$3" "$4" "$5"; exit ;;
   --kill) kill_rows "$2"; exit ;;
+  --zmx) export ZPICK_MODE=zmx; shift ;;
 esac
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/zpick.XXXXXXXX") || exit 1
 export ZPICK_VIEW=$scratch/view
@@ -87,7 +93,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 from=${1:-}
 export ZPICK_FROM=$from
-ws=$(kitten @ ls --match "id:$from" 2>/dev/null | /usr/bin/python3 -c '
+ws=$([ "${ZPICK_MODE:-}" = zmx ] || kitten @ ls --match "id:$from" 2>/dev/null | /usr/bin/python3 -c '
 import json, sys
 try: print(json.load(sys.stdin)[0]["tabs"][0]["windows"][0].get("session_name", ""))
 except (ValueError, IndexError, KeyError): pass')
@@ -114,8 +120,15 @@ open_row() { # kind target holder cwd key
   esac >/dev/null 2>&1
 }
 
-. "$HOME/.config/themes/current/colors.sh" # the active theme's accent and selection
+THEME_ACCENT=4 THEME_SEL=8 # the active theme's accent and selection, where the themes are installed
+[ -r "$HOME/.config/themes/current/colors.sh" ] && . "$HOME/.config/themes/current/colors.sh"
 A=$THEME_ACCENT
+if [ "${ZPICK_MODE:-}" = zmx ]; then
+  keys=(--print-query --expect ctrl-n)
+else
+  keys=(--bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)"
+        --bind 'zero:change-ghost(nothing here · ctrl-t switches view)' --expect ctrl-s)
+fi
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
   --border rounded --border-label "$(label)" --border-label-pos 3 --margin 6%,10% --padding 1,2 \
@@ -129,9 +142,16 @@ out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --color "input-border:8,preview-border:8,preview-label:8,footer-border:8" \
   --bind "load:transform($self --onload)" \
   --bind "ctrl-x:execute-silent($self --kill {+f})+reload($self --list)+transform-footer($self --footer)" \
-  --bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)" \
-  --bind 'zero:change-ghost(nothing here · ctrl-t switches view)' \
-  --expect ctrl-s </dev/null) || exit 0
+  "${keys[@]}" </dev/null)
+rc=$?
+if [ "${ZPICK_MODE:-}" = zmx ]; then
+  [ $rc = 0 ] || [ $rc = 1 ] || exit 1 # 1: no match, the typed name stands
+  { IFS= read -r query; IFS= read -r key; IFS=$'\t' read -r kind target _; } <<<"$out"
+  [ "$key" != ctrl-n ] && [ "${kind:-}" = det ] && query=$target
+  [ -z "$query" ] || printf '%s\n' "$query"
+  exit 0
+fi
+[ $rc = 0 ] || exit 0
 key=$(head -1 <<<"$out")
 while IFS=$'\t' read -r kind target holder cwd _; do
   [ -n "$kind" ] && open_row "$kind" "$target" "$holder" "$cwd" "$key"

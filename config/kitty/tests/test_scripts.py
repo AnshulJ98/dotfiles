@@ -60,10 +60,15 @@ if cmd == "pgrep": sys.exit(0 if mode == "starting" else 1)
 if cmd == "fzf":
     view = pathlib.Path(os.environ["ZPICK_VIEW"])
     for suffix in ("", ".ask", ".pos"): pathlib.Path(str(view) + suffix).write_text("all")
-    subprocess.run([str(root / "zpick"), "--list"], check=True)
+    subprocess.run([str(root / "zpick"), "--list"], check=True, stdout=subprocess.DEVNULL)
     assert view.exists()  # helpers must not remove the interactive owner's scratch
     (root / "view").write_text(str(view))
     if mode == "interrupt": time.sleep(30)
+    if mode.startswith("pick:"):  # zpick --zmx: query, key and the selected row, as fzf prints them
+        rc, query, key, sel = mode[5:].split("|")
+        print(query); print(key)
+        if sel: print("det\t" + sel + "\t" + sel + "\t/x\t0\tshown")
+        sys.exit(int(rc))
     sys.exit(1)
 """
 
@@ -454,6 +459,22 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         args, = self.calls("fzf")
         self.assertIn("fg:-1,bg:-1,hl:#aabbcc,hl+:#aabbcc,fg+:-1:bold,bg+:#123456,gutter:-1,border:#aabbcc,label:#aabbcc:bold", args)
+
+    def test_picker_zmx_mode_prints_the_session_and_never_calls_kitty(self):
+        for mode, printed in (("pick:0|||logs", "logs"),             # enter on a row
+                              ("pick:1|newbox||", "newbox"),         # typed name, no match
+                              ("pick:0|dot|ctrl-n|dotfiles", "dot"),  # ctrl-n: the typed name
+                              ("pick:130|||", None)):                # esc
+            with self.subTest(mode=mode):
+                (self.root / "calls").unlink(missing_ok=True)
+                result = self.run_script("zpick", "--zmx", MODE=mode)
+                self.assertEqual(result.returncode, 0 if printed else 1, result.stderr)
+                self.assertEqual(result.stdout, printed + "\n" if printed else "")
+                self.assertEqual(self.calls("kitten"), [])
+                args, = self.calls("fzf")
+                self.assertIn("--print-query", args)
+                self.assertNotIn("ctrl-s", " ".join(args))
+                self.assertFalse(any(a.startswith(("ctrl-t:", "zero:")) for a in args))
 
     def test_picker_interrupt_cleans_only_owned_directory(self):
         neighbor = self.root / "zpick-view.neighbor"

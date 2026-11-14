@@ -1,58 +1,17 @@
 #!/usr/bin/env bash
-# zmx-pick: a zmx session switcher for any terminal (iPad, WSL, plain ssh). Pick a session and
-# attach; ctrl+\ (zmx's detach key) comes back here; esc leaves for a login shell. Inside a zmx
-# session it switches this terminal once instead. Run it as the ssh command:
+# zmx-pick: a zmx session switcher for any terminal (iPad, WSL, plain ssh). It is kitty's cmd+alt+g
+# picker (config/kitty/bin/zpick --zmx) in a loop: pick a session and attach; ctrl+\ (zmx's detach
+# key) comes back here; esc leaves for a login shell. Inside a zmx session it switches once instead.
 #   ssh -t host '~/.local/bin/zmx-pick'      (or RemoteCommand in ~/.ssh/config, RequestTTY yes)
-# enter attaches the highlighted session, or creates the typed name when nothing matches;
-# ctrl-n creates the typed name even when something matches; ctrl-x kills the highlighted one.
 set -u
 export PATH=$PATH:$HOME/.local/bin:/opt/homebrew/bin # non-interactive ssh skips the rc files
-self=$(realpath "$0" 2>/dev/null || echo "$0")
-
-rows() { # name<TAB>shown line, one per session: name, attached clients, folder
-  zmx ls 2>/dev/null | awk -F'\t' -v home="$HOME" '
-    { sub(/^.*name=/, "name="); delete f
-      for (i = 1; i <= NF; i++) { k = $i; sub(/=.*/, "", k); v = $i; sub(/^[^=]*=/, "", v); f[k] = v }
-      cwd = f["cwd"]; sub(/^[a-z-]+:\/\/[^\/]*/, "", cwd)
-      if (home != "" && index(cwd, home) == 1) cwd = "~" substr(cwd, length(home) + 1)
-      att = f["clients"] > 0 ? f["clients"] " attached" : ""
-      printf "%s\t%-24s %-11s %s\n", f["name"], f["name"], att, cwd }'
-}
-# The session screen, blank lines squeezed, cut to the preview height.
-preview() { zmx history "$1" --screen 2>/dev/null | cat -s | tail -n "$2"; }
-
-case ${1:-} in
-  --rows) rows; exit ;;
-  --preview) preview "$2" "$3"; exit ;;
-  --kill) zmx kill "$2" >/dev/null 2>&1; exit ;;
-esac
-
-A=4 SEL=8 # the theme's accent and selection where the dotfiles themes are installed
-[ -r "$HOME/.config/themes/current/colors.sh" ] && . "$HOME/.config/themes/current/colors.sh" && A=$THEME_ACCENT SEL=$THEME_SEL
-
-pick() { # prints the session name to attach; fails on esc
-  local out rc query key sel
-  out=$(rows | FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --delimiter '\t' --with-nth 2 --no-sort --layout reverse \
-    --print-query --expect ctrl-n --border rounded --border-label ' zmx ' --border-label-pos 3 \
-    --prompt '/ ' --ghost 'search or type a new name' --info inline-right --pointer '▌' \
-    --preview "$self --preview {1} \$FZF_PREVIEW_LINES" --preview-window 'right,50%,border-left,nowrap,<70(down,40%,border-top)' \
-    --footer 'enter attach · ^n new · ^x kill · ^\\ back here · esc shell' --footer-border line \
-    --color "fg:-1,bg:-1,hl:$A,hl+:$A,fg+:-1:bold,bg+:$SEL,gutter:-1,border:$A,label:$A:bold,prompt:$A,pointer:$A" \
-    --color 'info:8,ghost:8,footer:8,preview-border:8,footer-border:8' \
-    --bind "ctrl-x:execute-silent($self --kill {1})+reload($self --rows)")
-  rc=$?
-  [ $rc = 0 ] || [ $rc = 1 ] || return 1
-  { IFS= read -r query; IFS= read -r key; IFS=$'\t' read -r sel _; } <<<"$out"
-  [ "$key" = ctrl-n ] || [ -z "$sel" ] || query=$sel
-  [ -n "$query" ] && printf '%s\n' "$query"
-}
-
+ZPICK=${ZPICK:-$(dirname "$(realpath "$0")")/../kitty/bin/zpick}
 unset ZMX_NO_DETACH_KEY # ctrl+\ is the way back here
 if [ -n "${ZMX_SESSION:-}" ]; then
-  name=$(pick) && exec zmx attach "$name" # inside a session, attach switches this client
+  name=$("$ZPICK" --zmx) && [ -n "$name" ] && exec zmx attach "$name" # switches this client
   exit 0
 fi
 while :; do
-  name=$(pick) || exec "${SHELL:-/bin/sh}" -il
+  name=$("$ZPICK" --zmx) || exec "${SHELL:-/bin/sh}" -il
   [ -n "$name" ] && zmx attach "$name"
 done

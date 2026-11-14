@@ -105,6 +105,32 @@ class SideTests(unittest.TestCase):
                 self.assertEqual(self.side.repo(str(outer)), (str(outer), 'main'))
                 self.assertEqual(rows.git_ref(str(outer)), ('main', str(outer)))
 
+    def test_picker_rows_zmx_view_lists_every_session_without_kitty(self):
+        # zmx-pick outside kitty: no kitty calls, attached sessions listed too, no closed workspaces.
+        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx', str(SCRIPT.parent / 'zpick-rows'))
+        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(rows)
+        ls = ('  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n'
+              '  name=pi-agent\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n')
+        calls = []
+        def run(*cmd):
+            calls.append(cmd[0])
+            return ls if cmd[:2] == ('zmx', 'ls') else ''
+        with tempfile.TemporaryDirectory() as directory, patch.object(rows, 'run', run), \
+                patch.object(rows, 'DIR', directory), patch.object(sys, 'argv', ['zpick-rows', 'zmx']), \
+                patch('builtins.print') as out:
+            Path(directory, 'closed.kitty-session').write_text('cd /x\nlaunch\n')
+            rows.main()
+        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
+        self.assertNotIn('kitten', calls)
+        self.assertEqual([(l[0], l[1]) for l in lines], [('hdr', ''), ('det', 'logs'), ('det', 'pi-agent')])
+        self.assertIn('sessions', lines[0][5])
+        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in lines]
+        self.assertTrue(shown[1].lstrip(' └├─').startswith('logs '), shown[1])  # the name leads: fzf searches it
+        self.assertTrue(shown[2].lstrip(' └├─').startswith('pi-agent · attached'), shown[2])
+        self.assertIn('/srv', shown[1])
+        self.assertNotIn('kitty', shown[2])
+
     def test_rows_layout_actions_and_purity(self):
         obj = view('/repo')
         before = json.dumps(obj)
