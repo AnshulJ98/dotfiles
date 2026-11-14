@@ -1,0 +1,1 @@
+Back-to-back bookings in one room are rejected: booking 10:00–11:00 and then 11:00–12:00 throws "is booked". Adjacent bookings must be allowed; real overlaps must still be rejected. The code is in booking/.

@@ -10,7 +10,7 @@ measures instruction adherence and recall, not model benchmarks.
 
 Probes below check what a model says about a fixture. The task suite
 checks what it does: each trial gives a model a real job in a scratch
-workspace and grades the result mechanically or with judges. Four roles:
+workspace and grades the result mechanically or with judges. Five roles:
 
 - **worker** (14 tasks: `booking-*`, `cube-*`, `differ-*`, `gate-missing-pairs`). Cut from fix
   commits in pi-lab and sim/cube (and this repo, below). The trial runs `scout --rw` on
@@ -78,6 +78,48 @@ workspace and grades the result mechanically or with judges. Four roles:
   the line numbers if the section moved, and in `validate.sh`), then
   `./validate.sh --all`: a task whose `rule` no longer matches is INVALID, and its
   `expect` needs a fresh reading against the new rules.
+
+- **plan** (`plan-back-to-back`). Tests planning: the model gets a short ticket and the repo
+  and must write the spec a worker will run. A task is a worker task's `repo`, `fix`, `test`,
+  `hidden` and `link` with `"role": "plan"`, plus `ticket.md`, `"decisions"` (extra judged items,
+  `[{id, text}]`, may be empty), and `gold.md`, `bad.md` and `samples.json`
+  (`[{file, yes: [ids], no: [ids]}]`) for checking the judges. The trial renders the user's own
+  `/plan` prompt (`$@` replaced by the ticket) and runs plain `pi -p --mode json` at `fix^`. `lib/plan-grade.ts` takes the last
+  `---` / `files-allowed:` / `---` block of the reply (fenced or not) and puts it before the
+  rest: `spec.md`, what `scout --rw --spec -` takes. Three gradings:
+  1. **Mechanical** (`mechanical.json`, pure), six checks:
+     - `accepted`: a non-empty `files-allowed` list (`[a, b]` or `- a` lines), a non-empty `tests` value naming nothing under `/tmp`, a numbered step and a `check:`.
+     - `covers`: every non-test file the fix changes is in `files-allowed`.
+     - `tight`: every entry is a file the fix changes or a test path.
+     - `grounded`: every repo-relative file path the plan names (`:line` removed) exists in the workspace or is in `files-allowed`.
+     - `readonly`: the planner changed nothing.
+     - `short`: at most 450 words outside the block.
+
+     Without `accepted` the other four (not `readonly`) are false.
+  2. **Executed**, only if accepted: a fixed cheap worker (`EVAL_PLAN_WORKER`) runs the spec
+     in a second fresh workspace with its own home; `executed` = the hidden tests pass there.
+  3. **Judged**, only if accepted: `judge.sh --kind rubric` grades `spec.md` (ticket and
+     reference diff as background) on `fixtures/plan/rubric.json` plus the task's `decisions`:
+     `mechanism` (names the cause, consistent with the reference diff), `checks` (every step
+     ends in a command or a specific result), `test-first` (a test for the new behaviour
+     before the code change), `scope` (no refactor, rename or extra work).
+
+  `pass` = accepted and executed. The record has `checks`, `met`, `found`/`of` (the six
+  checks, `accepted` included, plus the judged items: the summary shows recall),
+  `workerCost` (`cost` and usage are the planner's) and `worker`; `workerSensors` is the worker digest's first-line verdict (`PASS`, `FAIL`, `CANNOT-RUN`), or null without one; the summary adds
+  **accepted** and **executed** columns, the gate is unchanged. An unaccepted plan is a
+  fail, not infra, with no worker or judge call; no planner turns, a planner timeout or an
+  accepted plan the judges could not rate is infra. Env: `EVAL_PLAN_WORKER`
+  (`<provider/model>:<thinking>`, default `anthropic/claude-haiku-5-5:low`), `EVAL_PLAN_PROMPT`
+  (when set, used exclusively; otherwise `~/.pi/agent/prompts/plan.md` if present, then
+  `config/pi/prompts/plan.md` in the repo holding agent-eval), `EVAL_PLAN_TIMEOUT` (planner seconds, default 900),
+  `EVAL_PLAN_PI` (default `pi`, the test seam). `validate.sh` needs the hidden tests to fail at
+  `fix^` and pass at `fix`, a `ticket.md`, unique decision ids that are not the rubric's, and
+  with `samples.json` known ids and a `gold.md` passing all six checks. To check the judges
+  (real calls): `./check-judges.sh plan-back-to-back` prints `<file> <id> want=yes|no: a=.. b=..;
+  ok|MISS` per sample id (both judges must agree with want). `gold.md` is a good plan, `bad.md`
+  one the mechanical checks accept and a reviewer would reject. One trial costs the planner,
+  the fixed worker and two judge calls.
 
 Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 `~/.pi/agent` except `memory.md`, sessions and run history, so trials
