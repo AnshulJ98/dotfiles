@@ -17,7 +17,7 @@ local function marks()
   return result
 end
 assert(vim.wait(2000, function() vim.cmd.redraw(); return #marks() > 0 end, 25), 'code header did not render')
-for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'dark-2026', 'tango', 'coffee-sky', 'coffee-slate' } do
+for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'dark-2026', 'tango', 'coffee-sky', 'coffee-slate', 'coffee-light' } do
   vim.cmd.colorscheme(name)
   require('render-markdown').enable()
   vim.cmd.redraw()

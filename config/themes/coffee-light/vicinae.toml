@@ -1,0 +1,54 @@
+# Coffee Light: Vicinae colours, matching kitty.conf in this directory.
+
+[meta]
+version = 1
+name = "Coffee Light"
+description = "coffee-light palette (generated; file and theme name kept so settings need no change)."
+variant = "light"
+inherits = "vicinae-light"
+
+[colors.core]
+background = "#faf4ed"            # editor.background
+foreground = "#3d352b"            # editor.foreground
+secondary_background = "#f2ece5"  # sideBar.background
+border = "#d9d2cc"                # editorWidget.border
+accent = "#027974"                # terminal.ansiBlue
+accent_foreground = "#faf4ed"
+
+[colors.accents]
+blue = "#027974"
+green = "#557a06"
+magenta = "#c44b87"
+orange = "#ae7504"
+purple = "#c44b87"
+red = "#d04a47"
+yellow = "#ae7504"
+cyan = "#067953"
+
+[colors.text]
+muted = "#6c655f"        # descriptionForeground #3d352b80
+placeholder = "#5b544c"  # input.placeholderForeground
+danger = "#d04a47"
+success = "#557a06"
+selection = { background = "#d7d0c9", foreground = "#3d352b" }
+
+[colors.text.links]
+default = "#c25133"      # textLink.foreground
+
+[colors.input]
+border = "#c1bab4"       # input.border
+border_focus = "#aca59f" # focusBorder
+border_error = "#d04a47"
+
+[colors.list.item.hover]
+foreground = "#3d352b"
+secondary_foreground = "#3d352b"
+
+[colors.list.item.selection]
+background = "#e1dad4"   # list.activeSelectionBackground #6d656073
+foreground = "#3d352b"
+secondary_background = "#d7d0c9"
+secondary_foreground = "#3d352b"
+
+[colors.grid.item]
+background = "#d2ccc5"   # editorWidget.background

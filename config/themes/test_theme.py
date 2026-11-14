@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent
-NAMES = ("ayu-ink", "ayu-neutral", "coffee-sky", "coffee-slate", "dark-2026", "midnightvoid",
+NAMES = ("ayu-ink", "ayu-neutral", "coffee-light", "coffee-sky", "coffee-slate", "dark-2026", "midnightvoid",
          "tango", "void-ink", "void-neutral")
 
 
@@ -129,10 +129,11 @@ class ThemeTests(unittest.TestCase):
                 self.assertLessEqual(contrast(fill, background), 1.12)
                 self.assertGreaterEqual(contrast(settings["color238"], background), 1.7)
                 self.assertLessEqual(contrast(settings["color238"], background), 2.0)
+                light = luminance(background) > 0.5
                 greys = [luminance(settings[f"color{index}"]) for index in range(232, 256)]
-                self.assertEqual(greys, sorted(greys))
-                for index in (76, 178):  # git clean and modified
-                    self.assertGreaterEqual(contrast(settings[f"color{index}"], fill), 8)
+                self.assertEqual(greys, sorted(greys, reverse=light))
+                for index in (76, 178):  # git clean and modified; ink on a light fill cannot reach 8:1 with colour left
+                    self.assertGreaterEqual(contrast(settings[f"color{index}"], fill), 4 if light else 8)
 
     def test_pi_keeps_the_accent_teal_and_yellow_out_of_prose_and_the_editor_rule(self):
         for name in NAMES:

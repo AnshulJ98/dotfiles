@@ -1,0 +1,134 @@
+name "coffee-light"
+
+base {
+    appearance "light"
+    background #faf4ed
+    separator #dcd5cf
+    text #3d352b
+}
+
+actionBar {
+    separator #dcd5cf
+
+    button {
+        background #f2ece5
+        hotkey #027974
+        text #5b544c
+    }
+}
+
+asyncProgressBar {
+    border #aca59f
+    progress #027974
+    itemProgress #557a06
+}
+
+breadcrumbs {
+    color1 #faf4ed
+    color2 #d2ccc5
+    color3 #eae4dd
+    separator #9c948e
+    text #3d352b
+}
+
+files {
+    background {
+        alternate #faf4ed
+        current #eae4dd
+        currentSelected #eae4dd
+        selected #d2ccc5
+    }
+
+    dragDropSelection {
+        color #027974
+        width 1
+    }
+
+    text {
+        current #c25133
+        currentSelected #c44b87
+        hidden #5b544c
+        matched #ae7504
+        selected #c44b87
+
+        highlighting1 #027974
+        highlighting2 #557a06
+        highlighting3 #c44b87
+        highlighting4 #ae7504
+    }
+}
+
+searchBar {
+    query {
+        border #aca59f
+        placeholder #5b544c
+    }
+
+    results {
+        highlighting #027974
+        selection #eae4dd
+        subtitle #5b544c
+    }
+
+    rowSeparator {
+        color #d2ccc5
+        show true
+    }
+}
+
+statusBar {
+    background #f2ece5
+    border #dcd5cf
+    text #3d352b
+    quickSelectNoResultsHighlighting #d04a47
+}
+
+tableHeader {
+    separator #dcd5cf
+    text #5b544c
+
+    pressed {
+        background #d2ccc5
+    }
+}
+
+tabs {
+    active {
+        text #3d352b
+    }
+
+    inactive {
+        background #f2ece5
+        text #5f584f
+    }
+}
+
+terminal {
+    caret {
+        background #ae7504
+        text #faf4ed
+    }
+}
+
+textEditor {
+    error #d04a47
+    warning #dad2b3
+    keyword #ae7504
+    comment #5f584f
+    identifier #cf4b3d
+
+    literal {
+        string #557a06
+        number #b75301
+        color #b75301
+    }
+
+    gutter {
+        background #faf4ed
+        text #6c645f
+    }
+}
+
+titleBar {
+    text #3d352b
+}
