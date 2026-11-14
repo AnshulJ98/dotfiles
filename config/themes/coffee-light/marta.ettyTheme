@@ -1,0 +1,26 @@
+background #faf4ed
+caret #ae7504
+caretText #faf4ed
+foreground #3d352b
+name "coffee-light"
+selectedText #3d352b
+selection #d7d0c9
+
+ansiColors [
+    #faf4ed
+    #d04a47
+    #557a06
+    #ae7504
+    #027974
+    #c44b87
+    #067953
+    #3d352b
+    #5b544c
+    #d04a47
+    #657f07
+    #ae7503
+    #0a7874
+    #9a5a79
+    #037d55
+    #140b06
+]

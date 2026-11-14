@@ -1,0 +1,19 @@
+# Coffee Light: delta colours, included by ~/.gitconfig. lazygit's diffRenderers use the feature.
+[delta "theme"]
+	line-numbers = true
+	syntax-theme = coffee-light
+	file-style = bold "#027974"
+	file-decoration-style = "#8a827c" ul
+	hunk-header-style = line-number syntax
+	hunk-header-decoration-style = "#8a827c" ol
+	plus-style = syntax "#dae1cd"
+	plus-emph-style = syntax "#c5ceb4"
+	minus-style = syntax "#f9e2e0"
+	minus-emph-style = syntax "#f5cfca"
+	plus-empty-line-marker-style = normal "#dae1cd"
+	minus-empty-line-marker-style = normal "#f9e2e0"
+	line-numbers-left-style = "#5f584f"
+	line-numbers-right-style = "#5f584f"
+	line-numbers-minus-style = "#d04a47"
+	line-numbers-plus-style = "#557a06"
+	line-numbers-zero-style = "#5f584f"
