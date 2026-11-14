@@ -120,6 +120,12 @@ old_bat="$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
 if [ -L "$old_bat" ] && [ "$(readlink "$old_bat")" = "$DOT/config/yazi/bearded-hc-midnightvoid.tmTheme" ]; then
   link "$DOT/config/themes/midnightvoid/syntax.tmTheme" "$old_bat"
 fi
+# A theme deleted from the repo leaves its links dangling; remove ours and nobody else's.
+for l in "$HOME/.config/bat/themes"/*.tmTheme "$HOME/.local/share/vicinae/themes"/*.toml; do
+  if [ -L "$l" ] && [ ! -e "$l" ]; then
+    case "$(readlink "$l")" in "$DOT"/config/themes/*) rm "$l" ;; esac
+  fi
+done
 for t in "$DOT"/config/themes/*/syntax.tmTheme; do
   n=$(basename "$(dirname "$t")")
   [ "$n" = current ] || link "$t" "$HOME/.config/bat/themes/$n.tmTheme"

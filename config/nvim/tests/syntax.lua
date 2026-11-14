@@ -42,8 +42,7 @@ end
 
 local temp = vim.fn.tempname()
 vim.fn.mkdir(temp .. '/themes', 'p')
-local names = { 'coffee-neutral', 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'soviet-dark', 'dark-2026', 'tango',
-  'coffee-steel-purple', 'coffee-steel', 'coffee-sky', 'coffee-slate' }
+local names = { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'dark-2026', 'tango', 'coffee-sky', 'coffee-slate' }
 for _, name in ipairs(names) do
   assert(vim.uv.fs_copyfile('config/themes/' .. name .. '/syntax.tmTheme', temp .. '/themes/' .. name .. '.tmTheme'))
 end
