@@ -264,3 +264,26 @@ test("worker cells report the share of counted trials whose agent wrote a test, 
 	assert.deepEqual(baselineCells(roles).worker["p/w:low"], { passRate: 1, tasks: 4, flaky: 0 });
 	assert.equal(render(summarize(wrote([true], { role: "scout" }))).includes("wrote test"), false);
 });
+
+test("plan cells report the share of counted trials whose spec was accepted and executed, '-' without records carrying both; the gate ignores them", () => {
+	const plan = (flags: [boolean | undefined, boolean | undefined][], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		flags.map(([a, e], i) => rec(`t${i}`, "p/m", 1, a === true && e === true, {
+			role: "plan", found: 3, of: 10, ...(a === undefined ? {} : { accepted: a }), ...(e === undefined ? {} : { executed: e }), ...over,
+		}));
+	const line = JSON.stringify({ task: "a", role: "plan", model: "p/m", thinking: "low", trial: 1, pass: true, accepted: true, executed: true });
+	const { records } = parseRecords(`${line}\n${line.replace('"executed":true', '"executed":"yes"')}\n`);
+	assert.deepEqual(records.map((r) => [r.accepted, r.executed]), [[true, true], [undefined, undefined]]);
+	// the leak record is not counted; a record with only one of the two fields is not in the denominator
+	const roles = summarize([
+		...plan([[true, true], [true, false], [false, false], [true, undefined]]), ...plan([[true, true]], { leak: true }),
+		...plan([[false, false]], { model: "p/n" }), ...plan([[undefined, undefined]], { model: "p/o" }),
+	]);
+	const [m, n, o] = roles[0].cells;
+	assert.deepEqual([m.accepted, m.executed, m.planOf, n.accepted, n.executed, n.planOf, o.planOf], [2, 1, 3, 0, 0, 1, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| infra \| accepted \| executed \|\n\|(---\|){12}\n/);
+	assert.match(text, /\| p\/m:low \|.* \| 0 \| 66\.7% \(2\/3\) \| 33\.3% \(1\/3\) \|\n/);
+	assert.match(text, /\| p\/o:low \|.* \| 0 \| - \| - \|\n/);
+	assert.deepEqual(Object.keys(baselineCells(roles).plan["p/m:low"]).sort(), ["defects", "flaky", "flakyDefects", "passRate", "recall", "tasks"]);
+	assert.equal(render(summarize(grid("p/x", { a: [true] }))).includes("accepted"), false);
+});

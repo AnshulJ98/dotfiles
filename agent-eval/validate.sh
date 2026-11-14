@@ -7,7 +7,10 @@
 # must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range), facts is a
 # non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. An orch task is valid
 # when expect is merge, rework, stop or fix, scenario.md is non-empty, and rule is {lines: [from, to], must} with the
-# phrase occurring (whitespace-insensitive) within those lines of fixtures/orch/rules.md. A NOTE on stderr (not a
+# phrase occurring (whitespace-insensitive) within those lines of fixtures/orch/rules.md. A plan task (role plan) is valid
+# when its hidden tests fail at fix^ and pass at fix, ticket.md is non-empty, decisions is a list of {id, text} with unique
+# ids that do not collide with the rubric's (fixtures/plan/rubric.json), and, when samples.json exists, each file it names
+# exists, each id is a rubric or decision id, and gold.md passes all six mechanical checks (lib/plan-grade.ts). A NOTE on stderr (not a
 # failure) says when that fixture no longer equals lines 89-204 of config/pi/prompts/plan.md in the repo holding
 # agent-eval. No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
@@ -56,6 +59,24 @@ check_facts() {
   ' "$1" 2>&1 | head -1
 }
 
+# Plan task: print nothing when valid, else the reason.
+check_plan() {
+  local task="$1" repo fix ws reason
+  repo="$(task_get "$task" repo)"
+  fix="$(task_get "$task" fix)"
+  if ! git -C "$repo" rev-parse --verify -q "$fix^" > /dev/null; then echo "cannot resolve $fix^ in $repo"; return 0; fi
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the base workspace"; return 0; }
+  reason="$(node "$EVAL_DIR/lib/plan-grade.ts" check "$task" "$ws" 2>&1 | head -1)"
+  [ -z "$reason" ] || { echo "$reason"; return 0; }
+  overlay_hidden "$task" "$ws" > /dev/null 2>&1 || { echo "cannot read hidden tests from $fix"; return 0; }
+  if run_test "$task" "$ws" > /dev/null 2>&1; then echo "hidden tests pass on the base"; return 0; fi
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$task" "$ws" fix > /dev/null 2>&1 || { echo "cannot build the fix workspace"; return 0; }
+  overlay_hidden "$task" "$ws" > /dev/null 2>&1 || { echo "cannot read hidden tests from $fix"; return 0; }
+  run_test "$task" "$ws" > /dev/null 2>&1 || echo "hidden tests fail at the fix commit"
+}
+
 # Orch tasks: say once on stderr when the rules fixture is stale against plan.md in this repo.
 orch_noted=0
 orch_note() {
@@ -74,6 +95,10 @@ check() {
   local task="$1" repo fix ws path hidden allowed reason
   if [ "$(task_get "$task" role)" = orch ]; then
     node "$EVAL_DIR/lib/orch.ts" check "$task" "$EVAL_DIR/fixtures/orch/rules.md" 2>&1 | head -1
+    return 0
+  fi
+  if [ "$(task_get "$task" role)" = plan ]; then
+    check_plan "$task"
     return 0
   fi
   repo="$(task_get "$task" repo)"
