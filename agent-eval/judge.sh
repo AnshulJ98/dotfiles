@@ -2,7 +2,9 @@
 # Score a list of items against a text with blinded judges: two judges from different providers say yes/no per item.
 # An item is met when both say yes.
 # usage: judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>]
-#                 [--items <file>] [--context <file>]
+#                 [--items <file>] [--context <file>] [--extract-only]
+#   --extract-only --subject <file>: only the review extractor; prints {findings, high, judgeCost, infra}.
+#     No item list is needed. Missing --subject exits 2; an empty subject or bad extraction is infra.
 #   --kind review (default): subject <trial-dir>/review.txt, items task.defects; a haiku extractor first turns the review
 #     into findings (or take the findings JSON given with --findings, which skips the extraction).
 #   --kind facts: subject <trial-dir>/digest.txt (an answer), items task.facts; no extractor.
@@ -25,14 +27,15 @@ JUDGE_A="anthropic/claude-opus-5-5"
 JUDGE_B="openai-codex/gpt-6.1-sol"
 
 usage() {
-  echo "usage: judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>]" >&2
+  echo "usage: judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>] [--extract-only]" >&2
   exit 2
 }
 [ $# -ge 2 ] || usage
 trial="$1" task="$2"
 shift 2
-kind=review given="" subject="" items="" context=""
+kind=review given="" subject="" items="" context="" extract_only=false
 while [ $# -gt 0 ]; do
+  if [ "$1" = --extract-only ]; then extract_only=true; shift; continue; fi
   [ $# -ge 2 ] || usage
   case "$1" in
     --kind) kind="$2" ;;
@@ -45,6 +48,7 @@ while [ $# -gt 0 ]; do
   shift 2
 done
 case "$kind" in review | facts | rubric) ;; *) usage ;; esac
+[ "$extract_only" = false ] || { [ -n "$subject" ] && [ "$kind" = review ] && [ -z "$given" ]; } || usage
 [ "$kind" = review ] || [ -z "$given" ] || usage
 [ "$kind" != rubric ] || { [ -n "$subject" ] && [ -n "$items" ]; } || usage
 [ -d "$trial" ] && [ -f "$task/task.json" ] || usage
@@ -71,11 +75,20 @@ call_pi() {
     < /dev/null > "$jdir/$name.reply.txt" 2> "$jdir/$name.stderr.txt") || true
 }
 
-finish() { node "$REVIEW_TS" result "$jdir/items.json" "$jdir" | tee "$trial/judge.json"; exit 0; }
+finish() {
+  if [ "$extract_only" = true ]; then
+    node "$REVIEW_TS" extract-result "$jdir"
+  else
+    node "$REVIEW_TS" result "$jdir/items.json" "$jdir"
+  fi | tee "$trial/judge.json"
+  exit 0
+}
 nonblank() { [ -s "$1" ] && grep -q '[^[:space:]]' "$1"; }
 
 # The item list, normalised once to [{id, text, minor}]; n is its length. A missing or invalid list is infra (of 0).
-if [ -n "$items" ]; then
+if [ "$extract_only" = true ]; then
+  : # Extraction does not grade items.
+elif [ -n "$items" ]; then
   n="$(node "$REVIEW_TS" items "$items" - "$jdir/items.json" 2> "$jdir/items.stderr.txt")" || finish
 else
   case "$kind" in review) key=defects ;; *) key=facts ;; esac
@@ -96,6 +109,7 @@ case "$kind" in
       call_pi extract "$EXTRACT_MODEL" "$jdir/extract.prompt.txt"
     fi
     node "$REVIEW_TS" findings "$jdir/extract.reply.txt" "$jdir/findings.json" || finish
+    [ "$extract_only" = false ] || finish
     match_args=(FINDINGS="$jdir/findings.json")
     ;;
   facts)

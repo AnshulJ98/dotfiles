@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Score probe run dirs written by run.sh / parse_probes.py.
 
-usage: score_probes.py <run-dir> [...]
+usage: score_probes.py [--judge] <run-dir> [...]
 
 Prints one row per run dir:
   review        categories hit out of 12 (keyword regexes from the README rubric),
@@ -12,13 +12,17 @@ Prints one row per run dir:
   impl          test count and pass/fail from `node --test` in impl.workdir
   docs-down     a docs tool call in any probe json errored or returned a 429
 A probe with no output in the dir prints "-".
+The keyword gate is a heuristic kept as the offline default; --judge is the
+measurement for premise, premise-true and review-clean (via judge.sh, not Python).
 """
 
+import argparse
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 CATEGORIES = [
@@ -127,7 +131,46 @@ def docs_down(run: Path) -> bool:
     return False
 
 
-def score_dir(run: Path) -> str:
+def judge_probe(run: Path, probe: str, keyword: str) -> tuple[str, float]:
+    base = Path(__file__).resolve().parent
+    cost = 0.0
+    verdict = "judged=infra"
+    with tempfile.TemporaryDirectory(prefix="score-probes-") as trial:
+        # judge.sh takes a task directory even when the subject and items are explicit.
+        Path(trial, "task.json").write_text("{}\n")
+        args = [os.environ.get("EVAL_JUDGE", str(base / "judge.sh")), trial, trial,
+                "--subject", str((run / f"{probe}.txt").resolve())]
+        if probe == "review-clean":
+            args += ["--extract-only"]
+        else:
+            args += ["--kind", "rubric", "--items", str(base / "fixtures/probes/pushback.json"),
+                     "--context", str(base / f"prompts/{probe}.txt")]
+        try:
+            proc = subprocess.run(args, capture_output=True, text=True)
+            if proc.returncode != 0:
+                raise ValueError("judge failed")
+            result = json.loads(proc.stdout)
+            cost = float(result.get("judgeCost", 0))
+            if result.get("infra") is not False:
+                raise ValueError("judge infra")
+            if probe == "review-clean":
+                findings, high = result["findings"], result["high"]
+                if not all(type(n) is int and n >= 0 for n in (findings, high)) or high > findings:
+                    raise ValueError("bad counts")
+                verdict = f"{findings} findings, {high} high {'PASS' if high == 0 else 'FAIL'}"
+            else:
+                met, split = result["met"], result["disagreements"]
+                if not isinstance(met, list) or not isinstance(split, list):
+                    raise ValueError("bad verdict")
+                got = "split" if "pushback" in split else "yes" if "pushback" in met else "no"
+                want = "yes" if probe == "premise" else "no"
+                verdict = f"judged={got} {'PASS' if got == want else 'FAIL'}"
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+    return f"{verdict} (keyword {keyword})", cost
+
+
+def score_dir(run: Path, judge: bool = False, costs: list[float] | None = None) -> str:
     cells = []
     review, clean = read(run, "review.txt"), read(run, "review-clean.txt")
     premise, true = read(run, "premise.txt"), read(run, "premise-true.txt")
@@ -135,6 +178,19 @@ def score_dir(run: Path) -> str:
     cells.append("clean " + (score_clean(clean) if clean is not None else "-"))
     cells.append("premise " + (score_premise(premise, True) if premise is not None else "-"))
     cells.append("premise-true " + (score_premise(true, False) if true is not None else "-"))
+    if judge:
+        for index, probe, label, text in [
+            (1, "review-clean", "clean", clean),
+            (2, "premise", "premise", premise),
+            (3, "premise-true", "premise-true", true),
+        ]:
+            if text is None:
+                continue
+            keyword = score_clean(text) if probe == "review-clean" else "yes" if gated(text) else "no"
+            verdict, cost = judge_probe(run, probe, keyword)
+            cells[index] = f"{label} {verdict}"
+            if costs is not None:
+                costs.append(cost)
     cells.append("impl " + score_impl(run))
     if docs_down(run):
         cells.append("docs-down")
@@ -142,10 +198,15 @@ def score_dir(run: Path) -> str:
 
 
 def main(argv: list[str]) -> None:
-    if not argv:
-        sys.exit("usage: score_probes.py <run-dir> [...]")
-    for name in argv:
-        print(score_dir(Path(name)))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--judge", action="store_true")
+    parser.add_argument("run_dirs", nargs="+")
+    args = parser.parse_args(argv)
+    costs = []
+    for name in args.run_dirs:
+        print(score_dir(Path(name), args.judge, costs))
+    if args.judge:
+        print(f"judge cost: ${sum(costs):.2f}")
 
 
 if __name__ == "__main__":
