@@ -12,8 +12,6 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent
-# Themes whose prompt follows Midnight Void's balance: a frame and fill that recede, saturated git colours.
-QUIET_PROMPT = ("void-ink",)
 NAMES = ("ayu-ink", "ayu-neutral", "coffee-sky", "coffee-slate", "dark-2026", "midnightvoid",
          "tango", "void-ink", "void-neutral")
 
@@ -114,17 +112,17 @@ class ThemeTests(unittest.TestCase):
                     self.assertTrue(found)
                     for color in found:
                         self.assertGreaterEqual(contrast(color, background), 3, color)
-            # p10k draws its frame in colour 238 on the background and its separators in 242 on its 234 fill.
-            kitty = dict(re.findall(r"(?m)^(color23[48]|color242)\s+(#\w{6})", (ROOT / name / "kitty.conf").read_text()))
+            # p10k draws its separators in colour 242 on its 234 fill.
+            kitty = dict(re.findall(r"(?m)^(color234|color242)\s+(#\w{6})", (ROOT / name / "kitty.conf").read_text()))
             with self.subTest(theme=name, file="kitty.conf"):
-                if name not in QUIET_PROMPT:
-                    self.assertGreaterEqual(contrast(kitty["color238"], background), 3)
                 self.assertGreaterEqual(contrast(kitty["color242"], kitty["color234"]), 3)
 
-    def test_quiet_prompts_keep_the_midnight_void_balance(self):
+    def test_prompts_keep_the_midnight_void_balance(self):
         # Midnight Void's prompt reads well because its chrome recedes (fill 1.02:1 and frame 1.72:1 on
         # the background) and its git colours are saturated. A 3:1 frame made the others look heavy.
-        for name in QUIET_PROMPT:
+        for name in NAMES:
+            if name == "midnightvoid":
+                continue
             with self.subTest(theme=name):
                 settings = dict(re.findall(r"(?m)^(background|color\d+)\s+(#\w{6})",
                                            (ROOT / name / "kitty.conf").read_text()))
@@ -137,19 +135,24 @@ class ThemeTests(unittest.TestCase):
                 for index in (76, 178):  # git clean and modified
                     self.assertGreaterEqual(contrast(settings[f"color{index}"], fill), 8)
 
-    def test_void_ink_pi_keeps_cyan_teal_and_yellow_out_of_prose_and_the_editor_rule(self):
-        pi = json.loads((ROOT / "void-ink" / "pi.json").read_text())
+    def test_pi_keeps_the_accent_teal_and_yellow_out_of_prose_and_the_editor_rule(self):
+        for name in NAMES:
+            if name == "midnightvoid":
+                continue
+            with self.subTest(theme=name):
+                pi = json.loads((ROOT / name / "pi.json").read_text())
 
-        def color(key):
-            return pi["vars"].get(pi["colors"][key], pi["colors"][key]).lower()
+                def color(key):
+                    return pi["vars"].get(pi["colors"][key], pi["colors"][key]).lower()
 
-        loud = {pi["vars"][name].lower() for name in ("blue", "turquoise", "yellow")}
-        for key in ("mdCode", "mdHeading", "mdListBullet", "mdQuoteBorder"):
-            self.assertNotIn(color(key), loud, key)
-        # The editor rule shows the thinking level: one colour per level, none of them a loud line.
-        levels = [color("thinking" + level) for level in ("Off", "Minimal", "Low", "Medium", "High", "Xhigh", "Max")]
-        self.assertEqual(len(set(levels)), len(levels))
-        self.assertFalse(loud & set(levels))
+                loud = {pi["vars"][var].lower() for var in ("accent", "blue", "turquoise", "yellow")}
+                for key in ("mdCode", "mdHeading", "mdListBullet", "mdQuoteBorder"):
+                    self.assertNotIn(color(key), loud, key)
+                # The editor rule shows the thinking level: one colour per level, none of them a loud line.
+                levels = [color("thinking" + level)
+                          for level in ("Off", "Minimal", "Low", "Medium", "High", "Xhigh", "Max")]
+                self.assertEqual(len(set(levels)), len(levels))
+                self.assertFalse(loud & set(levels))
 
     def test_ayu_ink_default_text_is_white_in_the_terminal_and_the_editor(self):
         settings = dict(line.split() for line in (ROOT / "ayu-ink" / "kitty.conf").read_text().splitlines()

@@ -7,7 +7,7 @@
 	hunk-header-style = line-number syntax
 	hunk-header-decoration-style = "#615f5d" ol
 	plus-style = syntax "#1e2112"
-	plus-emph-style = syntax "#252c15"
+	plus-emph-style = syntax "#293019"
 	minus-style = syntax "#251717"
 	minus-emph-style = syntax "#382020"
 	plus-empty-line-marker-style = normal "#1e2112"
