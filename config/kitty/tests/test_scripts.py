@@ -506,7 +506,10 @@ class ScriptTests(unittest.TestCase):
                                      (["/bin/zsh"], "", "", False)):
             with self.subTest(fg=fg, ps=ps):
                 (self.root / "calls").unlink(missing_ok=True)
-                result = self.run_script("zgoto", "7", "--key", KITTY_LS=ls(fg, holder), PS_OUT=ps)
+                # kitty does not fill in @active-kitty-window-id for remote_control_script (0.50.0,
+                # boss.py remote_control_script); zgoto finds the focused window itself
+                result = self.run_script("zgoto", "@active-kitty-window-id", "--key",
+                                         KITTY_LS=ls(fg, holder), PS_OUT=ps)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 kitten = [a for a in self.calls("kitten") if "ls" not in a]
                 self.assertEqual(kitten[0][:2] == ["@", "send-key"], sent, kitten)
@@ -514,6 +517,7 @@ class ScriptTests(unittest.TestCase):
                     self.assertEqual(kitten, [["@", "send-key", "--match", "id:7", "ctrl+backslash"]])
                 else:
                     self.assertEqual(kitten[0][:2], ["@", "launch"])
+                    self.assertEqual(kitten[0][-1], "7")  # zpick starts on the pane it came from
 
     def test_picker_fills_the_terminal(self):
         for extra in ((), ("--zmx",)):
