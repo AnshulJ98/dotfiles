@@ -132,6 +132,7 @@ function readVerdicts(path: string): boolean[] | undefined {
  *   findings <reply.txt> <out.json>                        parse an extractor reply, write the normalised findings
  *   verdicts <reply.txt> <n> <out.json>                    parse a judge reply, write the booleans
  *   result <items.json> <judge-dir>                        judge.sh's JSON line from <judge-dir>/verdicts-{a,b}.json and session costs (infra, of 0 when items.json is missing)
+ *   extract-result <judge-dir>                            extraction counts and session costs; infra when the extractor reply is missing or unparseable
  *   final-reply <stream.jsonl>                             the reviewer's final text
  */
 function main([command, ...args]: string[]): number {
@@ -166,6 +167,20 @@ function main([command, ...args]: string[]): number {
 			const verdicts = parseVerdicts(read(args[0]), Number(args[1]));
 			return verdicts === undefined ? 1 : write(args[2], verdicts);
 		}
+		case "extract-result": {
+			let findings: Finding[] | undefined;
+			try {
+				findings = parseFindings(read(join(args[0], "extract.reply.txt")));
+			} catch {
+				// Missing extractor reply is infra, just like an unparseable reply.
+			}
+			console.log(JSON.stringify({
+				findings: findings?.length ?? 0,
+				high: findings?.filter((f) => f.severity === "high").length ?? 0,
+				judgeCost: judgeCost(args[0]), infra: findings === undefined,
+			}));
+			return 0;
+		}
 		case "result": {
 			let items: Item[] = [];
 			try {
@@ -185,7 +200,7 @@ function main([command, ...args]: string[]): number {
 		case "final-reply":
 			return (process.stdout.write(finalReply(lines(args[0]))), 0);
 		default:
-			console.error("usage: review.ts render-extract|items|render-match|findings|verdicts|result|final-reply ...");
+			console.error("usage: review.ts render-extract|items|render-match|findings|verdicts|result|extract-result|final-reply ...");
 			return 2;
 	}
 }

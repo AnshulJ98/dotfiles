@@ -4,13 +4,21 @@ Probe battery built during the 2026-08-26 config audit
 (`~/Dev/probe-battery-2026-08-26.md`, `~/Dev/pi-master-review-2026-08.md`).
 Run it after any change to `config/pi/agents-md/` fragments, prompts, or
 default model/thinking, and compare against the baselines below. It
-measures instruction adherence and recall, not model benchmarks.
+measures task outcomes, instruction adherence and recall, not general model capability.
 
 ## Task suite
 
 Probes below check what a model says about a fixture. The task suite
 checks what it does: each trial gives a model a real job in a scratch
 workspace and grades the result mechanically or with judges. Five roles:
+
+| Role | What the model is given | What decides pass | What else is recorded | Judges? |
+|---|---|---|---|---|
+| worker | Ticket and repo at the fix's parent | Hidden tests pass, edits stay allowed; blocked tasks require no edits and a named blocker | Test-writing, outside edits, usage/cost | No |
+| review | Repo with seeded or injected defects, review request | Both judges find every non-minor defect | Defect recall, disagreements, extracted findings, usage/cost | Haiku extractor, opus-5-5 and gpt-6.1-sol |
+| scout | Research question and read-only repo | Both judges find every required fact in the digest | Fact recall, citation coverage, disagreements, usage/cost | Opus-5-5 and gpt-6.1-sol |
+| orch | Auto-run rules and one situation | First DECISION matches the expected action | Parsed decision, usage/cost | No |
+| plan | Ticket, repo and /plan prompt | Spec accepted mechanically and fixed worker passes hidden tests | Six mechanical checks, rubric/decision recall, worker outcome/sensors and cost, planner usage/cost | Opus-5-5 and gpt-6.1-sol on accepted specs |
 
 - **worker** (14 tasks: `booking-*`, `cube-*`, `differ-*`, `gate-missing-pairs`). Cut from fix
   commits in pi-lab and sim/cube (and this repo, below). The trial runs `scout --rw` on
@@ -127,14 +135,27 @@ workspace and grades the result mechanically or with judges. Five roles:
   one the mechanical checks accept and a reviewer would reject. One trial costs the planner,
   the fixed worker and two judge calls.
 
-  Plan tasks (what remains for the planner):
-  - `plan-back-to-back`: find the endpoint comparison behind the reported overlap.
-  - `plan-free-slots`: a gap-sweep feature with a seeded unknown: negative minMs (zero is pinned by hidden tests).
-  - `plan-delete-404`: locate the HTTP response fix rather than changing the booking store.
-  - `plan-cancel-ids`: reject a wrong guess at the cause and plan a cross-file store/router fix.
-  - `plan-malformed-json`: trace an asynchronous parse exception to a rejected promise and HTTP response.
-  - `plan-cube-render`: build a spec-driven feature with exact snapshots.
-  - `plan-gate-missing-pairs`: three review findings; the one task meant to be beyond the fixed worker without a plan.
+  Plan benchmarks committed in each task's `bench.json`, measured with
+  `calibrate-plan.sh --runs 3` on `anthropic/claude-haiku-5-5:low`:
+
+  | Task | Floor (ticket) | Gold | What it shows |
+  |---|---|---|---|
+  | plan-back-to-back | 3/3 | 3/3 | The worker finds the endpoint comparison without a plan. |
+  | plan-free-slots | 3/3 | 3/3 | The worker builds the gap sweep from the ticket despite the negative-minMs unknown. |
+  | plan-delete-404 | 3/3 | 3/3 | The worker locates the HTTP response fix without a plan. |
+  | plan-cancel-ids | 3/3 | 3/3 | The worker rejects the wrong cause and fixes store/router from the ticket. |
+  | plan-malformed-json | 3/3 | 3/3 | The worker traces the asynchronous parse failure without a plan. |
+  | plan-cube-render | 3/3 | 3/3 | The worker builds the snapshot-exact feature from the ticket alone. |
+  | plan-gate-missing-pairs | 0/3 | 3/3 | A plan decides the outcome on the three review findings. |
+
+  On six tasks the fixed worker passes from the ticket alone, so the executed
+  check there can only catch a plan that breaks the worker; the rubric carries
+  the comparison. This happened in a real trial: a plan that froze the interface
+  of a file exporting a class left the worker unable to run.
+  `plan-gate-missing-pairs` is the one task where a plan decides the outcome.
+  The gold plan for `plan-malformed-json` took the worker over 300 s against
+  under 20 s from the ticket: its test-first step runs a suite that hangs at
+  the base commit.
 
   `./calibrate-plan.sh <task> [--runs N]` (default 3) measures the fixed worker's
   floor with the ticket alone and gold ceiling with the assembled gold plan. Each arm
@@ -145,9 +166,10 @@ workspace and grades the result mechanically or with judges. Five roles:
   It prints per-run pass/fail and seconds, names the retained specs, homes, workspaces
   and logs under `/tmp/agent-eval-calibrate.XXXXXX`, and writes `bench.json` beside the task:
   `{"worker":"anthropic/claude-haiku-5-5:low","runs":3,"floor":0,"gold":3}`.
-  Floor and gold are pass counts, not rates. If floor equals runs, the task tells
-  nothing through the executed check, only through the rubric. Run calibration and
-  judge checks with real models separately; benchmarks are not committed here.
+  Floor and gold are pass counts, not rates. A saturated floor leaves the executed
+  check as a guard against harmful plans, not evidence of improvement from planning.
+  Run calibration and judge checks with real models separately; calibration
+  benchmarks above are committed, not model-comparison results.
 
 Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 `~/.pi/agent` except `memory.md`, sessions and run history, so trials
@@ -180,7 +202,7 @@ summarize.ts <run-dir|trials.jsonl>
 gate.sh <run-dir|trials.jsonl> [--update] [--partial]
 mk-task.sh <repo> <fix-sha> [id] [--test "<cmd>"]
 check-judges.sh <task>
-judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>]
+judge.sh <trial-dir> <task-dir> [--kind review|facts|rubric] [--findings <file>] [--subject <file>] [--items <file>] [--context <file>] [--extract-only]
 ```
 
 `matrix.sh` runs every task (or `--tasks`) for every cell, 3 trials each
@@ -298,6 +320,10 @@ true` items are judged and counted in `found`/`of` but cannot fail `pass`
 (d5 of booking-review is minor). Any role whose records carry `found` and
 `of` gets recall in the summary and the gate.
 
+`judge.sh <trial-dir> <task-dir> --extract-only --subject <file>` runs only
+that same haiku extractor, with the same isolation and cost accounting. It prints
+`{findings, high, judgeCost, infra}`; no defect list or matching judges are used.
+
 ### Playbook mapping
 
 Follows Anthropic's "The AI-native SDLC playbook"
@@ -308,13 +334,30 @@ code.
 
 | Playbook stage | Here |
 |---|---|
+| Plan | plan tasks |
 | Build | worker tasks |
-| Deploy | review task (the review that gates a change) |
+| Deploy | review tasks (the review that gates a change) |
+| Orchestration decisions | orch tasks: single decisions from the auto-run rules |
 | Test of the config | the probes below, and the gate |
-| Plan, Design, Maintain | not covered |
+| Design, Maintain | not covered |
 
-The scout tasks are not mapped to a stage. Nothing here evaluates planning,
-design decisions or long-lived maintenance work.
+The scout tasks are not mapped to a stage.
+
+### Not covered
+
+- Long multi-slice runs: orchestration is tested one decision at a time, not
+  whether a model keeps the rules over a whole run.
+- Design decisions and maintenance work.
+- Review precision: a task-suite review is never penalised for invented
+  findings; only recall is graded. The review-clean probe is a separate check.
+- Independent judging of every contestant: opus-5-5 is both a judge and a
+  contestant, mitigated by blinded text, binary criteria and a second judge
+  from another provider.
+- Harder research: the scout questions are close to saturated on correct answers.
+- Human-authored references: the injected cube defects and gold plans were
+  written by a model and checked by tests and judges, not by a person.
+- Strong statistical comparisons: trials per cell are few (3), so differences
+  of one task are noise.
 
 ## Usage
 
@@ -349,19 +392,34 @@ empty sessions, so the real ones are untouched. Results from before
   discipline: check named, tests run, green claimed only after a watched
   run. Verify independently with `node --test` in the printed workdir.
 - **review-clean** — the review prompt on `fixtures/review-clean/`, the
-  same code with every rubric defect fixed. Any finding at the top severity
-  is invented; `score_probes.py` prints the count (0 is clean).
+  same code with every rubric defect fixed. Checks invented findings;
+  `--judge` extracts findings and passes when none is high severity.
 - **premise-true** — the premise probe with a premise that holds (profiled
   GetItem p99 31 ms of 36 ms, Redis GET 1.2 ms). Pushing back is the
   failure; the first sentence must not gate.
 
 Name them explicitly (`./run.sh "" high review-clean premise-true`); the
-default run is review, premise, impl. Score a results dir with
-`python3 score_probes.py results/<ts>`: review and review-clean by
-keyword, premise and premise-true by a first-sentence gate, impl by
-`node --test` in the recorded workdir. The review keywords and the gate are
-heuristics. The gate misses some pushback (sonnet-5-5 opening "The main
-catch is ..."), so read every premise row yourself.
+default run is review, premise, impl. The offline default,
+`python3 score_probes.py results/<ts>`, scores review by category keywords,
+review-clean by severity-word lines, premise and premise-true by a
+first-sentence gate, and impl by `node --test` in the recorded workdir.
+These keyword scores are heuristics, not the measurement: the gate misses
+some pushback (sonnet-5-5 opening "The main catch is ...").
+
+Use `python3 score_probes.py --judge results/<ts> [results/<other-ts> ...]`
+for the measurement of premise, premise-true and review-clean. Python delegates
+to `judge.sh`: each premise reply is judged against the single `pushback`
+item in `fixtures/probes/pushback.json`, with its own probe prompt as context.
+Both judges must agree: premise passes on yes, premise-true on no; a split
+fails both. Review-clean uses extraction only and passes with zero high
+findings, while also reporting total findings. Cells retain the keyword result,
+marked `keyword`; infra (including a failed judge call) is reported without
+stopping the run. The last line totals judge cost.
+
+This costs two judge model calls per premise probe (opus-5-5 and gpt-6.1-sol),
+and one haiku extractor call for review-clean: five calls when all three replies
+are present. No model calls are made without `--judge`; review and impl scoring
+are unchanged.
 
 ## Review rubric (13 categories)
 
