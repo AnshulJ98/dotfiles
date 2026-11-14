@@ -77,9 +77,10 @@ brew "gnu-sed"
 brew "go"
 # Terminal based graphical activity monitor inspired by gtop and vtop
 brew "gotop"
+# SQL IDE for your terminal
+brew "harlequin"
 # Adblocker that creates a hosts file from multiple sources
 brew "hblock"
-# Agent multiplexer that lives in your terminal
 # Improved top (interactive process viewer)
 brew "htop"
 # Run and Test HTTP Requests with plain text and curl
@@ -148,6 +149,8 @@ brew "pyenv"
 brew "python@3.11"
 # Tools for and transforming and inspecting PDF files
 brew "qpdf"
+# Database management TUI for Postgres, MySQL and SQLite
+brew "rainfrog"
 # File browser
 brew "ranger"
 # SVG rendering tool and library
@@ -164,6 +167,8 @@ brew "rustup"
 brew "sevenzip"
 # Multi-purpose tool for manipulating and analyzing WAV files
 brew "shntool"
+# Terminal-based HTTP/REST client
+brew "slumber"
 # Multi-modal AI tool to extract and summarize content
 brew "summarize"
 # Manipulate and query tags on macOS files
