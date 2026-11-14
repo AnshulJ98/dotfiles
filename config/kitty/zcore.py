@@ -80,6 +80,12 @@ def view(panes: list[dict]) -> dict:
     return {'spaces': list(spaces.values()), 'agents': agents}
 
 
+def status(view: dict, current: str, clock: str) -> str:
+    """The tab bar's right end: the workspace's cmd+alt number, then the time."""
+    names = [s.get('name', '') for s in view.get('spaces', [])]
+    return f'{names.index(current) + 1} · {clock}' if current and current in names else clock
+
+
 def line(view: dict, session: str, tab: int) -> bytes:
     agents = [dict({k: v for k, v in a.items() if k not in ('tab_id', 'active')},
                    on=a.get('tab_id') == tab and bool(a.get('active', False)))
