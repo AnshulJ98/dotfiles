@@ -260,9 +260,15 @@ class ThemeTests(unittest.TestCase):
                 self.assertIn("nvim did not reload", result.stderr)
                 self.assertEqual(os.readlink(self.themes / "current"), "void-ink")
 
-    def test_installer_initialises_and_preserves_selection_on_rerun(self):
+    def fake_dotfiles(self):
         dot = self.base / "dotfiles"
         (dot / "config/pi/themes").mkdir(parents=True)
+        # The Linux package step, like brew, is a boundary: stubbed, never run.
+        (dot / "linux-tools.sh").write_text("")
+        return dot
+
+    def test_installer_initialises_and_preserves_selection_on_rerun(self):
+        dot = self.fake_dotfiles()
         (dot / "config/vicinae").mkdir()
         (dot / "config/vicinae/base.json").write_text("{}\n")
         (dot / "config/themes").symlink_to(self.themes)
@@ -284,8 +290,7 @@ class ThemeTests(unittest.TestCase):
         self.assertNotIn("pkill", (self.base / "apps.log").read_text())
 
     def test_installer_recovers_from_a_theme_deleted_from_the_repo(self):
-        dot = self.base / "dotfiles"
-        (dot / "config/pi/themes").mkdir(parents=True)
+        dot = self.fake_dotfiles()
         (dot / "config/vicinae").mkdir()
         (dot / "config/vicinae/base.json").write_text("{}\n")
         (dot / "config/themes").symlink_to(self.themes)
