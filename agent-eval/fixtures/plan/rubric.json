@@ -1,0 +1,6 @@
+[
+  {"id":"mechanism","text":"The plan states the cause of the problem or the mechanism of the change (which function or condition, and what changes in it), and that statement is consistent with the reference diff in the background."},
+  {"id":"checks","text":"Every numbered step ends with a check that is a command to run or a specific observable result. A check that only restates the step, or says to verify or confirm that it works, does not count."},
+  {"id":"test-first","text":"The plan has the worker add or change a test for the new behaviour, and puts that before the code change or says the test must fail before the change."},
+  {"id":"scope","text":"No step changes behaviour or files beyond what the ticket asks for: no refactor, rename, extra feature or unrelated cleanup."}
+]

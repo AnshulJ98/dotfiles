@@ -3,8 +3,14 @@
 export interface TrialRecord {
 	task: string; role: string; model: string; thinking: string; trial: number;
 	pass: boolean; seconds: number; cost: number; leak: boolean; infra: boolean;
-	/** review records: defects found and defects asked about in the trial */
+	/** judged records (review): items met and items asked about in the trial */
 	found?: number; of?: number;
+	/** scout records: the digest's citation grade, expect entries cited and expect entries (secondary to found/of) */
+	cited?: number; citable?: number;
+	/** worker records: the agent changed a test path (see record.ts wroteTest) */
+	wroteTest?: boolean;
+	/** plan records: the planner's spec was accepted by the mechanical checks, and the fixed worker's result passed the hidden tests */
+	accepted?: boolean; executed?: boolean;
 }
 
 export interface CellSummary {
@@ -23,11 +29,17 @@ export interface CellSummary {
 	flaky: string[];
 	meanCost: number; meanSeconds: number; leaks: number; infra: number;
 	/**
-	 * Review cells whose counted records carry found/of: defects found and asked about, summed over counted trials, and a
+	 * Cells whose counted records carry found/of (review; any judged role): items found and asked about, summed over counted trials, and a
 	 * lower bound on the defects whose judgement differs across a task's trials (most found minus least found, per task;
 	 * the record keeps counts, not which defects).
 	 */
 	found?: number; of?: number; flakyDefects?: number;
+	/** Cells whose counted records carry wroteTest: those with it true, out of the counted records that carry it. */
+	wroteTest?: number; wroteTestOf?: number;
+	/** Cells whose counted records carry cited/citable (scout): the sums over those records. */
+	cited?: number; citable?: number;
+	/** Cells whose counted records carry accepted and executed (plan): those with each true, out of the counted records that carry both. */
+	accepted?: number; executed?: number; planOf?: number;
 }
 
 export interface RoleSummary {
@@ -37,7 +49,7 @@ export interface RoleSummary {
 	saturated: string[];
 }
 
-/** Review cells also carry defect recall (found/of), defects per trial and flakyDefects; the gate then compares those. */
+/** Cells with found/of records also carry defect recall (found/of), defects per trial and flakyDefects; the gate then compares those. */
 export interface BaselineCell { passRate: number; tasks: number; flaky: number; recall?: number; defects?: number; flakyDefects?: number }
 
 /** role -> cell -> numbers; one cell may appear under several roles. */
@@ -69,6 +81,9 @@ function asRecord(value: unknown): TrialRecord | undefined {
 	return {
 		task, role, model, thinking, trial, pass, seconds: num(v.seconds), cost: num(v.cost), leak: v.leak === true, infra: v.infra === true,
 		...(count(v.found) && count(v.of) ? { found: v.found, of: v.of } : {}),
+		...(count(v.cited) && count(v.citable) ? { cited: v.cited, citable: v.citable } : {}),
+		...(typeof v.wroteTest === "boolean" ? { wroteTest: v.wroteTest } : {}),
+		...(typeof v.accepted === "boolean" && typeof v.executed === "boolean" ? { accepted: v.accepted, executed: v.executed } : {}),
 	};
 }
 
@@ -100,6 +115,21 @@ function recallOf(counted: TrialRecord[]): Pick<CellSummary, "found" | "of" | "f
 	};
 }
 
+function wroteTestOf(counted: TrialRecord[]): Pick<CellSummary, "wroteTest" | "wroteTestOf"> {
+	const carrying = counted.filter((r) => r.wroteTest !== undefined);
+	return carrying.length === 0 ? {} : { wroteTest: carrying.filter((r) => r.wroteTest).length, wroteTestOf: carrying.length };
+}
+
+function planOf(counted: TrialRecord[]): Pick<CellSummary, "accepted" | "executed" | "planOf"> {
+	const carrying = counted.filter((r) => r.accepted !== undefined && r.executed !== undefined);
+	return carrying.length === 0 ? {} : { accepted: carrying.filter((r) => r.accepted).length, executed: carrying.filter((r) => r.executed).length, planOf: carrying.length };
+}
+
+function citedOf(counted: TrialRecord[]): Pick<CellSummary, "cited" | "citable"> {
+	const carrying = counted.filter((r) => r.cited !== undefined && r.citable !== undefined);
+	return carrying.length === 0 ? {} : { cited: carrying.reduce((n, r) => n + (r.cited ?? 0), 0), citable: carrying.reduce((n, r) => n + (r.citable ?? 0), 0) };
+}
+
 function summarizeCell(role: string, cell: string, records: TrialRecord[]): CellSummary {
 	const counted = records.filter((r) => !r.leak && !r.infra);
 	const byTask = new Map<string, boolean[]>();
@@ -117,7 +147,10 @@ function summarizeCell(role: string, cell: string, records: TrialRecord[]): Cell
 		meanSeconds: mean(counted.map((r) => r.seconds)),
 		leaks: records.filter((r) => r.leak).length,
 		infra: records.filter((r) => r.infra).length,
-		...(role === "review" ? recallOf(counted) : {}),
+		...recallOf(counted),
+		...wroteTestOf(counted),
+		...citedOf(counted),
+		...planOf(counted),
 	};
 }
 

@@ -3,7 +3,7 @@
 # usage: gate.sh <run-dir|trials.jsonl> [--update] [--partial]
 # Prints baseline vs this run per baseline role and cell and whether the steering config changed since the baseline
 # commit. Exit 1 if a cell counted fewer tasks than the baseline, or is below baseline by more than its flaky count (the
-# larger of the two; drop in baseline tasks, and for review cells defect recall, in defects), or has recall on only one
+# larger of the two; drop in baseline tasks, and for cells with defect recall, in defects), or has recall on only one
 # side, or if a role/cell pair the baseline measured is absent from the run (MISSING); 2 if no baseline or no
 # role/cell pair in common with it. --partial is for a deliberate subset run: MISSING pairs are printed as
 # informational lines and do not fail the gate (one-sided recall still does). --update exits 2 while the steering paths have uncommitted changes (the recorded

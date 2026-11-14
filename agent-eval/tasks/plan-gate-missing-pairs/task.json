@@ -1,0 +1,17 @@
+{
+  "id": "plan-gate-missing-pairs",
+  "role": "plan",
+  "repo": "~/Dev/dotfiles",
+  "fix": "cc6774946eb03aeace90e2a693ef7140ad2eadb8",
+  "test": "PATH=${PATH#*/config/pi/bin/guard:} node --test --test-skip-pattern='gate: no baseline exits 2' --test-skip-pattern='gate: steering change is detected' --test-skip-pattern='gate --update exits 2 while the steering' 'agent-eval/tests/zz-hidden-*.test.ts'",
+  "hidden": [
+    "agent-eval/tests/matrix.test.ts",
+    "agent-eval/tests/record.test.ts",
+    "agent-eval/tests/summary.test.ts"
+  ],
+  "link": [],
+  "paths": [
+    "agent-eval"
+  ],
+  "decisions": []
+}

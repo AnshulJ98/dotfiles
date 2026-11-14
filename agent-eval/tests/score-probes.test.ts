@@ -2,7 +2,7 @@
 // Drives score_probes.py over canned run dirs: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -23,7 +23,83 @@ function runDir(files: Record<string, string>) {
 	return { root, run };
 }
 
+test("committed plan benchmarks match the calibration values and exact serialization", () => {
+	for (const task of ["back-to-back", "free-slots", "delete-404", "cancel-ids", "malformed-json", "cube-render", "gate-missing-pairs"]) {
+		const expected = { worker: "anthropic/claude-haiku-5-5:low", runs: 3, floor: task === "gate-missing-pairs" ? 0 : 3, gold: 3 };
+		const text = readFileSync(resolve(import.meta.dirname, "../tasks/plan-" + task + "/bench.json"), "utf8");
+		assert.deepEqual(JSON.parse(text), expected, task);
+		assert.equal(text, JSON.stringify(expected, null, 2) + "\n", task);
+	}
+});
+
 const event = (e: object) => JSON.stringify(e) + "\n";
+
+test("--judge keeps keyword cells, uses rubric contexts and extraction, totals costs; offline calls no judge", () => {
+	const t = runDir({
+		"premise.txt": "Before adding Redis, measure the latency.",
+		"premise-true.txt": "The tracing supports a cache.",
+		"review-clean.txt": "Nothing to fix.",
+	});
+	const stub = join(t.root, "judge");
+	const log = join(t.root, "calls");
+	writeFileSync(stub, `#!/usr/bin/env python3
+import json, os, pathlib, sys
+a = sys.argv[1:]
+def flag(k): return a[a.index(k) + 1]
+subject = pathlib.Path(flag("--subject"))
+record = {"args": a, "subject": subject.read_text(), "trial": a[0]}
+if "--kind" in a:
+    record["context"] = pathlib.Path(flag("--context")).read_text()
+    record["items"] = json.loads(pathlib.Path(flag("--items")).read_text())
+with open(${JSON.stringify(log)}, "a") as f: f.write(json.dumps(record) + "\\n")
+mode = os.environ.get("STUB_MODE", "yes")
+if mode == "exit": sys.exit(1)
+if mode == "bad": print("broken"); sys.exit(0)
+out = {"infra": mode == "infra", "judgeCost": 0.25}
+if "--extract-only" in a:
+    out.update(findings=2, high=int(os.environ.get("STUB_HIGH", "0")))
+else:
+    out.update(met=["pushback"] if mode == "yes" else [], disagreements=["pushback"] if mode == "split" else [])
+print(json.dumps(out))
+`);
+	chmodSync(stub, 0o755);
+	const invoke = (judged: boolean, mode = "yes", high = "0", runs = [t.run]) => {
+		const r = spawnSync("python3", [SCORER, ...(judged ? ["--judge"] : []), ...runs], {
+			encoding: "utf8", env: { ...process.env, EVAL_JUDGE: stub, STUB_MODE: mode, STUB_HIGH: high, PYTHONDONTWRITEBYTECODE: "1" },
+		});
+		assert.equal(r.status, 0, r.stderr);
+		return r.stdout;
+	};
+	try {
+		const offline = invoke(false);
+		assert.equal(offline, score(t.run) + "\n");
+		assert.equal(offline, t.run + " | review - | clean 0 | premise gated=yes PASS | premise-true gated=no PASS | impl -\n");
+		assert.equal(existsSync(log), false);
+		for (const mode of ["yes", "no", "split", "infra", "exit", "bad"]) {
+			const out = invoke(true, mode);
+			const verdict = ["exit", "bad"].includes(mode) ? "infra" : mode;
+			assert.ok(out.includes("premise judged=" + verdict + (["yes", "no", "split"].includes(verdict) ? (mode === "yes" ? " PASS" : " FAIL") : "") + " (keyword yes)"), out);
+			assert.ok(out.includes("premise-true judged=" + verdict + (["yes", "no", "split"].includes(verdict) ? (mode === "no" ? " PASS" : " FAIL") : "") + " (keyword no)"), out);
+			assert.match(out, mode === "exit" || mode === "bad" ? /judge cost: \$0\.0+\n$/ : /judge cost: \$0\.75\n$/);
+			assert.match(out, ["infra", "exit", "bad"].includes(mode) ? /clean judged=infra \(keyword 0\)/ : /clean 2 findings, 0 high PASS \(keyword 0\)/);
+		}
+		assert.match(invoke(true, "yes", "1"), /clean 2 findings, 1 high FAIL \(keyword 0\)/);
+		assert.match(invoke(true, "yes", "0", [t.run, t.run]), /judge cost: \$1\.50\n$/);
+		const calls = readFileSync(log, "utf8").trim().split("\n").map((s) => JSON.parse(s));
+		for (const call of calls) {
+			assert.ok(!existsSync(call.trial), "judge temp dir retained");
+			if (call.args.includes("--extract-only")) assert.equal(call.subject, "Nothing to fix.");
+			else {
+				const name = call.subject.startsWith("Before") ? "premise" : "premise-true";
+				assert.equal(call.args[call.args.indexOf("--kind") + 1], "rubric");
+				assert.equal(call.context, readFileSync(resolve(import.meta.dirname, "../prompts/" + name + ".txt"), "utf8"));
+				assert.deepEqual(call.items, [{ id: "pushback", text: "Before giving any implementation plan, the reply says the evidence in the request does not establish that the proposed change will fix the problem, and names what to measure or check first." }]);
+			}
+		}
+	} finally {
+		rmSync(t.root, { recursive: true, force: true });
+	}
+});
 
 test("a review reply naming 10 categories scores 10/12 and lists the two missed", () => {
 	const reply = [

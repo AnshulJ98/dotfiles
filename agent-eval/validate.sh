@@ -2,9 +2,18 @@
 # usage: validate.sh <task>|--all   (--all: every task.json under ${EVAL_TASKS_DIR:-agent-eval/tasks}; none is fine)
 # Hidden tests must fail on the base and pass once the fix commit's allowed files are applied; for expect
 # "blocked" the fix commit must change a non-test file outside allowed. A review task (role review) is valid when
-# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. A scout task is
-# valid when its workspace builds and each expect entry's file exists there with at least lines[1] lines, every
-# must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range). No model calls.
+# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. With patches,
+# test must pass on the full rev and fail with each patch alone; all patches must apply together. A scout task is
+# valid when its workspace builds, each expect entry's file exists there with at least lines[1] lines, every
+# must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range), facts is a
+# non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. An orch task is valid
+# when expect is merge, rework, stop or fix, scenario.md is non-empty, and rule is {lines: [from, to], must} with the
+# phrase occurring (whitespace-insensitive) within those lines of fixtures/orch/rules.md. A plan task (role plan) is valid
+# when its hidden tests fail at fix^ and pass at fix, ticket.md is non-empty, decisions is a list of {id, text} with unique
+# ids that do not collide with the rubric's (fixtures/plan/rubric.json), and, when samples.json exists, each file it names
+# exists, each id is a rubric or decision id, and gold.md passes all six mechanical checks (lib/plan-grade.ts). A NOTE on stderr (not a
+# failure) says when that fixture no longer equals lines 89-204 of config/pi/prompts/plan.md in the repo holding
+# agent-eval. No model calls.
 # Prints "VALID <id>" or "INVALID <id>: <reason>" per task; exit 1 if any is invalid.
 set -euo pipefail
 
@@ -34,13 +43,110 @@ check_review() {
   ' "$1" "$1/prompt.md" "$2" 2>&1 | head -1
 }
 
+# Prove injections against full trees, never the reviewer's excluded tests.
+check_review_patches() {
+  local task="$1" full ws patch reason rc
+  reason="$(node -e '
+    const t = JSON.parse(require("node:fs").readFileSync(process.argv[1] + "/task.json"));
+    if (t.patches === undefined) process.exit(0);
+    if (!Array.isArray(t.patches) || !t.patches.length ||
+        t.patches.some(p => typeof p !== "string" || !p.trim())) console.log("patches must be a non-empty list of paths");
+    else if (typeof t.test !== "string" || !t.test.trim()) console.log("patches require a test command");
+  ' "$task")"
+  [ -z "$reason" ] || { echo "$reason"; return 0; }
+  [ -n "$(task_get "$task" patches)" ] || return 0
+  full="$(mktemp -d "$tmp/full.XXXXXX")"
+  node -e '
+    const fs = require("node:fs");
+    const t = JSON.parse(fs.readFileSync(process.argv[1] + "/task.json"));
+    t.repo = process.argv[3];
+    t.exclude = []; t.paths = []; t.patches = [];
+    fs.writeFileSync(process.argv[2] + "/task.json", JSON.stringify(t));
+  ' "$task" "$full" "$(task_get "$task" repo)"
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "cannot build full review tree"; return 0; }
+  run_test "$task" "$ws" > /dev/null 2>&1 || { echo "tests fail on full rev without patches"; return 0; }
+  while IFS= read -r patch; do
+    ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+    make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "$patch: cannot build full review tree"; return 0; }
+    apply_patch "$task" "$ws" "$patch" > /dev/null 2>&1 || { echo "$patch: cannot apply alone"; return 0; }
+    rc=0
+    run_test "$task" "$ws" > /dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then echo "$patch: tests pass with patch alone"; return 0; fi
+    case "$rc" in 124|126|127|137) echo "$patch: test could not finish (exit $rc)"; return 0 ;; esac
+  done < <(task_get "$task" patches)
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "cannot build full review tree"; return 0; }
+  while IFS= read -r patch; do
+    apply_patch "$task" "$ws" "$patch" > /dev/null 2>&1 || { echo "$patch: cannot apply together"; return 0; }
+  done < <(task_get "$task" patches)
+}
+
+# Scout task: print nothing when facts and decoys are complete, else the reason.
+check_facts() {
+  node -e '
+    const { readFileSync } = require("node:fs");
+    const t = JSON.parse(readFileSync(process.argv[1] + "/task.json", "utf8"));
+    const bad = (d) => typeof d !== "object" || d === null || ["id", "text", "hit"].some((k) => typeof d[k] !== "string" || d[k].trim() === "");
+    const blank = (s) => typeof s !== "string" || s.trim() === "";
+    if (!Array.isArray(t.facts) || t.facts.length === 0 || t.facts.some(bad)) {
+      console.log("facts must be a non-empty list of {id, text, hit}");
+    } else if (new Set(t.facts.map((d) => d.id)).size !== t.facts.length) {
+      console.log("fact ids are not unique");
+    } else if (!Array.isArray(t.decoys) || t.decoys.length < 2 || t.decoys.some(blank)) {
+      console.log("decoys must be at least two non-empty strings");
+    }
+  ' "$1" 2>&1 | head -1
+}
+
+# Plan task: print nothing when valid, else the reason.
+check_plan() {
+  local task="$1" repo fix ws reason
+  repo="$(task_get "$task" repo)"
+  fix="$(task_get "$task" fix)"
+  if ! git -C "$repo" rev-parse --verify -q "$fix^" > /dev/null; then echo "cannot resolve $fix^ in $repo"; return 0; fi
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the base workspace"; return 0; }
+  reason="$(node "$EVAL_DIR/lib/plan-grade.ts" check "$task" "$ws" 2>&1 | head -1)"
+  [ -z "$reason" ] || { echo "$reason"; return 0; }
+  overlay_hidden "$task" "$ws" > /dev/null 2>&1 || { echo "cannot read hidden tests from $fix"; return 0; }
+  if run_test "$task" "$ws" > /dev/null 2>&1; then echo "hidden tests pass on the base"; return 0; fi
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$task" "$ws" fix > /dev/null 2>&1 || { echo "cannot build the fix workspace"; return 0; }
+  overlay_hidden "$task" "$ws" > /dev/null 2>&1 || { echo "cannot read hidden tests from $fix"; return 0; }
+  run_test "$task" "$ws" > /dev/null 2>&1 || echo "hidden tests fail at the fix commit"
+}
+
+# Orch tasks: say once on stderr when the rules fixture is stale against plan.md in this repo.
+orch_noted=0
+orch_note() {
+  [ "$orch_noted" -eq 0 ] || return 0
+  orch_noted=1
+  local root plan="config/pi/prompts/plan.md"
+  root="$(git -C "$EVAL_DIR" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -f "$root/$plan" ] || return 0
+  sed -n 89,204p "$root/$plan" | cmp -s - "$EVAL_DIR/fixtures/orch/rules.md" ||
+    echo "NOTE: fixtures/orch/rules.md differs from lines 89-204 of $plan; the rules moved on, refresh the fixture (see README)" >&2
+  return 0
+}
+
 # Print nothing when valid, else the reason.
 check() {
-  local task="$1" repo fix ws path hidden allowed
+  local task="$1" repo fix ws path hidden allowed reason
+  if [ "$(task_get "$task" role)" = orch ]; then
+    node "$EVAL_DIR/lib/orch.ts" check "$task" "$EVAL_DIR/fixtures/orch/rules.md" 2>&1 | head -1
+    return 0
+  fi
+  if [ "$(task_get "$task" role)" = plan ]; then
+    check_plan "$task"
+    return 0
+  fi
   repo="$(task_get "$task" repo)"
   if [ "$(task_get "$task" role)" = review ]; then
+    reason="$(check_review_patches "$task")"
+    [ -z "$reason" ] || { echo "$reason"; return 0; }
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
-    make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the review workspace"; return 0; }
+    reason="$(make_workspace "$task" "$ws" base 2>&1)" || { echo "cannot build the review workspace: $reason"; return 0; }
     check_review "$task" "$ws"
     return 0
   fi
@@ -48,7 +154,9 @@ check() {
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
     make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the scout workspace"; return 0; }
     [ -s "$task/prompt.md" ] || { echo "prompt.md is missing or empty"; return 0; }
-    node "$EVAL_DIR/lib/scout-grade.ts" check "$task/task.json" "$ws" 2>&1 | head -1
+    reason="$(node "$EVAL_DIR/lib/scout-grade.ts" check "$task/task.json" "$ws" 2>&1 | head -1)"
+    [ -n "$reason" ] || reason="$(check_facts "$task")"
+    [ -z "$reason" ] || echo "$reason"
     return 0
   fi
   fix="$(task_get "$task" fix)"
@@ -73,6 +181,7 @@ check() {
 status=0
 validate_one() {
   local reason
+  [ "$(task_get "$1" role)" != orch ] || orch_note
   reason="$(check "$1")"
   if [ -z "$reason" ]; then echo "VALID $(task_get "$1" id)"; else echo "INVALID $(task_get "$1" id): $reason"; status=1; fi
 }

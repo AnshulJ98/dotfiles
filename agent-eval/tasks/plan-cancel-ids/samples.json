@@ -1,0 +1,25 @@
+[
+  {
+    "file": "gold.md",
+    "yes": [
+      "mechanism",
+      "checks",
+      "test-first",
+      "scope",
+      "wrong-cause"
+    ],
+    "no": []
+  },
+  {
+    "file": "bad.md",
+    "yes": [
+      "checks",
+      "test-first",
+      "scope"
+    ],
+    "no": [
+      "mechanism",
+      "wrong-cause"
+    ]
+  }
+]

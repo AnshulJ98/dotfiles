@@ -1,6 +1,7 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 // Scout role: citation parsing and grading (lib/scout-grade.ts), the paths workspace (lib/task.sh), trial.sh's scout
-// branch driven by stub scouts, and validate.sh for scout tasks, against a throwaway source repo: no model, no tokens.
+// branch driven by stub scouts and stub judges (EVAL_SCOUT, EVAL_JUDGE_PI), and validate.sh for scout tasks, against a
+// throwaway source repo: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -134,18 +135,21 @@ write(join(repo, "config/pi/x.ts"), "changed after the pin\n");
 git(repo, "commit", "-qam", "later");
 
 const EXPECT = [{ file: "config/pi/bin/scout", lines: [2, 4], must: ["MODEL"] }, { file: "config/pi/x.ts", lines: [2, 3], must: ["THINKING"] }];
+const FACTS = [1, 2, 3].map((k) => ({ id: "f" + k, text: "fact text " + k, hit: "answer sentence stating fact " + k }));
+const DECOYS = ["decoy claim one", "decoy claim two"];
 function makeTask(id: string, over: Record<string, unknown> = {}): string {
 	const dir = join(scratch, "tasks", id);
-	write(join(dir, "task.json"), JSON.stringify({ id, role: "scout", repo, rev, paths: ["config/pi"], expect: EXPECT, ...over }));
+	write(join(dir, "task.json"), JSON.stringify({ id, role: "scout", repo, rev, paths: ["config/pi"], expect: EXPECT, facts: FACTS, decoys: DECOYS, ...over }));
 	write(join(dir, "prompt.md"), "Where is the MODEL set?\n");
 	return dir;
 }
 
-type Mode = "right" | "outside" | "none";
+type Mode = "right" | "outside" | "none" | "empty";
 const DIGESTS: Record<Mode, string> = {
 	right: "**Answer**: MODEL and THINKING are set in two files.\n**Evidence**: config/pi/bin/scout:3 (MODEL), config/pi/x.ts:2-3 (THINKING)\n",
 	outside: "**Answer**: MODEL and THINKING are set in two files.\n**Evidence**: config/pi/bin/scout:3 (MODEL), config/pi/x.ts:4 (THINKING)\n",
 	none: "**Answer**: MODEL and THINKING are set in the scout script and x.ts, I did not note the lines.\n",
+	empty: "  \n",
 };
 
 /** A stub scout. It runs under env -i, so everything it needs is baked into the script. */
@@ -165,24 +169,38 @@ cat '${path}.digest'
 }
 
 let counter = 0;
-function trial(task: string, mode: Mode) {
+/** A stub judge pi: the opus judge (a) and the gpt judge (b) each print their reply; every call is logged to <path>.calls. */
+function makeJudge(a: string, b: string): { path: string; calls: string } {
+	const path = join(scratch, `judge-${counter++}`);
+	const session = JSON.stringify({ type: "message", message: { role: "assistant", usage: { input: 1, output: 1, cost: { total: 0.25 } }, content: [] } });
+	write(path, `#!/usr/bin/env bash
+model=; sdir=; prev=
+for x in "$@"; do case "$prev" in --model) model=$x ;; --session-dir) sdir=$x ;; esac; prev=$x; done
+echo "$model" >> '${path}.calls'
+mkdir -p "$sdir"; echo '${session}' > "$sdir/s.jsonl"
+case "$model" in *opus*) printf '%s\\n' '${a}' ;; *gpt*) printf '%s\\n' '${b}' ;; esac
+`, 0o755);
+	return { path, calls: `${path}.calls` };
+}
+const YES3 = '["yes","yes","yes"]';
+function trial(task: string, mode: Mode, judge: { path: string } = makeJudge(YES3, YES3)) {
 	const stub = makeStub(mode);
 	const out = join(scratch, `out-${counter++}.jsonl`);
-	const r = run("trial.sh", [task, "prov/model-x", "high", "2", out], { EVAL_SCOUT: stub.path, EVAL_REAL_HOME: realHome });
+	const r = run("trial.sh", [task, "prov/model-x", "high", "2", out], { EVAL_SCOUT: stub.path, EVAL_REAL_HOME: realHome, EVAL_JUDGE_PI: judge.path });
 	const lines = existsSync(out) ? readFileSync(out, "utf8").trim().split("\n") : [];
 	const rec = lines.length ? JSON.parse(lines[lines.length - 1]) : undefined;
 	if (rec) keep.push(rec.dir);
 	return { r, rec, lines, stub };
 }
 
-test("a scout citing the right ranges passes: record fields, stub arguments, workspace limited to paths", () => {
+test("a scout whose answer states every fact passes: record fields, stub arguments, workspace limited to paths", () => {
 	const { r, rec, lines, stub } = trial(makeTask("s-right"), "right");
 	assert.equal(r.status, 0, r.stderr);
 	assert.equal(lines.length, 1);
 	const { dir, seconds, ...rest } = rec;
 	assert.deepEqual(rest, {
-		task: "s-right", role: "scout", model: "prov/model-x", thinking: "high", trial: 2, pass: true, hits: 2, of: 2, rc: 0,
-		cost: 0.125, input: 100, output: 20, cacheRead: 50, cacheWrite: 10, turns: 1, leak: false, infra: false,
+		task: "s-right", role: "scout", model: "prov/model-x", thinking: "high", trial: 2, pass: true, found: 3, of: 3, disagreements: [], judgeCost: 0.5,
+		cited: 2, citable: 2, rc: 0, cost: 0.125, input: 100, output: 20, cacheRead: 50, cacheWrite: 10, turns: 1, leak: false, infra: false,
 	});
 	assert.equal(typeof seconds, "number");
 	assert.equal(readFileSync(join(dir, "digest.txt"), "utf8"), DIGESTS.right);
@@ -201,16 +219,38 @@ test("a scout citing the right ranges passes: record fields, stub arguments, wor
 	assert.ok(!existsSync(join(dir, "ws/README.md")));
 });
 
-test("a scout citing a line outside the range does not pass; one with no citations has hits 0", () => {
-	const outside = trial(makeTask("s-outside"), "outside").rec;
-	assert.deepEqual([outside.pass, outside.hits, outside.of, outside.infra], [false, 1, 2, false]);
+test("the judges decide the pass; the citation grade is only cited/citable", () => {
+	// every expected citation, but a judge denies one fact: not a pass
+	const denied = trial(makeTask("s-denied"), "right", makeJudge(YES3, '["yes","no","yes"]')).rec;
+	assert.deepEqual([denied.pass, denied.found, denied.of, denied.disagreements, denied.cited, denied.citable, denied.infra], [false, 2, 3, ["f2"], 2, 2, false]);
+	// no citations at all, every fact stated: a pass
 	const none = trial(makeTask("s-none"), "none").rec;
-	assert.deepEqual([none.pass, none.hits, none.of], [false, 0, 2]);
+	assert.deepEqual([none.pass, none.found, none.of, none.cited, none.citable, none.infra], [true, 3, 3, 0, 2, false]);
+	// a citation outside its range lowers cited only
+	const outside = trial(makeTask("s-outside"), "outside").rec;
+	assert.deepEqual([outside.pass, outside.found, outside.cited, outside.citable, "hits" in outside], [true, 3, 1, 2, false]);
+});
+
+test("a non-empty digest with an unparseable judge reply is infra and does not pass", () => {
+	const { rec } = trial(makeTask("s-garbled"), "right", makeJudge("I cannot tell", YES3));
+	assert.deepEqual([rec.pass, rec.found, rec.of, rec.infra, rec.cited, rec.citable], [false, 0, 3, true, 2, 2]);
+});
+
+test("an empty digest from a run with turns fails with nothing found, is not infra, and is not judged", () => {
+	const judge = makeJudge(YES3, YES3);
+	const { rec } = trial(makeTask("s-empty"), "empty", judge);
+	assert.deepEqual([rec.pass, rec.found, rec.of, rec.disagreements, rec.judgeCost, rec.cited, rec.citable, rec.turns, rec.infra], [false, 0, 3, [], 0, 0, 2, 1, false]);
+	assert.equal(existsSync(judge.calls), false);
 });
 
 test("a malformed expect list is an infra record that does not pass", () => {
 	const { rec } = trial(makeTask("s-bad", { expect: "blocked" }), "right");
-	assert.deepEqual([rec.pass, rec.hits, rec.of, rec.infra], [false, 0, 0, true]);
+	assert.deepEqual([rec.pass, rec.found, rec.of, rec.cited, rec.citable, rec.infra], [false, 3, 3, 0, 0, true]);
+});
+
+test("a scout task without facts is an infra record: the judges have nothing to ask", () => {
+	const { rec } = trial(makeTask("s-nofacts", { facts: undefined }), "right");
+	assert.deepEqual([rec.pass, rec.found, rec.of, rec.infra], [false, 0, 0, true]);
 });
 
 test("scout records group under role scout in the summary", () => {
@@ -219,6 +259,7 @@ test("scout records group under role scout in the summary", () => {
 	assert.equal(malformed, 0);
 	const [{ role, cells: [cell] }] = summarize(records);
 	assert.deepEqual([role, cell.cell, cell.trials, cell.passes], ["scout", "prov/model-x:high", 1, 1]);
+	assert.deepEqual([cell.found, cell.of], [3, 3]);
 });
 
 test("trial.sh: a scout task without rev exits 2", () => {
@@ -239,6 +280,13 @@ test("validate.sh: the pinned snapshot must hold every expect entry", () => {
 		["v-alt-nomatch", { expect: [{ at: [{ file: "config/pi/bin/scout", lines: [2, 4] }, { file: "config/pi/x.ts", lines: [3, 4] }], must: ["MODEL"] }] }, /config\/pi\/x\.ts:3-4 does not match/],
 		["v-alt-nofile", { expect: [{ at: [{ file: "config/pi/bin/scout", lines: [2, 4] }, { file: "config/pi/none.ts", lines: [1, 1] }], must: ["MODEL"] }] }, /not in the workspace/],
 		["v-shape", { expect: [] }, /non-empty list/],
+		["v-nofacts", { facts: undefined }, /facts must be a non-empty list of \{id, text, hit\}/],
+		["v-emptyfacts", { facts: [] }, /facts must be a non-empty list/],
+		["v-badfact", { facts: [{ id: "f1", text: "t" }] }, /facts must be a non-empty list/],
+		["v-dupfacts", { facts: [FACTS[0], FACTS[0]] }, /fact ids are not unique/],
+		["v-nodecoys", { decoys: undefined }, /decoys must be at least two non-empty strings/],
+		["v-onedecoy", { decoys: ["only one"] }, /decoys must be at least two/],
+		["v-blankdecoy", { decoys: ["one", " "] }, /decoys must be at least two/],
 		["v-rev", { rev: "0000000000000000000000000000000000000000" }, /cannot build the scout workspace/],
 	];
 	for (const [id, over, reason] of cases) {

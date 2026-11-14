@@ -27,5 +27,16 @@
       {"file": "config/pi/DESIGN.md", "lines": [28, 28]},
       {"file": "config/pi/DESIGN.md", "lines": [126, 126]}
     ], "must": ["-ne"]}
+  ],
+  "facts": [
+    {"id":"f1","text":"The block on hand edits comes from the auto-run extension, config/pi/extensions/auto-run.ts, which refuses edit and write tool calls.","hit":"Manual edit/write tool calls are refused by the auto-run guard in config/pi/extensions/auto-run.ts."},
+    {"id":"f2","text":"The edit block is active while an AUTO.md file exists at the root of the checkout.","hit":"An AUTO.md at the checkout root activates the hand-edit guard."},
+    {"id":"f3","text":"The block on git worktree add inside the repo also comes from auto-run.ts, which refuses a bash command whose worktree target is inside the repo.","hit":"auto-run.ts rejects bash calls adding a git worktree at a path within the repository."},
+    {"id":"f4","text":"A scout --rw worker is not affected because scout starts its child pi with extensions disabled (-ne), so auto-run.ts is not loaded there.","hit":"scout --rw bypasses the edit guard by launching child pi with -ne, leaving auto-run.ts unloaded."}
+  ],
+  "decoys": [
+    "scout --fork starts the child from a copy of the parent session, which re-bills the whole parent context.",
+    "scout exits with code 124 when its timeout expires.",
+    "scout --ctx keeps AGENTS.md and CLAUDE.md discovery in the child, which is off by default."
   ]
 }

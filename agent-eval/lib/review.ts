@@ -1,12 +1,28 @@
-// Pure helpers for grading a review (see judge.sh): parsing judge replies, the found/disagreement arithmetic, prompt
-// rendering, plus a thin CLI for judge.sh and trial.sh (commands: see main).
+// Pure helpers for grading a list of items against a text (see judge.sh): item normalisation, parsing judge replies,
+// the found/met/pass arithmetic, prompt rendering, plus a thin CLI for judge.sh and trial.sh (commands: see main).
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { measure } from "./record.ts";
+import { measure } from "./usage.ts";
+import { render } from "./render.ts";
+export { render } from "./render.ts";
 
 export interface Finding { file: string; line: number | null; severity: "high" | "medium" | "low"; claim: string }
 export interface Defect { id: string; text: string; hit: string }
+/** What the judges are asked about: a review defect, a fact or a rubric criterion. A minor item does not decide pass or fail. */
+export interface Item { id: string; text: string; minor: boolean }
+
+/** [{id, text, minor}] from a JSON list; throws an Error when it is not a list or an item lacks a non-empty string id or text. minor is true only for true. */
+export function normalizeItems(raw: unknown): Item[] {
+	if (!Array.isArray(raw)) throw new Error("items must be a list");
+	return raw.map((x: unknown, i): Item => {
+		const v = x as Record<string, unknown> | null;
+		if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error(`item ${i + 1} is not an object`);
+		if (typeof v.id !== "string" || v.id.trim() === "") throw new Error(`item ${i + 1} needs a non-empty string id`);
+		if (typeof v.text !== "string" || v.text.trim() === "") throw new Error(`item ${i + 1} needs a non-empty string text`);
+		return { id: v.id, text: v.text, minor: v.minor === true };
+	});
+}
 
 /** The outermost JSON array in a reply (first "[" to last "]"), parsed; undefined when there is none or it is not JSON. */
 function outerArray(text: string): unknown[] | undefined {
@@ -54,13 +70,19 @@ export function combine(a: boolean[], b: boolean[], ids: string[]): { found: num
 	return { found: ids.filter((_, i) => a[i] && b[i]).length, disagreements: ids.filter((_, i) => a[i] !== b[i]) };
 }
 
-/** Replace each {{NAME}} by its value in one pass, so a value that contains a placeholder is left alone. */
-export function render(template: string, values: Record<string, string>): string {
-	return template.replace(/\{\{([A-Z]+)\}\}/g, (whole, name: string) => (name in values ? values[name] : whole));
+/** The ids both judges said yes to, in item order. */
+export function metIds(a: boolean[], b: boolean[], ids: string[]): string[] {
+	if (a.length !== b.length || a.length !== ids.length) throw new RangeError("verdict and id lists differ in length");
+	return ids.filter((_, i) => a[i] && b[i]);
 }
 
-/** The defect list as the match prompt shows it: numbered from 1, text only (never the hit sample). */
-export const numberDefects = (defects: Defect[]): string => defects.map((d, i) => `${i + 1}. ${d.text}`).join("\n");
+/** A pass needs a judged result, at least one item, and every non-minor item met. */
+export function passes(items: Item[], met: string[], infra: boolean): boolean {
+	return !infra && items.length > 0 && items.every((x) => x.minor || met.includes(x.id));
+}
+
+/** The item list as a match prompt shows it: numbered from 1, text only (never the hit sample). */
+export const numberDefects = (defects: { text: string }[]): string => defects.map((d, i) => `${i + 1}. ${d.text}`).join("\n");
 
 /** Text of the last assistant message (in a pi --mode json stream) that has any text. */
 export function finalReply(streamLines: string[]): string {
@@ -79,7 +101,6 @@ export function finalReply(streamLines: string[]): string {
 	return reply;
 }
 
-const readDefects = (taskFile: string): Defect[] => JSON.parse(readFileSync(taskFile, "utf8")).defects;
 const lines = (path: string): string[] => readFileSync(path, "utf8").split("\n").filter((l) => l.trim() !== "");
 
 function judgeCost(dir: string): number {
@@ -103,10 +124,12 @@ function readVerdicts(path: string): boolean[] | undefined {
 /**
  * Commands (output on stdout; exit 1 when a reply cannot be parsed):
  *   render-extract <template> <review.txt>                 the extractor prompt
- *   render-match <template> <findings.json> <task.json>    the matcher prompt
+ *   items <source.json> <key|-> <out.json>                 normalise the list at source[key] (- : the file is the list), write it, print its length; exit 1 when invalid or empty
+ *   render-match <template> <items.json> [NAME=file ...]   the matcher prompt: {{ITEMS}} and {{DEFECTS}} are the numbered items, {{CONTEXT}} is "(none)" unless given, each NAME=file sets {{NAME}} to the file's trimmed text
  *   findings <reply.txt> <out.json>                        parse an extractor reply, write the normalised findings
  *   verdicts <reply.txt> <n> <out.json>                    parse a judge reply, write the booleans
- *   result <task.json> <judge-dir>                         judge.sh's JSON line from <judge-dir>/verdicts-{a,b}.json and session costs
+ *   result <items.json> <judge-dir>                        judge.sh's JSON line from <judge-dir>/verdicts-{a,b}.json and session costs (infra, of 0 when items.json is missing)
+ *   extract-result <judge-dir>                            extraction counts and session costs; infra when the extractor reply is missing or unparseable
  *   final-reply <stream.jsonl>                             the reviewer's final text
  */
 function main([command, ...args]: string[]): number {
@@ -115,8 +138,24 @@ function main([command, ...args]: string[]): number {
 	switch (command) {
 		case "render-extract":
 			return (process.stdout.write(render(read(args[0]), { REVIEW: read(args[1]) })), 0);
-		case "render-match":
-			return (process.stdout.write(render(read(args[0]), { FINDINGS: read(args[1]).trim(), DEFECTS: numberDefects(readDefects(args[2])) })), 0);
+		case "items": {
+			let items: Item[];
+			try {
+				const source: unknown = JSON.parse(read(args[0]));
+				items = normalizeItems(args[1] === "-" ? source : (source as Record<string, unknown> | null)?.[args[1]]);
+			} catch (e) {
+				return (console.error(`items: ${e instanceof Error ? e.message : e}`), 1);
+			}
+			if (items.length === 0) return (console.error("items: the list is empty"), 1);
+			write(args[2], items);
+			return (console.log(items.length), 0);
+		}
+		case "render-match": {
+			const list = numberDefects(JSON.parse(read(args[1])));
+			const values: Record<string, string> = { ITEMS: list, DEFECTS: list, CONTEXT: "(none)" };
+			for (const pair of args.slice(2)) values[pair.slice(0, pair.indexOf("="))] = read(pair.slice(pair.indexOf("=") + 1)).trim();
+			return (process.stdout.write(render(read(args[0]), values)), 0);
+		}
 		case "findings": {
 			const findings = parseFindings(read(args[0]));
 			return findings === undefined ? 1 : write(args[1], findings);
@@ -125,19 +164,40 @@ function main([command, ...args]: string[]): number {
 			const verdicts = parseVerdicts(read(args[0]), Number(args[1]));
 			return verdicts === undefined ? 1 : write(args[2], verdicts);
 		}
+		case "extract-result": {
+			let findings: Finding[] | undefined;
+			try {
+				findings = parseFindings(read(join(args[0], "extract.reply.txt")));
+			} catch {
+				// Missing extractor reply is infra, just like an unparseable reply.
+			}
+			console.log(JSON.stringify({
+				findings: findings?.length ?? 0,
+				high: findings?.filter((f) => f.severity === "high").length ?? 0,
+				judgeCost: judgeCost(args[0]), infra: findings === undefined,
+			}));
+			return 0;
+		}
 		case "result": {
-			const ids = readDefects(args[0]).map((d) => d.id);
+			let items: Item[] = [];
+			try {
+				items = normalizeItems(JSON.parse(read(args[0])));
+			} catch {
+				// no usable item list: infra with nothing asked about
+			}
+			const ids = items.map((x) => x.id);
 			const a = readVerdicts(join(args[1], "verdicts-a.json"));
 			const b = readVerdicts(join(args[1], "verdicts-b.json"));
-			const judged = a !== undefined && b !== undefined && a.length === ids.length && b.length === ids.length;
+			const judged = ids.length > 0 && a !== undefined && b !== undefined && a.length === ids.length && b.length === ids.length;
 			const { found, disagreements } = judged ? combine(a, b, ids) : { found: 0, disagreements: [] };
-			console.log(JSON.stringify({ found, of: ids.length, disagreements, judgeCost: judgeCost(args[1]), infra: !judged }));
+			const met = judged ? metIds(a, b, ids) : [];
+			console.log(JSON.stringify({ found, of: ids.length, met, pass: passes(items, met, !judged), disagreements, judgeCost: judgeCost(args[1]), infra: !judged }));
 			return 0;
 		}
 		case "final-reply":
 			return (process.stdout.write(finalReply(lines(args[0]))), 0);
 		default:
-			console.error("usage: review.ts render-extract|render-match|findings|verdicts|result|final-reply ...");
+			console.error("usage: review.ts render-extract|items|render-match|findings|verdicts|result|extract-result|final-reply ...");
 			return 2;
 	}
 }
