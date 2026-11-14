@@ -9,6 +9,8 @@ export interface TrialRecord {
 	cited?: number; citable?: number;
 	/** worker records: the agent changed a test path (see record.ts wroteTest) */
 	wroteTest?: boolean;
+	/** plan records: the planner's spec was accepted by the mechanical checks, and the fixed worker's result passed the hidden tests */
+	accepted?: boolean; executed?: boolean;
 }
 
 export interface CellSummary {
@@ -36,6 +38,8 @@ export interface CellSummary {
 	wroteTest?: number; wroteTestOf?: number;
 	/** Cells whose counted records carry cited/citable (scout): the sums over those records. */
 	cited?: number; citable?: number;
+	/** Cells whose counted records carry accepted and executed (plan): those with each true, out of the counted records that carry both. */
+	accepted?: number; executed?: number; planOf?: number;
 }
 
 export interface RoleSummary {
@@ -79,6 +83,7 @@ function asRecord(value: unknown): TrialRecord | undefined {
 		...(count(v.found) && count(v.of) ? { found: v.found, of: v.of } : {}),
 		...(count(v.cited) && count(v.citable) ? { cited: v.cited, citable: v.citable } : {}),
 		...(typeof v.wroteTest === "boolean" ? { wroteTest: v.wroteTest } : {}),
+		...(typeof v.accepted === "boolean" && typeof v.executed === "boolean" ? { accepted: v.accepted, executed: v.executed } : {}),
 	};
 }
 
@@ -115,6 +120,11 @@ function wroteTestOf(counted: TrialRecord[]): Pick<CellSummary, "wroteTest" | "w
 	return carrying.length === 0 ? {} : { wroteTest: carrying.filter((r) => r.wroteTest).length, wroteTestOf: carrying.length };
 }
 
+function planOf(counted: TrialRecord[]): Pick<CellSummary, "accepted" | "executed" | "planOf"> {
+	const carrying = counted.filter((r) => r.accepted !== undefined && r.executed !== undefined);
+	return carrying.length === 0 ? {} : { accepted: carrying.filter((r) => r.accepted).length, executed: carrying.filter((r) => r.executed).length, planOf: carrying.length };
+}
+
 function citedOf(counted: TrialRecord[]): Pick<CellSummary, "cited" | "citable"> {
 	const carrying = counted.filter((r) => r.cited !== undefined && r.citable !== undefined);
 	return carrying.length === 0 ? {} : { cited: carrying.reduce((n, r) => n + (r.cited ?? 0), 0), citable: carrying.reduce((n, r) => n + (r.citable ?? 0), 0) };
@@ -140,6 +150,7 @@ function summarizeCell(role: string, cell: string, records: TrialRecord[]): Cell
 		...recallOf(counted),
 		...wroteTestOf(counted),
 		...citedOf(counted),
+		...planOf(counted),
 	};
 }
 

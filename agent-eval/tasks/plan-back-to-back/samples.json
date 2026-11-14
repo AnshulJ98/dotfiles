@@ -1,0 +1,2 @@
+[{"file":"gold.md","yes":["mechanism","checks","test-first","scope"],"no":[]},
+ {"file":"bad.md","yes":[],"no":["mechanism","checks","test-first","scope"]}]
