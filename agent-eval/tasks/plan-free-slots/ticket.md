@@ -1,0 +1,1 @@
+Add `freeSlots(roomId, from, to, minMs)` to the booking store: the gaps in `[from, to)` not covered by that room's bookings, each at least `minMs` long, in start order, as `{start, end}` objects. Throw when `to` is not after `from` (message contains "after from") and when an argument is not a finite number (message contains "numbers"). The code is in booking/.

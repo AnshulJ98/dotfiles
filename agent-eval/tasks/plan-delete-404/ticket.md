@@ -1,0 +1,1 @@
+`DELETE /bookings/:id` answers 204 for an id that does not exist. It must answer 404 with the body `{"error":"not found"}`; a non-numeric id such as `/bookings/abc` is also a 404. The code is in booking/.
