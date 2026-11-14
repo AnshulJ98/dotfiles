@@ -160,6 +160,12 @@ case ":$PATH:" in *:"$HOME/.local/bin":*) ;; *) export PATH="$HOME/.local/bin:$P
 # worktrunk: lets `wt switch` cd into the worktree it opens.
 command -v wt >/dev/null && eval "$(wt config shell init zsh)"
 
+# zmx attach NAME through zmx-pick (config/zmx/zmx.zsh, found beside the linked zmx-pick)
+_zmx_zsh=$HOME/.local/bin/zmx-pick
+_zmx_zsh=${_zmx_zsh:P:h}/zmx.zsh
+[[ -f $_zmx_zsh ]] && source $_zmx_zsh
+unset _zmx_zsh
+
 # Inside zmx (every kitty pane, see kitty/bin/zshell) the environment is frozen when the session
 # starts; after a reattach refresh it from the attaching client, so KITTY_WINDOW_ID is right.
 if [[ -n $ZMX_SESSION ]]; then

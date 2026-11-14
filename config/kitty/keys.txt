@@ -15,6 +15,7 @@ cmd+alt+b	hide or show the sidebar
 click	a sidebar row: go to that workspace or agent	sidebar
 right click	a sidebar space: rename, close, worktrees	sidebar
 cmd+alt+g	Go to: pick a workspace, tab, pane or session
+ctrl+backslash	Go to, as zmx-pick's key; an ssh pane gets the key
 cmd+/	this list
 # In the Go to picker
 enter	go to the row	picker

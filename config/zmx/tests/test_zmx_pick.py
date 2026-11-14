@@ -32,7 +32,7 @@ class ZmxPick(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        for name in ("zmx", "zpick", "sh"):
+        for name in ("zmx", "zpick", "sh", "zmx-pick"):
             (self.root / name).write_text(FAKE)
             (self.root / name).chmod(0o755)
 
@@ -54,6 +54,14 @@ class ZmxPick(unittest.TestCase):
             ["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]], ["zpick", ["--zmx"]],
             ["zmx", ["attach", "newbox"]], ["zpick", ["--zmx"]], ["sh", ["-il"]]])
         self.assertEqual({c[2] for c in calls if c[0] == "zmx"}, {None}, "ctrl+\\ must detach")
+
+    def test_zsh_zmx_attach_goes_through_the_picker(self):
+        # a session entered by hand also has a picker to return to with ctrl+\
+        env = {"PATH": f"{self.root}:/usr/bin:/bin", "FAKE_ROOT": str(self.root)}
+        subprocess.run(["zsh", "-fc", f"source {PICK.parent / 'zmx.zsh'}; zmx attach work; zmx attach a cmd; zmx ls"],
+                       env=env, check=True, timeout=10)
+        calls = [json.loads(l)[:2] for l in (self.root / "calls").read_text().splitlines()]
+        self.assertEqual(calls, [["zmx-pick", ["work"]], ["zmx", ["attach", "a", "cmd"]], ["zmx", ["ls"]]])
 
     def test_nothing_picked_shows_the_picker_again(self):
         calls = self.run_pick([[0, ""], [1, ""]])
