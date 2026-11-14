@@ -2,9 +2,9 @@
  * Split diffs for the edit tool: old | new side by side, drawn inside pi's own
  * edit box. Nothing else about the transcript changes.
  *
- * The drawing is pi-tidy's `renderSplitDiff` (MIT, Andy8647/pi-tidy), imported
- * from the pinned package. settings.json installs pi-tidy with
- * `"extensions": []`, so none of pi-tidy's own patches load.
+ * The drawing is pi-tidy's `renderSplitDiff` (MIT, Andy8647/pi-tidy), vendored
+ * in lib/pi-tidy-split-diff.ts because light themes need a change to its row
+ * tint that no theme token reaches.
  *
  * Mechanism: a tool renderer wraps edit's renderCall and gives pi's call box a
  * render override that swaps the unified diff body for a split one. pi keeps
@@ -14,8 +14,8 @@
  * tests/split-diff.test.ts fails if either changes. Anything unexpected
  * (no diff yet, an error, a narrow box) draws pi's unified diff unchanged.
  */
-import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { join } from "node:path";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { renderSplitDiff } from "../lib/pi-tidy-split-diff.ts";
 
 /** Box content width below which the panes get too narrow to read. */
 export const MIN_WIDTH = 120;
@@ -110,19 +110,8 @@ function isEditBox(value: unknown): value is EditBox {
 	return typeof value === "object" && value !== null && Array.isArray((value as EditBox).children);
 }
 
-export default async function (pi: ExtensionAPI): Promise<void> {
-	// Internal: pi-tidy does not export this file; loaded by path, checked with pi-tidy 0.4.12.
-	// verify.sh [tools] fails when the file or its renderSplitDiff export is gone.
-	const file = join(getAgentDir(), "npm", "node_modules", "pi-tidy", "split-diff.ts");
-	let split: RenderSplit;
-	try {
-		split = ((await import(file)) as { renderSplitDiff: RenderSplit }).renderSplitDiff;
-	} catch (error) {
-		pi.on("session_start", (_event, ctx) => {
-			ctx.ui.notify(`split-diff: cannot load ${file} (${String(error)}); edits keep pi's unified diff.`, "warning");
-		});
-		return;
-	}
+export default function (pi: ExtensionAPI): void {
+	const split: RenderSplit = renderSplitDiff;
 
 	pi.registerToolRenderer((toolName, next) => {
 		const renderers = next();

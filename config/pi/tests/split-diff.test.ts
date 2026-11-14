@@ -73,6 +73,16 @@ test("split-diff: render swap by width and expansion", async (t) => {
 	}
 });
 
+test("split-diff: a light tool box gets light diff rows", async () => {
+	const { renderSplitDiff } = await import("../lib/pi-tidy-split-diff.ts");
+	const slots: Record<string, number[]> = { toolDiffAdded: [85, 122, 6], toolDiffRemoved: [208, 74, 71], toolSuccessBg: [246, 240, 233] };
+	const paint = (kind: number) => (slot: string, text: string) => `\x1b[${kind};2;${(slots[slot] ?? [61, 53, 43]).join(";")}m${text}`;
+	const out = renderSplitDiff({ diff: DIFF, width: 120, theme: { fg: paint(38), bg: paint(48), bold: (text: string) => text }, filePath: "/tmp/x.txt" });
+	const fills = [...(out?.lines ?? []).join("").matchAll(/\x1b\[48;2;(\d+);(\d+);(\d+)m/g)].map((m) => 0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]);
+	assert.ok(fills.length > 0, "changed rows carry a background");
+	assert.ok(Math.min(...fills) > 150, `darkest row background is ${Math.min(...fills).toFixed(0)}, a dark band under dark text`);
+});
+
 test("split-diff: a failed edit keeps pi's box untouched", () => {
 	const { box } = settledBox(undefined, true);
 	const { calls, split } = fakeSplit();
