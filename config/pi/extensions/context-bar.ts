@@ -72,8 +72,10 @@ export default function (pi: ExtensionAPI) {
 					const cwdSeg = theme.fg("muted", `${basename(ctx.cwd)} `);
 					const branchSeg = theme.fg("mdLink", branch ? `⎇ ${branch}` : "no git");
 					// The thinking level only means something for models that can think
-					const thinking = ctx.model?.reasoning ? theme.fg("muted", ` · ${pi.getThinkingLevel()}`) : "";
-					const modelSeg = theme.fg("accent", `${ctx.model?.provider ?? "?"}/${ctx.model?.id ?? "none"}`) + thinking;
+					// and it takes the colour of the editor rule; the names around it stay grey.
+					const level = pi.getThinkingLevel();
+					const thinking = ctx.model?.reasoning ? theme.fg("muted", " · ") + theme.getThinkingBorderColor(level)(level) : "";
+					const modelSeg = theme.fg("muted", `${ctx.model?.provider ?? "?"}/${ctx.model?.id ?? "none"}`) + thinking;
 					// The model's full window in brackets when compact-cap holds the session below it
 					const windowNote = contextWindow > limit ? theme.fg("dim", ` (${fmtTokens(contextWindow)})`) : "";
 					const contextSeg = (barSize: number) =>
@@ -91,7 +93,7 @@ export default function (pi: ExtensionAPI) {
 							cacheSeg = theme.fg(hit >= 90 ? "success" : hit >= 50 ? "warning" : "error", `cache ${hit.toFixed(0)}%`);
 						}
 					}
-					const costSeg = theme.fg("success", `$${cost.toFixed(3)}`);
+					const costSeg = theme.fg("muted", `$${cost.toFixed(3)}`);
 
 					const sep = theme.fg("dim", " │ ");
 					const where = cwdSeg + branchSeg;
