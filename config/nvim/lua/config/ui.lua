@@ -70,18 +70,14 @@ vim.keymap.set('n', '<leader>wr', function() require('which-key').show { keys = 
 vim.keymap.set('n', '<leader>?', '<Cmd>WhichKey<CR>', { desc = '[?] All keymaps' })
 
 -- One label per tab page: the focused file's name. The default tabline
--- shortened whole paths, and CodeDiff, which opens every diff in its own tab
--- on codediff:// buffers, came out as `c////p/t/c/s/r///:/s/m/w/...`.
+-- shortened whole paths.
 local function tab_label(tab)
-  local label, modified = nil, false
+  local modified = false
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
-    local buf = vim.api.nvim_win_get_buf(win)
-    local name = vim.api.nvim_buf_get_name(buf)
-    modified = modified or vim.bo[buf].modified
-    if not label and name:find '^codediff://' then label = 'diff: ' .. vim.fn.fnamemodify(name, ':t') end
+    modified = modified or vim.bo[vim.api.nvim_win_get_buf(win)].modified
   end
   local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(tab)))
-  label = label or (name == '' and '[No Name]' or vim.fn.fnamemodify(name, ':t'))
+  local label = name == '' and '[No Name]' or vim.fn.fnamemodify(name, ':t')
   return label:gsub('%%', '%%%%') .. (modified and ' +' or '')
 end
 

@@ -14,19 +14,17 @@
 [core]
 	excludesfile = ~/.gitignore_global
 [merge]
-	tool = codediff
+	tool = nvimdiff
 [mergetool]
 	prompt = false
 	keepBackup = false
-[mergetool "codediff"]
-	cmd = nvim \"$MERGED\" -c \"execute 'CodeDiff --exit-on-close merge' fnameescape(expand('%'))\"
 [diff]
-	tool = codediff
+	tool = hunk
 [difftool]
 	prompt = false
 [include]
 	# The active theme's [delta "theme"] feature, used by lazygit's diffRenderers.
 	# `theme <name>` repoints ~/.config/themes/current.
 	path = ~/.config/themes/current/delta.gitconfig
-[difftool "codediff"]
-	cmd = nvim \"$LOCAL\" \"$REMOTE\" -c \"execute 'CodeDiff --exit-on-close file' fnameescape(argv(0)) fnameescape(argv(1))\"
+[difftool "hunk"]
+	cmd = hunk difftool \"$LOCAL\" \"$REMOTE\" \"$MERGED\"

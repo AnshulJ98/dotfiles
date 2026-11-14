@@ -2,9 +2,7 @@
 -- buffer's, so a scratch opened from a .sql or .hurl file starts as the same.
 --
 -- Throwaway follows :h scratch-buffer: no file, no swap file, never asks to be
--- saved, gone when nvim quits. hurl.nvim reads the file on disk for every
--- runner except the visual one, so in a throwaway .hurl only `<leader>r` on a
--- selection sends anything.
+-- saved, gone when nvim quits.
 --
 -- Persistent is one real file per extension under stdpath('data')/scratch,
 -- the counterpart of a VS Code Untitled tab kept by hot exit, except that it

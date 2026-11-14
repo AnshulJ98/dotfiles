@@ -39,7 +39,7 @@ require('neo-tree').setup {
     },
     -- VS Code's letters in place of neo-tree's glyph pairs, where a
     -- second glyph (the 󰄱 box) said staged or unstaged. The letter keeps
-    -- its git colour; the staged state is left to the CodeDiff explorer.
+    -- its git colour; the staged state is left to Hunk and lazygit.
     git_status = {
       symbols = {
         added = 'A',
