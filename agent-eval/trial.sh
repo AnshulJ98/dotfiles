@@ -19,6 +19,8 @@
 # fixed worker (EVAL_PLAN_WORKER, default anthropic/claude-haiku-5-5:low: scout --rw --spec - in a second fresh workspace ws2,
 # its own home worker-home), the hidden tests run there, and judge.sh --kind rubric grades spec.md. A spec that is not accepted
 # gets no worker run and no judging. Record: pass = accepted and executed (lib/record.ts); cost is the planner's, workerCost the worker's.
+# Worker/scout and fixed-worker infra: lib/record.ts agentInfra uses rc, session tokens and the digest;
+# the fixed worker exit code is preserved as --worker-rc (an unaccepted plan has no worker run).
 # usage: trial.sh <task> <provider/model> <thinking> <n> <out.jsonl>   (<task>: id under tasks/ or a dir)
 # Env: EVAL_SCOUT (default <home>/.pi/agent/bin/scout), EVAL_REVIEW_PI, EVAL_ORCH_PI and EVAL_PLAN_PI (default pi), EVAL_REAL_HOME (default $HOME),
 # EVAL_PLAN_TIMEOUT (seconds for the planner's pi call, default 900; rc 124 or 137 is recorded as infra),
@@ -104,13 +106,14 @@ if [ "$role" = plan ]; then
   node "$EVAL_DIR/lib/plan-grade.ts" assemble "$dir/reply.txt" "$dir/spec.md" || true
   node "$EVAL_DIR/lib/plan-grade.ts" mechanical "$dir/reply.txt" "$ws" "$dir/porcelain.txt" "$task_dir" > "$dir/mechanical.json"
   accepted="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).accepted === true)' "$dir/mechanical.json")"
-  test_exit=""
+  test_exit="" worker_rc=""
   if [ "$accepted" = true ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 137 ]; then
     ws2="$dir/ws2"
     make_workspace "$task_dir" "$ws2" base
     wscout="${EVAL_SCOUT:-$dir/worker-home/.pi/agent/bin/scout}"
+    worker_rc=0
     (cd "$ws2" && "$EVAL_DIR/lib/isolate.sh" "$dir/worker-home" "$wscout" --rw --model "${worker%:*}" --thinking "${worker##*:}" --spec - \
-      < "$dir/spec.md" > "$dir/worker-digest.txt" 2> "$dir/worker-stderr.txt") || true
+      < "$dir/spec.md" > "$dir/worker-digest.txt" 2> "$dir/worker-stderr.txt") || worker_rc=$?
     overlay_hidden "$task_dir" "$ws2"
     test_exit=0
     run_test "$task_dir" "$ws2" > "$dir/test.txt" 2>&1 || test_exit=$?
@@ -120,7 +123,7 @@ if [ "$role" = plan ]; then
   record="$(node "$EVAL_DIR/lib/record.ts" \
     --task "$(task_get "$task_dir" id)" --role "$role" --model "$model" --thinking "$thinking" --trial "$n" \
     --rc "$rc" --seconds "$seconds" --mechanical-file "$dir/mechanical.json" --items-file "$dir/items.json" \
-    --test-exit "$test_exit" --judge-file "$dir/judge.json" --worker "$worker" --digest-file "$dir/worker-digest.txt" \
+    --test-exit "$test_exit" --judge-file "$dir/judge.json" --worker "$worker" --worker-rc "$worker_rc" --digest-file "$dir/worker-digest.txt" \
     --sessions-dir "$home/.pi/agent/sessions" --worker-sessions-dir "$dir/worker-home/.pi/agent/sessions" \
     --needle "$(task_get "$task_dir" repo)" --needle "$EVAL_REAL_HOME/.pi/agent/memory.md" \
     --needle "$EVAL_REAL_HOME/.pi/agent/sessions" --dir "$dir")"

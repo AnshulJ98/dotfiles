@@ -74,15 +74,18 @@ workspace and grades the result mechanically or with judges. Five roles:
   rule}) and `scenario.md`. The trial renders `prompts/orch.txt` with
   `fixtures/orch/rules.md` and the scenario and runs plain `pi -p -nt` (no
   tools) in an empty directory under `lib/isolate.sh`. Grading is a pure
-  function (`lib/orch.ts`): the first line of the final reply that has a
-  `DECISION: <word>` (any case, bold or backticks allowed, trailing text
-  allowed) must carry the word in `expect`, one of `merge`, `rework`, `stop` or
+  function (`lib/orch.ts`): the first line of the final reply starting with
+  `DECISION: <word>` (any case, leading whitespace and markdown markers allowed,
+  trailing text allowed) must carry the word in `expect`, one of `merge`, `rework`, `stop` or
   `fix`. A reply with no such line or another word has `decision` null and fails;
   it is not infra (no turns or a timeout, `EVAL_ORCH_TIMEOUT`, default 300 s,
   is). There is no judge. `rule` is {lines: [from, to], must}: the lines of the
   fixture that decide the task and a phrase from them; `validate.sh` checks that
   the phrase occurs there (whitespace-insensitive) and that `expect` and
   `scenario.md` are sound. The answer mix is merge 3, rework 3, stop 4, fix 1.
+  `orch-two-first-fails` expects stop, but two models read the rule the other way:
+  "a first dispatch that FAILs on two slices in a row" is ambiguous about whether
+  a slice whose rework then passed still counts.
   Each task is a single decision, not a long run: it does not show whether a
   model keeps the rules over a whole auto run.
   `fixtures/orch/rules.md` is a pinned copy of lines 89-204 of
@@ -104,10 +107,11 @@ workspace and grades the result mechanically or with judges. Five roles:
   1. **Mechanical** (`mechanical.json`, pure), six checks:
      - `accepted`: a non-empty `files-allowed` list (`[a, b]` or `- a` lines), a non-empty `tests` value naming nothing under `/tmp`, a numbered step and a `check:`.
      - `covers`: every non-test file the fix changes is in `files-allowed`.
-     - `tight`: every entry is a file the fix changes or a test path.
+     - `tight`: every entry is a file the fix changes or any test path (even one the fix did not touch).
      - `grounded`: every repo-relative file path the plan names (`:line` removed) exists in the workspace or is in `files-allowed`.
      - `readonly`: the planner changed nothing.
      - `short`: at most 450 words outside the block.
+        `plan.md` asks for about 300; 450 leaves headroom, and the gold plans stay under 430.
 
      Without `accepted` the other four (not `readonly`) are false.
   2. **Executed**, only if accepted: a fixed cheap worker (`EVAL_PLAN_WORKER`) runs the spec
@@ -123,7 +127,7 @@ workspace and grades the result mechanically or with judges. Five roles:
   `workerCost` (`cost` and usage are the planner's) and `worker`; `workerSensors` is the worker digest's first-line verdict (`PASS`, `FAIL`, `CANNOT-RUN`), or null without one; the summary adds
   **accepted** and **executed** columns, the gate is unchanged. An unaccepted plan is a
   fail, not infra, with no worker or judge call; no planner turns, a planner timeout or an
-  accepted plan the judges could not rate is infra. Env: `EVAL_PLAN_WORKER`
+  accepted plan the judges could not rate is infra, as is an infra fixed-worker run. Env: `EVAL_PLAN_WORKER`
   (`<provider/model>:<thinking>`, default `anthropic/claude-haiku-5-5:low`), `EVAL_PLAN_PROMPT`
   (when set, used exclusively; otherwise `~/.pi/agent/prompts/plan.md` if present, then
   `config/pi/prompts/plan.md` in the repo holding agent-eval), `EVAL_PLAN_TIMEOUT` (planner seconds, default 900),
@@ -163,6 +167,9 @@ workspace and grades the result mechanically or with judges. Five roles:
   the task's test command. Floor specs include the fix's changed files, the test command,
   the ticket and one generic implementation step. No planner or judges are called.
   `EVAL_PLAN_WORKER` selects the worker as above; `EVAL_SCOUT` is the test seam.
+  Infra runs use the same `lib/record.ts` predicate as trials: they are reported as
+  `infra`, not counted, and retried once in a fresh workspace and HOME. A second
+  infra attempt exits 1 naming the run, without writing `bench.json`.
   It prints per-run pass/fail and seconds, names the retained specs, homes, workspaces
   and logs under `/tmp/agent-eval-calibrate.XXXXXX`, and writes `bench.json` beside the task:
   `{"worker":"anthropic/claude-haiku-5-5:low","runs":3,"floor":0,"gold":3}`.
@@ -235,8 +242,14 @@ trials before launching a full grid.
   "no difference" when the gap, in tasks, is no larger than the flaky count.
 - **Saturated** lists tasks every cell passed on every counted trial.
   They no longer tell the cells apart.
-- **infra** trials (no model turns, an empty review, an unparseable judge
-  reply) are unusable rather than failed; rerun `matrix.sh` to redo them.
+- **infra** trials are unusable rather than failed; rerun `matrix.sh` to redo them.
+  For scout-run agents (worker, scout, and the plan trial’s fixed worker), the shared
+  `agentInfra` rule counts scout refusing to start (rc 75), no input or output model
+  tokens regardless of turns, or a provider-error digest (`run ended: error` on the
+  first WORKER-SENSORS line, or `pi exited 1 with no digest`). An empty review or an
+  unparseable judge reply is also infra. A worker or scout timeout (rc 124) stays a
+  fail: the model used its time. A plan the worker cannot run for a reason in the
+  plan (for example interface-frozen files, with model usage) is a fail, not infra.
 
 ### When to run
 
