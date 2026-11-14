@@ -1,9 +1,6 @@
 vim.pack.add { 'https://github.com/NMAC427/guess-indent.nvim' }
 require('guess-indent').setup {}
 
--- vim-be-good: practice game, only loaded with VIM_PRACTICE=1 (alias: vimpractice)
-if vim.env.VIM_PRACTICE then vim.pack.add { 'https://github.com/ThePrimeagen/vim-be-good' } end
-
 vim.pack.add { 'https://github.com/mikesmithgh/kitty-scrollback.nvim' }
 require('kitty-scrollback').setup()
 
