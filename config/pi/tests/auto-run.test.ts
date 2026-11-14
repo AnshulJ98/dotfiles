@@ -156,6 +156,7 @@ test("after a compaction the reminder names the AUTO.md of the run this session 
 		await mine.session_compact({ reason: "threshold", willRetry: false });
 		const sent = (await mine.before_agent_start({})) as { message: { content: string } };
 		assert.ok(sent.message.content.endsWith(`re-read ${run}/AUTO.md before anything else.`), sent.message.content);
+		assert.match(sent.message.content, /^Post-compaction: [\s\S]*\n- target: [\s\S]*\n- left: [\s\S]*\n- next: [\s\S]*\n- waiting: [\s\S]*write two lines, `left:` and `next:`/);
 		const other = load(primeReminder, "s2");
 		await other.session_compact({ reason: "threshold", willRetry: false });
 		assert.doesNotMatch(((await other.before_agent_start({})) as { message: { content: string } }).message.content, /AUTO\.md/);

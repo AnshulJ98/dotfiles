@@ -17,7 +17,7 @@ dotfiles, so list those by name:
 
 ```
 ---
-files-allowed: [<every file the steps touch, relative to the git root>]
+files-allowed: [<every file the steps touch, test files included, relative to the git root>]
 tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
 max-lines: <cap on added lines across all files; omit for 400>
 allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]

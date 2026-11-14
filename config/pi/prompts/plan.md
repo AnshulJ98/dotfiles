@@ -30,7 +30,8 @@ first, one line each, `<n>. <name>, branch slice/<name>, decisions
 slice plan opens by restating, verbatim, the spec decisions it
 covers, so the review has its yardstick in reach.
 
-Write about 300 words, skipping any section with nothing to say:
+Write about 300 words, skipping any section with nothing to say; never
+drop a step or a check to fit:
 
 1. **Goal**: one line. Under it, `mechanism:` and one line on how the
    change works (which function, which seam), so the result can be
@@ -58,7 +59,7 @@ Close with this block; it is the worker's spec if the plan is dispatched:
 
 ```
 ---
-files-allowed: [<every file the steps touch, relative to the git root>]
+files-allowed: [<every file the steps touch, test files included, relative to the git root>]
 tests: <one command that proves the plan, including the repo's type check and lint when it has them, and exits non-zero on failure>
 max-lines: <cap on added lines across all files; omit for 400>
 allowed-commands: [<only if a step must change the cloud: exact prefix, e.g. cdk deploy MyStack-dev>]

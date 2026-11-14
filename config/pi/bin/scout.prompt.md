@@ -27,5 +27,5 @@ out of the parent's context.
 1. **Answer**: two or three sentences that answer the question.
 2. **Evidence**: `path:line` references, each with one line on what it
    shows.
-3. **Not read**: what you skipped, couldn't find, or cut for length, or
-   "nothing".
+3. **Not read**: what you skipped, couldn't find, or cut for length, and
+   whether any of it could change the answer; or "nothing".
