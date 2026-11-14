@@ -54,11 +54,33 @@ def zmx_sessions() -> dict[str, dict[str, str]]:
     # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
     out = {}
     for line in run('zmx', 'ls').splitlines():
+        line = line.strip().removeprefix('→')  # the arrow marks the session zmx ls ran in
         f = dict(p.strip().split('=', 1) for p in line.split('\t') if '=' in p)
         if 'name' in f:
             f['cwd'] = f.get('cwd', '').split('://', 1)[-1]
             f['cwd'] = f['cwd'][f['cwd'].find('/'):] if '/' in f['cwd'] else ''
             out[f['name']] = f
+    return out
+
+
+def spaces() -> dict[str, tuple[str, str, str]]:
+    """zmx session -> (session file, the file's first session, its first folder): the kitty space
+    that holds it, read from the saved session files. The newest file wins."""
+    out = {}
+    try:
+        files = sorted((os.path.join(DIR, f) for f in os.listdir(DIR) if f.endswith('.kitty-session')),
+                       key=os.path.getmtime)
+    except OSError:
+        return out
+    for path in files:
+        try:
+            text = open(path, errors='replace').read()
+        except OSError:
+            continue
+        holders = re.findall(r'--var=holder=(\S+)', text)
+        cd = next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), '')
+        for h in holders:
+            out[h] = (os.path.basename(path), holders[0], cd)
     return out
 
 
@@ -115,15 +137,17 @@ def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: st
     return '\t'.join((kind, target, holder, cwd, clients, display))
 
 
-def flush(left: str, rights: list[str], label: str = '') -> str:
+def flush(left: str, rights: list[str], label: str = '', keep: str = '') -> str:
     """left, the label, then the first of rights that leaves the label room, set against the
-    right edge. rights go from the fullest to the leanest; in a narrow list none may fit."""
+    right edge. rights go from the fullest to the leanest; in a narrow list none may fit.
+    keep follows the label and is never cut: a long label gives way to it."""
     for right in [*rights, '']:
         room = WIDTH - len(ANSI.sub('', left)) - len(ANSI.sub('', right)) - 1
         if room >= (12 if label else 0):
             break
-    if len(label) > room:
-        label = label[:max(0, room - 1)] + '…'
+    if len(label) + len(keep) > room:
+        label = label[:max(0, room - len(keep) - 1)] + '…'
+    label += keep
     return left + label + ' ' * (room - len(label) + 1) + right
 
 
@@ -136,7 +160,8 @@ def main() -> None:
     for z in zs.values():
         z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
     fg = foreground()
-    kitty = [] if view == 'zmx' else json.loads(run('kitten', '@', 'ls') or '[]')
+    zmx = view in ('zmx', 'zmx-detached')  # zmx-pick: no kitty
+    kitty = [] if zmx else json.loads(run('kitten', '@', 'ls') or '[]')
 
     def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
         z = zs.get(holder)
@@ -193,6 +218,11 @@ def main() -> None:
             for ti, t in enumerate(tabs):
                 last_t = ti == len(tabs) - 1
                 active = next((w for w in t['windows'] if w['is_active']), t['windows'][0])
+                if len(t['windows']) == 1:  # nothing to nest: the tab's row carries its pane
+                    holder = active['user_vars'].get('holder', '')
+                    rows.append(row('pane', str(active['id']), holder, active.get('cwd', ''), '1', flush(
+                        f'  {"└─" if last_t else "├─"} ', pane_cols(*proc_status(active, holder), holder), t['title'])))
+                    continue
                 rows.append(row('tab', str(t['id']), active['user_vars'].get('holder', ''), active.get('cwd', ''), '',
                                 flush(f'  {"└─" if last_t else "├─"} ', [], t['title'])))
                 for wi, w in enumerate(t['windows']):
@@ -204,26 +234,48 @@ def main() -> None:
     else:
         open_ws = list(workspaces)
 
-    if det:
-        rows.append(row('hdr', '', '', '', '', f'{DIM}{"sessions" if view == "zmx" else "detached"}{OFF}'))
+    if view == 'zmx-detached':
+        det = [z for z in det if z.get('clients', '0') == '0']
+    if det and zmx:
+        # No kitty to ask: a session sits in the space whose saved session file holds it, named as
+        # cmd+alt+g names it; one no file holds is grouped by where it is, the git checkout (branch
+        # alongside) or the plain folder.
+        where = spaces()
+        groups: dict[str, tuple[str, str, list[tuple[dict, str]]]] = {}
+        for z in det:
+            space = where.get(z['name'])
+            cwd = (zs.get(space[1], {}).get('cwd') or space[2]) if space else z['cwd']
+            ref, top = git_ref(cwd)
+            folder = (top or cwd).rstrip('/') or '/'
+            shown = 'home' if folder == HOME.rstrip('/') else os.path.basename(folder) or folder
+            at = short(z['cwd']) if space else os.path.relpath(z['cwd'], folder) if z['cwd'].rstrip('/') != folder else ''
+            groups.setdefault(space[0] if space else folder, (shown, ref, []))[2].append((z, at))
+        for shown, ref, members in groups.values():
+            n = len(members)
+            rows.append(row('hdr', '', '', '', '', flush(
+                f'{DIM}◇{OFF} {BOLD}{shown}{OFF} {DIM}{n} session{"s" if n > 1 else ""}{OFF}',
+                [f'{DIM}{ref}{OFF}'])))
+            for i, (z, below) in enumerate(members):
+                other = z.get('clients', '0') != '0'
+                proc, status, when = proc_status({}, z['name'])
+                cols = f'{fit(proc, 8)} {STATUS.get(status, "")}{fit(status, 8)}{OFF} {DIM}{when:>3}{OFF}'
+                # the session name leads, so fzf searches it
+                rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
+                    f'  {"└─" if i == n - 1 else "├─"} ', [f'{DIM}{fit(below, 22)}{OFF} {cols}', cols],
+                    z['name'], ' · attached' if other else '')))
+    elif det:
+        rows.append(row('hdr', '', '', '', '', f'{DIM}detached{OFF}'))
         for i, z in enumerate(det):
             other = z.get('clients', '0') != '0'
             branch = '└─' if i == len(det) - 1 else '├─'
-            if view == 'zmx':  # no kitty names these: the session name leads, the folder goes right
-                proc, status, when = proc_status({}, z['name'])
-                cols = f'{fit(proc, 8)} {STATUS.get(status, "")}{fit(status, 8)}{OFF} {DIM}{when:>3}{OFF}'
-                rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
-                    f'  {branch} ', [f'{DIM}{fit(short(z["cwd"]), 22)}{OFF} {cols}', cols],
-                    z['name'] + (' · attached' if other else ''))))
-                continue
             rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
                 f'  {branch} ', pane_cols(*proc_status({}, z['name']), z['name']),
-                short(z['cwd']) + ((' · attached' if view == 'zmx' else ' · other kitty') if other else ''))))
+                short(z['cwd']) + (' · other kitty' if other else ''))))
     try:
         files = sorted(f for f in os.listdir(DIR) if f.endswith('.kitty-session'))
     except OSError:
         files = []
-    closed = [] if view == 'zmx' else [f for f in files if f[:-len('.kitty-session')] not in open_ws]
+    closed = [] if zmx else [f for f in files if f[:-len('.kitty-session')] not in open_ws]
     if closed:
         rows.append(row('hdr', '', '', '', '', f'{DIM}closed workspaces{OFF}'))
         for i, f in enumerate(closed):

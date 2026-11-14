@@ -474,7 +474,23 @@ class ScriptTests(unittest.TestCase):
                 args, = self.calls("fzf")
                 self.assertIn("--print-query", args)
                 self.assertNotIn("ctrl-s", " ".join(args))
-                self.assertFalse(any(a.startswith(("ctrl-t:", "zero:")) for a in args))
+                self.assertTrue(any(a.startswith("ctrl-t:") for a in args))  # all <-> detached, as in kitty
+
+    def test_picker_fills_the_terminal(self):
+        for extra in ((), ("--zmx",)):
+            (self.root / "calls").unlink(missing_ok=True)
+            self.run_script("zpick", *extra, MODE="pick:130|||")
+            args, = self.calls("fzf")
+            self.assertNotIn("--margin", args)
+            self.assertTrue(any(a.startswith("right,55%") for a in args), args)
+
+    def test_picker_zmx_ctrl_t_switches_between_all_and_detached_sessions(self):
+        env = dict(ZPICK_MODE="zmx", ZPICK_VIEW=str(self.root / "zview"))
+        labels = []
+        for _ in range(3):
+            labels.append(self.run_script("zpick", "--label", **env).stdout.strip())
+            self.run_script("zpick", "--toggle", **env)
+        self.assertEqual(labels, ["zmx", "zmx · detached", "zmx"])
 
     def test_picker_interrupt_cleans_only_owned_directory(self):
         neighbor = self.root / "zpick-view.neighbor"
