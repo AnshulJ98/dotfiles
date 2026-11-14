@@ -63,15 +63,24 @@ def zmx_sessions() -> dict[str, dict[str, str]]:
     return out
 
 
-def spaces() -> dict[str, tuple[str, str, str]]:
+def space_label(z: dict) -> str:
+    """The workspace kitty labelled this session with (workspaces.py, zcore.label), or ''."""
+    value = z.get('space', '')
+    try:
+        return bytes.fromhex(value).decode()
+    except ValueError:
+        return ''
+
+
+def spaces() -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str, str]]]:
     """zmx session -> (session file, the file's first session, its first folder): the kitty space
-    that holds it, read from the saved session files. The newest file wins."""
-    out = {}
+    that holds it, read from the saved session files. The newest file wins. Then the same by file."""
+    out, by_file = {}, {}
     try:
         files = sorted((os.path.join(DIR, f) for f in os.listdir(DIR) if f.endswith('.kitty-session')),
                        key=os.path.getmtime)
     except OSError:
-        return out
+        return out, by_file
     for path in files:
         try:
             text = open(path, errors='replace').read()
@@ -79,9 +88,10 @@ def spaces() -> dict[str, tuple[str, str, str]]:
             continue
         holders = re.findall(r'--var=holder=(\S+)', text)
         cd = next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), '')
+        by_file[os.path.basename(path)] = (os.path.basename(path), holders[0] if holders else '', cd)
         for h in holders:
-            out[h] = (os.path.basename(path), holders[0], cd)
-    return out
+            out[h] = by_file[os.path.basename(path)]
+    return out, by_file
 
 
 def live_cwds(pids: list[str]) -> dict[str, str]:
@@ -240,10 +250,14 @@ def main() -> None:
         # No kitty to ask: a session sits in the space whose saved session file holds it, named as
         # cmd+alt+g names it; one no file holds is grouped by where it is, the git checkout (branch
         # alongside) or the plain folder.
-        where = spaces()
+        where, by_file = spaces()
         groups: dict[str, tuple[str, str, list[tuple[dict, str]]]] = {}
         for z in det:
-            space = where.get(z['name'])
+            was = space_label(z)  # a closed pane is in no file; its label still names the space
+            space = where.get(z['name']) or by_file.get(was + '.kitty-session')
+            if not space and was:
+                groups.setdefault('label ' + was, (was, '', []))[2].append((z, short(z['cwd'])))
+                continue
             cwd = (zs.get(space[1], {}).get('cwd') or space[2]) if space else z['cwd']
             ref, top = git_ref(cwd)
             folder = (top or cwd).rstrip('/') or '/'

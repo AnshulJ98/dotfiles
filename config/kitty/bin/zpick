@@ -97,7 +97,22 @@ case ${1:-} in
 esac
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/zpick.XXXXXXXX") || exit 1
 export ZPICK_VIEW=$scratch/view
-trap 'rm -rf -- "$scratch"' EXIT
+# Keep the list current: every 2 s, when a session has come, gone, or been attached or detached,
+# ask fzf over its socket to reload. Only on a change, because fzf drops keys typed while a
+# tracked reload runs (0.75.0).
+tick() {
+  local last now first=1
+  while sleep 2; do
+    now=$(zmx ls 2>/dev/null | cut -f1,3)
+    if [ -z "$first" ] && [ "$now" != "$last" ]; then
+      curl -s -m 2 --unix-socket "$ZPICK_VIEW.sock" -X POST http://fzf -d "reload($self --list)"
+    fi
+    last=$now first=
+  done
+}
+tick </dev/null >/dev/null 2>&1 &
+ticker=$!
+trap 'kill "$ticker" 2>/dev/null; rm -rf -- "$scratch"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -138,6 +153,7 @@ keys=(--bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transfo
 if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect ctrl-s); fi
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
+  --track --id-nth 1,2 --listen "$ZPICK_VIEW.sock" \
   --border rounded --border-label "$(label)" --border-label-pos 3 --padding 1,2 \
   --prompt '/ ' --ghost "$(ghost)" --info inline-right --pointer '▌' --marker '+' --gutter ' ' \
   --input-border line --list-border none \

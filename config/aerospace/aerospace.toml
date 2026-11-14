@@ -47,9 +47,10 @@ outer.right = 10
 [mode.main.binding]
 # alt-enter = 'exec-and-forget open -n /Applications/kitty.app'
 # Cmd+Enter: focus the one kitty that holds the workspaces, or start it (kitty/bin/kmain).
-# Cmd+Alt+Enter: a separate plain kitty with no workspace.
+# Cmd+Alt+Enter: a throwaway kitty: the usual zsh, but no workspace, no sidebar and no zmx session,
+# so nothing in it outlives the window or shows in the pickers.
 cmd-enter = "exec-and-forget $HOME/.config/kitty/bin/kmain"
-cmd-alt-enter = 'exec-and-forget open -n -a kitty'
+cmd-alt-enter = 'exec-and-forget open -n -a kitty --args -o shell=/bin/zsh'
 # alt-cmd-h = 'split horizontal'
 # alt-cmd-v = 'split vertical'
 

@@ -21,6 +21,11 @@ def holder(cwd: str, home: str, unique: str) -> str:
     return base + '-' + unique
 
 
+def label(text: str) -> str:
+    """A zmx label value: zmx set takes only [a-zA-Z0-9-_.] (1.0.1). bin/zpick-rows decodes it."""
+    return text.encode().hex()
+
+
 def answer(name: str, pi_session: str) -> bytes:
     return (': zq ' + urllib.parse.quote(name, safe='') + ' ' +
             (urllib.parse.quote(pi_session, safe='') if pi_session else '-') + '\n').encode()

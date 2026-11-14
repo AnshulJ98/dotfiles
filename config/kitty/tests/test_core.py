@@ -58,6 +58,14 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(core.holder('/x/observability', '/Users/a', '0123456789ab'),
                          'observability-0123456789ab')
 
+    def test_label_fits_what_zmx_set_accepts(self):
+        # zmx 1.0.1 rejects label values outside [a-zA-Z0-9-_.]; bin/zpick-rows decodes these
+        for text in ('dotfiles-6', 'my space', 'π - dotfiles', 'a/b=c;d', 'x' * 90):
+            with self.subTest(text=text):
+                value = core.label(text)
+                self.assertRegex(value, r'^[A-Za-z0-9_.-]+$')
+                self.assertEqual(bytes.fromhex(value).decode(), text)
+
     def test_answer(self):
         for name, pi, expected in [
             ('n', '', b': zq n -\n'),
