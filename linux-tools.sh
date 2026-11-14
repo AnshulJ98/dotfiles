@@ -46,6 +46,15 @@ if ! "$BIN/zmx" version 2>/dev/null | grep -q "$ZMX_VERSION"; then
 fi
 ok "zmx $("$BIN/zmx" version | head -1)"
 
+# apt's fzf lags too; the pickers (zpick, zmx-pick) are built against this one.
+FZF_VERSION=0.75.0
+if ! "$BIN/fzf" --version 2>/dev/null | grep -q "^$FZF_VERSION "; then
+  log "fzf $FZF_VERSION..."
+  case $(uname -m) in aarch64|arm64) fzf_arch=arm64 ;; *) fzf_arch=amd64 ;; esac
+  curl -fsSL "https://github.com/junegunn/fzf/releases/download/v$FZF_VERSION/fzf-$FZF_VERSION-linux_$fzf_arch.tar.gz" | tar -xz -C "$BIN" fzf
+fi
+ok "fzf $("$BIN/fzf" --version)"
+
 # kitty from upstream (apt lags); the remote end needs its shell integration and kitten.
 if ! "$HOME/.local/kitty.app/bin/kitty" --version >/dev/null 2>&1; then
   log "kitty..."
