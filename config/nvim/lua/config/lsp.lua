@@ -1,12 +1,3 @@
-vim.pack.add { 'https://github.com/j-hui/fidget.nvim' }
--- Progress UI has nothing to show before a server attaches; 2.5 ms of setup
--- waits for the first one.
-vim.api.nvim_create_autocmd('LspAttach', {
-  group = vim.api.nvim_create_augroup('fidget-lazy-setup', { clear = true }),
-  once = true,
-  callback = function() require('fidget').setup {} end,
-})
-
 vim.api.nvim_create_autocmd('LspAttach', {
   group = vim.api.nvim_create_augroup('lsp-attach', { clear = true }),
   callback = function(event)

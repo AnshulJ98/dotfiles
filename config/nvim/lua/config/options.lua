@@ -52,9 +52,9 @@ vim.o.linebreak = true
 -- of jumping a whole buffer line at a time; keeps <C-e>/<C-d> steady.
 vim.o.smoothscroll = true
 
--- One statusline for the whole screen. With one per window, neo-tree, the
--- terminal and the debugger panel each drew a line of junk, and the code
--- window's own line truncated its path once the panel took 60 columns.
+-- One statusline for the whole screen. With one per window, the terminal
+-- and the debugger panel each drew a line of junk, and the code window's
+-- own line truncated its path once the panel took 60 columns.
 vim.o.laststatus = 3
 
 -- Opening the terminal or the debugger panel keeps the text in place rather

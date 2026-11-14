@@ -37,8 +37,6 @@ require('which-key').setup {
     { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
     { '<leader>g', group = '[G]it diff', mode = { 'n', 'x' } },
     { '<leader>w', group = '[W]indow' },
-    { '<leader>D', group = '[D]atabase' },
-    { '<leader>r', group = 'HTTP [R]equest' },
     { '<leader>x', group = 'Scratch' },
     { '<leader>ws', group = '[S]wap' },
     { 'gr', group = 'LSP Actions', mode = { 'n' } },
@@ -120,7 +118,7 @@ local function starts_fold(lnum)
 end
 
 --- Renders 'statuscolumn': signs, the line number, then a clickable fold arrow.
---- Windows without line numbers (neo-tree, terminals) keep the default columns.
+--- Windows without line numbers (panels, terminals) keep the default columns.
 ---@return string
 function _G.StatusColumn()
   if not (vim.wo.number or vim.wo.relativenumber) then return '%C%s' end

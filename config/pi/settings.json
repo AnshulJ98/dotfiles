@@ -40,7 +40,6 @@
     "-~/.agents/skills/d2-diagrams"
   ],
   "extensions": [
-    "~/Dev/dotfiles/config/pi/extensions/mlx-local.ts",
     "~/Dev/dotfiles/config/pi/extensions/compact-cap.ts",
     "~/Dev/dotfiles/config/pi/extensions/prime-reminder.ts",
     "~/Dev/dotfiles/config/pi/extensions/scout.ts",

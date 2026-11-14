@@ -24,8 +24,8 @@ local function window_for(buf)
 end
 
 -- Splitting from the focused window puts the terminal inside whatever holds
--- focus, and during a debug session that is usually dap-view, neo-tree, or the
--- terminal itself. Anchoring on a window that holds a file keeps the panels
+-- focus, and during a debug session that is usually dap-view or the terminal
+-- itself. Anchoring on a window that holds a file keeps the panels
 -- full height and the terminal under the code, where both VS Code and the
 -- previous layout put it. Falls back to the focused window so the caller
 -- always gets a split rather than an error.
@@ -55,7 +55,7 @@ local function open_below(buf, enter)
   return win
 end
 
--- Floating windows (which-key, completion docs, fidget) count in the tabpage
+-- Floating windows (which-key, completion docs) count in the tabpage
 -- list but cannot take over as the last window, so only splits are counted.
 ---@return integer
 local function split_window_count()
