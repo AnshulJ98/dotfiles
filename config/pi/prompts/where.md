@@ -1,91 +1,80 @@
 ---
-description: Where we are on the ladder (this, slice, beyond, higher, target), what's left at each level, a brief on the slice and the effort, and the next move; report only
-argument-hint: "[this|slice|beyond|higher to brief instead]"
+description: Where we are by outcome, each level's done-when checks and numbered actions by whose move it is; report only
+argument-hint: "[action number or level to brief]"
 ---
-Show me where we are. Print the card below in one code block and stop:
-no edits, no next step started, no plan. Expand: $@
+Show me where we are, by outcome. Print the card below in one code block
+and stop: no edits, no next step started, no plan. Expand: $@
 
 ```
-target  ◇ <the outcome I want, in my latest words>
-higher  ○ <what the effort lands in>     <pips>  left  <what remains here>
-beyond  ▸ <the effort>                   <pips>  left  <what remains here>
-slice   ▸ <the agreed batch in hand>     <pips>  left  <what remains here>
-this    ● <the one piece in hand>                left  <what remains here>
+target  ◇ <the outcome I want, in my latest words>, done when:
+          ☐ <check>                                  <action numbers>
+higher  ○ <what the effort lands in>, done when:
+          ☐ <check>                                  <action numbers>
+beyond  ▸ <the effort, as an outcome>, done when:
+          ? <check reported done, not checked>       <where it was reported>
+          ▸ <the slice below, closed>                <action numbers>
+slice   ▸ <the agreed batch in hand, as an outcome>, done when:
+          ✓ <check>                                  <proof: one sha, test or path>
+          ☐ <check>                                  <action numbers>
+this    ● <the one piece in hand, as an outcome>, done when:
+          ☐ <check>                                  <action numbers>
 
-────────────────────────────────────────────────────────────────────────
-open    ● <piece in hand>   <its state>                  you: <verb>
-        ▸ <in progress>     <its state>                  me: <verb>
-        ○ <not started>     <its state>                  you: <verb>
-        ? <reported done>   <what is unchecked>          me: check
-done    <count> in this slice · latest proof: <one sha, test or path>
-
-    ── slice · <its name> ──────────────────────────────────────────────
-    what    <what this batch delivers, or what is being decided in it>
-    where   <the files, branch, command or window it lives in>
-    why     <what it serves on the rung above; what goes wrong without it>
-    how     <the approach in hand, or the options when it is my decision>
-    effort  <what is left here: files touched, rough size, what has to be tested>
-    impact  <what changes for me once it is done; what it unblocks>
-    pick    <your recommendation and its reason>
-    context <one earlier decision, constraint or result I need to judge this>
-
-── beyond slice · <its name> ───────────────────────────────────────────
-what    <what the effort delivers, or what is being decided in it>
-where   <the files, branch, command or window it lives in>
-why     <what it serves on the rung above; what goes wrong without it>
-how     <the approach in hand, or the options when it is my decision>
-effort  <what is left here: files touched, rough size, what has to be tested>
-impact  <what changes for me once it is done; what it unblocks>
-pick    <your recommendation and its reason>
-context <one earlier decision, constraint or result I need to judge this>
-
-ideas   <yours that I have not agreed to, on one line>
-next    <one move; start with "you:" when it is my decision>
+needs you   1 ● <verb-first decision or move>   <options a · b · c>          my pick: <x>
+            2   <verb-first decision or move>   <options>                    my pick: <x>
+I do next   3   <verb-first action>             <what it needs first>
+waiting     4   <verb-first action>             until <number or event>
+ideas       <yours that I have not agreed to, on one line>
+reply       <an example answer by number, and what you would do then>
 ```
 
-- The ladder is the top five rows, always in this order with these
-  labels. `higher` is what the effort lands in or serves (a branch to
-  merge, a release, a programme). `beyond` is the effort the slice
-  belongs to: everything beyond this slice. `slice` is the
-  agreed batch in hand. `this` is the one piece in hand right now; when
-  that piece is finished, `this` is the next open piece, not the
-  finished one.
-- Leave out a rung we never named; two rungs and `target` is a fine
-  answer. Never invent a rung, an item, a count or a percentage.
-- Marks: ✓ done with proof, ▸ in progress, ○ agreed and not started,
-  ? reported done but not checked, ● you are here. ● appears on `this`
-  and on its row under `open`, nowhere else.
-- Pips: one mark per item we named at that level, in order. No pips
-  where the items were never listed.
-- `left` is what remains at that level beyond the rung below it, as
-  agreed with me. Write `none named` when nothing was agreed. Your own
-  suggestions go under `ideas`, never under `left`.
-- `open` lists every piece of the slice that is not done, the piece in
-  hand first, at most 5, each ending with whose move it is. If I named a
-  level after "Expand", list that level's pieces there.
-- A brief is the eight rows `what` to `context` under a rule that names
-  its rung. By default print two: one for `slice`, indented four
-  spaces, then one for `beyond`, headed `beyond slice`. If I named rungs
-  after "Expand" (this, slice, beyond, higher), brief those instead. A rung left off the ladder gets no brief.
-- Each brief row adds something the ladder does not already say, and
-  the two briefs do not repeat each other. `effort` and `impact` come
-  from what we measured or said: write `not sized` rather than guess.
-  `pick` is yours and labelled as such by its row; write `nothing to
-  choose` when there is one way forward.
-- A piece is a unit of the agreed work, not a chore done along the way
-  (a note saved, a window opened).
-- ✓ needs proof from this session. A todo, a summary or your own
-  earlier "done" is not proof: that piece is ? and stays under `open`.
-  `done` gives one pointer, not a list.
+- The ladder is the rungs `target`, `higher`, `beyond`, `slice`, `this`,
+  in this order with these labels. `higher` is what the effort lands in
+  or serves (a branch to merge, a release, a programme). `beyond` is the
+  effort the slice belongs to. `slice` is the agreed batch in hand.
+  `this` is the one piece in hand right now; when that piece is
+  finished, `this` is the next open piece.
+- Leave out a rung we never named; `target` and two rungs is a fine
+  answer. Never invent a rung, a check, a count or a percentage.
+- A rung line states an outcome: what is true when it is done, not the
+  activity. Under it go its done-when checks, one per line, each
+  something I could verify. Take them from what we agreed. If we never
+  agreed how a rung is done, its only check is `☐ done-when not agreed`
+  and naming it is a `needs you` action.
+- A check appears once, on the lowest rung that owns it. A higher rung
+  lists the rung below it as one check, then only what remains beyond
+  it. At most 5 checks on a rung.
+- Check marks: ✓ done with proof from this session; ? reported done (a
+  todo, a summary, your own earlier "done") but not checked; ▸ in
+  progress; ☐ open. The right column gives one proof pointer for ✓,
+  where it was reported for ?, and for ▸ and ☐ the numbers of the
+  actions that close it.
+- Actions are numbered from 1, verb first, one move each. Every open
+  check has at least one action and every action closes a check. ●
+  marks `this` and the action that moves it, nowhere else.
+- `needs you` holds the moves that are mine: decisions, approvals,
+  things to try. Give the options, then `my pick:` with your
+  recommendation, or `my pick: none yet`.
+- `I do next` holds what you will do once I answer, each with what it
+  needs first (`needs nothing`, `after 1-2`, `your "commit"`).
+- `waiting` holds actions that cannot start yet, each with `until` and
+  the number or event that frees it.
+- Leave out a group that is empty. At most 9 actions.
+- `ideas` holds your suggestions I have not agreed to; they are never a
+  check or an action. Leave the row out when empty.
+- `reply` is one example of how I could answer by number, and what you
+  would do then. You still stop here.
+- If I gave an action number or a rung after "Expand", print no card.
+  Print a brief for it instead: eight rows `what`, `where`, `why`,
+  `how`, `effort`, `impact`, `pick`, `context`, under a rule that names
+  it. A number means the action with that number in your last card.
+  `effort` and `impact` come from what we measured or said: write `not
+  sized` rather than guess.
 - My latest word wins over the original ask and over a compaction
-  summary. Where a summary lost a rung or a piece, write `lost in
+  summary. Where a summary lost a rung or a check, write `lost in
   compaction` on that row; do not guess.
 - You may run `git status` and `git log` to settle a mark. Nothing else.
-- Pad with spaces so the marks, pips, `left` and the owners line up.
-  Names are at most 30 characters. Every rule ends at column 72; a
-  labelled one is filled out with ─. One blank line goes before each
-  rule and before `ideas`.
-  One row is one line of at most 100 characters and never wraps onto a
-  second line: cut detail, not rows.
-  Nothing before the card and nothing after `next`. Leave out `done`
-  and `ideas` when empty. At most 34 rows, blank lines not counted.
+- Pad with spaces so the marks, the right column and the action columns
+  line up. One row is one line of at most 100 characters and never
+  wraps: cut detail, not rows. One blank line goes between the ladder
+  and the actions. Nothing before the card and nothing after `reply`.
+  At most 30 rows.
