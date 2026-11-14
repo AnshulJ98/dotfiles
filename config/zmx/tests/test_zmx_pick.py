@@ -39,11 +39,11 @@ class ZmxPick(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_pick(self, answers, **env):
+    def run_pick(self, answers, *args, **env):
         (self.root / "answers").write_text(json.dumps(answers))
         full = {"PATH": f"{self.root}:/usr/bin:/bin", "HOME": str(self.root), "FAKE_ROOT": str(self.root),
                 "SHELL": str(self.root / "sh"), "ZPICK": str(self.root / "zpick"), "ZMX_NO_DETACH_KEY": "1", **env}
-        self.out = subprocess.run(["bash", str(PICK)], env=full, capture_output=True, text=True,
+        self.out = subprocess.run(["bash", str(PICK), *args], env=full, capture_output=True, text=True,
                                   timeout=10, stdin=subprocess.DEVNULL).stdout
         calls = [json.loads(l) for l in (self.root / "calls").read_text().splitlines()]
         return [c for c in calls if c[1][:1] != ["list"]]
@@ -66,6 +66,42 @@ class ZmxPick(unittest.TestCase):
         self.assertIn("x/y", self.out)
         self.assertNotIn("logs", self.out, "a session that ran must not trigger the message")
         self.assertEqual([c[0] for c in calls], ["zpick", "zmx", "zpick", "zmx", "zpick", "sh"])
+
+    def test_a_named_session_is_entered_through_the_loop(self):
+        # zmx-pick NAME replaces zmx attach NAME at any entry point (ssh, Rootshell), so ctrl+\
+        # always comes back to the picker.
+        calls = self.run_pick([[0, "logs\n"], [1, ""]], "work")
+        self.assertEqual([c[:2] for c in calls], [
+            ["zmx", ["attach", "work"]], ["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]],
+            ["zpick", ["--zmx"]], ["sh", ["-il"]]])
+        self.assertEqual({c[2] for c in calls if c[0] == "zmx"}, {None})
+
+    def test_a_named_session_inside_a_session_switches_without_the_picker(self):
+        calls = self.run_pick([], "work", ZMX_SESSION="dotfiles")
+        self.assertEqual([c[:2] for c in calls], [["zmx", ["attach", "work"]]])
+
+    def test_system_install_runs_for_a_user_who_cannot_read_the_repo(self):
+        prefix, home = self.root / "prefix", self.root / "owner"
+        (home / ".local/bin").mkdir(parents=True)
+        (home / ".local/bin/zmx").write_text("#!/bin/sh\n")
+        (home / ".local/bin/zmx").chmod(0o755)
+        done = subprocess.run(["bash", str(PICK.parent / "install-system"), str(prefix)],
+                              env={"PATH": "/usr/bin:/bin", "HOME": str(home), "USER": "nobody"},
+                              capture_output=True, text=True, timeout=10)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        link = prefix / "bin/zmx-pick"
+        self.assertTrue(link.resolve().is_relative_to(prefix.resolve()), "must not point into the repo")
+        for part in ("zmx/zmx-pick", "kitty/bin/zpick", "kitty/bin/zpick-rows"):
+            self.assertTrue(os.access(prefix / "share/zmx-pick" / part, os.X_OK), part)
+        # the installed copy finds its own picker: the same loop, driven by the fakes
+        (self.root / "answers").write_text(json.dumps([[1, ""]]))
+        env = {"PATH": f"{self.root}:/usr/bin:/bin", "HOME": str(self.root), "FAKE_ROOT": str(self.root),
+               "SHELL": str(self.root / "sh")}
+        (prefix / "share/zmx-pick/kitty/bin/zpick").write_text((self.root / "zpick").read_text())
+        subprocess.run(["bash", str(link)], env=env, capture_output=True, text=True, timeout=10,
+                       stdin=subprocess.DEVNULL)
+        calls = [json.loads(l) for l in (self.root / "calls").read_text().splitlines()]
+        self.assertEqual([c[0] for c in calls], ["zpick", "sh"])
 
     def test_inside_a_session_switches_once(self):
         calls = self.run_pick([[0, "bare\n"]], ZMX_SESSION="dotfiles")

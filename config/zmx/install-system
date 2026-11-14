@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# install-system: zmx-pick for every user of this machine, each over their own zmx sessions.
+#   sudo config/zmx/install-system [PREFIX]      (PREFIX defaults to /usr/local)
+# Other users cannot read this repo in a home folder, so the three scripts are copied to
+# PREFIX/share/zmx-pick, in the layout zmx-pick expects, and linked from PREFIX/bin. zmx and fzf
+# are copied too when they only exist in the installing user's ~/.local/bin (Linux).
+# The copies do not follow the repo: run this again after an update.
+set -euo pipefail
+here=$(cd "$(dirname "$(realpath "$0")")" && pwd)
+prefix=${1:-/usr/local}
+share=$prefix/share/zmx-pick
+install -d "$share/zmx" "$share/kitty/bin" "$prefix/bin"
+install -m 755 "$here/zmx-pick" "$share/zmx/zmx-pick"
+install -m 755 "$here/../kitty/bin/zpick" "$here/../kitty/bin/zpick-rows" "$share/kitty/bin/"
+ln -sfn "$share/zmx/zmx-pick" "$prefix/bin/zmx-pick"
+owner=${SUDO_USER:-$(id -un)}
+owner_home=$(eval echo "~$owner")
+for tool in zmx fzf; do
+  if [ -x "$owner_home/.local/bin/$tool" ]; then install -m 755 "$owner_home/.local/bin/$tool" "$prefix/bin/$tool"; fi
+done
+echo "zmx-pick installed in $prefix/bin for every user"

@@ -2,17 +2,21 @@
 # zmx-pick: a zmx session switcher for any terminal (iPad, WSL, plain ssh). It is kitty's cmd+alt+g
 # picker (config/kitty/bin/zpick --zmx) in a loop: pick a session and attach; ctrl+\ (zmx's detach
 # key) comes back here; esc leaves for a login shell. Inside a zmx session it switches once instead.
+# zmx-pick NAME enters NAME first, without the picker: use it wherever zmx attach NAME would go
+# (ssh, Rootshell), so ctrl+\ always has a picker to come back to.
 #   ssh -t host '~/.local/bin/zmx-pick'      (or RemoteCommand in ~/.ssh/config, RequestTTY yes)
 set -u
 export PATH=$PATH:$HOME/.local/bin:/opt/homebrew/bin # non-interactive ssh skips the rc files
 ZPICK=${ZPICK:-$(dirname "$(realpath "$0")")/../kitty/bin/zpick}
 unset ZMX_NO_DETACH_KEY # ctrl+\ is the way back here
+first=${1:-}
 if [ -n "${ZMX_SESSION:-}" ]; then
-  name=$("$ZPICK" --zmx) && [ -n "$name" ] && exec zmx attach "$name" # switches this client
+  name=${first:-$("$ZPICK" --zmx)} && [ -n "$name" ] && exec zmx attach "$name" # switches this client
   exit 0
 fi
 while :; do
-  name=$("$ZPICK" --zmx) || exec "${SHELL:-/bin/sh}" -il
+  name=$first first=
+  [ -n "$name" ] || name=$("$ZPICK" --zmx) || exec "${SHELL:-/bin/sh}" -il
   [ -n "$name" ] || continue
   start=$SECONDS
   zmx attach "$name"
