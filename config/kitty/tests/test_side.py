@@ -155,6 +155,20 @@ class SideTests(unittest.TestCase):
         self.assertTrue(got[3][2].lstrip(' ◇').startswith('elsewhere 1 session'), got[3][2])  # named as cmd+alt+g names it
         self.assertTrue(got[5][2].lstrip(' ◇').startswith('srv 1 session'), got[5][2])
 
+    def test_picker_rows_put_a_detached_session_under_the_space_its_label_names(self):
+        # kitty drops a closed pane from the session file; the space label zmx keeps still places it
+        line = lambda n, c, extra='': f'  name={n}\tpid=1\tclients={c}\tcreated=1\tcwd=file://box/srv{extra}\n'
+        ls = (line('dev-1', 1).replace('/srv', '/work/Dev') + line('loose', 0) + line('was-dev', 0, '\tspace=646576') +
+              line('was-gone', 0, '\tspace=6d79207370616365') + line('bad', 0, '\tspace=!'))
+        files = {'dev': 'new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\n'}
+        got = self.picker_rows('zmx', ls, files=files)
+        self.assertEqual([(k, t) for k, t, _ in got], [
+            ('hdr', ''), ('det', 'dev-1'), ('det', 'was-dev'), ('hdr', ''), ('det', 'loose'), ('det', 'bad'),
+            ('hdr', ''), ('det', 'was-gone')])
+        self.assertTrue(got[0][2].lstrip(' ◇').startswith('Dev 2 sessions'), got[0][2])
+        self.assertIn('· attached', got[1][2]); self.assertNotIn('attached', got[2][2])
+        self.assertTrue(got[6][2].lstrip(' ◇').startswith('my space 1 session'), got[6][2])  # its file is gone
+
     def test_picker_rows_zmx_view_lists_every_session_without_kitty(self):
         # zmx-pick outside kitty: no kitty calls, attached sessions listed too, no closed workspaces.
         loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx', str(SCRIPT.parent / 'zpick-rows'))

@@ -95,6 +95,25 @@ class SavingTests(unittest.TestCase):
             self.assertEqual(len(boss.calls), saves)
 
 
+    def test_save_labels_each_zmx_session_with_its_workspace_once(self):
+        # the label outlives the pane, so zmx-pick can put a detached session under its workspace
+        with tempfile.TemporaryDirectory() as directory:
+            a, b, plain = Window("my space", 1), Window("b", 1), Window("", 1)
+            a.user_vars["holder"], b.user_vars["holder"], plain.user_vars["holder"] = "a-1", "b-1", "p-1"
+            boss = Boss([a, b, plain], active=a, saved="launch\n")
+            module = load(directory, boss)
+            def labels():
+                found = [c[3:] for c in boss.calls if c[:2] == ("launch", "--type=background")]
+                del boss.calls[:]
+                return found
+            module._save()
+            self.assertEqual(labels(), [("set", "a-1", "space=6d79207370616365"), ("set", "b-1", "space=62")])
+            module._save()
+            self.assertEqual(labels(), [])
+            a.created_in_session_name = "b"
+            module._save()  # a pane moved to another workspace is labelled again
+            self.assertEqual(labels(), [("set", "a-1", "space=62")])
+
     def test_empty_owner_replaces_open_atomically_nonowner_leaves_it(self):
         from unittest.mock import patch
         for owner in (True, False):

@@ -476,6 +476,18 @@ class ScriptTests(unittest.TestCase):
                 self.assertNotIn("ctrl-s", " ".join(args))
                 self.assertTrue(any(a.startswith("ctrl-t:") for a in args))  # all <-> detached, as in kitty
 
+    def test_picker_keeps_its_list_current(self):
+        # a ticker reloads the list over fzf's socket; the cursor stays on its row by kind and target
+        for extra in ((), ("--zmx",)):
+            (self.root / "calls").unlink(missing_ok=True)
+            self.run_script("zpick", *extra, MODE="pick:130|||")
+            args, = self.calls("fzf")
+            self.assertIn("--track", args)
+            self.assertEqual(args[args.index("--id-nth") + 1], "1,2")
+            sock = Path(args[args.index("--listen") + 1])
+            self.assertEqual(sock.name, "view.sock")
+            self.assertFalse(sock.parent.exists())
+
     def test_picker_fills_the_terminal(self):
         for extra in ((), ("--zmx",)):
             (self.root / "calls").unlink(missing_ok=True)

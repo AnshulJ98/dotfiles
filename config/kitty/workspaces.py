@@ -12,6 +12,7 @@
 import os
 import re
 import shlex
+import shutil
 import time
 import sys
 from importlib import import_module
@@ -35,6 +36,7 @@ _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
+_labelled: dict[str, str] = {}  # zmx session -> the workspace its label names
 _check_tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _named: set[int] = set()
@@ -150,6 +152,20 @@ def _place(path: str, own_window: bool) -> None:
     os.replace(path + '.tmp', path)
 
 
+def _label(boss) -> None:
+    """Label each pane's zmx session with its workspace. kitty drops a closed pane from the session
+    file; the label stays with the session, so bin/zpick-rows can still place it once detached."""
+    zmx = shutil.which('zmx') or '/opt/homebrew/bin/zmx'
+    for w in boss.all_windows:
+        name, holder = w.created_in_session_name, w.user_vars.get('holder', '')
+        if not name or not holder or _labelled.get(holder) == name:
+            continue
+        # kitty runs it: no process may be started from this thread (tests/test_kitty.py)
+        boss.call_remote_control(None, ('launch', '--type=background', zmx, 'set', holder,
+                                        'space=' + zcore.label(name)))
+        _labelled[holder] = name
+
+
 def _save(timer_id: int | None = None) -> None:
     global _save_pending
     _save_pending = False
@@ -168,6 +184,7 @@ def _save(timer_id: int | None = None) -> None:
                                         '--match=' + shlex.quote(f'session:^{re.escape(name)}$ and not var:transient=1'),
                                         _file(name)))
         _place(_file(name), first not in where.get(name, {first}))
+    _label(boss)
     if _owner:
         with open(OPEN + '.tmp', 'w') as f:
             f.write(''.join(name + '\n' for name in names))
