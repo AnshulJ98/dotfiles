@@ -4,7 +4,7 @@
 # usage: isolate.sh <home-dir> <command> [args...]
 #
 # Builds <home-dir> when it has no .pi/agent yet, then execs the command with
-# a reduced environment (PATH, HOME, TERM, LANG, SCOUT_HERDR=0).
+# a reduced environment (PATH, HOME, TERM, LANG).
 #   .pi/agent  links every entry of the real ~/.pi/agent except memory.md*,
 #              sessions, tmp, run-history.jsonl and crashes.json; memory.md is
 #              an empty file and sessions an empty directory.
@@ -45,5 +45,4 @@ exec env -i \
   HOME="$home" \
   TERM="${TERM:-dumb}" \
   LANG="${LANG:-en_US.UTF-8}" \
-  SCOUT_HERDR=0 \
   "$@"
