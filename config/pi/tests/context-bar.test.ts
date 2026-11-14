@@ -22,7 +22,9 @@ const { visibleWidth } = await import("@earendil-works/pi-tui");
 type Handler = (event: unknown, ctx: unknown) => unknown;
 type Footer = { render(width: number): string[] };
 
-async function footer(): Promise<Footer> {
+type Paint = (color: string, text: string) => string;
+
+async function footer(paint: Paint = (_color, text) => text): Promise<Footer> {
 	const handlers: Record<string, Handler> = {};
 	contextBar({ on: (event: string, handler: Handler) => (handlers[event] = handler), getThinkingLevel: () => "low" } as never);
 	(globalThis as Record<symbol, unknown>)[Symbol.for("pi.compact-cap.threshold")] = 150_000;
@@ -37,7 +39,7 @@ async function footer(): Promise<Footer> {
 	});
 	return factory(
 		{ requestRender() {} },
-		{ fg: (_color: string, text: string) => text },
+		{ fg: paint, getThinkingBorderColor: (level: string) => (text: string) => paint(`thinking-${level}`, text) },
 		{ onBranchChange: () => () => {}, getGitBranch: () => "dotfiles-v2-2026-05", getExtensionStatuses: () => new Map() },
 	);
 }
@@ -64,4 +66,13 @@ test("cwd and branch sit left, the cost is pinned top right, and a half split wr
 		assert.match(lines.at(-1) ?? "", bottom, `bottom right at ${width}`);
 		for (const line of lines) assert.equal(visibleWidth(line), width, `flush to both edges at ${width}: ${line}`);
 	}
+});
+
+test("only the cache rate, the context meter and the thinking level are coloured", async () => {
+	const bar = await footer((color, text) => `<${color}:${text}>`);
+	const [line] = bar.render(240);
+	assert.match(line, /<success:cache 98%>/);
+	assert.match(line, /<success: 9%>/);
+	assert.match(line, /<muted:anthropic\/claude-sonnet-5-5><muted: · ><thinking-low:low>/);
+	assert.match(line, /<muted:\$0\.024>$/);
 });
