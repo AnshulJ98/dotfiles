@@ -156,7 +156,7 @@ function makeStub(mode: Mode): { path: string; record: string } {
 	const line = JSON.stringify({ type: "message", message: { role: "assistant", usage, content: [{ type: "toolCall", name: "bash", arguments: { command: "ls" } }] } });
 	write(`${path}.digest`, DIGESTS[mode]);
 	write(path, `#!/usr/bin/env bash
-{ echo "HOME=$HOME"; echo "ARGC=$#"; echo "ARGS=$1 $2 $3 $4"; echo "TASK=$5"; echo "PWD=$PWD"; echo "STDIN=$(cat)"; echo "TOP=$(ls | tr '\\n' ' ')"; echo "OUTER=$(env | grep -Ec '^(PI_|EVAL_)' || true)"; echo "HERDR=$SCOUT_HERDR"; } > '${record}'
+{ echo "HOME=$HOME"; echo "ARGC=$#"; echo "ARGS=$1 $2 $3 $4"; echo "TASK=$5"; echo "PWD=$PWD"; echo "STDIN=$(cat)"; echo "TOP=$(ls | tr '\\n' ' ')"; echo "OUTER=$(env | grep -Ec '^(PI_|EVAL_)' || true)"; } > '${record}'
 d="$HOME/.pi/agent/sessions/scout/$$"; mkdir -p "$d"
 printf '%s\\n' '${line}' > "$d/s.jsonl"
 cat '${path}.digest'
@@ -195,7 +195,6 @@ test("a scout citing the right ranges passes: record fields, stub arguments, wor
 	assert.match(seen, /^STDIN=$/m);
 	assert.match(seen, /^TOP=config $/m);
 	assert.match(seen, /^OUTER=0$/m);
-	assert.match(seen, /^HERDR=0$/m);
 	assert.equal(git(join(dir, "ws"), "rev-list", "--count", "HEAD"), "1");
 	assert.equal(readFileSync(join(dir, "ws/config/pi/x.ts"), "utf8"), SCOUT_TS);
 	assert.ok(!existsSync(join(dir, "ws/agent-eval")));

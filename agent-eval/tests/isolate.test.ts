@@ -47,12 +47,11 @@ function setup() {
 test("HOME seen by the command is the new dir, and the environment is reduced", () => {
 	const t = setup();
 	try {
-		const r = isolate(t.real, t.home, ["env"], { HERDR_PANE_ID: "7", PI_SESSION_FILE: "/x", SCOUT_HERDR: "1", SECRET: "s" });
+		const r = isolate(t.real, t.home, ["env"], { PI_SESSION_FILE: "/x", SECRET: "s" });
 		assert.equal(r.status, 0, r.stderr);
 		const seen = Object.fromEntries(r.stdout.trim().split("\n").map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
-		assert.deepEqual(Object.keys(seen).sort(), ["HOME", "LANG", "PATH", "SCOUT_HERDR", "TERM"]);
+		assert.deepEqual(Object.keys(seen).sort(), ["HOME", "LANG", "PATH", "TERM"]);
 		assert.equal(seen.HOME, t.home);
-		assert.equal(seen.SCOUT_HERDR, "0");
 		assert.equal(seen.TERM, "xterm");
 		assert.equal(seen.LANG, "C");
 	} finally {

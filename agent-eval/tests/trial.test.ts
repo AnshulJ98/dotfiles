@@ -76,7 +76,7 @@ function makeStub(mode: Mode): { path: string; record: string } {
 	const command = mode === "leak" ? `cat ${repo}/src/add.ts` : "ls";
 	const line = JSON.stringify({ type: "message", message: { role: "assistant", usage, content: [{ type: "toolCall", name: "bash", arguments: { command } }] } });
 	write(path, `#!/usr/bin/env bash
-{ echo "HOME=$HOME"; echo "ARGS=$*"; echo "PWD=$PWD"; echo "STDIN=$(cat)"; echo "OUTER=$(env | grep -Ec '^(PI_|EVAL_)' || true)"; echo "HERDR=$SCOUT_HERDR"; } > '${record}'
+{ echo "HOME=$HOME"; echo "ARGS=$*"; echo "PWD=$PWD"; echo "STDIN=$(cat)"; echo "OUTER=$(env | grep -Ec '^(PI_|EVAL_)' || true)"; } > '${record}'
 d="$HOME/.pi/agent/sessions/scout/$$"; mkdir -p "$d"
 if [ ${mode} = silent ]; then : > "$d/s.jsonl"; exit 1; fi
 printf '%s\\n' '${line}' > "$d/s.jsonl"
@@ -116,7 +116,6 @@ test("a fixing scout passes: record fields, summed usage, isolated HOME, stub ar
 	assert.match(seen, /^PWD=.*\/ws$/m);
 	assert.match(seen, /^STDIN=files-allowed: \[src\/add.ts\]$/m);
 	assert.match(seen, /^OUTER=0$/m);
-	assert.match(seen, /^HERDR=0$/m);
 });
 
 test("the workspace is the base in a fresh one-commit repo", () => {

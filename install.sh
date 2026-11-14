@@ -88,7 +88,6 @@ link "$DOT/config/kitty"           "$HOME/.config/kitty"
 link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 link "$DOT/config/borders"         "$HOME/.config/borders"
-link "$DOT/config/tmux"            "$HOME/.config/tmux"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 # Hunk reuses the yazi syntax theme and the lazygit palette.
 link "$DOT/config/hunk"            "$HOME/.config/hunk"

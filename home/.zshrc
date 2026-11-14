@@ -53,11 +53,6 @@ export PATH="$PATH:$HOME/.local/bin"
 # Editor
 export EDITOR='nvim'  # or 'nvim' if you switch
 
-# Claude Code clamps to 256 colors when $TMUX is set, ignoring COLORTERM;
-# this undocumented flag lifts the clamp (anthropics/claude-code#46146).
-# Must be a shell export: it is read before settings.json env injection.
-export CLAUDE_CODE_TMUX_TRUECOLOR=1
-
 # ── Pi ──────────────────────────────────────────────────────────────────────
 # Anthropic prompt-cache TTL: "long" requests 1h retention on models that
 # support it, else falls back to the default 5m (pi-ai anthropic-messages.js).

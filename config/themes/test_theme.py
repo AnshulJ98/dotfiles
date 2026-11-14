@@ -40,7 +40,7 @@ class ThemeTests(unittest.TestCase):
         self.bin = self.base / "bin"
         self.bin.mkdir()
         # Only app/process boundaries are replaced; never signal real apps.
-        for command in ("pkill", "pgrep", "borders", "vicinae", "tmux", "nvim", "bat", "brew", "git", "ya"):
+        for command in ("pkill", "pgrep", "borders", "vicinae", "nvim", "bat", "brew", "git", "ya"):
             file = self.bin / command
             file.write_text('#!/bin/sh\necho "$(basename "$0") $*" >> "$APP_LOG"\n'
                             'if [ "$(basename "$0")" = "$FAIL_APP" ]; then exit 1; fi\n')
@@ -96,7 +96,6 @@ class ThemeTests(unittest.TestCase):
             "yazi.toml": r"(?m)^(?:border_style|border|separator_style)\s*=\s*\{ fg = \"(#\w{6})\"",
             "hunk.toml": r"(?m)^border = \"(#\w{6})\"",
             "btop.theme": r"theme\[(?:meter_bg|div_line)\]=\"(#\w{6})\"",
-            "tmux.conf": r"pane-border-style \"fg=(#\w{6})\"",
         }
         for name in NAMES:
             if name == "midnightvoid":
@@ -224,7 +223,6 @@ class ThemeTests(unittest.TestCase):
                 self.assertEqual(json.loads(pi.read_text())["name"], "current")
                 self.assertTrue((self.themes / name / "kitty.conf").is_file())
         calls = (self.base / "apps.log").read_text()
-        self.assertIn("tmux source-file", calls)
         self.assertIn("bat cache --build", calls)
 
     def test_rejects_invalid_name_and_extra_arguments_without_changes(self):
@@ -345,7 +343,7 @@ class ThemeTests(unittest.TestCase):
     def test_all_theme_files_resolve(self):
         files = ("kitty.conf", "delta.gitconfig", "lazygit.yml", "hunk.toml",
                  "yazi.toml", "syntax.tmTheme", "pi.json", "vicinae.toml",
-                 "marta.theme", "marta.ettyTheme", "colors.sh", "btop.theme", "tmux.conf")
+                 "marta.theme", "marta.ettyTheme", "colors.sh", "btop.theme")
         for name in NAMES:
             for file in files:
                 with self.subTest(name=name, file=file):

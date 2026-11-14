@@ -21,7 +21,7 @@ With a name, switch the shared theme and reload supported apps.
 
 Example: theme void-ink
 
-Reloads kitty, nvim, tmux, JankyBorders and Vicinae; rebuilds bat's cache.
+Reloads kitty, nvim, JankyBorders and Vicinae; rebuilds bat's cache.
 Restart yazi, lazygit, hunk, btop and Marta. In pi, run /reload.
 Open a new shell after first installation for shell and lazygit settings.
 EOF
@@ -75,9 +75,6 @@ if command -v vicinae >/dev/null; then
 fi
 if command -v bat >/dev/null; then
   bat cache --build >/dev/null 2>&1 || warn "bat cache did not rebuild"
-fi
-if command -v tmux >/dev/null && tmux list-sessions >/dev/null 2>&1; then
-  tmux source-file "$T/current/tmux.conf" || warn "tmux did not reload"
 fi
 for s in "${TMPDIR:-/tmp}"/nvim."$USER"/*/nvim.*.0; do
   [ -S "$s" ] || continue
