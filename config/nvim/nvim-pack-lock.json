@@ -70,10 +70,6 @@
       "src": "https://github.com/delphinus/md-render.nvim",
       "version": "3.0.0 - 4.0.0"
     },
-    "meatcode.nvim": {
-      "rev": "0641fa0be06983bdab24fdfde6504ee0ab2d8672",
-      "src": "https://github.com/urwrstkn8mare/meatcode.nvim"
-    },
     "mini.nvim": {
       "rev": "1345d191bb3da9c7b0e977f4387c5761f9bff68d",
       "src": "https://github.com/nvim-mini/mini.nvim"
@@ -155,10 +151,6 @@
     "todo-comments.nvim": {
       "rev": "31e3c38ce9b29781e4422fc0322eb0a21f4e8668",
       "src": "https://github.com/folke/todo-comments.nvim"
-    },
-    "vim-be-good": {
-      "rev": "0ae3de14eb8efc6effe7704b5e46495e91931cc5",
-      "src": "https://github.com/ThePrimeagen/vim-be-good"
     },
     "vim-dadbod": {
       "rev": "6d1d41da4873a445c5605f2005ad2c68c99d8770",
