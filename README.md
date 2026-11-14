@@ -14,6 +14,7 @@ config/hunk/       → ~/.config/hunk                      diff review TUI
 config/aerospace/  → ~/.config/aerospace                 tiling window manager
 config/borders/    → ~/.config/borders                   window borders (JankyBorders)
 config/ccstatusline/ → ~/.config/ccstatusline            Claude Code statusline
+config/zmx/zmx-pick → ~/.local/bin/zmx-pick                zmx session switcher for any terminal (ssh, iPad)
 config/rootshell/  → iCloud Drive/rootshell (copied)     rootshell on the iPad (the file says how)
 config/pi/         → ~/.pi/agent/*                       pi coding agent (see below)
 claude/            → ~/.claude/*                         Claude Code settings, agents, skills

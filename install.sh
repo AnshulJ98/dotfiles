@@ -97,6 +97,8 @@ link "$DOT/config/themes"          "$HOME/.config/themes"
 # Initialise before tools resolve their theme files, without reloading running apps.
 [ -e "$DOT/config/themes/current" ] || ln -sfn midnightvoid "$DOT/config/themes/current"
 link "$DOT/config/themes/theme"    "$HOME/.local/bin/theme"
+# zmx session switcher for any terminal: ssh -t host '~/.local/bin/zmx-pick' (iPad, WSL).
+link "$DOT/config/zmx/zmx-pick"    "$HOME/.local/bin/zmx-pick"
 link "$DOT/config/btop/btop.conf"   "$HOME/.config/btop/btop.conf"
 mkdir -p "$HOME/.config/btop/themes"
 ln -sfn "$HOME/.config/themes/current/btop.theme" "$HOME/.config/btop/themes/current.theme"
