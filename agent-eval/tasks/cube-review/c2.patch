@@ -1,0 +1,12 @@
+diff --git a/src/notation.ts b/src/notation.ts
+--- a/src/notation.ts
++++ b/src/notation.ts
+@@ -42,7 +42,7 @@
+     }
+     const turns = (quarters(last) + quarters(move)) % 4
+     out.pop()
+-    if (turns !== 0) out.push(`${face}${SUFFIXES[turns]}` as Move)
++    out.push(`${face}${SUFFIXES[turns]}` as Move)
+   }
+   return out
+ }

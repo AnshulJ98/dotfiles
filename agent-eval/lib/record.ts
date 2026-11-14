@@ -1,21 +1,39 @@
 // Pure functions that build one worker-trial record, plus a thin CLI for trial.sh (flags: see main).
-// Roles: worker (default), review (--judge-file), scout (--task-file task.json with its expect list, --digest-file).
+// Worker pass: the hidden tests exit 0 and no changed file is outside the task's allowed list (the record's "outside");
+// wroteTest says whether a changed path is a test path.
+// Roles: worker (default), review (--judge-file), scout (--judge-file, --task-file task.json, --digest-file),
+// orch (--reply-file, --expect), plan (--mechanical-file, --items-file, --judge-file, --test-exit, --worker, --worker-sessions-dir).
+// Plan record: pass = accepted and executed (plan-grade.ts accepted the spec, the fixed worker's work passes the hidden tests);
+// checks = covers, tight, grounded, readonly, short; met = judged ids met; found = true mechanical checks (accepted too) plus met,
+// of = 6 plus the judged items; cost and usage are the planner's, workerCost the worker's. workerSensors is the verdict on the
+// worker digest's first line (PASS, FAIL, CANNOT-RUN), else null (--digest-file). infra: agentInfra on the planner or
+// fixed worker (--worker-rc), a planner timeout (rc 124 or 137), or an accepted plan the judges could not rate.
+// Worker/scout infra uses agentInfra: rc 75, no input/output tokens, or a provider-error digest.
+// Calibration uses --agent-infra --rc --sessions-dir --digest-file to print that same predicate.
+// Orch record: pass = the reply's DECISION word equals expect (lib/orch.ts), decision = that word or null; infra is
+// no turns or a timeout (rc 124 or 137); a reply without a decision is a fail, not infra.
+// Scout record: pass = judge.sh's verdict on the digest against the task's facts (found, of = facts, disagreements,
+// judgeCost); cited and citable are the secondary citation grade of the digest against the task's expect list
+// (lib/scout-grade.ts). An empty digest from a run with model tokens is a fail with found 0; a non-empty digest
+// the judges could not rate, a task without facts, or a malformed expect list is infra.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { gradeOrch, parseDecision } from "./orch.ts";
 import { grade as gradeScout, parseExpect } from "./scout-grade.ts";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };
 
-export interface Usage {
-	cost: number;
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	turns: number;
+import { measure, type Usage } from "./usage.ts";
+export { measure, type Usage } from "./usage.ts";
+
+/** A scout-run agent refused to start, used no model tokens, or ended on a provider error. */
+export function agentInfra({ rc, usage, digest }: { rc: number; usage: Usage; digest: string }): boolean {
+	return rc === 75 || (usage.input === 0 && usage.output === 0)
+		|| /^WORKER-SENSORS: CANNOT-RUN run ended: error(?:\r?\n|$)/.test(digest)
+		|| digest.includes("pi exited 1 with no digest");
 }
 
 function parseLine(line: string): Json | undefined {
@@ -37,23 +55,6 @@ function num(value: Json | undefined): number {
 function messageOf(line: string): JsonObject | undefined {
 	const entry = asObject(parseLine(line));
 	return entry?.type === "message" ? asObject(entry.message) : undefined;
-}
-
-/** Sum usage over every assistant turn in the session lines. */
-export function measure(sessionLines: string[]): Usage {
-	const total: Usage = { cost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 };
-	for (const line of sessionLines) {
-		const message = messageOf(line);
-		if (message?.role !== "assistant") continue;
-		const usage = asObject(message.usage);
-		total.turns += 1;
-		total.input += num(usage?.input);
-		total.output += num(usage?.output);
-		total.cacheRead += num(usage?.cacheRead);
-		total.cacheWrite += num(usage?.cacheWrite);
-		total.cost += num(asObject(usage?.cost)?.total);
-	}
-	return total;
 }
 
 /** True when any tool call's JSON-encoded arguments contain one of the needles. */
@@ -116,14 +117,29 @@ export function blocked(digest: string): boolean {
 	return false;
 }
 
-/** Pass: for expect "blocked", nothing changed and the digest names a blocker; else test exit 0. */
-export function grade(g: { expect: string; testExit: number | null; changed: string[]; digest: string }): boolean {
-	return g.expect === "blocked" ? g.changed.length === 0 && blocked(g.digest) : g.testExit === 0;
+/**
+ * Pass: for expect "blocked", nothing changed and the digest names a blocker; else the hidden tests exit 0 and
+ * nothing changed outside the allowed files (outside is empty).
+ */
+export function grade(g: { expect: string; testExit: number | null; changed: string[]; outside: string[]; digest: string }): boolean {
+	return g.expect === "blocked" ? g.changed.length === 0 && blocked(g.digest) : g.testExit === 0 && g.outside.length === 0;
+}
+
+/** A test path: the same rule as is_test_path in lib/task.sh (.test. / .spec. / _test. names, files under tests/ or __tests__/). */
+export function isTestPath(path: string): boolean {
+	return /^(__tests__|tests)\//.test(path) || /\/(__tests__|tests)\//.test(path) || /\.test\.|\.spec\.|_test\./.test(path.slice(path.lastIndexOf("/") + 1));
+}
+
+/** True when any changed path is a test path: the agent wrote or edited a test. */
+export function wroteTest(changed: string[]): boolean {
+	return changed.some(isTestPath);
 }
 
 export interface Judged {
 	found: number;
 	of: number;
+	/** judge.sh's verdict: every non-minor item met; a judge.json without it is not a pass */
+	pass: boolean;
 	disagreements: string[];
 	judgeCost: number;
 	infra: boolean;
@@ -131,11 +147,11 @@ export interface Judged {
 
 /** judge.sh's JSON line; anything unreadable is an infra result with nothing found. */
 export function parseJudged(text: string): Judged {
-	const none: Judged = { found: 0, of: 0, disagreements: [], judgeCost: 0, infra: true };
+	const none: Judged = { found: 0, of: 0, pass: false, disagreements: [], judgeCost: 0, infra: true };
 	const v = asObject(parseLine(text.trim()));
 	if (v === undefined || typeof v.found !== "number" || typeof v.of !== "number" || !Array.isArray(v.disagreements)) return none;
 	return {
-		found: v.found, of: v.of, disagreements: v.disagreements.filter((d): d is string => typeof d === "string"),
+		found: v.found, of: v.of, pass: v.pass === true, disagreements: v.disagreements.filter((d): d is string => typeof d === "string"),
 		judgeCost: num(v.judgeCost), infra: v.infra === true,
 	};
 }
@@ -145,9 +161,50 @@ export function isReviewTimeout(rc: number): boolean {
 	return rc === 124 || rc === 137;
 }
 
-/** A review passes when it found every defect and the judging itself worked. */
+/** A review passes when judge.sh says so (every non-minor defect found) and the judging itself worked. */
 export function gradeReview(j: Judged): boolean {
-	return !j.infra && j.of > 0 && j.found === j.of;
+	return !j.infra && j.of > 0 && j.pass;
+}
+
+/**
+ * A scout's judged result. A blank digest is never judged: pass false, found 0 over the task's factCount facts, and infra
+ * only when the task has no facts. Otherwise judge.json as parseJudged reads it (unusable is infra).
+ */
+export function judgeScout(digest: string, judgeText: string, factCount: number): Judged {
+	if (digest.trim() === "") return { found: 0, of: factCount, pass: false, disagreements: [], judgeCost: 0, infra: factCount === 0 };
+	return parseJudged(judgeText);
+}
+
+export interface PlanMechanical { accepted: boolean; covers: boolean; tight: boolean; grounded: boolean; readonly: boolean; short: boolean }
+
+/** mechanical.json as plan-grade.ts prints it; anything unreadable is a plan that was not accepted. */
+export function parseMechanical(text: string): PlanMechanical {
+	const v = asObject(parseLine(text.trim()));
+	const flag = (k: string): boolean => v?.[k] === true;
+	return { accepted: flag("accepted"), covers: flag("covers"), tight: flag("tight"), grounded: flag("grounded"), readonly: flag("readonly"), short: flag("short") };
+}
+
+/** The ids in judge.json's "met" list. */
+export function judgedIds(text: string): string[] {
+	const met = asObject(parseLine(text.trim()))?.met;
+	return Array.isArray(met) ? met.filter((m): m is string => typeof m === "string") : [];
+}
+
+/**
+ * A plan trial's grade. judged is judge.sh's result for the spec (ignored when the plan was not accepted: it is then not
+ * judged). itemCount is the number of judged items (rubric and decisions); testExit is the hidden tests' exit status, null when
+ * the worker did not run.
+ */
+export function gradePlan(g: { mechanical: PlanMechanical; testExit: number | null; judged: Judged | undefined; met: string[]; itemCount: number }) {
+	const { accepted, ...checks } = g.mechanical;
+	const executed = accepted && g.testExit === 0;
+	const judged = accepted ? g.judged : undefined;
+	const met = judged && !judged.infra ? g.met : [];
+	return {
+		pass: accepted && executed, accepted, executed, checks, met,
+		found: Object.values(g.mechanical).filter(Boolean).length + met.length, of: Object.keys(g.mechanical).length + g.itemCount,
+		disagreements: judged?.disagreements ?? [], judgeCost: judged?.judgeCost ?? 0, judgeInfra: judged?.infra === true,
+	};
 }
 
 function readText(path: string | undefined): string {
@@ -166,7 +223,8 @@ function main(argv: string[]): void {
 		args: argv,
 		options: {
 			task: str, role: str, model: str, thinking: str, trial: str, rc: str, seconds: str, expect: str,
-			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str,
+			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str, "reply-file": str,
+			"mechanical-file": str, "items-file": str, worker: str, "worker-sessions-dir": str, "worker-rc": str, "agent-infra": { type: "boolean" },
 			needle: { type: "string", multiple: true, default: [] },
 		},
 	});
@@ -175,6 +233,9 @@ function main(argv: string[]): void {
 	const verdictFile = files.filter((f) => f.endsWith("/verdict.json")).pop();
 	const verdict = asObject(parseLine(readText(verdictFile)))?.verdict;
 	const usage = measure(sessionLines);
+	const digest = readText(v["digest-file"]);
+	const runInfra = agentInfra({ rc: Number(v.rc), usage, digest });
+	if (v["agent-infra"]) return void console.log(runInfra);
 	if (v.role === "review") {
 		const judged = parseJudged(readText(v["judge-file"]));
 		console.log(JSON.stringify({
@@ -185,27 +246,67 @@ function main(argv: string[]): void {
 		}));
 		return;
 	}
-	if (v.role === "scout") {
-		const expect = parseExpect(asObject(parseLine(readText(v["task-file"])))?.expect);
-		const graded = typeof expect === "string" ? { hits: 0, of: 0, pass: false } : gradeScout(readText(v["digest-file"]), expect);
+	if (v.role === "orch") {
+		const reply = readText(v["reply-file"]);
 		console.log(JSON.stringify({
 			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
-			pass: graded.pass, hits: graded.hits, of: graded.of,
+			pass: gradeOrch(reply, v.expect ?? ""), decision: parseDecision(reply), expect: v.expect,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || typeof expect === "string", dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || isReviewTimeout(Number(v.rc)), dir: v.dir,
+		}));
+		return;
+	}
+	if (v.role === "scout") {
+		const task = asObject(parseLine(readText(v["task-file"])));
+		const expect = parseExpect(task?.expect);
+		const digest = readText(v["digest-file"]);
+		const judged = judgeScout(digest, readText(v["judge-file"]), Array.isArray(task?.facts) ? task.facts.length : 0);
+		const cited = typeof expect === "string" ? { hits: 0, of: 0 } : gradeScout(digest, expect);
+		console.log(JSON.stringify({
+			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
+			pass: typeof expect !== "string" && gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
+			cited: cited.hits, citable: cited.of,
+			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
+			leak: leaked(sessionLines, v.needle ?? []), infra: runInfra || typeof expect === "string" || judged.infra, dir: v.dir,
+		}));
+		return;
+	}
+	if (v.role === "plan") {
+		const mechanical = parseMechanical(readText(v["mechanical-file"]));
+		const items = parseLine(readText(v["items-file"]));
+		const judge = readText(v["judge-file"]);
+		const g = gradePlan({
+			mechanical, testExit: v["test-exit"] === "" ? null : Number(v["test-exit"]), judged: parseJudged(judge), met: judgedIds(judge),
+			itemCount: Array.isArray(items) ? items.length : 0,
+		});
+		let workerLines: string[] = [];
+		try {
+			const dir = v["worker-sessions-dir"] ?? "";
+			workerLines = readdirSync(dir, { recursive: true, encoding: "utf8" }).sort().filter((f) => f.endsWith(".jsonl")).flatMap((f) => lines(readText(join(dir, f))));
+		} catch { /* the worker never ran: no sessions */ }
+		const workerUsage = measure(workerLines);
+		const workerInfra = mechanical.accepted && v["worker-rc"] !== "" && agentInfra({ rc: Number(v["worker-rc"]), usage: workerUsage, digest });
+		const { judgeInfra, ...graded } = g;
+		console.log(JSON.stringify({
+			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
+			...graded, ...(workerInfra ? { executed: false, pass: false } : {}), workerCost: workerUsage.cost, worker: v.worker,
+			workerSensors: /^WORKER-SENSORS: (PASS|FAIL|CANNOT-RUN)(?=\s|$)/.exec(readText(v["digest-file"]).split("\n")[0])?.[1] ?? null,
+			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
+			leak: leaked(sessionLines, v.needle ?? []), infra: runInfra || isReviewTimeout(Number(v.rc)) || workerInfra || judgeInfra, dir: v.dir,
 		}));
 		return;
 	}
 	const changed = parsePorcelain(readText(v.porcelain));
 	const testExit = v["test-exit"] === "" ? null : Number(v["test-exit"]);
+	const outside = outsideAllowed(changed, lines(readText(v["allowed-file"])));
 	const record = {
 		task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
-		pass: grade({ expect: v.expect ?? "", testExit, changed, digest: readText(v["digest-file"]) }),
+		pass: grade({ expect: v.expect ?? "", testExit, changed, outside, digest: readText(v["digest-file"]) }),
 		sensors: typeof verdict === "string" ? verdict : null,
 		rc: Number(v.rc), seconds: Number(v.seconds),
-		outside: outsideAllowed(changed, lines(readText(v["allowed-file"]))),
+		outside, wroteTest: wroteTest(changed),
 		added: Number(v.added), ...usage,
-		leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0, dir: v.dir,
+		leak: leaked(sessionLines, v.needle ?? []), infra: runInfra, dir: v.dir,
 	};
 	console.log(JSON.stringify(record));
 }

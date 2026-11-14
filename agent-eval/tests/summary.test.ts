@@ -198,6 +198,41 @@ test("render: tables per role, saturated, comparisons, malformed note", () => {
 	assert.match(text, /skipped 2 malformed line/);
 	assert.equal(render([]).trim(), "no records");
 });
+test("any role whose counted records carry found and of gets recall, in baselineCells and in a recall column", () => {
+	const plan = (found: number[]): TrialRecord[] => found.map((f, i) => rec("p1", "p/m", i + 1, f === 4, { role: "plan", found: f, of: 4 }));
+	const roles = summarize([...plan([4, 3]), ...grid("p/x", { a: [true, false] }), ...grid("p/x", { s: [true] }, { role: "scout" })]);
+	const byRole = Object.fromEntries(roles.map((r) => [r.role, r.cells[0]]));
+	assert.deepEqual([byRole.plan.found, byRole.plan.of, byRole.plan.flakyDefects], [7, 8, 1]);
+	assert.equal("found" in byRole.worker, false);
+	assert.equal("found" in byRole.scout, false);
+	const base = baselineCells(roles);
+	assert.deepEqual(base.plan["p/m:low"], { passRate: 0.5, tasks: 1, flaky: 1, recall: 7 / 8, defects: 4, flakyDefects: 1 });
+	assert.deepEqual(base.worker["p/x:low"], { passRate: 0.5, tasks: 1, flaky: 1 });
+	assert.deepEqual(base.scout["p/x:low"], { passRate: 1, tasks: 1, flaky: 0 });
+	const text = render(roles);
+	assert.match(text, /## plan\n\n\| cell \| pass rate \| any \| all \| flaky \| recall \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){10}\n\| p\/m:low \| 50\.0% \(1\/2\) \| 1\/1 \| 0\/1 \| 1 \(p1\) \| 87\.5% \(7\/8\), 1 flaky \|/);
+	assert.match(text, /## scout\n\n\| cell \| pass rate \| any \| all \| flaky \| mean \$ \|/);
+});
+
+test("cells whose counted records carry cited/citable get a cited column, '-' for a cell without them; the gate ignores it", () => {
+	const scout = (cited: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		cited.map((c, i) => rec("s" + i, "p/m", 1, true, { role: "scout", found: 3, of: 3, cited: c, citable: 2, ...over }));
+	const line = JSON.stringify({ task: "a", role: "scout", model: "p/m", thinking: "low", trial: 1, pass: true, cited: 1, citable: "x" });
+	assert.equal(parseRecords(line).records[0].cited, undefined);
+	assert.equal(parseRecords(line.replace('"x"', "2")).records[0].citable, 2);
+	// the leak record and the infra record are not counted
+	const roles = summarize([...scout([2, 1, 0]), ...scout([2], { leak: true }), ...scout([2], { infra: true }), ...scout([2], { model: "p/n", cited: undefined, citable: undefined })]);
+	const [m, n] = roles[0].cells;
+	assert.deepEqual([m.cited, m.citable, n.cited, n.citable], [3, 6, undefined, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| flaky \| recall \| cited \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){11}\n/);
+	assert.match(text, /\| p\/m:low \| 100\.0% \(3\/3\) .* \| 100\.0% \(9\/9\) \| 3\/6 \| 0\.5000 \|/);
+	assert.match(text, /\| p\/n:low \| 100\.0% \(1\/1\) .* \| 100\.0% \(3\/3\) \| - \| 0\.5000 \|/);
+	assert.equal(render(summarize(grid("p/x", { a: [true] }))).includes("cited"), false);
+	assert.equal("cited" in baselineCells(roles).scout["p/m:low"], false);
+	assert.deepEqual(Object.keys(baselineCells(roles).scout["p/m:low"]).sort(), ["defects", "flaky", "flakyDefects", "passRate", "recall", "tasks"]);
+});
+
 test("render: only the review table has a recall column, 80.0% (8/10) with flaky defects when non-zero", () => {
 	const review = (found: number[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
 		found.map((f, i) => rec("r1", "p/m", i + 1, f === 5, { role: "review", found: f, of: 5, ...over }));
@@ -205,7 +240,50 @@ test("render: only the review table has a recall column, 80.0% (8/10) with flaky
 	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| recall \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){10}\n/);
 	assert.match(text, /\| p\/m:low \| 50\.0% \(1\/2\) \| 1\/1 \| 0\/1 \| 1 \(r1\) \| 80\.0% \(8\/10\), 2 flaky \| 0\.5000 \|/);
 	assert.match(text, /\| p\/n:low \| 0\.0% \(0\/2\) \| 0\/1 \| 0\/1 \| 0 \| 80\.0% \(8\/10\) \| 0\.5000 \|/);
-	// worker table unchanged, and a review cell without counts shows "-"
-	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| mean \$ \| mean s \| leak \| infra \|\n\|(---\|){9}\n\| p\/x:low \| 100\.0% \(1\/1\) \| 1\/1 \| 1\/1 \| 0 \| 0\.5000 \|/);
+	// the worker table has no recall column (but its wrote test column, "-" without records carrying it), and a review cell without counts shows "-"
+	assert.match(text, /\| cell \| pass rate \| any \| all \| flaky \| mean \$ \| mean s \| leak \| infra \| wrote test \|\n\|(---\|){10}\n\| p\/x:low \| 100\.0% \(1\/1\) \| 1\/1 \| 1\/1 \| 0 \| 0\.5000 \|/);
 	assert.match(render(summarize(grid("p/z", { a: [true] }, { role: "review" }))), /\| 0 \| - \| 0\.5000 \|/);
+});
+
+test("worker cells report the share of counted trials whose agent wrote a test, '-' when no record carries wroteTest; the gate ignores it", () => {
+	const wrote = (flags: (boolean | undefined)[], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		flags.map((w, i) => rec(`t${i}`, "p/w", 1, true, { ...(w === undefined ? {} : { wroteTest: w }), ...over }));
+	const line = JSON.stringify({ task: "a", role: "worker", model: "p/m", thinking: "low", trial: 1, pass: true, wroteTest: true });
+	const { records } = parseRecords(`${line}\n${line.replace("true}", '"yes"}')}\n`);
+	assert.deepEqual(records.map((r) => r.wroteTest), [true, undefined]);
+	// the leak record is not counted; the record without the field is not in the denominator
+	const roles = summarize([...wrote([true, false, true, undefined]), ...wrote([true], { leak: true }), ...wrote([false], { model: "p/n" }), ...grid("p/o", { a: [true] })]);
+	const [n, o, w] = roles[0].cells;
+	assert.deepEqual([w.wroteTest, w.wroteTestOf, n.wroteTest, n.wroteTestOf, o.wroteTest, o.wroteTestOf], [2, 3, 0, 1, undefined, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| infra \| wrote test \|\n\|(---\|){10}\n/);
+	assert.match(text, /\| p\/w:low \| 100\.0% \(4\/4\) .* \| 1 \| 0 \| 66\.7% \(2\/3\) \|\n/);
+	assert.match(text, /\| p\/n:low \|.* \| 0 \| 0\.0% \(0\/1\) \|\n/);
+	assert.match(text, /\| p\/o:low \|.* \| 0 \| - \|\n/);
+	// nothing in the gate's view changes
+	assert.deepEqual(baselineCells(roles).worker["p/w:low"], { passRate: 1, tasks: 4, flaky: 0 });
+	assert.equal(render(summarize(wrote([true], { role: "scout" }))).includes("wrote test"), false);
+});
+
+test("plan cells report the share of counted trials whose spec was accepted and executed, '-' without records carrying both; the gate ignores them", () => {
+	const plan = (flags: [boolean | undefined, boolean | undefined][], over: Partial<TrialRecord> = {}): TrialRecord[] =>
+		flags.map(([a, e], i) => rec(`t${i}`, "p/m", 1, a === true && e === true, {
+			role: "plan", found: 3, of: 10, ...(a === undefined ? {} : { accepted: a }), ...(e === undefined ? {} : { executed: e }), ...over,
+		}));
+	const line = JSON.stringify({ task: "a", role: "plan", model: "p/m", thinking: "low", trial: 1, pass: true, accepted: true, executed: true });
+	const { records } = parseRecords(`${line}\n${line.replace('"executed":true', '"executed":"yes"')}\n`);
+	assert.deepEqual(records.map((r) => [r.accepted, r.executed]), [[true, true], [undefined, undefined]]);
+	// the leak record is not counted; a record with only one of the two fields is not in the denominator
+	const roles = summarize([
+		...plan([[true, true], [true, false], [false, false], [true, undefined]]), ...plan([[true, true]], { leak: true }),
+		...plan([[false, false]], { model: "p/n" }), ...plan([[undefined, undefined]], { model: "p/o" }),
+	]);
+	const [m, n, o] = roles[0].cells;
+	assert.deepEqual([m.accepted, m.executed, m.planOf, n.accepted, n.executed, n.planOf, o.planOf], [2, 1, 3, 0, 0, 1, undefined]);
+	const text = render(roles);
+	assert.match(text, /\| infra \| accepted \| executed \|\n\|(---\|){12}\n/);
+	assert.match(text, /\| p\/m:low \|.* \| 0 \| 66\.7% \(2\/3\) \| 33\.3% \(1\/3\) \|\n/);
+	assert.match(text, /\| p\/o:low \|.* \| 0 \| - \| - \|\n/);
+	assert.deepEqual(Object.keys(baselineCells(roles).plan["p/m:low"]).sort(), ["defects", "flaky", "flakyDefects", "passRate", "recall", "tasks"]);
+	assert.equal(render(summarize(grid("p/x", { a: [true] }))).includes("accepted"), false);
 });

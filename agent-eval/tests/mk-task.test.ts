@@ -139,6 +139,36 @@ test("a commit changing src/a.ts and src/a.test.ts allows both and hides the tes
 	assert.deepEqual(task.hidden, ["src/a.test.ts"]);
 });
 
+test("--test: a repo without package.json exits 1 without it; with it the task carries that command", () => {
+	const bare = join(scratch, "bare-repo");
+	write(join(bare, "lib/a.ts"), "1\n");
+	git(bare, "init", "-q");
+	commit(bare, "base");
+	write(join(bare, "lib/a.ts"), "2\n");
+	write(join(bare, "lib/a.test.ts"), "t\n");
+	const sha = commit(bare, "fix");
+	const without = run("mk-task.sh", [bare, sha, "bare"]);
+	assert.equal(without.status, 1);
+	assert.match(without.stderr, /no package\.json/);
+	assert.equal(existsSync(join(tasksDir, "bare")), false);
+	const cmd = "node --test 'lib/zz-hidden-*.test.ts'";
+	const withCmd = run("mk-task.sh", [bare, sha, "bare", "--test", cmd]);
+	assert.equal(withCmd.status, 0, withCmd.stderr);
+	assert.equal(withCmd.stdout.trim(), join(tasksDir, "bare"));
+	assert.deepEqual(taskJson("bare"), {
+		id: "bare", role: "worker", repo: bare, fix: sha, test: cmd, allowed: ["lib/a.test.ts", "lib/a.ts"], hidden: ["lib/a.test.ts"], link: [],
+	});
+	assert.equal(readFileSync(join(tasksDir, "bare/prompt.md"), "utf8").split("\n")[2], `tests: ${cmd}`);
+	// the flag may come first, and a missing or empty command is a usage error
+	assert.equal(run("mk-task.sh", ["--test", cmd, bare, sha, "bare2"]).status, 0);
+	assert.equal(run("mk-task.sh", [bare, sha, "bare3", "--test"]).status, 2);
+	assert.equal(run("mk-task.sh", [bare, sha, "bare3", "--test", ""]).status, 2);
+	assert.equal(existsSync(join(tasksDir, "bare3")), false);
+	// with a package.json the flag still wins over npm test
+	assert.equal(run("mk-task.sh", [repo, fixSha, "add-fix-cmd", "--test", cmd]).status, 0);
+	assert.equal(taskJson("add-fix-cmd").test, cmd);
+});
+
 test("an existing id exits 1 and leaves the task alone", () => {
 	const before = readFileSync(join(tasksDir, "add-fix/task.json"), "utf8");
 	const r = run("mk-task.sh", [repo, fixSha, "add-fix"]);

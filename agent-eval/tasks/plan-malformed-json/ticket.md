@@ -1,0 +1,1 @@
+`POST /bookings` with a body that is not JSON kills the server. It should answer 400 with a JSON body that has a string `error`, and keep serving. An empty body is a 400 as well. The code is in booking/.

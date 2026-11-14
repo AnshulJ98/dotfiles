@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# usage: mk-task.sh <repo> <fix-sha> [id]
+# usage: mk-task.sh <repo> <fix-sha> [id] [--test "<cmd>"]
 # Turn a fix commit into a worker task: writes tasks/<id>/task.json and a prompt.md stub (the prompt is then
 # written by hand from the ticket). Tasks go to ${EVAL_TASKS_DIR:-agent-eval/tasks}.
 #   allowed = the files the commit changes (deleted ones too) except deleted test files, so the agent may edit the
 #             test files it touches (in path order), hidden = test files it adds or changes,
 #   test    = the package's test script, run as "npm test" from the nearest package.json above the first
-#             hidden test file ("cd <dir> && npm test" when that is not the repo root).
+#             hidden test file ("cd <dir> && npm test" when that is not the repo root); with --test "<cmd>" that
+#             command is the task's test, run at the workspace root, and the package.json search is skipped.
 # Test files: see is_test_path in lib/task.sh. Exit 1 when the commit changes no test file, has no package.json
 # with a test script above its tests, or the id already exists; 2 on bad usage.
 set -euo pipefail
@@ -13,7 +14,16 @@ set -euo pipefail
 EVAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$EVAL_DIR/lib/task.sh"
 
-[ $# -ge 2 ] && [ $# -le 3 ] || { echo "usage: mk-task.sh <repo> <fix-sha> [id]" >&2; exit 2; }
+usage() { echo "usage: mk-task.sh <repo> <fix-sha> [id] [--test \"<cmd>\"]" >&2; exit 2; }
+test_cmd="" args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --test) [ $# -ge 2 ] && [ -n "$2" ] || usage; test_cmd="$2"; shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[ ${#args[@]} -ge 2 ] && [ ${#args[@]} -le 3 ] || usage
+set -- "${args[@]}"
 repo="$(git -C "${1/#\~/$HOME}" rev-parse --show-toplevel 2>/dev/null)" || { echo "mk-task.sh: not a git repo: $1" >&2; exit 2; }
 fix="$(git -C "$repo" rev-parse --verify -q "$2^{commit}")" || { echo "mk-task.sh: no such commit: $2" >&2; exit 2; }
 git -C "$repo" rev-parse --verify -q "$fix^" > /dev/null || { echo "mk-task.sh: $2 has no parent commit" >&2; exit 1; }
@@ -33,16 +43,18 @@ while IFS=$'\t' read -r status path; do
 done < <(git -c core.quotePath=false -C "$repo" diff --no-renames --name-status "$fix^" "$fix")
 [ ${#hidden[@]} -gt 0 ] || { echo "mk-task.sh: $2 changes no test file" >&2; exit 1; }
 
-pkg="$(dirname "${hidden[0]}")"
-while :; do
-  if [ "$pkg" = . ]; then pkg_json="$fix:package.json"; else pkg_json="$fix:$pkg/package.json"; fi
-  git -C "$repo" cat-file -e "$pkg_json" 2>/dev/null && break
-  [ "$pkg" != . ] || { echo "mk-task.sh: no package.json above ${hidden[0]}" >&2; exit 1; }
-  pkg="$(dirname "$pkg")"
-done
-git -C "$repo" show "$pkg_json" | node -e 'process.exit(typeof JSON.parse(require("node:fs").readFileSync(0, "utf8")).scripts?.test === "string" ? 0 : 1)' \
-  || { echo "mk-task.sh: $pkg_json has no test script" >&2; exit 1; }
-if [ "$pkg" = . ]; then test_cmd="npm test"; else test_cmd="cd $pkg && npm test"; fi
+if [ -z "$test_cmd" ]; then
+  pkg="$(dirname "${hidden[0]}")"
+  while :; do
+    if [ "$pkg" = . ]; then pkg_json="$fix:package.json"; else pkg_json="$fix:$pkg/package.json"; fi
+    git -C "$repo" cat-file -e "$pkg_json" 2>/dev/null && break
+    [ "$pkg" != . ] || { echo "mk-task.sh: no package.json above ${hidden[0]}" >&2; exit 1; }
+    pkg="$(dirname "$pkg")"
+  done
+  git -C "$repo" show "$pkg_json" | node -e 'process.exit(typeof JSON.parse(require("node:fs").readFileSync(0, "utf8")).scripts?.test === "string" ? 0 : 1)' \
+    || { echo "mk-task.sh: $pkg_json has no test script" >&2; exit 1; }
+  if [ "$pkg" = . ]; then test_cmd="npm test"; else test_cmd="cd $pkg && npm test"; fi
+fi
 
 mkdir -p "$dir"
 node -e '

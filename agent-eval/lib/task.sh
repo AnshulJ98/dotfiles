@@ -3,7 +3,8 @@
 #   resolve_task <id|dir>   print the task dir, else return 1
 #   task_get <dir> <field>  a task.json field, arrays one item per line, leading ~ of repo expanded
 #   make_workspace <dir> <dest> <base|fix>   git archive of fix^ / fix (a task with "rev": that commit, kind ignored),
-#                           "paths" (pathspecs after `--` of git archive) limit what is extracted, "exclude" paths removed, fresh one-commit repo, links symlinked
+#                           "paths" limit the archive, "exclude" paths removed, "patches" applied in order from the task dir,
+#                           fresh one-commit repo (including patches), links symlinked
 #   overlay_hidden / apply_reference / run_test <dir> <ws>
 #                           run_test runs the task's test command in <ws> under lib/isolate.sh (scratch HOME, reduced
 #                           environment) and timeout (EVAL_TEST_TIMEOUT seconds, default 600); a timeout exits 124, a failing test
@@ -54,6 +55,9 @@ make_workspace() {
     rm -rf "${dest:?}/$path"
   done < <(task_get "$task" exclude)
   git -C "$dest" init -q
+  while IFS= read -r path; do
+    apply_patch "$task" "$dest" "$path" || return $?
+  done < <(task_get "$task" patches)
   git -C "$dest" add -A
   git -C "$dest" -c user.name=agent-eval -c user.email=agent-eval@example.invalid -c commit.gpgsign=false \
     commit -q --allow-empty -m "base $rev"
@@ -64,6 +68,14 @@ make_workspace() {
     mkdir -p "$dest/.git/info"
     printf '/%s\n' "$path" >> "$dest/.git/info/exclude"
   done < <(task_get "$task" link)
+}
+
+# Apply one task-relative patch, naming it on every failure.
+apply_patch() {
+  case "/$3/" in //*|*/../*) echo "bad patch path: $3" >&2; return 2 ;; esac
+  local task
+  task="$(cd "$1" && pwd)" || return 1
+  git -C "$2" apply -- "$task/$3" || { echo "cannot apply patch: $3" >&2; return 1; }
 }
 
 is_test_path() {
