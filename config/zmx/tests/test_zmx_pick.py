@@ -63,6 +63,43 @@ class ZmxPick(unittest.TestCase):
         calls = [json.loads(l)[:2] for l in (self.root / "calls").read_text().splitlines()]
         self.assertEqual(calls, [["zmx-pick", ["work"]], ["zmx", ["attach", "a", "cmd"]], ["zmx", ["ls"]]])
 
+    def test_from_a_shell_key_esc_returns_to_that_shell(self):
+        # zmx.zsh's ctrl+\ runs the picker over a live shell; esc must not start another one
+        calls = self.run_pick([[0, "logs\n"], [1, ""]], ZMX_PICK_ESC="return")
+        self.assertEqual([c[:2] for c in calls], [["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]], ["zpick", ["--zmx"]]])
+
+    def test_zsh_ctrl_backslash_opens_the_picker_outside_a_session(self):
+        import pty, select, time
+        for session, expected in (("", [["zmx-pick", []]]), ("inside", [])):
+            with self.subTest(session=session):
+                (self.root / "calls").unlink(missing_ok=True)
+                pid, fd = pty.fork()
+                if pid == 0:
+                    os.execve("/bin/zsh", ["zsh", "-fi"], {
+                        "PATH": f"{self.root}:/usr/bin:/bin", "FAKE_ROOT": str(self.root), "TERM": "xterm",
+                        "ZMX_SESSION": session, "PS1": "> ",
+                        "ZDOTDIR": str(self.root)})
+                os.write(fd, f"source {PICK.parent / 'zmx.zsh'}; echo $((6*7))-sourced\n".encode())
+                out, end = b"", time.time() + 5  # a key typed before stty runs is still SIGQUIT
+                while time.time() < end and b"42-sourced" not in out:
+                    if select.select([fd], [], [], 0.1)[0]:
+                        out += os.read(fd, 4096)
+                time.sleep(0.3)
+                os.write(fd, b"\x1c")
+                end = time.time() + (5 if expected else 1.5)
+                while time.time() < end and not (expected and (self.root / "calls").exists()):
+                    if select.select([fd], [], [], 0.1)[0]:
+                        os.read(fd, 4096)
+                time.sleep(0.3)
+                os.write(fd, b"exit\n")
+                end = time.time() + 3
+                while time.time() < end and select.select([fd], [], [], 0.1)[0]:
+                    try: os.read(fd, 4096)
+                    except OSError: break
+                os.waitpid(pid, 0)
+                calls = (self.root / "calls").read_text().splitlines() if (self.root / "calls").exists() else []
+                self.assertEqual([json.loads(l)[:2] for l in calls], expected)
+
     def test_nothing_picked_shows_the_picker_again(self):
         calls = self.run_pick([[0, ""], [1, ""]])
         self.assertEqual([c[0] for c in calls], ["zpick", "zpick", "sh"])
