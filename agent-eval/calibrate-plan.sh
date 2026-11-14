@@ -3,6 +3,8 @@
 # usage: calibrate-plan.sh <task> [--runs N]   (default 3 per arm)
 # EVAL_PLAN_WORKER: <provider/model>:<thinking> (default anthropic/claude-haiku-5-5:low);
 # EVAL_SCOUT overrides scout for tests. Each run gets fix^ and its own isolated HOME, as in trial.sh.
+# lib/record.ts agentInfra classifies rc, usage and digest: infra is reported, not counted, and retried once.
+# A second infra attempt exits 1 without writing bench.json. Each attempt gets a fresh workspace and HOME.
 # Writes counts to <task>/bench.json. Keeps specs, workspaces, homes and logs below the printed
 # /tmp/agent-eval-calibrate.XXXXXX directory; EVAL_TEST_TIMEOUT applies to hidden tests.
 set -euo pipefail
@@ -33,13 +35,24 @@ node "$EVAL_DIR/lib/plan-grade.ts" assemble "$task_dir/gold.md" "$dir/gold.md" |
 floor=0 gold=0
 for arm in floor gold; do
   for ((n=1; n<=runs; n++)); do
-    run="$dir/$arm-$n"
-    ws="$run/ws" home="$run/home"
-    start="$(date +%s)"
-    make_workspace "$task_dir" "$ws" base
-    scout="${EVAL_SCOUT:-$home/.pi/agent/bin/scout}"
-    (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$scout" --rw --model "${worker%:*}" --thinking "${worker##*:}" --spec - \
-      < "$dir/$arm.md" > "$run/digest.txt" 2> "$run/stderr.txt") || true
+    for attempt in 1 2; do
+      run="$dir/$arm-$n-$attempt"
+      ws="$run/ws" home="$run/home"
+      start="$(date +%s)"
+      make_workspace "$task_dir" "$ws" base
+      scout="${EVAL_SCOUT:-$home/.pi/agent/bin/scout}"
+      rc=0
+      (cd "$ws" && "$EVAL_DIR/lib/isolate.sh" "$home" "$scout" --rw --model "${worker%:*}" --thinking "${worker##*:}" --spec - \
+        < "$dir/$arm.md" > "$run/digest.txt" 2> "$run/stderr.txt") || rc=$?
+      infra="$(node "$EVAL_DIR/lib/record.ts" --agent-infra --rc "$rc" \
+        --sessions-dir "$home/.pi/agent/sessions" --digest-file "$run/digest.txt")"
+      [ "$infra" = true ] || break
+      echo "$arm $n/$runs infra $(( $(date +%s) - start ))s (attempt $attempt)"
+      if [ "$attempt" -eq 2 ]; then
+        echo "calibrate-plan.sh: $arm $n/$runs infra twice; kept $run" >&2
+        exit 1
+      fi
+    done
     overlay_hidden "$task_dir" "$ws"
     result=fail
     if run_test "$task_dir" "$ws" > "$run/test.txt" 2>&1; then

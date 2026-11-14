@@ -15,3 +15,11 @@ Review findings, as the reviewer wrote them:
 - A missing pair prints `FAIL <role> <cell>: MISSING ...`; with `--partial` the same line starts `skip` instead of `FAIL`, keeps `: MISSING`, and has `--partial` after it (`skip <role> <cell>: MISSING ... --partial ...`).
 - A one-sided row prints `FAIL <role> <cell>` followed on the same line by `recall in the baseline only` when only the baseline has recall (also under `--partial`).
 - `lib/record.ts` exports `isReviewTimeout(rc: number): boolean`.
+
+**Required behaviour**
+
+- A run lacking a baseline role or cell fails: a MISSING line and exit 1, or exit 0 with `--partial` when the shared pairs pass.
+- Recall on one side only fails in either direction, even with `--partial`; the line names the side (`recall in the run only` for run-only recall).
+- A review killed by `timeout -k`, exit 137, is infra like exit 124.
+- `gate()` still returns failing missing rows when no pairs are shared.
+- Present pairs have `missing: false`; a one-sided row is not missing, has unit `task` and `fail: true`; when both sides have recall, `oneSided` is absent.
