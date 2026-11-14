@@ -79,7 +79,7 @@ workspace and grades the result mechanically or with judges. Five roles:
   `./validate.sh --all`: a task whose `rule` no longer matches is INVALID, and its
   `expect` needs a fresh reading against the new rules.
 
-- **plan** (`plan-back-to-back`). Tests planning: the model gets a short ticket and the repo
+- **plan**. Tests planning: the model gets a short ticket and the repo
   and must write the spec a worker will run. A task is a worker task's `repo`, `fix`, `test`,
   `hidden` and `link` with `"role": "plan"`, plus `ticket.md`, `"decisions"` (extra judged items,
   `[{id, text}]`, may be empty), and `gold.md`, `bad.md` and `samples.json`
@@ -120,6 +120,28 @@ workspace and grades the result mechanically or with judges. Five roles:
   ok|MISS` per sample id (both judges must agree with want). `gold.md` is a good plan, `bad.md`
   one the mechanical checks accept and a reviewer would reject. One trial costs the planner,
   the fixed worker and two judge calls.
+
+  Plan tasks (what remains for the planner):
+  - `plan-back-to-back`: find the endpoint comparison behind the reported overlap.
+  - `plan-free-slots`: a gap-sweep feature with a seeded unknown: negative minMs (zero is pinned by hidden tests).
+  - `plan-delete-404`: locate the HTTP response fix rather than changing the booking store.
+  - `plan-cancel-ids`: reject a wrong guess at the cause and plan a cross-file store/router fix.
+  - `plan-malformed-json`: trace an asynchronous parse exception to a rejected promise and HTTP response.
+  - `plan-cube-render`: build a spec-driven feature with exact snapshots.
+  - `plan-gate-missing-pairs`: three review findings; the one task meant to be beyond the fixed worker without a plan.
+
+  `./calibrate-plan.sh <task> [--runs N]` (default 3) measures the fixed worker's
+  floor with the ticket alone and gold ceiling with the assembled gold plan. Each arm
+  runs N fresh fix^ workspaces and isolated homes, then overlays hidden tests and runs
+  the task's test command. Floor specs include the fix's changed files, the test command,
+  the ticket and one generic implementation step. No planner or judges are called.
+  `EVAL_PLAN_WORKER` selects the worker as above; `EVAL_SCOUT` is the test seam.
+  It prints per-run pass/fail and seconds, names the retained specs, homes, workspaces
+  and logs under `/tmp/agent-eval-calibrate.XXXXXX`, and writes `bench.json` beside the task:
+  `{"worker":"anthropic/claude-haiku-5-5:low","runs":3,"floor":0,"gold":3}`.
+  Floor and gold are pass counts, not rates. If floor equals runs, the task tells
+  nothing through the executed check, only through the rubric. Run calibration and
+  judge checks with real models separately; benchmarks are not committed here.
 
 Every trial runs under `lib/isolate.sh`: a temp HOME that links the real
 `~/.pi/agent` except `memory.md`, sessions and run history, so trials

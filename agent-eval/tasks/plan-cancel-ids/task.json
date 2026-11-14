@@ -1,0 +1,19 @@
+{
+  "id": "plan-cancel-ids",
+  "role": "plan",
+  "repo": "~/Dev/pi-lab",
+  "fix": "703b89e1df0a43be1cf15354786aed113033ec1e",
+  "test": "cd booking && npm test",
+  "hidden": [
+    "booking/src/booking.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ],
+  "decisions": [
+    {
+      "id": "wrong-cause",
+      "text": "The ticket guesses that the DELETE handler calls cancel more than once. The plan says explicitly that this guess is not the cause."
+    }
+  ]
+}

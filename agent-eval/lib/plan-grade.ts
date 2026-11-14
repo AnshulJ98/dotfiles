@@ -136,10 +136,10 @@ const RUBRIC_FILE = join(import.meta.dirname, "../fixtures/plan/rubric.json");
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, "utf8"));
 const home = (p: string): string => p.replace(/^~(?=\/|$)/, process.env.HOME ?? "~");
 
-interface Task { repo: string; fix: string; decisions: unknown }
+interface Task { repo: string; fix: string; test: string; decisions: unknown }
 function readTask(dir: string): Task {
 	const t = readJson(join(dir, "task.json")) as Record<string, unknown>;
-	return { repo: home(String(t.repo ?? "")), fix: String(t.fix ?? ""), decisions: t.decisions };
+	return { repo: home(String(t.repo ?? "")), fix: String(t.fix ?? ""), test: String(t.test ?? ""), decisions: t.decisions };
 }
 
 /** The rubric followed by the task's decisions, as [{id, text}]; throws when decisions are not a list of {id, text}. */
@@ -192,7 +192,7 @@ function checkTask(dir: string, ws: string): string {
 
 /**
  * Commands: render <prompt.md> <ticket.md> (the planner prompt); assemble <reply.txt> <spec.md> (exit 1, empty file, without a
- * spec block); mechanical <reply.txt> <ws> <porcelain.txt> <task-dir> (the checks as a JSON line); items <task-dir> <out.json> (the
+ * spec block); floor <task-dir> <spec.md> (ticket-only worker spec); mechanical <reply.txt> <ws> <porcelain.txt> <task-dir> (the checks as a JSON line); items <task-dir> <out.json> (the
  * rubric, then the decisions; exit 1 when invalid); context <task-dir> <out.txt> (ticket and reference diff); check <task-dir> <ws>
  * (prints why the task's files are unsound); sample-files <task-dir>; report <task-dir> <file> <trial-dir> (one line per sample id
  * from the judge run in <trial-dir>; exit 1 on a miss).
@@ -205,6 +205,13 @@ function main([command, ...args]: string[]): number {
 			const got = assemble(readOr(args[0]));
 			writeFileSync(args[1], got?.spec ?? "");
 			return got ? 0 : 1;
+		}
+		case "floor": {
+			const task = readTask(args[0]);
+			const files = git(task.repo, "diff", "--name-only", task.fix + "^", task.fix).trim().split("\n");
+			const ticket = readFileSync(join(args[0], "ticket.md"), "utf8").trim();
+			writeFileSync(args[1], `---\nfiles-allowed: ${JSON.stringify(files)}\ntests: ${task.test}\n---\n\n${ticket}\n\n1. Do what the ticket asks. → check: the tests command passes.\n`);
+			return 0;
 		}
 		case "mechanical": {
 			const changed = parsePorcelain(readOr(args[2]));
@@ -248,7 +255,7 @@ function main([command, ...args]: string[]): number {
 			return status;
 		}
 		default:
-			console.error("usage: plan-grade.ts render|assemble|mechanical|items|context|check|sample-files|report ...");
+			console.error("usage: plan-grade.ts render|assemble|floor|mechanical|items|context|check|sample-files|report ...");
 			return 2;
 	}
 }

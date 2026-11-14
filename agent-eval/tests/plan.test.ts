@@ -1,6 +1,8 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 // Pure plan grading (lib/plan-grade.ts): assembling the worker spec from a planner's reply and the six mechanical checks.
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { assemble, mechanical, renderPrompt } from "../lib/plan-grade.ts";
 
@@ -87,6 +89,52 @@ for (const [name, over, want] of CASES) test("mechanical: " + name, () => assert
 test("mechanical: a reply with no spec block does not read the other inputs", () => {
 	const input = { ...GOOD, reply: "just words", existing: () => { throw new Error("must not be called"); } };
 	assert.deepEqual(mechanical(input), NONE);
+});
+
+test("every committed plan task sample covers every rubric and decision id exactly once", () => {
+	const root = join(import.meta.dirname, "../tasks");
+	const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
+	const rubric = readJson(join(import.meta.dirname, "../fixtures/plan/rubric.json")).map((x: { id: string }) => x.id);
+	let plans = 0;
+	for (const name of readdirSync(root)) {
+		const dir = join(root, name);
+		const task = readJson(join(dir, "task.json"));
+		if (task.role !== "plan") continue;
+		plans++;
+		const ids = [...rubric, ...task.decisions.map((d: { id: string }) => d.id)].sort();
+		assert.equal(new Set(ids).size, ids.length, name + ": duplicate item ids");
+		const samples = readJson(join(dir, "samples.json"));
+		assert.ok(samples.length > 0, name + ": no samples");
+		assert.equal(new Set(samples.map((s: { file: string }) => s.file)).size, samples.length, name + ": duplicate sample files");
+		for (const s of samples) {
+			assert.deepEqual([...s.yes, ...s.no].sort(), ids, name + "/" + s.file);
+			assert.ok(readFileSync(join(dir, s.file), "utf8").trim(), name + "/" + s.file + ": empty sample");
+		}
+	}
+	assert.ok(plans >= 7, "expected at least seven committed plan tasks");
+});
+
+test("gate plan copies the worker contract and ticket, with history-independent gold checks", () => {
+	const root = join(import.meta.dirname, "../tasks");
+	const read = (task: string, file: string) => readFileSync(join(root, task, file), "utf8");
+	const worker = JSON.parse(read("gate-missing-pairs", "task.json"));
+	const { id, role, allowed, ...copied } = worker;
+	assert.deepEqual(JSON.parse(read("plan-gate-missing-pairs", "task.json")), {
+		id: "plan-gate-missing-pairs", role: "plan", ...copied, decisions: [],
+	});
+	const ticket = read("gate-missing-pairs", "prompt.md")
+		.replace(/^---\n[\s\S]*?\n---\n/, "").split("\n1. ")[0].trim() + "\n";
+	assert.equal(read("plan-gate-missing-pairs", "ticket.md"), ticket);
+	const gold = assemble(read("plan-gate-missing-pairs", "gold.md"));
+	assert.ok(gold);
+	assert.ok(gold.body.split(/\s+/).length <= 430, "gold body exceeds 430 words");
+	const tests = gold.spec.match(/^tests: (.+)$/m)?.[1];
+	assert.equal(tests, worker.test.replace("'agent-eval/tests/zz-hidden-*.test.ts'", worker.hidden.join(" ")));
+	assert.doesNotMatch(gold.spec, /^(interface-frozen|allowed-commands):/m);
+	assert.deepEqual(JSON.parse(read("plan-gate-missing-pairs", "samples.json")), [
+		{ file: "gold.md", yes: ["mechanism", "checks", "test-first", "scope"], no: [] },
+		{ file: "bad.md", yes: ["mechanism", "scope"], no: ["checks", "test-first"] },
+	]);
 });
 
 test("renderPrompt: strips the leading frontmatter and puts the ticket in place of every $@", () => {
