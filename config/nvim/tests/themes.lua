@@ -34,8 +34,7 @@ local function read(path)
   file:close()
   return text
 end
-for _, name in ipairs { 'coffee-neutral', 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'soviet-dark', 'dark-2026', 'tango',
-  'coffee-steel-purple', 'coffee-steel', 'coffee-sky', 'coffee-slate' } do
+for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'dark-2026', 'tango', 'coffee-sky', 'coffee-slate' } do
   vim.cmd.colorscheme(name)
   assert(vim.g.colors_name == name, name .. ' did not load')
   assert(hl('DapViewNormal').dim, name .. ' lost panel dimming')

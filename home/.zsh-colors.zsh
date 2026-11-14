@@ -8,6 +8,10 @@ export LSCOLORS='ExgxfxdxcxDxdxBxDxExEx'
 # The switcher rebuilds bat's cached current theme after relinking it.
 export BAT_THEME=current
 
+# fzf (zi, ad-hoc pipes): its defaults are fixed 256-colour olives and greys. These follow the palette;
+# 235 is the selection colour. The kitty pickers set their own colours.
+export FZF_DEFAULT_OPTS='--color=fg:-1,bg:-1,hl:3,hl+:3,fg+:-1:bold,bg+:235,gutter:-1,prompt:4,pointer:1,marker:2,spinner:8,info:8,header:8,border:8,label:8,separator:8,scrollbar:8,preview-border:8'
+
 # Was fg=#666666,bold: a fixed grey that ignores the theme. Bright black is held near 4:1 in every palette.
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
 

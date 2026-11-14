@@ -5,7 +5,7 @@
 theme = "coffee-slate"
 # Split at 160+ columns, unified below, like GitHub's layout switch.
 mode = "split"
-# kitty's 0.97 opacity and blur show through, as in lazygit.
+# kitty's opacity and blur show through, as in lazygit.
 transparent_background = true
 # Same as nvim's scrolloff.
 scroll_off = 5

@@ -1,4 +1,5 @@
 """Startup guards; run with python3 -m unittest discover -s home/tests."""
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -59,6 +60,19 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "ready\n")
         self.assertEqual(result.stderr, "")
+
+    @unittest.skipUnless(shutil.which("fzf"), "fzf is not installed")
+    def test_fzf_takes_its_colours_from_the_terminal_palette(self):
+        script = (f'typeset -A FAST_HIGHLIGHT_STYLES; source "{HOME / ".zsh-colors.zsh"}"; '
+                  'print -r -- $FZF_DEFAULT_OPTS')
+        with tempfile.TemporaryDirectory() as directory:
+            options = self.run_zsh(script, directory).stdout.strip()
+            self.assertIn("--color=", options)
+            self.assertNotIn("#", options)  # indexes follow the loaded theme; a hex would not
+            result = subprocess.run([shutil.which("fzf"), "--filter", "b"], input="a\nb\n",
+                                    capture_output=True, text=True, timeout=10,
+                                    env={"HOME": directory, "PATH": "/usr/bin:/bin", "FZF_DEFAULT_OPTS": options})
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "b\n", ""))
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ Usage: theme [name]
 With no name, list installed themes (* marks the active one).
 With a name, switch the shared theme and reload supported apps.
 
-Example: theme coffee-neutral
+Example: theme void-ink
 
 Reloads kitty, nvim, tmux, JankyBorders and Vicinae; rebuilds bat's cache.
 Restart yazi, lazygit, hunk, btop and Marta. In pi, run /reload.
