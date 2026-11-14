@@ -1,0 +1,1 @@
+Add the render module, `src/render.ts`, as SPEC.md describes under "Render", with the tests that section asks for. Use six-space indentation for U and D, no final newline, white RGB 255;255;255, and an ANSI reset `\x1b[0m` at the end of every colored line.

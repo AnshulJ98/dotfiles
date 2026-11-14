@@ -1,0 +1,25 @@
+[
+  {
+    "file": "gold.md",
+    "yes": [
+      "mechanism",
+      "checks",
+      "test-first",
+      "scope",
+      "min-zero"
+    ],
+    "no": []
+  },
+  {
+    "file": "bad.md",
+    "yes": [
+      "mechanism",
+      "scope"
+    ],
+    "no": [
+      "checks",
+      "test-first",
+      "min-zero"
+    ]
+  }
+]
