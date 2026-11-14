@@ -1,9 +1,26 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { blocked, grade, gradePlan, gradeReview, isReviewTimeout, isTestPath, judgedIds, judgeScout, leaked, measure, outsideAllowed, parseJudged, parseMechanical, parsePorcelain, wroteTest } from "../lib/record.ts";
+
+import * as record from "../lib/record.ts";
+
+test("the local lib import graph has no cycles", () => {
+	const done = new Set<string>();
+	const visit = (file: string, stack: string[]) => {
+		assert.ok(!stack.includes(file), [...stack, file].join(" -> "));
+		if (done.has(file)) return;
+		const source = readFileSync(file, "utf8");
+		for (const m of source.matchAll(/(?:import|export)[^;]*from "\.(\/[^"]+)"/g)) {
+			visit(resolve(dirname(file), "." + m[1]), [...stack, file]);
+		}
+		done.add(file);
+	};
+	for (const name of ["record", "review", "orch", "plan-grade"]) visit(resolve(import.meta.dirname, "../lib", name + ".ts"), []);
+});
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -19,6 +36,24 @@ test("measure sums usage over assistant turns only and ignores junk lines", () =
 	];
 	assert.deepEqual(measure(lines), { cost: 0.75, input: 13, output: 6, cacheRead: 5, cacheWrite: 3, turns: 3 });
 	assert.deepEqual(measure([]), { cost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 });
+});
+
+const used = measure([turn({ input: 10, output: 2, cost: { total: 0.1 } })]);
+const INFRA: [string, number, typeof used, string, boolean][] = [
+	["refused", 75, used, "", true],
+	["no turns", 1, measure([]), "", true],
+	["counted error turns", 1, { ...used, input: 0, output: 0, turns: 4 }, "", true],
+	["no tokens even on success", 0, { ...used, input: 0, output: 0 }, "", true],
+	["error first line", 1, used, "WORKER-SENSORS: CANNOT-RUN run ended: error\nHTTP 429", true],
+	["no digest diagnostic", 1, used, "scout: pi exited 1 with no digest. Last stderr lines:\n429", true],
+	["pass", 0, used, "WORKER-SENSORS: PASS", false],
+	["plan blocker", 1, used, "WORKER-SENSORS: CANNOT-RUN interface-frozen files must spell out their interface before a freeze", false],
+	["timeout", 124, used, "", false],
+	["input only", 0, { ...used, output: 0 }, "", false],
+	["output only", 0, { ...used, input: 0 }, "", false],
+];
+for (const [name, rc, usage, digest, want] of INFRA) test(`agentInfra: ${name}`, () => {
+	assert.equal(record.agentInfra({ rc, usage, digest }), want);
 });
 
 const LEAK: [string, string[], string[], boolean][] = [

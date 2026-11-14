@@ -1,14 +1,14 @@
 // Pure helpers for the orch role (a model picks the action the user's orchestration rules prescribe for one situation),
 // plus a thin CLI for trial.sh and validate.sh (commands: see main).
-// A reply's decision is the word after "DECISION:" on the first line of the reply that has one (any case, optional
-// markdown bold or backticks around the label or the word, trailing text allowed). Only merge, rework, stop and fix are
+// A reply's decision is the word after "DECISION:" on the first line starting with that label (any case, optional
+// leading whitespace/markdown markers, markup around the word, trailing text allowed). Only merge, rework, stop and fix are
 // decisions; a reply without such a line, or whose first such line has another word, has no decision.
 // An orch task is task.json {id, role: "orch", expect, rule: {lines: [from, to], must}} plus scenario.md; the rule
 // points at the lines of fixtures/orch/rules.md that decide it and a phrase that occurs in them.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render } from "./review.ts";
+import { render } from "./render.ts";
 
 export const DECISIONS = ["merge", "rework", "stop", "fix"] as const;
 export type Decision = (typeof DECISIONS)[number];
@@ -18,9 +18,9 @@ const isDecision = (word: string): word is Decision => (DECISIONS as readonly st
 /** The decision in a reply, or null. */
 export function parseDecision(reply: string): Decision | null {
 	for (const line of reply.split(/\r?\n/)) {
-		const m = /\bDECISION[*`_ \t]*:[*`_ \t]*([A-Za-z]+)/i.exec(line);
+		const m = /^[#>*`_ \t-]*DECISION[*`_ \t]*:[*`_ \t]*([A-Za-z]+)?/i.exec(line);
 		if (!m) continue;
-		const word = m[1].toLowerCase();
+		const word = (m[1] ?? "").toLowerCase();
 		return isDecision(word) ? word : null;
 	}
 	return null;

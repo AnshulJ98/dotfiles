@@ -6,13 +6,15 @@
 // Plan record: pass = accepted and executed (plan-grade.ts accepted the spec, the fixed worker's work passes the hidden tests);
 // checks = covers, tight, grounded, readonly, short; met = judged ids met; found = true mechanical checks (accepted too) plus met,
 // of = 6 plus the judged items; cost and usage are the planner's, workerCost the worker's. workerSensors is the verdict on the
-// worker digest's first line (PASS, FAIL, CANNOT-RUN), else null (--digest-file). infra: no planner turns, a planner
-// timeout (rc 124 or 137), or an accepted plan the judges could not rate.
+// worker digest's first line (PASS, FAIL, CANNOT-RUN), else null (--digest-file). infra: agentInfra on the planner or
+// fixed worker (--worker-rc), a planner timeout (rc 124 or 137), or an accepted plan the judges could not rate.
+// Worker/scout infra uses agentInfra: rc 75, no input/output tokens, or a provider-error digest.
+// Calibration uses --agent-infra --rc --sessions-dir --digest-file to print that same predicate.
 // Orch record: pass = the reply's DECISION word equals expect (lib/orch.ts), decision = that word or null; infra is
 // no turns or a timeout (rc 124 or 137); a reply without a decision is a fail, not infra.
 // Scout record: pass = judge.sh's verdict on the digest against the task's facts (found, of = facts, disagreements,
 // judgeCost); cited and citable are the secondary citation grade of the digest against the task's expect list
-// (lib/scout-grade.ts). An empty digest from a run with turns is a fail with found 0 (not infra); a non-empty digest
+// (lib/scout-grade.ts). An empty digest from a run with model tokens is a fail with found 0; a non-empty digest
 // the judges could not rate, a task without facts, or a malformed expect list is infra.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,13 +26,14 @@ import { grade as gradeScout, parseExpect } from "./scout-grade.ts";
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };
 
-export interface Usage {
-	cost: number;
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	turns: number;
+import { measure, type Usage } from "./usage.ts";
+export { measure, type Usage } from "./usage.ts";
+
+/** A scout-run agent refused to start, used no model tokens, or ended on a provider error. */
+export function agentInfra({ rc, usage, digest }: { rc: number; usage: Usage; digest: string }): boolean {
+	return rc === 75 || (usage.input === 0 && usage.output === 0)
+		|| /^WORKER-SENSORS: CANNOT-RUN run ended: error(?:\r?\n|$)/.test(digest)
+		|| digest.includes("pi exited 1 with no digest");
 }
 
 function parseLine(line: string): Json | undefined {
@@ -52,23 +55,6 @@ function num(value: Json | undefined): number {
 function messageOf(line: string): JsonObject | undefined {
 	const entry = asObject(parseLine(line));
 	return entry?.type === "message" ? asObject(entry.message) : undefined;
-}
-
-/** Sum usage over every assistant turn in the session lines. */
-export function measure(sessionLines: string[]): Usage {
-	const total: Usage = { cost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 };
-	for (const line of sessionLines) {
-		const message = messageOf(line);
-		if (message?.role !== "assistant") continue;
-		const usage = asObject(message.usage);
-		total.turns += 1;
-		total.input += num(usage?.input);
-		total.output += num(usage?.output);
-		total.cacheRead += num(usage?.cacheRead);
-		total.cacheWrite += num(usage?.cacheWrite);
-		total.cost += num(asObject(usage?.cost)?.total);
-	}
-	return total;
 }
 
 /** True when any tool call's JSON-encoded arguments contain one of the needles. */
@@ -238,7 +224,7 @@ function main(argv: string[]): void {
 		options: {
 			task: str, role: str, model: str, thinking: str, trial: str, rc: str, seconds: str, expect: str,
 			"test-exit": str, porcelain: str, "allowed-file": str, added: str, "sessions-dir": str, "digest-file": str, dir: str, "judge-file": str, "task-file": str, "reply-file": str,
-			"mechanical-file": str, "items-file": str, worker: str, "worker-sessions-dir": str,
+			"mechanical-file": str, "items-file": str, worker: str, "worker-sessions-dir": str, "worker-rc": str, "agent-infra": { type: "boolean" },
 			needle: { type: "string", multiple: true, default: [] },
 		},
 	});
@@ -247,6 +233,9 @@ function main(argv: string[]): void {
 	const verdictFile = files.filter((f) => f.endsWith("/verdict.json")).pop();
 	const verdict = asObject(parseLine(readText(verdictFile)))?.verdict;
 	const usage = measure(sessionLines);
+	const digest = readText(v["digest-file"]);
+	const runInfra = agentInfra({ rc: Number(v.rc), usage, digest });
+	if (v["agent-infra"]) return void console.log(runInfra);
 	if (v.role === "review") {
 		const judged = parseJudged(readText(v["judge-file"]));
 		console.log(JSON.stringify({
@@ -278,7 +267,7 @@ function main(argv: string[]): void {
 			pass: typeof expect !== "string" && gradeReview(judged), found: judged.found, of: judged.of, disagreements: judged.disagreements, judgeCost: judged.judgeCost,
 			cited: cited.hits, citable: cited.of,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || typeof expect === "string" || judged.infra, dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: runInfra || typeof expect === "string" || judged.infra, dir: v.dir,
 		}));
 		return;
 	}
@@ -295,13 +284,15 @@ function main(argv: string[]): void {
 			const dir = v["worker-sessions-dir"] ?? "";
 			workerLines = readdirSync(dir, { recursive: true, encoding: "utf8" }).sort().filter((f) => f.endsWith(".jsonl")).flatMap((f) => lines(readText(join(dir, f))));
 		} catch { /* the worker never ran: no sessions */ }
+		const workerUsage = measure(workerLines);
+		const workerInfra = mechanical.accepted && v["worker-rc"] !== "" && agentInfra({ rc: Number(v["worker-rc"]), usage: workerUsage, digest });
 		const { judgeInfra, ...graded } = g;
 		console.log(JSON.stringify({
 			task: v.task, role: v.role, model: v.model, thinking: v.thinking, trial: Number(v.trial),
-			...graded, workerCost: measure(workerLines).cost, worker: v.worker,
+			...graded, ...(workerInfra ? { executed: false, pass: false } : {}), workerCost: workerUsage.cost, worker: v.worker,
 			workerSensors: /^WORKER-SENSORS: (PASS|FAIL|CANNOT-RUN)(?=\s|$)/.exec(readText(v["digest-file"]).split("\n")[0])?.[1] ?? null,
 			rc: Number(v.rc), seconds: Number(v.seconds), ...usage,
-			leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0 || isReviewTimeout(Number(v.rc)) || judgeInfra, dir: v.dir,
+			leak: leaked(sessionLines, v.needle ?? []), infra: runInfra || isReviewTimeout(Number(v.rc)) || workerInfra || judgeInfra, dir: v.dir,
 		}));
 		return;
 	}
@@ -315,7 +306,7 @@ function main(argv: string[]): void {
 		rc: Number(v.rc), seconds: Number(v.seconds),
 		outside, wroteTest: wroteTest(changed),
 		added: Number(v.added), ...usage,
-		leak: leaked(sessionLines, v.needle ?? []), infra: usage.turns === 0, dir: v.dir,
+		leak: leaked(sessionLines, v.needle ?? []), infra: runInfra, dir: v.dir,
 	};
 	console.log(JSON.stringify(record));
 }
