@@ -13,5 +13,12 @@ if [ -n "${ZMX_SESSION:-}" ]; then
 fi
 while :; do
   name=$("$ZPICK" --zmx) || exec "${SHELL:-/bin/sh}" -il
-  [ -n "$name" ] && zmx attach "$name"
+  [ -n "$name" ] || continue
+  start=$SECONDS
+  zmx attach "$name"
+  # zmx attach exits 0 even when it refuses a name (a /, too long); keep its error on screen.
+  if [ $((SECONDS - start)) -le 1 ] && ! zmx list --short 2>/dev/null | grep -qxF -- "$name"; then
+    printf '\nzmx-pick: %s did not start · press a key\n' "$name"
+    read -rsn1 -t 30 || true
+  fi
 done
