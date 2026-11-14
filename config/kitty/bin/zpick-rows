@@ -3,7 +3,7 @@
 then closed workspaces (session files with no open tabs).
 
 usage: zpick-rows VIEW [WINDOW]   VIEW is all | detached (detached sessions and closed workspaces
-only); WINDOW is the pane the picker was opened from, whose workspace is marked current.
+only) | zmx (every zmx session, no kitty: zmx-pick in any terminal); WINDOW is the pane the picker was opened from, whose workspace is marked current.
 Each row: kind, target, holder, cwd, clients, display; tab separated. kind is ws | tab | pane |
 det | closed; target is the session name, tab id, window id, zmx session or session file.
 clients is 0 only for a session no terminal is attached to. Inside fzf (FZF_COLUMNS) the right
@@ -136,7 +136,7 @@ def main() -> None:
     for z in zs.values():
         z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
     fg = foreground()
-    kitty = json.loads(run('kitten', '@', 'ls') or '[]')
+    kitty = [] if view == 'zmx' else json.loads(run('kitten', '@', 'ls') or '[]')
 
     def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
         z = zs.get(holder)
@@ -205,18 +205,25 @@ def main() -> None:
         open_ws = list(workspaces)
 
     if det:
-        rows.append(row('hdr', '', '', '', '', f'{DIM}detached{OFF}'))
+        rows.append(row('hdr', '', '', '', '', f'{DIM}{"sessions" if view == "zmx" else "detached"}{OFF}'))
         for i, z in enumerate(det):
             other = z.get('clients', '0') != '0'
             branch = '└─' if i == len(det) - 1 else '├─'
+            if view == 'zmx':  # no kitty names these: the session name leads, the folder goes right
+                proc, status, when = proc_status({}, z['name'])
+                cols = f'{fit(proc, 8)} {STATUS.get(status, "")}{fit(status, 8)}{OFF} {DIM}{when:>3}{OFF}'
+                rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
+                    f'  {branch} ', [f'{DIM}{fit(short(z["cwd"]), 22)}{OFF} {cols}', cols],
+                    z['name'] + (' · attached' if other else ''))))
+                continue
             rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
                 f'  {branch} ', pane_cols(*proc_status({}, z['name']), z['name']),
-                short(z['cwd']) + (' · other kitty' if other else ''))))
+                short(z['cwd']) + ((' · attached' if view == 'zmx' else ' · other kitty') if other else ''))))
     try:
         files = sorted(f for f in os.listdir(DIR) if f.endswith('.kitty-session'))
     except OSError:
         files = []
-    closed = [f for f in files if f[:-len('.kitty-session')] not in open_ws]
+    closed = [] if view == 'zmx' else [f for f in files if f[:-len('.kitty-session')] not in open_ws]
     if closed:
         rows.append(row('hdr', '', '', '', '', f'{DIM}closed workspaces{OFF}'))
         for i, f in enumerate(closed):
