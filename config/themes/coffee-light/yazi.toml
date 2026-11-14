@@ -9,7 +9,7 @@
 cwd           = { fg = "#027974" }
 border_symbol = "│"
 border_style  = { fg = "#8a827c" }
-syntect_theme = "/tmp/theme-preview/light2/themes/coffee-light/syntax.tmTheme"
+syntect_theme = "~/.config/themes/current/syntax.tmTheme"
 
 [tabs]
 active   = { fg = "#3d352b", bg = "#eae4dd", bold = true }
