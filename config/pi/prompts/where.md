@@ -1,5 +1,5 @@
 ---
-description: Where we are on the ladder (this, slice, high, higher, target), what's left at each level and the next move; report only
+description: Where we are on the ladder (this, slice, high, higher, target), what's left at each level, a brief on the piece in hand and the next move; report only
 argument-hint: "[level to expand]"
 ---
 Show me where we are. Print the card below in one code block and stop:
@@ -17,6 +17,15 @@ open    ● <piece in hand>   <its state>                  you: <verb>
         ○ <not started>     <its state>                  you: <verb>
         ? <reported done>   <what is unchecked>          me: check
 done    <count> in this slice · latest proof: <one sha, test or path>
+────────────────────────────────────────────────────────────────────────
+what    <the piece in hand: what changes, or what is being decided>
+where   <the files, branch, command or window it lives in>
+why     <what it serves on the rung above; what goes wrong without it>
+how     <the approach in hand, or the options when it is my decision>
+effort  <files touched, rough size, what has to be tested>
+impact  <what changes for me once it is done; what it unblocks>
+pick    <your recommendation and its reason>
+context <one earlier decision, constraint or result I need to judge this>
 ideas   <yours that I have not agreed to, on one line>
 next    <one move; start with "you:" when it is my decision>
 ```
@@ -38,8 +47,13 @@ next    <one move; start with "you:" when it is my decision>
   agreed with me. Write `none named` when nothing was agreed. Your own
   suggestions go under `ideas`, never under `left`.
 - `open` lists every piece of the slice that is not done, the piece in
-  hand first, at most 6, each ending with whose move it is. If I named a
+  hand first, at most 5, each ending with whose move it is. If I named a
   level after "Expand", list that level's pieces there.
+- The brief (`what` to `context`) is about the `this` piece only, and
+  each row adds something the ladder does not already say. `effort` and
+  `impact` come from what we measured or said: write `not sized` rather
+  than guess. `pick` is yours and labelled as such by its row; write
+  `nothing to choose` when the piece has one way forward.
 - A piece is a unit of the agreed work, not a chore done along the way
   (a note saved, a window opened).
 - ✓ needs proof from this session. A todo, a summary or your own
@@ -54,4 +68,4 @@ next    <one move; start with "you:" when it is my decision>
   One row is one line of at most 100 characters and never wraps onto a
   second line: cut detail, not rows.
   Nothing before the card and nothing after `next`. Leave out `done`
-  and `ideas` when empty. At most 14 rows.
+  and `ideas` when empty. At most 24 rows.
