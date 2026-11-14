@@ -1,18 +1,37 @@
 #!/usr/bin/env bash
 # cmd+alt+g. One picker tab at most: open it, focus it, or, if it has focus, switch its
 # view between all and detached sessions (forwards ctrl-t to fzf). esc closes it.
-# $1 = @active-kitty-window-id
+# $1 = @active-kitty-window-id. --key (ctrl+\, zmx-pick's key elsewhere): the same, but a pane
+# running ssh gets the key itself, so the remote zmx-pick has it. ssh may run in kitty's pane or
+# inside the pane's zmx session, whose terminal kitty does not see.
 export PATH=/opt/homebrew/bin:$PATH
 state=$(kitten @ ls 2>/dev/null | python3 -c '
-import json, sys
+import json, os, subprocess, sys
+wid, key = sys.argv[1], sys.argv[2:] == ["--key"]
+REMOTE = {"ssh", "mosh", "mosh-client", "et"}
+def run(*cmd):
+    try: return subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.SubprocessError): return ""
+def inside(holder):  # the foreground program of a zmx session, as bin/zpick-rows finds it
+    pid = next((f.split("=", 1)[1] for line in run("zmx", "ls").splitlines() for f in line.split("\t")
+                if line.strip().lstrip("→ ").startswith(f"name={holder}\t") and f.startswith("pid=")), "")
+    procs = {p[0]: p[1:] for p in (l.split(None, 2) for l in run("ps", "-Ao", "pid=,tpgid=,comm=").splitlines()) if len(p) == 3}
+    tpgid = procs.get(pid, ("", ""))[0]
+    return os.path.basename(procs.get(tpgid, procs.get(pid, ("", "")))[1]).lstrip("-")
 st = "none"
 for o in json.load(sys.stdin):
     for t in o["tabs"]:
         for w in t["windows"]:
             if w.get("user_vars", {}).get("role") == "zgoto":
                 st = "focused" if (o["is_focused"] and t["is_focused"] and w["is_focused"]) else "open"
-print(st)')
+            if key and str(w.get("id")) == wid:
+                fg = {os.path.basename(p["cmdline"][0]) for p in w.get("foreground_processes", []) if p.get("cmdline")}
+                holder = w.get("user_vars", {}).get("holder", "")
+                if fg & REMOTE or (holder and inside(holder) in REMOTE):
+                    print("remote"); sys.exit()
+print(st)' "$1" "${2:-}")
 case $state in
+  remote)  kitten @ send-key --match "id:$1" ctrl+backslash ;;
   focused) kitten @ send-key --match var:role=zgoto ctrl+t ;;
   open)    kitten @ focus-window --match var:role=zgoto ;;
   *)       kitten @ launch --type=tab --tab-title 'Go to' --var role=zgoto "$(dirname "$(realpath "$0")")/zpick" "$1" >/dev/null ;;

@@ -36,6 +36,8 @@ if cmd == "zmx":
     if args == ["ls"]: print("name=old-1\tpid=123\tclients=0")
     if args == ["ls", "--short"]: print(os.environ.get("SESSIONS", "old-1"))
     sys.exit(0)
+if cmd == "ps":
+    print(os.environ.get("PS_OUT", ""), end="")
 if cmd == "lsof":
     if mode == "lsof-hang": time.sleep(30)
     print("n" + str(root / "live cwd"))
@@ -46,7 +48,9 @@ if cmd == "kitten":
         if ready.exists() and time.time() >= float(ready.read_text()):
             print('[{"platform_window_id": 42}]')
         sys.exit(0)
-    if "ls" in args:
+    if "ls" in args and os.environ.get("KITTY_LS"):
+        print(os.environ["KITTY_LS"])
+    elif "ls" in args:
         print(json.dumps([{"is_active": True, "tabs": [{"is_active": True, "windows": [{
             "is_active": True, "cwd": str(root / "cwd space"), "session_name": "",
             "user_vars": {"holder": os.environ.get("HOLDER", "")}}]}]}]))
@@ -85,11 +89,11 @@ class ScriptTests(unittest.TestCase):
                         ZWS_DIR=str(self.root / "workspaces"), FAKE_ROOT=str(self.root),
                         PATH=str(self.root) + ":" + os.environ["PATH"])
         for cmd in ("kitten", "zmx", "timeout", "lsof", "open", "pgrep", "aerospace",
-                    "fzf", "plain-shell", "find", "zpick-rows", "kitty"):
+                    "fzf", "plain-shell", "find", "zpick-rows", "kitty", "ps"):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
-        for name in ("zshell", "kmain", "zws", "zpick"):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto"):
             source = (BIN / name).read_text()
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
@@ -487,6 +491,29 @@ class ScriptTests(unittest.TestCase):
             sock = Path(args[args.index("--listen") + 1])
             self.assertEqual(sock.name, "view.sock")
             self.assertFalse(sock.parent.exists())
+
+    def test_ctrl_backslash_opens_the_picker_but_reaches_ssh_untouched(self):
+        # kitty maps ctrl+\ to bin/zgoto --key: the picker, as cmd+alt+g, unless the pane runs ssh,
+        # whose remote zmx-pick owns the key. ssh runs in kitty's pane or inside its zmx session.
+        def ls(fg, holder):
+            return json.dumps([{"is_focused": True, "tabs": [{"is_focused": True, "windows": [{
+                "id": 7, "is_focused": True, "user_vars": {"holder": holder},
+                "foreground_processes": [{"pid": 1, "cmdline": fg}]}]}]}])
+        zmx = ["/opt/homebrew/bin/zmx", "attach", "old-1"]
+        for fg, holder, ps, sent in ((["ssh", "-t", "box"], "", "", True),
+                                     (zmx, "old-1", "123 456 -zsh\n456 456 ssh\n", True),
+                                     (zmx, "old-1", "123 456 -zsh\n456 456 nvim\n", False),
+                                     (["/bin/zsh"], "", "", False)):
+            with self.subTest(fg=fg, ps=ps):
+                (self.root / "calls").unlink(missing_ok=True)
+                result = self.run_script("zgoto", "7", "--key", KITTY_LS=ls(fg, holder), PS_OUT=ps)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                kitten = [a for a in self.calls("kitten") if "ls" not in a]
+                self.assertEqual(kitten[0][:2] == ["@", "send-key"], sent, kitten)
+                if sent:
+                    self.assertEqual(kitten, [["@", "send-key", "--match", "id:7", "ctrl+backslash"]])
+                else:
+                    self.assertEqual(kitten[0][:2], ["@", "launch"])
 
     def test_picker_fills_the_terminal(self):
         for extra in ((), ("--zmx",)):

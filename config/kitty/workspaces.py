@@ -37,6 +37,7 @@ _quitting = False  # windows close one by one on quit; saving then would drop wo
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
 _labelled: dict[str, str] = {}  # zmx session -> the workspace its label names
+_refused: dict[str, int] = {}  # zmx session -> labels zmx refused
 _check_tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _named: set[int] = set()
@@ -158,11 +159,14 @@ def _label(boss) -> None:
     zmx = shutil.which('zmx') or '/opt/homebrew/bin/zmx'
     for w in boss.all_windows:
         name, holder = w.created_in_session_name, w.user_vars.get('holder', '')
-        if not name or not holder or _labelled.get(holder) == name:
+        if not name or not holder or _labelled.get(holder) == name or _refused.get(holder, 0) > 3:
             continue
-        # kitty runs it: no process may be started from this thread (tests/test_kitty.py)
-        boss.call_remote_control(None, ('launch', '--type=background', zmx, 'set', holder,
-                                        'space=' + zcore.label(name)))
+        # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
+        # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
+        boss.call_remote_control(None, (
+            'launch', '--type=background', '--allow-remote-control', 'sh', '-c',
+            '"$1" set "$2" "$3" >/dev/null 2>&1 || kitten @ set-user-vars --match "id:$4" zlabel=retry',
+            'sh', zmx, holder, 'space=' + zcore.label(name), str(w.id)))
         _labelled[holder] = name
 
 
@@ -336,7 +340,13 @@ def on_set_user_var(boss, window, data) -> None:
             zkitty.attach(boss, window)
         else:
             boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zq'))
-    elif data.get('key') in ('zside', 'zdo', 'zq'):
+    elif data.get('key') == 'zlabel' and data.get('value'):
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zlabel'))
+        holder = window.user_vars.get('holder', '')
+        _labelled.pop(holder, None)
+        _refused[holder] = _refused.get(holder, 0) + 1
+        on_tab_bar_dirty(boss, window, data)  # the next save tries again
+    elif data.get('key') in ('zside', 'zdo', 'zq', 'zlabel'):
         return
     else:  # a rename (ws_name) or pi's model and context use
         on_tab_bar_dirty(boss, window, data)

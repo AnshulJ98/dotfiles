@@ -22,6 +22,7 @@ class Window:
     def __init__(self, session: str, os_window_id: int):
         self.created_in_session_name = session
         self.os_window_id = os_window_id
+        self.id = 0
         self.user_vars: dict[str, str] = {}
 
 
@@ -103,16 +104,41 @@ class SavingTests(unittest.TestCase):
             boss = Boss([a, b, plain], active=a, saved="launch\n")
             module = load(directory, boss)
             def labels():
-                found = [c[3:] for c in boss.calls if c[:2] == ("launch", "--type=background")]
+                found = [tuple(c[-3:-1]) for c in boss.calls if c[:2] == ("launch", "--type=background")]
                 del boss.calls[:]
                 return found
             module._save()
-            self.assertEqual(labels(), [("set", "a-1", "space=6d79207370616365"), ("set", "b-1", "space=62")])
+            self.assertEqual(labels(), [("a-1", "space=6d79207370616365"), ("b-1", "space=62")])
             module._save()
             self.assertEqual(labels(), [])
             a.created_in_session_name = "b"
             module._save()  # a pane moved to another workspace is labelled again
-            self.assertEqual(labels(), [("set", "a-1", "space=62")])
+            self.assertEqual(labels(), [("a-1", "space=62")])
+
+    def test_a_label_zmx_refused_is_retried_a_few_times(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a = Window("a", 1)
+            a.id, a.user_vars["holder"] = 5, "a-1"
+            boss = Boss([a], active=a, saved="launch\n")
+            module = load(directory, boss)
+            def labels():
+                found = [c for c in boss.calls if c[:2] == ("launch", "--type=background")]
+                del boss.calls[:]
+                return found
+            module._save()
+            first, = labels()
+            self.assertIn("--allow-remote-control", first)  # a refusal comes back as zlabel=retry
+            self.assertEqual(first[-1], "5")
+            for _ in range(3):
+                module.on_set_user_var(boss, a, {"key": "zlabel", "value": "retry"})
+                self.assertIn(("set-user-vars", "--match=id:5", "zlabel"), boss.calls)  # never saved
+                del boss.calls[:]
+                module._save()
+                self.assertEqual(len(labels()), 1)
+            module.on_set_user_var(boss, a, {"key": "zlabel", "value": "retry"})
+            del boss.calls[:]
+            module._save()
+            self.assertEqual(labels(), [])  # a session that never comes up is not chased forever
 
     def test_empty_owner_replaces_open_atomically_nonowner_leaves_it(self):
         from unittest.mock import patch
