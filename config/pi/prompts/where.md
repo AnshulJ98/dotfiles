@@ -1,6 +1,6 @@
 ---
-description: Where we are on the ladder (this, slice, high, higher, target), what's left at each level, a brief on the slice and the effort, and the next move; report only
-argument-hint: "[this|slice|high|higher to brief instead]"
+description: Where we are on the ladder (this, slice, beyond, higher, target), what's left at each level, a brief on the slice and the effort, and the next move; report only
+argument-hint: "[this|slice|beyond|higher to brief instead]"
 ---
 Show me where we are. Print the card below in one code block and stop:
 no edits, no next step started, no plan. Expand: $@
@@ -8,25 +8,28 @@ no edits, no next step started, no plan. Expand: $@
 ```
 target  ◇ <the outcome I want, in my latest words>
 higher  ○ <what the effort lands in>     <pips>  left  <what remains here>
-high    ▸ <the effort>                   <pips>  left  <what remains here>
+beyond  ▸ <the effort>                   <pips>  left  <what remains here>
 slice   ▸ <the agreed batch in hand>     <pips>  left  <what remains here>
 this    ● <the one piece in hand>                left  <what remains here>
+
 ────────────────────────────────────────────────────────────────────────
 open    ● <piece in hand>   <its state>                  you: <verb>
         ▸ <in progress>     <its state>                  me: <verb>
         ○ <not started>     <its state>                  you: <verb>
         ? <reported done>   <what is unchecked>          me: check
 done    <count> in this slice · latest proof: <one sha, test or path>
-── slice · <its name> ──────────────────────────────────────────────────
-what    <what this batch delivers, or what is being decided in it>
-where   <the files, branch, command or window it lives in>
-why     <what it serves on the rung above; what goes wrong without it>
-how     <the approach in hand, or the options when it is my decision>
-effort  <what is left here: files touched, rough size, what has to be tested>
-impact  <what changes for me once it is done; what it unblocks>
-pick    <your recommendation and its reason>
-context <one earlier decision, constraint or result I need to judge this>
-── high · <its name> ───────────────────────────────────────────────────
+
+    ── slice · <its name> ──────────────────────────────────────────────
+    what    <what this batch delivers, or what is being decided in it>
+    where   <the files, branch, command or window it lives in>
+    why     <what it serves on the rung above; what goes wrong without it>
+    how     <the approach in hand, or the options when it is my decision>
+    effort  <what is left here: files touched, rough size, what has to be tested>
+    impact  <what changes for me once it is done; what it unblocks>
+    pick    <your recommendation and its reason>
+    context <one earlier decision, constraint or result I need to judge this>
+
+── beyond slice · <its name> ───────────────────────────────────────────
 what    <what the effort delivers, or what is being decided in it>
 where   <the files, branch, command or window it lives in>
 why     <what it serves on the rung above; what goes wrong without it>
@@ -35,13 +38,15 @@ effort  <what is left here: files touched, rough size, what has to be tested>
 impact  <what changes for me once it is done; what it unblocks>
 pick    <your recommendation and its reason>
 context <one earlier decision, constraint or result I need to judge this>
+
 ideas   <yours that I have not agreed to, on one line>
 next    <one move; start with "you:" when it is my decision>
 ```
 
 - The ladder is the top five rows, always in this order with these
   labels. `higher` is what the effort lands in or serves (a branch to
-  merge, a release, a programme). `high` is the effort. `slice` is the
+  merge, a release, a programme). `beyond` is the effort the slice
+  belongs to: everything beyond this slice. `slice` is the
   agreed batch in hand. `this` is the one piece in hand right now; when
   that piece is finished, `this` is the next open piece, not the
   finished one.
@@ -59,9 +64,9 @@ next    <one move; start with "you:" when it is my decision>
   hand first, at most 5, each ending with whose move it is. If I named a
   level after "Expand", list that level's pieces there.
 - A brief is the eight rows `what` to `context` under a rule that names
-  its rung. By default print two: one for `slice`, one for `high`. If I
-  named rungs after "Expand" (this, slice, high, higher), brief those
-  instead. A rung left off the ladder gets no brief.
+  its rung. By default print two: one for `slice`, indented four
+  spaces, then one for `beyond`, headed `beyond slice`. If I named rungs
+  after "Expand" (this, slice, beyond, higher), brief those instead. A rung left off the ladder gets no brief.
 - Each brief row adds something the ladder does not already say, and
   the two briefs do not repeat each other. `effort` and `impact` come
   from what we measured or said: write `not sized` rather than guess.
@@ -77,9 +82,10 @@ next    <one move; start with "you:" when it is my decision>
   compaction` on that row; do not guess.
 - You may run `git status` and `git log` to settle a mark. Nothing else.
 - Pad with spaces so the marks, pips, `left` and the owners line up.
-  Names are at most 30 characters. Every rule is 72 characters wide;
-  a labelled one is filled out with ─.
+  Names are at most 30 characters. Every rule ends at column 72; a
+  labelled one is filled out with ─. One blank line goes before each
+  rule and before `ideas`.
   One row is one line of at most 100 characters and never wraps onto a
   second line: cut detail, not rows.
   Nothing before the card and nothing after `next`. Leave out `done`
-  and `ideas` when empty. At most 34 rows.
+  and `ideas` when empty. At most 34 rows, blank lines not counted.

@@ -79,7 +79,7 @@ The original driver was GitHub Copilot's move to token billing on 2026-06-01. Th
 │   ├── grill.md             # /grill      (design interrogation in chat, one wave at a time; "save" writes `.grill/<topic>.md`)
 │   ├── diagnose.md          # /diagnose   (feedback-loop-first bug discipline)
 │   ├── handoff.md           # /handoff    (session notes printed; "save" writes repo-root HANDOFF.md)
-│   ├── where.md             # /where      (status card: target/higher/high/slice/this ladder, what's left at each, open pieces with owner, what/where/why/how/effort/impact/pick briefs on the slice and the effort; report only, writes nothing)
+│   ├── where.md             # /where      (status card: target/higher/beyond/slice/this ladder, what's left at each, open pieces with owner, what/where/why/how/effort/impact/pick briefs on the slice and the effort; report only, writes nothing)
 │   └── spec-contract.md     # brainstorm or plan → implementable spec, with worker frontmatter for scout --rw
 ├── extensions/
 │   ├── compact-cap.ts       # flat ~210k compaction safety-net, mid-run capable (/compact-cap command)
