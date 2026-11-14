@@ -2,7 +2,8 @@
 # usage: validate.sh <task>|--all   (--all: every task.json under ${EVAL_TASKS_DIR:-agent-eval/tasks}; none is fine)
 # Hidden tests must fail on the base and pass once the fix commit's allowed files are applied; for expect
 # "blocked" the fix commit must change a non-test file outside allowed. A review task (role review) is valid when
-# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. A scout task is
+# its workspace builds, every file named in prompt.md exists there, and defects lists id/text/hit. With patches,
+# test must pass on the full rev and fail with each patch alone; all patches must apply together. A scout task is
 # valid when its workspace builds, each expect entry's file exists there with at least lines[1] lines, every
 # must regex matching the text of lines[0]..lines[1] (the expected answer is really in the cited range), facts is a
 # non-empty list of {id, text, hit} with unique ids, and decoys has at least two non-empty strings. An orch task is valid
@@ -40,6 +41,45 @@ check_review() {
       else if (missing.length) console.log("prompt.md names files missing from the workspace: " + [...new Set(missing)].join(", "));
     }
   ' "$1" "$1/prompt.md" "$2" 2>&1 | head -1
+}
+
+# Prove injections against full trees, never the reviewer's excluded tests.
+check_review_patches() {
+  local task="$1" full ws patch reason rc
+  reason="$(node -e '
+    const t = JSON.parse(require("node:fs").readFileSync(process.argv[1] + "/task.json"));
+    if (t.patches === undefined) process.exit(0);
+    if (!Array.isArray(t.patches) || !t.patches.length ||
+        t.patches.some(p => typeof p !== "string" || !p.trim())) console.log("patches must be a non-empty list of paths");
+    else if (typeof t.test !== "string" || !t.test.trim()) console.log("patches require a test command");
+  ' "$task")"
+  [ -z "$reason" ] || { echo "$reason"; return 0; }
+  [ -n "$(task_get "$task" patches)" ] || return 0
+  full="$(mktemp -d "$tmp/full.XXXXXX")"
+  node -e '
+    const fs = require("node:fs");
+    const t = JSON.parse(fs.readFileSync(process.argv[1] + "/task.json"));
+    t.repo = process.argv[3];
+    t.exclude = []; t.paths = []; t.patches = [];
+    fs.writeFileSync(process.argv[2] + "/task.json", JSON.stringify(t));
+  ' "$task" "$full" "$(task_get "$task" repo)"
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "cannot build full review tree"; return 0; }
+  run_test "$task" "$ws" > /dev/null 2>&1 || { echo "tests fail on full rev without patches"; return 0; }
+  while IFS= read -r patch; do
+    ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+    make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "$patch: cannot build full review tree"; return 0; }
+    apply_patch "$task" "$ws" "$patch" > /dev/null 2>&1 || { echo "$patch: cannot apply alone"; return 0; }
+    rc=0
+    run_test "$task" "$ws" > /dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then echo "$patch: tests pass with patch alone"; return 0; fi
+    case "$rc" in 124|126|127|137) echo "$patch: test could not finish (exit $rc)"; return 0 ;; esac
+  done < <(task_get "$task" patches)
+  ws="$(mktemp -d "$tmp/ws.XXXXXX")"
+  make_workspace "$full" "$ws" base > /dev/null 2>&1 || { echo "cannot build full review tree"; return 0; }
+  while IFS= read -r patch; do
+    apply_patch "$task" "$ws" "$patch" > /dev/null 2>&1 || { echo "$patch: cannot apply together"; return 0; }
+  done < <(task_get "$task" patches)
 }
 
 # Scout task: print nothing when facts and decoys are complete, else the reason.
@@ -103,8 +143,10 @@ check() {
   fi
   repo="$(task_get "$task" repo)"
   if [ "$(task_get "$task" role)" = review ]; then
+    reason="$(check_review_patches "$task")"
+    [ -z "$reason" ] || { echo "$reason"; return 0; }
     ws="$(mktemp -d "$tmp/ws.XXXXXX")"
-    make_workspace "$task" "$ws" base > /dev/null 2>&1 || { echo "cannot build the review workspace"; return 0; }
+    reason="$(make_workspace "$task" "$ws" base 2>&1)" || { echo "cannot build the review workspace: $reason"; return 0; }
     check_review "$task" "$ws"
     return 0
   fi

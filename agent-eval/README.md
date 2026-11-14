@@ -27,13 +27,19 @@ workspace and grades the result mechanically or with judges. Five roles:
   `agent-eval/` with `paths`) instead of a spelled-out spec, plus the names the
   hidden tests need. `booking-delete-404-scope` expects the agent to stop:
   it passes only when nothing changed and the digest names a blocker.
-- **review** (`booking-review`). Plain `pi -p` reviews pi-lab at
+- **review** (`booking-review`, `cube-review`). Plain `pi -p` reviews pi-lab at
   `e6189ea`, which has five seeded defects. A haiku-5-5 extractor turns the
   review into findings; two judges, opus-5-5 and gpt-6.1-sol, each say
   yes/no per defect. A defect counts only when both say yes, and the trial
   passes when every defect not marked `"minor": true` is found (d5, the
   id validation, is minor: it is still judged and counted in recall, but a
   miss no longer fails the trial).
+  `cube-review` reviews sim/cube at `e3fe8d7` with five injected defects;
+  passing needs all five. Its `patches` field lists task-relative patch files
+  applied in order after `exclude`, before the workspace’s single commit.
+  Absolute paths and `..` components are rejected. `validate.sh` proves the
+  repo’s excluded tests pass on the full revision, fail with each patch alone,
+  and all patches apply together; patched review tasks require `test`.
 - **scout** (4 tasks: `scout-*`). Each is a research question about
   `config/pi` at `39f0715`. The trial runs `scout` read-only, then the two
   judges (as for review) say yes/no per fact: the task's `facts` are

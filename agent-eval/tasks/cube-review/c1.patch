@@ -1,0 +1,14 @@
+diff --git a/src/cube.ts b/src/cube.ts
+--- a/src/cube.ts
++++ b/src/cube.ts
+@@ -11,9 +11,6 @@
+ export function isValid(state: string): boolean {
+   return (
+     state.length === 54 &&
+-    FACES.every(
+-      (face, i) =>
+-        state.split(face).length === 10 && state.charAt(9 * i + 4) === face,
+-    )
++    FACES.every((face) => state.split(face).length === 10)
+   )
+ }
