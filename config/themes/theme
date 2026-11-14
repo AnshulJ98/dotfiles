@@ -54,11 +54,12 @@ if [ "$name" = current ] || [ ! -f "$T/$name/kitty.conf" ]; then
   exit 1
 fi
 
-# Rename the link atomically; -h keeps macOS mv from following the old directory link.
+# Rename the link atomically; without -h (macOS) or -T (GNU) mv would move into the old
+# directory link instead of replacing it.
 next="$T/.current.$$"
 trap 'rm -f "$next"' EXIT
 ln -s "$name" "$next"
-mv -fh "$next" "$T/current"
+if [ "$(uname -s)" = Darwin ]; then mv -fh "$next" "$T/current"; else mv -fT "$next" "$T/current"; fi
 # pi watches its themes folder for the active theme's file, so that link is replaced on every
 # switch instead of going through current.
 mkdir -p "$HOME/.pi/agent/themes"
@@ -67,7 +68,7 @@ ln -sfn "$T/$name/pi.json" "$HOME/.pi/agent/themes/current.json"
 warn() { echo "theme: $*" >&2; }
 pkill -USR1 -x kitty || true # kitty reloads its config on SIGUSR1; no process is fine.
 . "$T/$name/colors.sh"
-if pgrep -xq borders; then
+if pgrep -x borders >/dev/null; then
   borders active_color="$BORDER_ACTIVE" inactive_color="$BORDER_INACTIVE" || warn "borders did not reload"
 fi
 if command -v vicinae >/dev/null; then

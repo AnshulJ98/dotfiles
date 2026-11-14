@@ -93,6 +93,8 @@ nvm() {
   unset -f nvm
   [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"
   [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+  # Linux: nvm's own installer puts it in NVM_DIR.
+  [ -s "$NVM_DIR/nvm.sh" ] && ! typeset -f nvm >/dev/null && \. "$NVM_DIR/nvm.sh"
   nvm "$@"
 }
 

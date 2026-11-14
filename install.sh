@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — bootstrap a fresh macOS machine from this dotfiles repo.
+# install.sh — bootstrap a fresh macOS or Linux (Ubuntu, WSL) machine from this dotfiles repo.
 # Idempotent: safe to re-run. Existing files are backed up to *.bak.<timestamp>.
 #
 # Usage:
@@ -18,6 +18,7 @@ done
 # Read by the Brewfile to pick per-machine casks. brew strips env vars without the HOMEBREW_ prefix.
 if [ "$PI_VARIANT" = "work" ]; then export HOMEBREW_DOTFILES_WORK=1; fi
 TS="$(date +%s)"
+OS="$(uname -s)"
 VSC_USER="$HOME/Library/Application Support/Code - Insiders/User"
 
 if [ ! -d "$DOT" ]; then
@@ -29,7 +30,10 @@ log()  { printf "→ %s\n" "$*"; }
 warn() { printf "⚠ %s\n" "$*" >&2; }
 ok()   { printf "✓ %s\n" "$*"; }
 
-# 1. Homebrew + Brewfile -----------------------------------------------------
+# 1. Homebrew + Brewfile (Linux: linux-tools.sh) ------------------------------
+if [ "$OS" = Linux ]; then
+  bash "$DOT/linux-tools.sh"
+else
 if ! command -v brew >/dev/null 2>&1; then
   log "Installing Homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -40,6 +44,7 @@ if [ -f "$DOT/Brewfile" ]; then
   log "Installing from Brewfile..."
   brew bundle --file="$DOT/Brewfile"
   ok "Brewfile applied"
+fi
 fi
 
 # 2. Symlink helper ----------------------------------------------------------
@@ -85,9 +90,9 @@ clone_plugin https://github.com/zsh-users/zsh-autosuggestions.git    zsh-autosug
 mkdir -p "$HOME/.config"
 link "$DOT/config/nvim"            "$HOME/.config/nvim"
 link "$DOT/config/kitty"           "$HOME/.config/kitty"
-link "$DOT/config/aerospace"       "$HOME/.config/aerospace"
+[ "$OS" = Darwin ] && link "$DOT/config/aerospace" "$HOME/.config/aerospace"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
-link "$DOT/config/borders"         "$HOME/.config/borders"
+[ "$OS" = Darwin ] && link "$DOT/config/borders" "$HOME/.config/borders"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
 # Hunk reuses the yazi syntax theme and the lazygit palette.
 link "$DOT/config/hunk"            "$HOME/.config/hunk"
@@ -114,7 +119,11 @@ link "$DOT/config/worktrunk/config.toml"     "$HOME/.config/worktrunk/config.tom
 link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
-link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+if [ "$OS" = Darwin ]; then
+  link "$DOT/config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+else
+  link "$DOT/config/lazygit/config.yml" "$HOME/.config/lazygit/config.yml"
+fi
 # delta reads syntax themes from bat's cache; each theme's delta.gitconfig names its own.
 # Replace only our old link: one dangling theme makes bat skip the whole folder.
 old_bat="$HOME/.config/bat/themes/bearded-hc-midnightvoid.tmTheme"
@@ -135,6 +144,7 @@ link "$DOT/config/themes/current/syntax.tmTheme" "$HOME/.config/bat/themes/curre
 if command -v bat >/dev/null 2>&1; then
   bat cache --build >/dev/null || warn "bat cache build failed — run: bat cache --build"
 fi
+if [ "$OS" = Darwin ]; then
 # Marta's folder also holds plugin state, so link its files, not the folder.
 # conf.marco can't hold comments (Marco rejects // and /* */ and falls back to
 # defaults). Its F11 runs a kitty gadget because environment.terminal only
@@ -161,6 +171,7 @@ elif ! grep -q '"base.json"' "$VICINAE_SETTINGS"; then
   warn "$VICINAE_SETTINGS does not import base.json — add \"imports\": [\"base.json\"]"
 fi
 bash "$DOT/config/vicinae/install-raycast-extensions.sh" || warn "Vicinae Raycast extensions partially installed: re-run config/vicinae/install-raycast-extensions.sh"
+fi
 bash "$DOT/config/imagemagick/check.sh" || warn "ImageMagick cannot decode SVG — see config/imagemagick/delegates.xml"
 
 
@@ -196,7 +207,7 @@ mkdir -p "$HOME/.pi/agent/skills-local"   # settings.json names it; pi does not 
 
 # 7. VSCode (macOS-specific paths) -------------------------------------------
 # Insiders' files are the source; stable VS Code shares them.
-for user_dir in "$VSC_USER" "$HOME/Library/Application Support/Code/User"; do
+[ "$OS" = Darwin ] && for user_dir in "$VSC_USER" "$HOME/Library/Application Support/Code/User"; do
   mkdir -p "$user_dir"
   for item in settings.json keybindings.json snippets css; do
     [ -e "$DOT/vscode-insiders/$item" ] && link "$DOT/vscode-insiders/$item" "$user_dir/$item"
