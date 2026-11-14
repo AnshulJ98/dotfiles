@@ -1,0 +1,22 @@
+diff --git a/src/cli.ts b/src/cli.ts
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -38,16 +38,15 @@
+   !values.plain && process.stdout.isTTY === true && process.env.NO_COLOR === undefined
+ const show = (state: string) => render(state, { color })
+ 
+-let moves: Move[]
++let moves: Move[] = []
+ if (values.scramble) {
+   const rng = values.seed === undefined ? Math.random : seeded(Number(values.seed))
+   moves = scramble(25, rng)
+ } else {
+   try {
+     moves = parse(positionals.join(' '))
+   } catch (error) {
+-    if (error instanceof NotationError) fail(error.message)
+-    throw error
++    if (!(error instanceof NotationError)) throw error
+   }
+ }
+ const state = applyMoves(SOLVED, moves)

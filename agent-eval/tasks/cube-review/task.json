@@ -1,0 +1,57 @@
+{
+  "id": "cube-review",
+  "role": "review",
+  "repo": "~/Dev/sim/cube",
+  "rev": "e3fe8d7941a0c0d5633a98c0a9813417f041d2c3",
+  "exclude": [
+    "src/cube.test.ts",
+    "src/moves.test.ts",
+    "src/notation.test.ts",
+    "src/scramble.test.ts",
+    "src/render.test.ts",
+    "src/solve.test.ts",
+    "src/cli.test.ts",
+    ".sdlc",
+    ".pi"
+  ],
+  "test": "npm test",
+  "patches": [
+    "c1.patch",
+    "c2.patch",
+    "c3.patch",
+    "c4.patch",
+    "c5.patch"
+  ],
+  "defects": [
+    {
+      "id": "c1",
+      "text": "isValid in src/cube.ts accepts states with moved centres when the length and letter counts are correct.",
+      "hit": "isValid in src/cube.ts checks length and counts but never checks the centre stickers. Swapping centres while keeping nine of each letter is therefore incorrectly accepted."
+    },
+    {
+      "id": "c2",
+      "text": "simplify in src/notation.ts leaves a face turn when consecutive turns of that face cancel.",
+      "hit": "simplify in src/notation.ts unconditionally pushes a move even when the combined turns are zero modulo four. R R' becomes R rather than an empty sequence, changing the resulting cube state."
+    },
+    {
+      "id": "c3",
+      "text": "invert in src/moves.ts preserves move order, so its result does not undo a general sequence.",
+      "hit": "invert in src/moves.ts maps invertMove without reversing the sequence. Noncommuting moves must be undone in reverse order, so applying a sequence followed by this inverse does not restore the starting state."
+    },
+    {
+      "id": "c4",
+      "text": "The parse catch in src/cli.ts silently accepts bad notation and exits successfully with no moves.",
+      "hit": "The catch around parse in src/cli.ts swallows NotationError, leaving moves empty. Bad notation prints a solved net and exits 0 instead of reporting the token on stderr and exiting 2."
+    },
+    {
+      "id": "c5",
+      "text": "solve in src/solve.ts returns a non-solving move list for a state with one twisted corner instead of throwing.",
+      "hit": "solve in src/solve.ts returns after the steps without checking that the resulting state equals SOLVED. A single twisted corner can pass isValid yet remain unsolved after those steps, so an unusable solution is returned instead of an error."
+    }
+  ],
+  "decoys": [
+    "seeded in src/scramble.ts produces a deterministic random sequence for a given seed.",
+    "render in src/render.ts uses two character cells per sticker before trimming trailing spaces in plain output.",
+    "The usage string in src/cli.ts lists --scramble, --seed N, --solve and --plain."
+  ]
+}

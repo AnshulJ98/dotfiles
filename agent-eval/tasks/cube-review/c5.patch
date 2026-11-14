@@ -1,0 +1,10 @@
+diff --git a/src/solve.ts b/src/solve.ts
+--- a/src/solve.ts
++++ b/src/solve.ts
+@@ -176,6 +176,5 @@
+     out.push(...moves)
+     s = applyMoves(s, moves)
+   }
+-  if (s !== SOLVED) throw new Error('cannot solve this state')
+   return simplify(out)
+ }
