@@ -487,6 +487,82 @@ test("validate.sh: a review task is VALID when the workspace builds, the prompt'
 	}
 });
 
+// ---- injected review patches ----
+
+function patchedTask(id: string, over: Record<string, unknown> = {}): string {
+	const dir = makeTask(id, {
+		patches: ["a.patch", "b.patch"],
+		test: "test -f README.md && test -L deps && grep -q 'a = 1' booking/src/a.ts && grep -q 'b = 2' booking/src/b.ts",
+		link: ["deps"], paths: ["booking"], ...over,
+	});
+	for (const [file, from, to] of [["a", 1, 9], ["b", 2, 8]]) {
+		write(join(dir, file + ".patch"), `diff --git a/booking/src/${file}.ts b/booking/src/${file}.ts
+--- a/booking/src/${file}.ts
++++ b/booking/src/${file}.ts
+@@ -1 +1 @@
+-export const ${file} = ${from};
++export const ${file} = ${to};
+`);
+	}
+	return dir;
+}
+
+function workspace(task: string, ws: string) {
+	return spawnSync("bash", ["-c", 'source "$1/lib/task.sh"; make_workspace "$2" "$3" base', "_", EVAL_DIR, task, ws], { encoding: "utf8", env: env() });
+}
+
+test("make_workspace: patches are ordered, applied after excludes and hidden in a clean single commit", () => {
+	const task = patchedTask("wp", { paths: undefined, patches: ["a.patch", "next.patch"] });
+	write(join(task, "next.patch"), readFileSync(join(task, "a.patch"), "utf8").replace("-export const a = 1;", "-export const a = 9;").replace("+export const a = 9;", "+export const a = 7;"));
+	const ws = join(scratch, "patched-ws");
+	const r = workspace(task, ws);
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(readFileSync(join(ws, "booking/src/a.ts"), "utf8"), "export const a = 7;\n");
+	assert.ok(!existsSync(join(ws, "README.md")));
+	assert.equal(git(ws, "status", "--porcelain"), "");
+	assert.equal(git(ws, "rev-list", "--count", "HEAD"), "1");
+	assert.deepEqual(git(ws, "ls-files").split("\n"), ["booking/src/a.ts", "booking/src/b.ts"]);
+});
+
+test("make_workspace: a failing or unsafe patch is non-zero and named", () => {
+	for (const patch of ["missing.patch", "../a.patch", "/tmp/a.patch", "bad.patch"]) {
+		const task = patchedTask("wp-bad", { patches: [patch] });
+		write(join(task, "bad.patch"), "not a patch\n");
+		const r = workspace(task, join(scratch, "bad-ws-" + counter++));
+		assert.notEqual(r.status, 0, patch);
+		assert.ok(r.stderr.includes(patch), r.stderr);
+	}
+	const task = patchedTask("wp-excluded", { exclude: ["booking/src/a.ts"], patches: ["a.patch"] });
+	const r = workspace(task, join(scratch, "excluded-ws"));
+	assert.notEqual(r.status, 0);
+	assert.match(r.stderr, /a.patch/);
+});
+
+test("validate.sh: review patches each fail tests alone on a full tree, with links", () => {
+	const r = run("validate.sh", [patchedTask("vp-good")]);
+	assert.equal(r.status, 0, r.stdout + r.stderr);
+	assert.equal(r.stdout.trim(), "VALID vp-good");
+});
+
+test("validate.sh: rejects unproven review patches with the reason and patch name", () => {
+	const cases: [string, Record<string, unknown>, RegExp][] = [
+		["passing", { test: "test -f README.md" }, /a.patch.*tests pass/],
+		["only-a", { test: "test -f README.md && grep -q 'a = 1' booking/src/a.ts" }, /b.patch.*tests pass/],
+		["excluded", { exclude: ["booking/src/a.ts"] }, /cannot build.*a.patch/s],
+		["baseline", { test: "exit 1" }, /tests fail.*without patches/],
+		["missing-test", { test: undefined }, /patches.*test/],
+		["apply", { patches: ["missing.patch"] }, /missing.patch.*apply/],
+		["together", { patches: ["a.patch", "a.patch"] }, /a.patch.*apply/],
+		["timeout", { test: "grep -q 'a = 1' booking/src/a.ts || sleep 10" }, /a.patch.*test.*124/],
+	];
+	for (const [id, over, reason] of cases) {
+		const r = run("validate.sh", [patchedTask("vp-" + id, over)], { EVAL_TEST_TIMEOUT: "1" });
+		assert.equal(r.status, 1, r.stdout + r.stderr);
+		assert.match(r.stdout, /^INVALID vp-/);
+		assert.match(r.stdout, reason);
+	}
+});
+
 // ---- check-judges.sh ----
 
 test("check-judges.sh: judges that agree with the known answers exit 0, one line per defect", () => {
