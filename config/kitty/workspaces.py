@@ -22,8 +22,8 @@ if FOLDER not in sys.path:
 import zcore
 import zkitty
 
-# Undocumented kitty API names are checked by INTERNALS and _missing below.
-from kitty.fast_data_types import add_timer, get_boss
+# Undocumented kitty API names (here and in tab_bar.py) are checked by INTERNALS, FUNCTIONS and _missing below.
+from kitty.fast_data_types import add_timer, get_boss, mark_tab_bar_dirty, wakeup_main_loop
 
 DIR = zkitty.folder()
 _log = zkitty.log
@@ -43,13 +43,20 @@ _sent: dict[int, bytes] = {}
 
 
 INTERNALS = (
-    ('kitty.boss:Boss', 'all_windows all_tabs active_window active_tab call_remote_control'),
+    ('kitty.boss:Boss', 'all_windows all_tabs all_tab_managers active_window active_tab call_remote_control'),
     ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child'),
     ('kitty.child:Child', 'argv'),
     ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
-    ('kitty.fast_data_types:Screen', 'last_reported_cwd'),
+    ('kitty.fast_data_types:Screen', 'last_reported_cwd columns cursor draw'),
     ('kitty.program_status:ProgramStatus', 'as_list'),
-    ('kitty.tabs:TabManager', 'active_tab'),
+    ('kitty.tabs:TabManager', 'active_tab os_window_id tab_bar_hidden tab_bar_should_be_visible'),
+    ('kitty.tab_bar:TabBarData', 'is_active active_session_name'),
+    ('kitty.tab_bar:DrawData', 'inactive_fg default_bg'),
+    ('kitty.tab_bar:ExtraData', 'for_layout'),
+)
+FUNCTIONS = (
+    ('kitty.fast_data_types', 'add_timer get_boss mark_tab_bar_dirty wakeup_main_loop'),
+    ('kitty.tab_bar', 'draw_tab_with_powerline as_rgb'),
 )
 
 
@@ -70,9 +77,13 @@ def _missing() -> list[str]:
         config_dir = None
     if not isinstance(config_dir, str):
         missing.append('kitty.constants.config_dir')
-    for name in ('add_timer', 'get_boss'):
-        if not callable(getattr(import_module('kitty.fast_data_types'), name, None)):
-            missing.append('kitty.fast_data_types.' + name)
+    for module, names in FUNCTIONS:
+        try:
+            found = import_module(module)
+        except ImportError:
+            found = None
+        missing.extend(module + '.' + name for name in names.split()
+                       if not callable(getattr(found, name, None)))
     return missing
 
 
@@ -241,10 +252,22 @@ def _sync(timer_id: int | None = None) -> None:
     _refresh(boss)
 
 
+def _clock(timer_id: int | None = None) -> None:
+    """Redraw every tab bar as the minute turns, for tab_bar.py's clock.
+
+    The C call skips TabManager.mark_tab_bar_dirty's on_tab_bar_dirty, which would save each minute.
+    An idle kitty draws a dirty bar only when its main loop next wakes, so wake it."""
+    add_timer(_safe(_clock), 60.05 - time.time() % 60, False)  # first, so a failure below keeps the clock
+    for tm in get_boss().all_tab_managers:
+        mark_tab_bar_dirty(tm.os_window_id, not tm.tab_bar_hidden and tm.tab_bar_should_be_visible)
+    wakeup_main_loop()
+
+
 @_safe
 def on_load(boss, data) -> None:
     add_timer(_safe(_restore), 1.0, False)
     add_timer(_safe(_check), 1.0, False)
+    add_timer(_safe(_clock), 1.0, False)
 
 
 @_safe

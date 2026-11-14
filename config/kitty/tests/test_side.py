@@ -114,7 +114,10 @@ class SideTests(unittest.TestCase):
         self.assertEqual(len(body), 24)
         self.assertEqual(len(clicks), 24)
         self.assertIn('48;5;8', body[2])
-        self.assertIn('Repo', plain[2])
+        # cmd+alt+N's number, then the state glyph; the branch lines up under the name
+        self.assertEqual(plain[2], ' 1 ◐ Repo'.ljust(32))
+        self.assertEqual(plain[3], '     main ↑2 ↓1'.ljust(32))
+        self.assertEqual(plain[8], ' 2 · Bee'.ljust(32))
         self.assertIn('main ↑2 ↓1', plain[3])
         self.assertEqual(clicks[2:4], [('space', 'a')] * 2)
         self.assertIn('Rename', plain[4])

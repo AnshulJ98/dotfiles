@@ -167,14 +167,16 @@ def rows(view, info, menu, cols, lines):
         return ''.join(out) + f'\x1b[0;{bg}39m' + ' ' * (cols - used) + '\x1b[0m'
 
     top: list[tuple[str, tuple | None]] = [(line([(' spaces', '1;97')]), None), (line([]), None)]
-    for name, sp in spaces.items():
+    for number, (name, sp) in enumerate(spaces.items(), 1):  # cmd+alt+N goes to space N
         shown, branch, status = info[name]
         glyph, colour = ICON.get(sp['state'], ICON[''])
         on, go = name == current, ('space', name)
-        top.append((line([(' ', ''), (glyph + ' ', colour), (fit(shown, cols - 4), '1;97' if on else '97')], on), go))
+        tag = f' {number} '
+        indent = len(tag) + 2  # the name's column, after the glyph
+        top.append((line([(tag, '39'), (glyph + ' ', colour), (fit(shown, cols - indent - 1), '1;97' if on else '97')], on), go))
         if branch:
-            room = cols - 4 - (len(status) + 1 if status else 0)
-            segs = [('   ', ''), (fit(branch, room), '39')]
+            room = cols - indent - 1 - (len(status) + 1 if status else 0)
+            segs = [(' ' * indent, ''), (fit(branch, room), '39')]
             for part in status.split():
                 segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
             top.append((line(segs, on), go))

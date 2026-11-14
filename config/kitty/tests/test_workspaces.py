@@ -44,6 +44,8 @@ def load(state_dir: str, boss: Boss | None = None) -> types.ModuleType:
     stub = types.ModuleType("kitty.fast_data_types")
     stub.add_timer = lambda *args: None
     stub.get_boss = lambda: boss
+    stub.mark_tab_bar_dirty = lambda *args: None
+    stub.wakeup_main_loop = lambda: None
     sys.modules["kitty"] = types.ModuleType("kitty")
     sys.modules["kitty.fast_data_types"] = stub
     os.environ["ZWS_DIR"] = state_dir
@@ -318,6 +320,32 @@ class PushTests(unittest.TestCase):
             with patch('builtins.open', side_effect=OSError):
                 module._log('unwritable')  # The only deliberately dropped error.
 
+    def test_clock_redraws_tab_bars_without_watchers_each_minute(self):
+        # tab_bar.py's clock: the C call, not TabManager.mark_tab_bar_dirty, which would run
+        # on_tab_bar_dirty and save every workspace each minute. An idle kitty renders the
+        # dirty bar only once its main loop wakes (spike /tmp/kt/run9.sh, kitty 0.50.0).
+        from unittest.mock import call, patch
+        shown = types.SimpleNamespace(os_window_id=3, tab_bar_hidden=False, tab_bar_should_be_visible=True)
+        hidden = types.SimpleNamespace(os_window_id=4, tab_bar_hidden=True, tab_bar_should_be_visible=True)
+        boss = types.SimpleNamespace(all_tab_managers=[shown, hidden])
+        with tempfile.TemporaryDirectory() as directory:
+            module = load(directory, boss)
+            with patch.object(module, 'mark_tab_bar_dirty') as mark, \
+                 patch.object(module, 'wakeup_main_loop') as wake, \
+                 patch.object(module, 'add_timer') as timer, \
+                 patch.object(module.time, 'time', return_value=120.5):
+                module._clock()
+                self.assertEqual(mark.call_args_list, [call(3, True), call(4, False)])
+                wake.assert_called_once_with()
+                self.assertAlmostEqual(timer.call_args.args[1], 59.55)  # just after the next minute
+                self.assertFalse(timer.call_args.args[2])
+                timer.reset_mock()
+                module.on_load(None, {})
+                self.assertIn(1.0, [c.args[1] for c in timer.call_args_list])
+                self.assertEqual(len(timer.call_args_list), 3)
+            self.assertFalse(module._save_pending)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
 
 class NamesTests(unittest.TestCase):
     def test_missing_names_imports_constants_and_functions(self):
@@ -336,8 +364,9 @@ class NamesTests(unittest.TestCase):
                 self.argv = []
             del classes['Child'].argv
             classes['Child'].__init__ = init
-            modules['kitty.fast_data_types'].add_timer = lambda *a: None
-            modules['kitty.fast_data_types'].get_boss = lambda: None
+            for mod, names in module.FUNCTIONS:
+                for name in names.split():
+                    setattr(modules.setdefault(mod, types.ModuleType(mod)), name, lambda *a: None)
             modules['kitty.constants'] = types.SimpleNamespace(config_dir=directory)
             with patch.dict(sys.modules, modules):
                 self.assertEqual(module._missing(), [])
@@ -361,12 +390,12 @@ class NamesTests(unittest.TestCase):
                 module = load(directory, boss)
                 with patch.object(module, 'add_timer') as timer, patch.object(module, '_missing', return_value=missing):
                     module.on_load(boss, {})
-                    self.assertEqual(timer.call_count, 2)
-                    self.assertEqual([c.args[0].__name__ for c in timer.call_args_list], ['_restore', '_check'])
+                    self.assertEqual(timer.call_count, 3)
+                    self.assertEqual([c.args[0].__name__ for c in timer.call_args_list], ['_restore', '_check', '_clock'])
                     for call in timer.call_args_list:
                         self.assertEqual(call.args[1:], (1.0, False))
                     timer.call_args_list[1].args[0](0)
-                    self.assertEqual(timer.call_count, 2)  # clean or launched: no retry
+                    self.assertEqual(timer.call_count, 3)  # clean or launched: no retry
                 log = Path(directory, 'watcher.log')
                 if missing:
                     self.assertEqual(boss.calls, [('launch', '--type=tab', '--tab-title',

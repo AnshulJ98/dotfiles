@@ -160,6 +160,14 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(json.loads(data[4:-2])['spaces'][0]['name'], '\x1b')
         self.assertEqual(core.TICK, b'\x1b_zt\x1b\\')
 
+    def test_status_numbers_the_workspace_like_cmd_alt(self):
+        view = snapshot()
+        for current, expected in [('a', '1 · 14:31'), ('b', '2 · 14:31'),
+                                  ('', '14:31'), ('gone', '14:31')]:
+            self.assertEqual(core.status(view, current, '14:31'), expected)
+        self.assertEqual(core.intent(view, 'a', ['switch', '2']), [('goto', 'b')])
+        self.assertEqual(core.status({}, 'a', '09:05'), '09:05')
+
     def test_intent(self):
         rows = [
             ('a', ['switch', '2'], [('goto', 'b')]),
