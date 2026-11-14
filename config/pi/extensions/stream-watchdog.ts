@@ -38,7 +38,7 @@ export default function (pi: ExtensionAPI): void {
 	};
 	const arm = (ctx: ExtensionContext) => {
 		disarm();
-		// A local server (mlx-local) can take longer than any limit to read a long prompt; there is no network to hang
+		// A local server can take longer than any limit to read a long prompt; there is no network to hang
 		if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(ctx.model?.baseUrl ?? "")) return;
 		const ms = limitMs();
 		timer = setTimeout(() => {

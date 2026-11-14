@@ -4,9 +4,9 @@ tap "asmvik/formulae", "https://github.com/asmvik/homebrew-formulae.git", truste
 tap "felixkratz/formulae", "https://github.com/FelixKratz/homebrew-formulae", trusted: true
 tap "grishka/grishka", trusted: true
 tap "iina/mpv-iina", trusted: true
-tap "italomandara/cxpatcher", "https://github.com/italomandara/homebrew-CXPatcher", trusted: true
 tap "manaflow-ai/cmux", trusted: true
 tap "mongodb/brew", trusted: true
+tap "neurosnap/tap", trusted: true
 tap "nikitabobko/tap", trusted: true
 tap "openclaw/tap", trusted: true
 tap "oven-sh/bun", trusted: true
@@ -117,8 +117,6 @@ brew "markdownlint-cli2"
 brew "mpv"
 # Ncurses-based client for the Music Player Daemon
 brew "ncmpcpp"
-# Fast, highly customisable system info script
-brew "neofetch"
 # Incremental parsing library
 brew "tree-sitter"
 # Ambitious Vim-fork focused on extensibility and agility
@@ -129,8 +127,6 @@ brew "netpbm"
 brew "nvm"
 # Outputs current CPU temperature for OSX
 brew "osx-cpu-temp"
-# Pretty system information tool written in POSIX sh
-brew "pfetch"
 # Animated pipes terminal screensaver
 brew "pipes-sh"
 # Execute binaries from Python packages in isolated environments
@@ -199,16 +195,14 @@ brew "antoniorodr/memo/memo"
 brew "felixkratz/formulae/borders"
 # High-performance, schema-free, document-oriented database
 brew "mongodb/brew/mongodb-community"
-# Google CLI for Gmail, Calendar, Drive, Docs, Sheets, and more
-brew "openclaw/tap/gogcli"
+# Persistent terminal sessions used by the kitty sidebar
+brew "neurosnap/tap/zmx"
 # Modern Go client + CLI for the Google Places API (New).
 brew "openclaw/tap/goplaces", link: false
 # Incredibly fast JavaScript runtime, bundler, transpiler and package manager - all in one.
 brew "oven-sh/bun/bun"
 # Terminal trainer that drills advanced Vim techniques in real vim/nvim
 brew "s-sigdel/tap/vimhjkl", trusted: true
-# Fast X CLI for tweeting, replying, and reading
-brew "steipete/tap/bird"
 # One command to grab frames, clips, or motion alerts from RTSP/ONVIF cams
 brew "steipete/tap/camsnap"
 # Grep the GIF. Stick the landing
@@ -225,13 +219,10 @@ brew "steipete/tap/remindctl"
 brew "steipete/tap/sag"
 # Spectral visualization CLI for audio files
 brew "steipete/tap/songsee"
-brew "yakitrak/yakitrak/notesmd-cli", link: false
 # i3-like tiling window manager for macOS (app unmanaged by brew on this host; cask kept for fresh installs)
 cask "aerospace"
 # iOS App Store alternative
 cask "altserver"
-# Android SDK component
-cask "android-platform-tools"
 # Display management tool
 cask "betterdisplay"
 # Open source IDE for exploring and testing APIs
@@ -240,16 +231,12 @@ cask "bruno"
 cask "claude"
 # Terminal-based AI coding assistant
 cask "claude-code@latest"
-# OpenAI's coding agent that runs in your terminal
-cask "codex"
 # Menu bar usage monitor for Codex and Claude
 cask "codexbar"
 # Voice and text chat software
 cask "discord"
 # Modern Go client + CLI for the Google Places API (New).
 cask "openclaw/tap/goplaces", trusted: true
-# Open-source keystroke visualiser
-cask "keycastr"
 # GPU-based terminal emulator
 cask "kitty"
 # Mouse utility to add gesture functions and smooth scrolling to 3rd party mice
@@ -258,12 +245,6 @@ cask "mac-mouse-fix"
 cask "maccy"
 # Keyboard-driven two-pane file manager
 cask "marta"
-# Reverse proxy, secure introspectable tunnels to localhost
-cask "ngrok"
-# Knowledge base that works on top of a local folder of plain text Markdown files
-cask "obsidian"
-# Administration and development platform for PostgreSQL
-cask "pgadmin4"
 # Native launcher with Raycast extension compatibility (replaced Raycast at home)
 cask "vicinae"
 # The work Mac keeps Raycast alongside Vicinae.
@@ -278,9 +259,3 @@ go "github.com/go-delve/delve/cmd/dlv"
 go "golang.org/x/tools/gopls"
 uv "nano-pdf"
 uv "zmk"
-npm "@earendil-works/pi-coding-agent"
-npm "ccusage"
-npm "corepack"
-npm "fetch"
-npm "pi-coding-agent"
-npm "prisma"

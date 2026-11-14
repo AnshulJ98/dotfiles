@@ -132,15 +132,14 @@ vim.keymap.set('n', '<leader>dv', '<cmd>DapVirtualTextToggle<CR>', { desc = 'Deb
 -- wide, terminal 102 on the first stop) and hide it when the child session
 -- exits, although the debug shell inside is still running. A string here
 -- runs `belowright 15new` against the focused window, which puts the terminal
--- inside dap-view or neo-tree when the session is started from one; the
--- function anchors it on a code window instead.
+-- inside dap-view when the session is started from there; the function
+-- anchors it on a code window instead.
 dap.defaults.fallback.terminal_win_cmd = terminal.open_for_dap
 
 -- Where the stopped frame is shown. nvim-dap's default, `uselast`, targets the
 -- previously focused window whenever the current one holds a terminal or the
 -- panel: a dap-view pane there has winfixbuf and the jump is skipped without
--- a message, and the neo-tree window has no winfixbuf and gets the source
--- file loaded into it. `useopen` finds the window already showing the file.
+-- a message. `useopen` finds the window already showing the file.
 dap.defaults.fallback.switchbuf = 'usevisible,useopen,uselast'
 
 -- Two gaps in nvim-dap's own terminal handling close here. It pools terminal

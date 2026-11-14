@@ -1,5 +1,5 @@
--- mini.icons mocks nvim-web-devicons, which telescope and neo-tree resolve
--- on first use, so this module loads before either of them.
+-- mini.icons mocks nvim-web-devicons, which telescope resolves on first use,
+-- so this module loads before telescope.
 
 vim.pack.add { 'https://github.com/nvim-mini/mini.nvim' }
 
@@ -40,6 +40,14 @@ require('mini.ai').setup {
 }
 
 require('mini.surround').setup()
+
+local files = require 'mini.files'
+files.setup()
+vim.keymap.set('n', '\\', function()
+  if files.close() ~= nil then return end
+  local path = vim.api.nvim_buf_get_name(0)
+  files.open(vim.uv.fs_stat(path) and path or nil, false)
+end, { desc = 'Toggle mini.files', silent = true })
 
 -- Scroll only: kitty's cursor_trail already animates the cursor. Scrolls of up
 -- to 3 lines (one wheel notch at 'mousescroll' ver:3, `j`/`k` against
