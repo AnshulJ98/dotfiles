@@ -1,0 +1,19 @@
+{
+  "id": "plan-free-slots",
+  "role": "plan",
+  "repo": "~/Dev/pi-lab",
+  "fix": "750b739ece6fab2dab975d3106578cbdb1c53dda",
+  "test": "cd booking && npm test",
+  "hidden": [
+    "booking/src/booking.test.ts"
+  ],
+  "link": [
+    "node_modules"
+  ],
+  "decisions": [
+    {
+      "id": "min-zero",
+      "text": "The ticket does not say what a negative minMs should do. The plan either states a choice for that case with a reason, or flags it as a question for the user."
+    }
+  ]
+}
