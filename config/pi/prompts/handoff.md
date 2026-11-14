@@ -11,9 +11,8 @@ unless I say "save"; then they go to `HANDOFF.md` at the repo root
 any previous one and added to `.git/info/exclude` if not already ignored.
 
 The reader has none of this conversation and cannot ask. Be complete
-and exact: the length limits in your instructions do not apply here.
-Cover every section below, in order; write "none" under a section
-rather than dropping it.
+and exact. Use the sections below that help the next session, in order,
+and combine ones that overlap.
 
 ```
 # Session Handoff
@@ -54,7 +53,7 @@ _Written: <YYYY-MM-DD HH:MM> on <branch> @ <short sha>, <machine>_
 <every URL, file:line, session file, commit sha, issue and PR number that was used>
 
 ## 12. Next steps
-<ordered; the first one starts with the exact command to run; then risks, blockers, and what the next session must not touch>
+<ordered; the first one starts with the exact command to run; then risks, blockers, and what the next session must not touch; last, the commands that prove these notes still match the repo>
 ```
 
 Rules:

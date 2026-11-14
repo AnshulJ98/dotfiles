@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // Zero-token audit of pi sessions: what inference keeps getting spent on the same work.
-// usage: session-audit [sessions-dir]   (default ~/.pi/agent/sessions)
-// Prints one markdown table: kind | item | sessions | count.
+// usage: session-audit [--models] [sessions-dir]   (default ~/.pi/agent/sessions)
+// --models prints one row per model and thinking level instead: sessions, turns, and per-turn medians of
+// reasoning tokens, tool calls and final reply length, plus compactions. A turn runs from a user message to
+// the assistant reply that makes no tool call. Child runs under <sessions-dir>/scout are left out; pass
+// that directory to audit them.
+// Otherwise prints one markdown table: kind | item | sessions | count.
 //   cmd     an exact bash command (whitespace-normalized) seen in 2+ sessions
 //   shape   a command shape (program + subcommand) seen in the most sessions
 //   seq     two command shapes run back to back in one session
@@ -11,7 +15,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const root = process.argv[2] ?? path.join(os.homedir(), ".pi/agent/sessions");
+const args = process.argv.slice(2);
+const root = args.find((a) => !a.startsWith("--")) ?? path.join(os.homedir(), ".pi/agent/sessions");
 const TOP = 20;
 
 function* jsonlFiles(dir) {
@@ -20,6 +25,61 @@ function* jsonlFiles(dir) {
     if (e.isDirectory()) yield* jsonlFiles(p);
     else if (e.name.endsWith(".jsonl")) yield p;
   }
+}
+
+function modelsTable() {
+  const median = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] ?? 0;
+  const groups = new Map();
+  const group = (key) => {
+    if (!groups.has(key)) groups.set(key, { sessions: new Set(), reasoning: [], tools: [], chars: [], compactions: 0 });
+    return groups.get(key);
+  };
+  let files = 0;
+  for (const file of jsonlFiles(root)) {
+    if (path.relative(root, file).split(path.sep)[0] === "scout") continue;
+    files++;
+    let level = "?"; // sessions older than the per-message field carry it only as a change entry
+    let key;
+    let turn;
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      if (!line) continue;
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue; // a session cut off mid-write
+      }
+      if (entry.type === "thinking_level_change") level = entry.thinkingLevel ?? level;
+      if (entry.type === "compaction" && key) group(key).compactions++;
+      const msg = entry.type === "message" ? entry.message : undefined;
+      if (!msg) continue;
+      if (msg.role === "user") {
+        turn = { reasoning: 0, tools: 0 };
+        continue;
+      }
+      if (msg.role !== "assistant" || !turn || !Array.isArray(msg.content)) continue;
+      key = `${msg.model ?? "?"}:${msg.thinkingLevel ?? level}`;
+      const toolCalls = msg.content.filter((c) => c.type === "toolCall").length;
+      turn.tools += toolCalls;
+      turn.reasoning += msg.usage?.reasoning ?? 0;
+      if (toolCalls) continue;
+      const g = group(key);
+      g.sessions.add(file);
+      g.reasoning.push(turn.reasoning);
+      g.tools.push(turn.tools);
+      g.chars.push(msg.content.reduce((n, c) => n + (c.type === "text" ? c.text.length : 0), 0));
+      turn = undefined;
+    }
+  }
+  console.log(`${files} session files under ${root.replace(os.homedir(), "~")}, medians per turn\n`);
+  console.log("| model:thinking | sessions | turns | reasoning tokens | tool calls | final chars | compactions |\n|---|---|---|---|---|---|---|");
+  for (const [key, g] of [...groups].sort((a, b) => b[1].tools.length - a[1].tools.length || a[0].localeCompare(b[0]))) {
+    console.log(`| ${key} | ${g.sessions.size} | ${g.tools.length} | ${median(g.reasoning)} | ${median(g.tools)} | ${median(g.chars)} | ${g.compactions} |`);
+  }
+}
+if (args.includes("--models")) {
+  modelsTable();
+  process.exit(0);
 }
 
 // Program plus the word that says what it does: `git diff`, `node --test`, `npm run build`.

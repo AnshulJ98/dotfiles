@@ -9,8 +9,9 @@
  *    (mid-run cap firing). One queued continuation message resumes the task.
  *
  * 2. Every compaction (native threshold, overflow, cap-after-settle) arms a
- *    one-shot reminder injected on the NEXT turn — a brief pointer back to
- *    the rules, not a re-injection of them.
+ *    one-shot reminder injected on the NEXT turn: rebuild the task from the
+ *    summary (target, left, next, waiting), show `left:` and `next:`, then a
+ *    brief pointer back to the rules, not a re-injection of them.
  *    Sessions that never compact never pay a token.
  *
  * compact-cap.ts signals via Symbol.for keys whether a compaction is its own
@@ -21,8 +22,14 @@ import { capFiring } from "../lib/compact-cap-state.ts";
 import { ownRun } from "./auto-run.ts";
 
 const REMINDER =
-  "Post-compaction reminder: your core instructions survived intact and still bind. " +
-  "Re-adhere before acting: lead with the answer, keep every change inside the " +
+  "Post-compaction: the summary above stands in for the conversation, so rebuild the task before acting.\n" +
+  "- target: the outcome I asked for. My latest message wins over the summary.\n" +
+  '- left: what is still open. A "done" in the summary is reported, not checked; check it against the files or git before you build on it.\n' +
+  "- next: the one action you take now.\n" +
+  "- waiting: anything that needs my decision.\n" +
+  'If the summary lost a goal, a check or a decision, say "lost in compaction"; do not guess.\n' +
+  "Before your first tool call, write two lines, `left:` and `next:`, then carry on. " +
+  "Your instructions still bind: lead with the answer, keep every change inside the " +
   "request, take the first option in Before Writing Code that holds, and delegate " +
   "per the dispatch rule.";
 

@@ -70,8 +70,9 @@ reply       <an example answer by number, and what you would do then>
   `effort` and `impact` come from what we measured or said: write `not
   sized` rather than guess.
 - My latest word wins over the original ask and over a compaction
-  summary. Where a summary lost a rung or a check, write `lost in
-  compaction` on that row; do not guess.
+  summary. Where you know a summary lost a rung or a check we had
+  named, write `lost in compaction` on that row. Leave out a rung you
+  only suspect; do not guess.
 - You may run `git status` and `git log` to settle a mark. Nothing else.
 - Pad with spaces so the marks, the right column and the action columns
   line up. One row is one line of at most 100 characters and never

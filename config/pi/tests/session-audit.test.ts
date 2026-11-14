@@ -65,6 +65,45 @@ test("session-audit: counts repeated commands, shapes, sequences, reads and revi
 	assert.equal([...table.keys()].filter((k) => k.startsWith("review ")).length, 1, "the clean line is not a finding");
 });
 
+test("session-audit --models: per-turn medians by model and thinking level, compactions counted, scout runs left out", () => {
+	const root = mkdtempSync(join(tmpdir(), "session-audit-models-"));
+	const reply = (model: string, reasoning: number, content: Part[], thinkingLevel?: string): string =>
+		JSON.stringify({ type: "message", message: { role: "assistant", model, thinkingLevel, usage: { reasoning }, content } });
+	const say = (text: string): Part => ({ type: "text", text });
+	mkdirSync(join(root, "--repo--"));
+	writeFileSync(
+		join(root, "--repo--", "a.jsonl"),
+		[
+			session("/repo"),
+			user("one"),
+			reply("m1", 10, [bash("ls"), bash("pwd")], "high"),
+			reply("m1", 30, [say("done")], "high"),
+			JSON.stringify({ type: "compaction" }),
+			user("two"),
+			reply("m1", 5, [say("ok")], "high"),
+			user("three"),
+			reply("m1", 4, [read("a.ts")], "high"),
+			reply("m1", 5, [say("sixsix")], "high"),
+			"{not json",
+		].join("\n"),
+	);
+	// An older session names the level only in a change entry.
+	writeFileSync(
+		join(root, "--repo--", "b.jsonl"),
+		[session("/repo"), JSON.stringify({ type: "thinking_level_change", thinkingLevel: "medium" }), user("one"), reply("m2", 7, [say("hi")])].join("\n"),
+	);
+	mkdirSync(join(root, "scout", "1"), { recursive: true });
+	writeFileSync(join(root, "scout", "1", "c.jsonl"), [user("look"), reply("child", 1, [say("digest")], "low")].join("\n"));
+
+	const r = spawnSync(process.execPath, [AUDIT, "--models", root], { encoding: "utf8" });
+	assert.equal(r.status, 0, r.stderr);
+	assert.match(r.stdout, /^2 session files under /);
+	const lines = r.stdout.split("\n").filter((l) => /^\| m\d/.test(l));
+	// model:thinking | sessions | turns | reasoning tokens | tool calls | final chars | compactions
+	assert.deepEqual(lines, ["| m1:high | 1 | 3 | 9 | 1 | 4 | 1 |", "| m2:medium | 1 | 1 | 7 | 0 | 2 | 0 |"]);
+	assert.doesNotMatch(r.stdout, /child/);
+});
+
 test("session-audit: an empty sessions dir prints the header and no rows", () => {
 	const root = mkdtempSync(join(tmpdir(), "session-audit-empty-"));
 	const r = spawnSync(process.execPath, [AUDIT, root], { encoding: "utf8" });

@@ -20,8 +20,9 @@ out of this context; only its digest comes back.
   starts it never stops. If the target is a package or directory you
   have not read this session, or a trace across more than two files,
   the first tool call is `~/.pi/agent/bin/scout "<task>"`. The digest's
-  file:line citations are yours to cite; re-read a cited line range only
-  when you need the exact text, never the whole file. A single targeted
+  file:line citations are yours to cite. Read a cited range yourself
+  when you will edit it or a decision rests on it; the digest is a
+  pointer and you own the conclusion. A single targeted
   read or narrow grep in a file you already know: do it yourself. Never
   dispatch for a single named file, however unfamiliar, or for a
   directory one `ls` covers; the scout's floor is two or more files
