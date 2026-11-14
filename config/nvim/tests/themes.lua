@@ -47,6 +47,10 @@ for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'd
     end
   end
   assert(contrast(tonumber(vim.g.terminal_color_8:sub(2), 16), background) >= 3, name .. ': terminal colour 8 is too dim')
+  -- LSP tokens land about a second after Treesitter and paint over it; these three took colour away.
+  assert(vim.tbl_isempty(hl '@lsp.type.variable'), name .. ': @lsp.type.variable repaints constants')
+  assert(hl('@lsp.typemod.property.declaration').fg == hl('@lsp.type.property').fg, name .. ': declared properties lose their colour')
+  assert(hl('@lsp.type.enumMember').fg == hl('@constant').fg, name .. ': enum members change colour')
   if name == 'dark-2026' or name == 'tango' then
     for _, syntax in ipairs { 'Normal', 'Comment', 'String', 'Number', 'Boolean', 'Constant',
       'Function', 'Keyword', 'Type', 'Special', 'Identifier', '@property', '@variable.parameter',
