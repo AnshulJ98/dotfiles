@@ -1,0 +1,6 @@
+{
+  "worker": "anthropic/claude-haiku-5-5:low",
+  "runs": 3,
+  "floor": 0,
+  "gold": 3
+}
