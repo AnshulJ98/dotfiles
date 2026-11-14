@@ -349,6 +349,8 @@ class ThemeTests(unittest.TestCase):
             for file in files:
                 with self.subTest(name=name, file=file):
                     self.assertTrue((ROOT / name / file).is_file())
+                    # A preview build once left a scratch path in a shipped theme.
+                    self.assertNotIn("/tmp/", (ROOT / name / file).read_text())
 
 
 if __name__ == "__main__":
