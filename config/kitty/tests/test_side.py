@@ -105,6 +105,56 @@ class SideTests(unittest.TestCase):
                 self.assertEqual(self.side.repo(str(outer)), (str(outer), 'main'))
                 self.assertEqual(rows.git_ref(str(outer)), ('main', str(outer)))
 
+    def picker_rows(self, view, ls, kitty=None, files=None, home=None, origin=''):
+        loader = importlib.machinery.SourceFileLoader('zpick_rows_x', str(SCRIPT.parent / 'zpick-rows'))
+        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(rows)
+        def run(*cmd):
+            if cmd[:2] == ('zmx', 'ls'):
+                return ls
+            return json.dumps(kitty or []) if cmd[0] == 'kitten' else ''
+        with tempfile.TemporaryDirectory() as directory, patch.object(rows, 'run', run), \
+                patch.object(rows, 'DIR', directory), patch.object(rows, 'HOME', home or rows.HOME), \
+                patch.object(sys, 'argv', ['zpick-rows', view, origin]), patch('builtins.print') as out:
+            for name, text in (files or {}).items():
+                Path(directory, name + '.kitty-session').write_text(text)
+            rows.main()
+        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
+        return [(l[0], l[1], re.sub(r'\x1b\[[0-9;]*m', '', l[5])) for l in lines]
+
+    def test_picker_rows_keep_the_session_zmx_marks_as_current(self):
+        # Inside a session, zmx ls points at it with an arrow; zmx-pick must still list it.
+        ls = ('  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n'
+              '\u2192 name=here\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n')
+        self.assertEqual([r[1] for r in self.picker_rows('zmx', ls) if r[0] == 'det'], ['logs', 'here'])
+
+    def test_picker_rows_tab_with_one_pane_is_one_row(self):
+        def pane(i, title, holder):
+            return {'id': i, 'title': title, 'cwd': '/srv', 'is_active': i != 3, 'session_name': 'lab',
+                    'user_vars': {'holder': holder}, 'foreground_processes': [{'cmdline': ['zsh']}]}
+        kitty = [{'is_active': True, 'tabs': [
+            {'id': 7, 'title': 'solo', 'is_active': True, 'windows': [pane(1, 'solo', 'h1')]},
+            {'id': 8, 'title': 'pair', 'is_active': False, 'windows': [pane(2, 'left', 'h2'), pane(3, 'right', 'h3')]}]}]
+        got = self.picker_rows('all', '', kitty)
+        self.assertEqual([(k, t) for k, t, _ in got], [('ws', 'lab'), ('pane', '1'), ('tab', '8'), ('pane', '2'), ('pane', '3')])
+        self.assertTrue(got[1][2].lstrip(' ├─').startswith('solo '), got[1][2])
+        self.assertIn('zsh', got[1][2])  # the pane's columns sit on the tab's row
+        self.assertIn('2 tabs', got[0][2])
+
+    def test_picker_rows_zmx_view_groups_by_kitty_space_where_a_session_file_names_it(self):
+        # A session sits in the space whose session file holds it, wherever its process has gone;
+        # one no file names falls back to its folder.
+        ls = ''.join(f'  name={n}\tpid=1{i}\tclients=1\tcreated=1\tcwd=file://box{c}\n' for i, (n, c) in enumerate((
+            ('dev-1', '/work/Dev'), ('dev-2', '/work/Dev/dotfiles'), ('dot-1', '/elsewhere'), ('loose', '/srv'))))
+        files = {'dev': 'new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\nnew_tab\nlaunch --var=holder=dev-2\n',
+                 'dotfiles': 'new_tab\ncd /work/Dev/dotfiles\nlaunch --var=holder=dot-1\n'}
+        got = self.picker_rows('zmx', ls, files=files)
+        self.assertEqual([(k, t) for k, t, _ in got], [
+            ('hdr', ''), ('det', 'dev-1'), ('det', 'dev-2'), ('hdr', ''), ('det', 'dot-1'), ('hdr', ''), ('det', 'loose')])
+        self.assertTrue(got[0][2].lstrip(' ◇').startswith('Dev 2 sessions'), got[0][2])
+        self.assertTrue(got[3][2].lstrip(' ◇').startswith('elsewhere 1 session'), got[3][2])  # named as cmd+alt+g names it
+        self.assertTrue(got[5][2].lstrip(' ◇').startswith('srv 1 session'), got[5][2])
+
     def test_picker_rows_zmx_view_lists_every_session_without_kitty(self):
         # zmx-pick outside kitty: no kitty calls, attached sessions listed too, no closed workspaces.
         loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx', str(SCRIPT.parent / 'zpick-rows'))
@@ -128,8 +178,56 @@ class SideTests(unittest.TestCase):
         shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in lines]
         self.assertTrue(shown[1].lstrip(' └├─').startswith('logs '), shown[1])  # the name leads: fzf searches it
         self.assertTrue(shown[2].lstrip(' └├─').startswith('pi-agent · attached'), shown[2])
-        self.assertIn('/srv', shown[1])
+        self.assertTrue(shown[0].lstrip(' ◇').startswith('srv 2 sessions'), shown[0])  # the folder heads them
         self.assertNotIn('kitty', shown[2])
+
+    def test_picker_rows_zmx_view_groups_sessions_by_checkout(self):
+        # cmd+alt+g's workspace level, rebuilt from where each session is: one group per git
+        # checkout (its branch alongside) or plain folder, and home as "home".
+        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx2', str(SCRIPT.parent / 'zpick-rows'))
+        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(rows)
+        with tempfile.TemporaryDirectory() as root:
+            repo, other, home = (os.path.join(root, d) for d in ('repo', 'notes', 'home'))
+            os.makedirs(os.path.join(repo, '.git'))
+            os.makedirs(os.path.join(repo, 'sub'))
+            Path(repo, '.git', 'HEAD').write_text('ref: refs/heads/main\n')
+            ls = ''.join(f'  name={n}\tpid=1{i}\tclients=0\tcreated=1\tcwd=file://box{c}\n' for i, (n, c) in enumerate((
+                ('alpha', repo), ('logs', other), ('beta', os.path.join(repo, 'sub')), ('shell', home))))
+            with patch.object(rows, 'run', lambda *cmd: ls if cmd[:2] == ('zmx', 'ls') else ''), \
+                    patch.object(rows, 'HOME', home), patch.object(rows, 'DIR', root), \
+                    patch.object(sys, 'argv', ['zpick-rows', 'zmx']), patch('builtins.print') as out:
+                rows.main()
+        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
+        self.assertEqual([(l[0], l[1]) for l in lines], [
+            ('hdr', ''), ('det', 'alpha'), ('det', 'beta'), ('hdr', ''), ('det', 'logs'), ('hdr', ''), ('det', 'shell')])
+        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in lines]
+        self.assertTrue(shown[0].lstrip(' ◇').startswith('repo 2 sessions'), shown[0])
+        self.assertTrue(shown[0].rstrip().endswith('main'), shown[0])
+        self.assertTrue(shown[1].lstrip(' ├─').startswith('alpha '), shown[1])
+        self.assertIn('sub', shown[2])  # a session below the checkout's top says where
+        self.assertTrue(shown[3].lstrip(' ◇').startswith('notes 1 session'), shown[3])
+        self.assertTrue(shown[5].lstrip(' ◇').startswith('home'), shown[5])
+
+    def test_picker_rows_zmx_attached_mark_survives_a_long_name_and_detached_view_drops_them(self):
+        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx3', str(SCRIPT.parent / 'zpick-rows'))
+        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(rows)
+        long = 'dotfiles-337362b2-3f92-4c90-bc63-a12d354ccb81'
+        ls = (f'  name={long}\tpid=11\tclients=1\tcreated=1\tcwd=file://box/srv\n'
+              '  name=logs\tpid=12\tclients=0\tcreated=1\tcwd=file://box/srv\n')
+        out = {}
+        for view in ('zmx', 'zmx-detached'):
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.object(rows, 'run', lambda *cmd: ls if cmd[:2] == ('zmx', 'ls') else ''), \
+                    patch.object(rows, 'DIR', directory), patch.object(rows, 'WIDTH', 60), \
+                    patch.object(sys, 'argv', ['zpick-rows', view]), patch('builtins.print') as p:
+                rows.main()
+            out[view] = [l.split('\t') for l in p.call_args[0][0].split('\n')]
+        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in out['zmx']]
+        self.assertIn('· attached', shown[1])
+        self.assertIn('…', shown[1])  # the name gives way, not the mark
+        self.assertEqual([(l[0], l[1]) for l in out['zmx-detached']], [('hdr', ''), ('det', 'logs')])
 
     def test_rows_layout_actions_and_purity(self):
         obj = view('/repo')
