@@ -3,7 +3,9 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { measure } from "./record.ts";
+import { measure } from "./usage.ts";
+import { render } from "./render.ts";
+export { render } from "./render.ts";
 
 export interface Finding { file: string; line: number | null; severity: "high" | "medium" | "low"; claim: string }
 export interface Defect { id: string; text: string; hit: string }
@@ -77,11 +79,6 @@ export function metIds(a: boolean[], b: boolean[], ids: string[]): string[] {
 /** A pass needs a judged result, at least one item, and every non-minor item met. */
 export function passes(items: Item[], met: string[], infra: boolean): boolean {
 	return !infra && items.length > 0 && items.every((x) => x.minor || met.includes(x.id));
-}
-
-/** Replace each {{NAME}} by its value in one pass, so a value that contains a placeholder is left alone. */
-export function render(template: string, values: Record<string, string>): string {
-	return template.replace(/\{\{([A-Z]+)\}\}/g, (whole, name: string) => (name in values ? values[name] : whole));
 }
 
 /** The item list as a match prompt shows it: numbered from 1, text only (never the hit sample). */

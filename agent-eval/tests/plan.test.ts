@@ -124,7 +124,13 @@ test("gate plan copies the worker contract and ticket, with history-independent 
 	});
 	const ticket = read("gate-missing-pairs", "prompt.md")
 		.replace(/^---\n[\s\S]*?\n---\n/, "").split("\n1. ")[0].trim() + "\n";
-	assert.equal(read("plan-gate-missing-pairs", "ticket.md"), ticket);
+	const planTicket = read("plan-gate-missing-pairs", "ticket.md");
+	assert.equal(planTicket.split("\n**Required behaviour**")[0], ticket);
+	assert.match(planTicket, /A run lacking a baseline role or cell fails: a MISSING line and exit 1, or exit 0 with `--partial`/);
+	assert.match(planTicket, /Recall on one side only fails in either direction/);
+	assert.match(planTicket, /A review killed by `timeout -k`, exit 137, is infra like exit 124/);
+	assert.doesNotMatch(planTicket, /^\d+[.)] /m);
+	assert.doesNotMatch(planTicket, /^---\r?$/m);
 	const gold = assemble(read("plan-gate-missing-pairs", "gold.md"));
 	assert.ok(gold);
 	assert.ok(gold.body.split(/\s+/).length <= 430, "gold body exceeds 430 words");

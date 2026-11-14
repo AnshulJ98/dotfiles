@@ -13,6 +13,15 @@ const scratch = realpathSync(mkdtempSync(join(tmpdir(), "orch-test-")));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const DECISION: [string, string, string | null][] = [
+	["embedded labels", "The decision: stop is wrong; DECISION: rework\nDECISION: rework", "rework"],
+	["reply format", "Reply format: `DECISION: merge`\nDECISION: stop", "stop"],
+	["first real line", "The decision: merge is wrong\nDECISION: stop\nDECISION: rework", "stop"],
+	["embedded only", "Reply format: `DECISION: merge`", null],
+	["bold merge", "**DECISION: merge**", "merge"],
+	["quote", "> DECISION: stop", "stop"],
+	["heading", "# DECISION: fix", "fix"],
+	["bullet", "- decision: rework", "rework"],
+	["compact merge", "DECISION:merge", "merge"],
 	["plain", "DECISION: merge", "merge"],
 	["lower case label and word", "decision: Rework", "rework"],
 	["bold around the whole line", "**DECISION: stop**", "stop"],
@@ -29,6 +38,7 @@ const DECISION: [string, string, string | null][] = [
 	["a word outside the four", "DECISION: ship", null],
 	["a longer word that starts with a decision", "DECISION: stopping", null],
 	["no word", "DECISION:", null],
+	["empty first decision", "DECISION:\nDECISION: merge", null],
 	["the word on the next line", "DECISION:\nmerge", null],
 	["no decision line", "I would merge it.", null],
 	["a bare decision word", "merge", null],
@@ -107,7 +117,7 @@ test("validate.sh: a fixture that differs from plan.md lines 89-204 gives a note
 	mkdirSync(join(repo, "agent-eval/lib"), { recursive: true });
 	mkdirSync(join(repo, "agent-eval/fixtures/orch"), { recursive: true });
 	mkdirSync(join(repo, "config/pi/prompts"), { recursive: true });
-	for (const f of ["validate.sh", "lib/task.sh", "lib/orch.ts", "lib/review.ts", "lib/record.ts", "lib/scout-grade.ts"]) writeFileSync(join(repo, "agent-eval", f), read(f), { mode: 0o755 });
+	for (const f of ["validate.sh", "lib/task.sh", "lib/orch.ts", "lib/review.ts", "lib/record.ts", "lib/scout-grade.ts", "lib/render.ts", "lib/usage.ts"]) writeFileSync(join(repo, "agent-eval", f), read(f), { mode: 0o755 });
 	const rules = read("fixtures/orch/rules.md");
 	writeFileSync(join(repo, "agent-eval/fixtures/orch/rules.md"), rules);
 	const plan = () => writeFileSync(join(repo, "config/pi/prompts/plan.md"), "x\n".repeat(88) + rules);

@@ -44,7 +44,7 @@ const command = "node --test 'src/*.test.ts'";
 const ticket = "Adding 2 and 3 gives -1. Fix add in src/.";
 const gold = "**Goal**: GOLD_MARKER\n1. Fix add → check: tests pass\n\n```\n---\nfiles-allowed: [src/add.ts, src/add.test.ts]\ntests: " + command + "\n---\n```\n";
 let counter = 0;
-function fixture(mode: "gold" | "always", noGold = false) {
+function fixture(mode: "gold" | "always" | "retry" | "dead", noGold = false) {
 	const dir = join(scratch, "task-" + counter++);
 	write(join(dir, "task.json"), JSON.stringify({ id: "calibrate", role: "plan", repo, fix, test: command, hidden: ["src/add.test.ts"], link: [], decisions: [] }));
 	write(join(dir, "ticket.md"), ticket + "\n");
@@ -61,7 +61,18 @@ fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({
 	memory: fs.readFileSync(path.join(process.env.HOME, ".pi/agent/memory.md"), "utf8"),
 	outer: Object.keys(process.env).filter(k => /^(PI_|EVAL_)/.test(k))
 }) + "\\n");
-if (${JSON.stringify(mode)} === "always" || spec.includes("GOLD_MARKER")) fs.writeFileSync("src/add.ts", ${JSON.stringify(fixed)});
+const calls = fs.readFileSync(${JSON.stringify(log)}, "utf8").trim().split("\\n").length;
+const dead = ${JSON.stringify(mode)} === "dead" || (${JSON.stringify(mode)} === "retry" && calls === 1);
+const sessions = path.join(process.env.HOME, ".pi/agent/sessions/scout");
+fs.mkdirSync(sessions, { recursive: true });
+fs.writeFileSync(path.join(sessions, "s.jsonl"), JSON.stringify({
+	type: "message", message: { role: "assistant", usage: { input: dead ? 0 : 10, output: dead ? 0 : 2 }, content: [] }
+}) + "\\n");
+if (dead) {
+	console.log("WORKER-SENSORS: CANNOT-RUN run ended: error\\nscout: pi exited 1 with no digest. Last stderr lines:\\nHTTP 429");
+	process.exit(1);
+}
+if (${JSON.stringify(mode)} !== "gold" || spec.includes("GOLD_MARKER")) fs.writeFileSync("src/add.ts", ${JSON.stringify(fixed)});
 `);
 	chmodSync(scout, 0o755);
 	return { dir, log, scout };
@@ -130,6 +141,29 @@ test("default calibration runs each arm three times", () => {
 		worker: "anthropic/claude-haiku-5-5:low", runs: 3, floor: 0, gold: 3,
 	});
 	assert.equal(readFileSync(f.log, "utf8").trim().split("\n").length, 6);
+});
+
+test("infra calibration runs are reported and retried once, never counted", () => {
+	const f = fixture("retry");
+	const r = run(f, ["--runs", "2"]);
+	assert.equal(r.status, 0, r.stderr);
+	assert.match(r.stdout, /floor 1\/2 infra/);
+	assert.deepEqual(JSON.parse(readFileSync(join(f.dir, "bench.json"), "utf8")), {
+		worker: "anthropic/claude-haiku-5-5:low", runs: 2, floor: 2, gold: 2,
+	});
+	const calls = readFileSync(f.log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+	assert.equal(calls.length, 5);
+	assert.equal(new Set(calls.map((c) => c.home)).size, 5);
+	assert.equal(new Set(calls.map((c) => c.cwd)).size, 5);
+});
+
+test("a second infra calibration attempt exits 1 naming the run and writes no bench", () => {
+	const f = fixture("dead");
+	const r = run(f, ["--runs", "2"]);
+	assert.equal(r.status, 1, r.stderr);
+	assert.match(r.stderr, /floor 1\/2.*infra/);
+	assert.equal(readFileSync(f.log, "utf8").trim().split("\n").length, 2);
+	assert.equal(existsSync(join(f.dir, "bench.json")), false);
 });
 
 test("missing gold and invalid arguments exit 2 before calling the worker", () => {

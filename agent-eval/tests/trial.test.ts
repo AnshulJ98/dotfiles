@@ -65,21 +65,30 @@ function makeTask(id: string, over: Record<string, unknown> = {}): string {
 	return dir;
 }
 
-type Mode = "fix" | "noop" | "leak" | "silent" | "blocked" | "fixplus" | "fixtest";
-const VERDICT = { fix: "PASS", fixplus: "PASS", fixtest: "PASS", leak: "PASS", noop: "FAIL", blocked: "CANNOT-RUN", silent: "" };
+type Mode = "fix" | "noop" | "leak" | "silent" | "blocked" | "fixplus" | "fixtest" | "dead" | "refused" | "frozen";
+const VERDICT = { fix: "PASS", fixplus: "PASS", fixtest: "PASS", leak: "PASS", noop: "FAIL", blocked: "CANNOT-RUN", silent: "", dead: "CANNOT-RUN", refused: "CANNOT-RUN", frozen: "CANNOT-RUN" };
 
 /** A stub scout. It runs under env -i, so everything it needs is baked into the script. */
 function makeStub(mode: Mode, sensors = false): { path: string; record: string } {
 	const path = join(scratch, `stub-${mode}`);
 	const record = `${path}.record`;
-	const usage = { input: 100, output: 20, cacheRead: 50, cacheWrite: 10, cost: { total: 0.125 } };
+	const usage = mode === "dead" ? { input: 0, output: 0, cost: { total: 0 } } : { input: 100, output: 20, cacheRead: 50, cacheWrite: 10, cost: { total: 0.125 } };
 	const command = mode === "leak" ? `cat ${repo}/src/add.ts` : "ls";
 	const line = JSON.stringify({ type: "message", message: { role: "assistant", usage, content: [{ type: "toolCall", name: "bash", arguments: { command } }] } });
 	write(path, `#!/usr/bin/env bash
 { echo "HOME=$HOME"; echo "ARGS=$*"; echo "PWD=$PWD"; echo "STDIN=$(cat)"; echo "OUTER=$(env | grep -Ec '^(PI_|EVAL_)' || true)"; echo "HERDR=$SCOUT_HERDR"; } > '${record}'
 d="$HOME/.pi/agent/sessions/scout/$$"; mkdir -p "$d"
+if [ ${mode} = refused ]; then exit 75; fi
 if [ ${mode} = silent ]; then : > "$d/s.jsonl"; exit 1; fi
 printf '%s\\n' '${line}' > "$d/s.jsonl"
+if [ ${mode} = dead ]; then
+  printf '%s\\n' 'WORKER-SENSORS: CANNOT-RUN run ended: error' 'scout: pi exited 1 with no digest. Last stderr lines:' 'HTTP 429'
+  exit 1
+fi
+if [ ${mode} = frozen ]; then
+  echo 'WORKER-SENSORS: CANNOT-RUN interface-frozen files must spell out their interface before a freeze'
+  exit 1
+fi
 printf '%s' '{"verdict":"${VERDICT[mode]}","reasons":[],"retriesUsed":0}' > "$d/verdict.json"
 case ${mode} in fix|fixplus|fixtest|leak) printf 'export function add(a: number, b: number): number {\\n\\treturn a + b;\\n}\\n' > src/add.ts ;; esac
 if [ ${mode} = fixplus ]; then echo extra > NOTES.md; fi
@@ -119,6 +128,19 @@ test("a fixing scout passes: record fields, summed usage, isolated HOME, stub ar
 	assert.match(seen, /^STDIN=files-allowed: \[src\/add.ts\]$/m);
 	assert.match(seen, /^OUTER=0$/m);
 	assert.match(seen, /^HERDR=0$/m);
+});
+
+test("dead worker and scout runs with counted turns are infra", () => {
+	for (const role of ["worker", "scout"]) {
+		const judge = makeJudgeStub("dead-" + role, [{ reply: '["no"]' }]);
+		const task = makeTask("dead-" + role, {
+			role, ...(role === "scout" ? { rev: fixSha } : {}), facts: [{ id: "f", text: "add sums", hit: "add sums" }],
+			expect: role === "scout" ? [{ file: "src/add.ts", lines: [1, 2], must: [] }] : "pass",
+		});
+		const { r, rec } = trial(task, "dead", { EVAL_JUDGE_PI: judge.path });
+		assert.equal(r.status, 0, r.stderr);
+		assert.deepEqual([rec.infra, rec.pass, rec.rc, rec.input, rec.output, rec.turns], [true, false, 1, 0, 0, 1]);
+	}
 });
 
 test("the workspace is the base in a fresh one-commit repo", () => {
@@ -512,6 +534,14 @@ test("trial.sh plan: a plan the worker cannot make pass is accepted, not execute
 	assert.deepEqual([rec.pass, rec.accepted, rec.executed, rec.infra, rec.found, rec.of], [false, true, false, false, 11, 11]);
 	assert.equal(readFileSync(judge.calls, "utf8").trim().split("\n").length, 2);
 	assert.match(readFileSync(join(rec.dir, "test.txt"), "utf8"), /fail [1-9]/);
+});
+
+test("trial.sh plan: a refused fixed worker is infra, but a plan blocker is a real failure", () => {
+	for (const [worker, infra] of [["refused", true], ["dead", true], ["frozen", false]] as const) {
+		const { r, rec } = planTrial(GOOD_PLAN, { worker });
+		assert.equal(r.status, 0, r.stderr);
+		assert.deepEqual([rec.infra, rec.executed, rec.pass], [infra, false, false], worker);
+	}
 });
 
 test("trial.sh plan: default prompt falls back to the repo when the real home has no prompts", () => {
