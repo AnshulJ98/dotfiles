@@ -311,6 +311,37 @@ test("judge.sh --findings skips the extraction; invalid findings are infra; usag
 	assert.equal(run("judge.sh", [scratch, makeTask("jt-usage"), "--findings"]).status, 2);
 });
 
+test("judge.sh --extract-only: counts findings and high severity, extraction failures are infra, subject required", () => {
+	const subject = join(scratch, "extract-subject.txt");
+	write(subject, "A standalone review.\n");
+	for (const [reply, findings, high, infra] of [
+		[JSON.stringify([finding, finding, { ...finding, severity: "low" }]), 3, 2, false],
+		["[]", 0, 0, false],
+		["not JSON", 0, 0, true],
+	] as const) {
+		const { r, pi, trial, out } = judge({ extract: reply }, {
+			task: makeTask("extract-" + counter++, { defects: undefined }),
+			args: ["--extract-only", "--subject", subject],
+		});
+		assert.equal(r.status, 0, r.stderr);
+		assert.deepEqual(out, { findings, high, judgeCost: 0.01, infra });
+		assert.equal(pi.seen("a"), undefined);
+		assert.equal(pi.seen("b"), undefined);
+		const args = pi.seen("extract")!;
+		assert.equal(flag(args, "--model"), "anthropic/claude-haiku-5-5");
+		assert.equal(args[0], "HOME=" + join(trial, "judge/home"));
+		assert.equal(flag(args, "--session-dir"), join(trial, "judge/extract/sessions"));
+		assert.equal(args.at(-1), render(readFileSync(join(EVAL_DIR, "prompts/judge-extract.txt"), "utf8"), { REVIEW: "A standalone review.\n" }).trimEnd());
+	}
+	assert.equal(judge({}, { args: ["--extract-only"] }).r.status, 2);
+	for (const body of ["", " \n"]) {
+		write(subject, body);
+		const { out, pi } = judge({}, { args: ["--extract-only", "--subject", subject] });
+		assert.deepEqual(out, { findings: 0, high: 0, judgeCost: 0, infra: true });
+		assert.equal(pi.seen("extract"), undefined);
+	}
+});
+
 // ---- judge.sh kinds ----
 
 const factsTask = (id: string, over: Record<string, unknown> = {}) => makeTask(id, { defects: undefined, facts: FACTS, ...over });
