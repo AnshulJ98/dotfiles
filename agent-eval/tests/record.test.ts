@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { blocked, grade, gradeReview, isReviewTimeout, isTestPath, judgeScout, leaked, measure, outsideAllowed, parseJudged, parsePorcelain, wroteTest } from "../lib/record.ts";
+import { blocked, grade, gradePlan, gradeReview, isReviewTimeout, isTestPath, judgedIds, judgeScout, leaked, measure, outsideAllowed, parseJudged, parseMechanical, parsePorcelain, wroteTest } from "../lib/record.ts";
 
 const turn = (usage: object, content: object[] = []) => JSON.stringify({ type: "message", message: { role: "assistant", usage, content } });
 const call = (args: object) => ({ type: "toolCall", name: "bash", arguments: args });
@@ -154,4 +154,31 @@ test("judgeScout: judge.json is used for a non-empty digest; an empty digest is 
 	// a non-empty digest with a missing or unparseable judge.json is infra
 	for (const bad of ["", "nope", "{}"]) assert.deepEqual(judgeScout("The answer.", bad, 3), { found: 0, of: 0, pass: false, disagreements: [], judgeCost: 0, infra: true });
 	assert.equal(gradeReview(judgeScout("The answer.", json.replace('"pass":true,', ""), 3)), false);
+});
+
+const MECH = { accepted: true, covers: true, tight: true, grounded: true, readonly: true, short: true };
+const JUDGED = { found: 5, of: 5, pass: true, disagreements: [], judgeCost: 0.3, infra: false };
+const IDS = ["mechanism", "checks", "test-first", "scope", "d1"];
+
+test("parseMechanical and judgedIds: unreadable input is a plan that was not accepted, with no ids met", () => {
+	assert.deepEqual(parseMechanical(JSON.stringify(MECH)), MECH);
+	for (const bad of ["", "nope", "[]", '{"accepted":"yes"}']) assert.equal(parseMechanical(bad).accepted, false);
+	assert.deepEqual([judgedIds('{"met":["a","b",3]}'), judgedIds(""), judgedIds("{}")], [["a", "b"], [], []]);
+});
+
+test("gradePlan: found and of count accepted and the other five checks plus the judged ids; pass needs accepted and executed", () => {
+	const g = gradePlan({ mechanical: MECH, testExit: 0, judged: JUDGED, met: IDS, itemCount: 5 });
+	assert.deepEqual([g.pass, g.accepted, g.executed, g.found, g.of, g.met, g.judgeCost, g.judgeInfra], [true, true, true, 11, 11, IDS, 0.3, false]);
+	assert.deepEqual(g.checks, { covers: true, tight: true, grounded: true, readonly: true, short: true });
+	const partial = gradePlan({ mechanical: { ...MECH, tight: false, short: false }, testExit: 1, judged: { ...JUDGED, disagreements: ["scope"] }, met: ["mechanism", "checks"], itemCount: 5 });
+	assert.deepEqual([partial.pass, partial.executed, partial.found, partial.of, partial.disagreements], [false, false, 6, 11, ["scope"]]);
+	assert.equal(gradePlan({ mechanical: MECH, testExit: null, judged: JUDGED, met: IDS, itemCount: 5 }).executed, false);
+});
+
+test("gradePlan: a plan that was not accepted is not executed or judged; an infra judge result finds no items and is flagged", () => {
+	const none = { ...MECH, accepted: false, covers: false, tight: false, grounded: false, short: false };
+	const g = gradePlan({ mechanical: none, testExit: 0, judged: JUDGED, met: IDS, itemCount: 5 });
+	assert.deepEqual([g.pass, g.executed, g.met, g.found, g.of, g.judgeCost, g.judgeInfra], [false, false, [], 1, 11, 0, false]);
+	const infra = gradePlan({ mechanical: MECH, testExit: 0, judged: { ...JUDGED, found: 0, of: 0, infra: true }, met: [], itemCount: 5 });
+	assert.deepEqual([infra.pass, infra.found, infra.of, infra.judgeInfra], [true, 6, 11, true]);
 });

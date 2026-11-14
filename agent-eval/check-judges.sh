@@ -7,6 +7,10 @@
 # decoys alone must get "no" from both. Review: the subject is the findings (hit and each decoy as a claim); facts: the
 # answer text (the hit text, then the decoys, one per line). Prints one line per item, exits 1 on any miss (an unparseable
 # reply is a miss). Makes real model calls through judge.sh (EVAL_JUDGE_PI is its test seam); the extraction step is skipped.
+# A plan task (role plan) has samples.json instead, [{file, yes: [ids], no: [ids]}] with files relative to the task dir: each
+# sample is judged with judge.sh --kind rubric (the rubric and the task's decisions as items, the ticket and the reference diff
+# as context, as in trial.sh), and every listed id prints "<file> <id> want=yes|no: a=.. b=..; ok|MISS". A yes id needs yes from
+# both judges, a no id needs no from both.
 set -euo pipefail
 
 EVAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,6 +19,21 @@ source "$EVAL_DIR/lib/task.sh"
 task_dir="$(resolve_task "$1")" || { echo "check-judges.sh: no such task: $1" >&2; exit 2; }
 tmp="$(mktemp -d /tmp/agent-eval-judges.XXXXXX)"
 trap 'rm -rf "$tmp"' EXIT
+
+if [ "$(task_get "$task_dir" role)" = plan ]; then
+  [ -f "$task_dir/samples.json" ] || { echo "check-judges.sh: the plan task has no samples.json" >&2; exit 2; }
+  node "$EVAL_DIR/lib/plan-grade.ts" items "$task_dir" "$tmp/items.json" || exit 2
+  node "$EVAL_DIR/lib/plan-grade.ts" context "$task_dir" "$tmp/context.txt"
+  status=0
+  i=0
+  while IFS= read -r file; do
+    mkdir -p "$tmp/sample-$i"
+    "$EVAL_DIR/judge.sh" "$tmp/sample-$i" "$task_dir" --kind rubric --subject "$task_dir/$file" --items "$tmp/items.json" --context "$tmp/context.txt" > /dev/null < /dev/null || true
+    node "$EVAL_DIR/lib/plan-grade.ts" report "$task_dir" "$file" "$tmp/sample-$i" || status=1
+    i=$(( i + 1 ))
+  done < <(node "$EVAL_DIR/lib/plan-grade.ts" sample-files "$task_dir")
+  exit "$status"
+fi
 
 # The kind of the task: review (defects) or facts (facts); the decoys go to $tmp/decoys.json.
 kind="$(node -e '
