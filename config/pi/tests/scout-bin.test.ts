@@ -13,6 +13,7 @@ const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) â†
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
 // args (prints the arguments scout passed), digest (prints FAKE_DIGEST),
+// provider-error (exits non-zero; a worker writes run ended: error),
 // blocked (a worker digest with a step left under Blocked on me),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
@@ -32,6 +33,11 @@ missing) printf '%s\\n' "\${FAKE_DIGEST:-TOOLS-MISSING: web_search, fetch_conten
 env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
 pass) echo '{"verdict":"PASS","reasons":[],"retriesUsed":0}' >"$PI_WORKER_REPORT"; echo "report body" ;;
+provider-error)
+  if [ "$PI_SCOUT_MODE" = rw ]; then
+    printf '{"verdict":"%s","reasons":["run ended: error"],"retriesUsed":0}\\n' "\${FAKE_VERDICT:-CANNOT-RUN}" >"$PI_WORKER_REPORT"
+  fi
+  echo "provider error"; exit "\${FAKE_RC:-1}" ;;
 blocked) printf '%s\\n' '**Blocked on me**' '- step 2 needs src/b.ts, outside files-allowed' '' '**Changed**' '- a.txt' ;;
 error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
 esac
@@ -131,6 +137,7 @@ test("a spec whose body is not a plan (no numbered step, or no check: line) is r
 		const run = await runScout(["--spec", "-"], env, `---\nfiles-allowed: [a.txt]\ntests: true\n---\n${body}\n`);
 		assert.equal(run.code, 2, body);
 		assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
+		assert.doesNotMatch(run.stderr, /rerun with --model/);
 		assert.match(run.stderr, /it needs numbered steps or acceptance checks, each with a check: line/, body);
 	}
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
@@ -148,6 +155,68 @@ test("a child loads background.ts for its bash tool and gets no bg_run; only a w
 		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts -e \S+\/extensions\/bash-changes\.ts /);
 		assert.match(run.stdout, worker ? / -t read,grep,find,ls,bash,edit,write,codemode / : / -t read,grep,find,ls,bash /);
 		assert.equal(/ -e builtin:codemode /.test(run.stdout), worker);
+	}
+});
+
+test("worker and read defaults, and explicit model overrides, reach pi", async () => {
+	const { env } = sandbox();
+	for (const worker of [false, true]) {
+		for (const override of [false, true]) {
+			const args = worker ? ["--spec", "-"] : [];
+			if (override) args.push("--model", "x/y");
+			if (!worker) args.push("look");
+			const run = await runScout(args, { ...env, FAKE_PI: "args" }, worker ? SPEC : "");
+			assert.equal(run.code, 0, run.stderr);
+			const model = override ? "x/y" : worker ? "openai-codex/gpt-6.1-sol" : "anthropic/claude-sonnet-5-5";
+			assert.ok(run.stdout.includes(`--model ${model} --thinking ${worker ? "high" : "low"} `));
+		}
+	}
+});
+
+test("a worker provider error offers one fallback without changing the verdict or exit", async () => {
+	for (const fallback of [false, true]) {
+		const { env, scoutRoot } = sandbox();
+		const args = ["--spec", "-"];
+		if (fallback) args.push("--model", "anthropic/claude-sonnet-5-5");
+		const run = await runScout(args, { ...env, FAKE_PI: "provider-error" }, SPEC);
+		assert.equal(run.code, 1, run.stderr);
+		assert.equal(run.stdout.split("\n")[0], "WORKER-SENSORS: CANNOT-RUN run ended: error");
+		assert.deepEqual(report(scoutRoot), { verdict: "CANNOT-RUN", reasons: ["run ended: error"], retriesUsed: 0 });
+		const hints = run.stderr.split("\n").filter((line) => line.startsWith("scout: the run ended on an error;"));
+		assert.deepEqual(hints, fallback ? [] : [
+			"scout: the run ended on an error; if openai-codex quota is out, rerun with --model anthropic/claude-sonnet-5-5",
+		]);
+	}
+});
+
+test("a read provider error offers one fallback and preserves pi's exit code", async () => {
+	const { env } = sandbox();
+	for (const model of ["anthropic/claude-sonnet-5-5", "x/y", "openai-codex/gpt-6.1-terra"]) {
+		const run = await runScout(["--model", model, "look"], { ...env, FAKE_PI: "provider-error", FAKE_RC: "7" });
+		assert.equal(run.code, 7, run.stderr);
+		const hints = run.stderr.split("\n").filter((line) => line.startsWith("scout: the run ended on an error;"));
+		assert.deepEqual(hints, model === "openai-codex/gpt-6.1-terra" ? [] : [
+			`scout: the run ended on an error; if ${model.split("/")[0]} quota is out, rerun with --model openai-codex/gpt-6.1-terra`,
+		]);
+	}
+});
+
+test("success, PASS/FAIL verdicts, timeout and signals do not offer a fallback", async () => {
+	const { env } = sandbox();
+	for (const [worker, mode, extra, code] of [
+		[true, "pass", {}, 0],
+		[false, "ok", {}, 0],
+		[true, "provider-error", { FAKE_VERDICT: "PASS" }, 1],
+		[true, "provider-error", { FAKE_VERDICT: "FAIL" }, 1],
+		[true, "provider-error", { FAKE_RC: "143" }, 143],
+		[false, "provider-error", { FAKE_RC: "143" }, 143],
+		[true, "hang", {}, 124],
+		[false, "hang", {}, 124],
+	] as const) {
+		const args = ["--timeout", "1", ...(worker ? ["--spec", "-"] : ["look"])];
+		const run = await runScout(args, { ...env, FAKE_PI: mode, ...extra }, worker ? SPEC : "");
+		assert.equal(run.code, code, run.stderr);
+		assert.doesNotMatch(run.stderr, /rerun with --model/);
 	}
 });
 
@@ -618,6 +687,7 @@ test("a child whose session file goes stale is killed as a stall", async () => {
 	assert.ok(run.ms < 20_000, `took ${run.ms}ms`);
 	assert.match(run.stdout.split("\n")[0], /^WORKER-SENSORS: CANNOT-RUN model stream stalled/);
 	assert.match(report(scoutRoot).reasons[0], /model stream stalled/);
+	assert.doesNotMatch(run.stderr, /rerun with --model/);
 });
 
 const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
