@@ -382,6 +382,20 @@ def on_set_user_var(boss, window, data) -> None:
                 'launch', '--type=background', '--allow-remote-control',
                 zkitty.ZWS, 'here', directory))
         return
+    if data.get('key') == 'zmdread':
+        # A box nvim's <leader>mo (config/nvim markdown_reading.lua) sends LINE:PATH; the overlay runs on the box.
+        line, _, path = (data.get('value') or '').partition(':')
+        if not path:
+            return
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zmdread'))
+        if (zkitty.instance_host() and line.isdecimal() and path.startswith('/')
+                and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
+                            for c in path)):
+            zkitty.launch_program(boss, window, 'overlay', (
+                'nvim', '--cmd', "let $MD_READING_OVERLAY = '1'", '-R', '-n', '+' + line,
+                '-c', 'autocmd UIEnter * ++once lua vim.schedule(function() vim.cmd.MdRender "toggle" end)',
+                '--', path), ('--title', 'md reading'))
+        return
     if data.get('key') == 'zside' and data.get('value') == 'toggle':
         if os.path.exists(OFF):
             os.remove(OFF)

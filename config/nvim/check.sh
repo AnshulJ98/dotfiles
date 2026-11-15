@@ -7,4 +7,5 @@ nvim --headless -u NONE -l config/nvim/tests/files.lua
 nvim --headless -u NONE -l config/nvim/tests/outline.lua
 nvim --headless -u NONE -l config/nvim/tests/themes.lua
 nvim --headless -u NONE -l config/nvim/tests/markdown.lua
+nvim --headless -u NONE -l config/nvim/tests/markdown_reading.lua
 nvim --headless -u NONE -l config/nvim/tests/syntax.lua
