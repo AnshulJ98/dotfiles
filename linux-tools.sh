@@ -23,6 +23,8 @@ APT_PKGS=(
   # tools
   zsh git curl unzip fzf ripgrep fd-find bat git-delta jq gh zoxide yazi
   imagemagick librsvg2-bin poppler-utils
+  # office skills: headless render and recalc, .docx reading
+  libreoffice-nogui pandoc
   golang-go rustup btop just hyperfine glow eza direnv xh git-filter-repo pipx 7zip
 )
 if sudo -n true 2>/dev/null || [ -t 0 ]; then
@@ -73,7 +75,8 @@ nvm ls default >/dev/null 2>&1 || { nvm install --lts && nvm alias default 'lts/
 nvm use default >/dev/null; set -u
 ok "node $(node --version) (nvm)"
 
-NPM_PKGS=(tree-sitter-cli hunkdiff @ast-grep/cli markdownlint-cli2 @steipete/summarize)
+NPM_PKGS=(tree-sitter-cli hunkdiff @ast-grep/cli markdownlint-cli2 @steipete/summarize
+  pptxgenjs docx react-icons react react-dom sharp)  # second line: office skills
 log "npm: ${NPM_PKGS[*]}"
 npm install -g --silent "${NPM_PKGS[@]}"
 ok "npm globals"

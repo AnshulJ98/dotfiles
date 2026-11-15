@@ -127,6 +127,8 @@ brew "netpbm"
 brew "nvm"
 # Outputs current CPU temperature for OSX
 brew "osx-cpu-temp"
+# Document converter (docx skill reads .docx with it)
+brew "pandoc"
 # Animated pipes terminal screensaver
 brew "pipes-sh"
 # Execute binaries from Python packages in isolated environments
@@ -240,6 +242,8 @@ cask "openclaw/tap/goplaces", trusted: true
 # GPU-based terminal emulator
 cask "kitty"
 # Mouse utility to add gesture functions and smooth scrolling to 3rd party mice
+# Headless renderer for the office skills (pptx/docx/xlsx previews, formula recalc)
+cask "libreoffice"
 cask "mac-mouse-fix"
 # Clipboard manager
 cask "maccy"
@@ -259,3 +263,10 @@ go "github.com/go-delve/delve/cmd/dlv"
 go "golang.org/x/tools/gopls"
 uv "nano-pdf"
 uv "zmk"
+# Office skills: pptx and docx generators, icons for slides
+npm "pptxgenjs"
+npm "docx"
+npm "react-icons"
+npm "react"
+npm "react-dom"
+npm "sharp"
