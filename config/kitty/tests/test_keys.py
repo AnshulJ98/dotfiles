@@ -20,9 +20,21 @@ class KeyConfigTests(unittest.TestCase):
         self.assertEqual(plain["cmd+shift+w"], ["close_tab"])
         self.assertEqual(plain["cmd+0"], ["change_font_size", "all", "0"])
         self.assertEqual(plain["cmd+alt+l"], [
-            "launch", "--type=tab", "--tab-title", "hunk", "--add-to-session=!",
-            "--cwd=current", "/opt/homebrew/bin/hunk", "diff",
+            "kitten", "zdo.py", "hunk",
         ])
+
+    def test_plain_shell_and_open_actions_use_launcher(self):
+        config = (ROOT / "config/kitty/kitty.conf").read_text()
+        self.assertIn("map cmd+alt+t kitten zdo.py shell", config)
+        self.assertIn("map cmd+shift+e kitten hints --customize-processing zkitty.py", config)
+        actions = (ROOT / "config/kitty/open-actions.conf").read_text().splitlines()
+        commands = [shlex.split(line)[1:] for line in actions if line.startswith("action ")]
+        self.assertEqual(len(commands), 4)
+        for command in commands:
+            self.assertEqual(command[:8], ["launch", "--type=overlay", "--cwd=current",
+                                          "/bin/bash", "-c",
+                                          'exec /bin/bash ~/.config/kitty/bin/zrun "$@"', "_", "."])
+        self.assertEqual([c[8] for c in commands], ["sh", "nvim", "nvim", "nvim"])
 
     def test_intent_maps(self):
         lines = (ROOT / "config/kitty/kitty.conf").read_text().splitlines()

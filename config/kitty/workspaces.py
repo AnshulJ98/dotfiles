@@ -51,7 +51,7 @@ _sent: dict[int, bytes] = {}
 
 INTERNALS = (
     ('kitty.boss:Boss', 'all_windows all_tabs all_tab_managers active_window active_tab call_remote_control'),
-    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at'),
+    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at open_url_handler'),
     ('kitty.child:Child', 'argv'),
     ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
     ('kitty.fast_data_types:Screen', 'last_reported_cwd columns cursor draw'),
@@ -326,6 +326,13 @@ def _clock(timer_id: int | None = None) -> None:
     for tm in get_boss().all_tab_managers:
         mark_tab_bar_dirty(tm.os_window_id, not tm.tab_bar_hidden and tm.tab_bar_should_be_visible)
     wakeup_main_loop()
+
+
+@_safe
+def on_resize(boss, window, data) -> None:
+    # Every new window is resized before use, including overlays and restored panes.
+    if zkitty.instance_host():
+        window.open_url_handler = zkitty.open_url
 
 
 @_safe

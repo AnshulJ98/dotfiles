@@ -114,7 +114,7 @@ class ScriptTests(unittest.TestCase):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
-        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost"):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun"):
             source = (BIN / name).read_text()
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
@@ -739,6 +739,51 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"])
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
+
+    def test_zrun_local_and_remote_quoting_cwd_and_failures(self):
+        folder = self.root / "folder ' quoted"
+        folder.mkdir()
+        file = "it's a file.py"
+        result = self.run_script("zrun", str(folder), str(self.root / "plain-shell"), "-il")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("plain-shell"), [["-il"]])
+        shutil.copy(self.root / "plain-shell", self.root / "hunk")
+        result = self.run_script("zrun", str(folder), str(self.root / "hunk"), "diff")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("hunk"), [["diff"]])
+        self.run_script("zrun", str(folder), "/bin/zsh", "-il", ZWS_HOST="winpc")
+        shell_args = self.calls("ssh")[-1]
+        self.assertEqual(shlex.split(shell_args[-1])[-2:], ["/bin/zsh", "-il"])
+        self.assertEqual(shell_args[-2], "winpc")
+        result = self.run_script("zrun", str(folder), "zmx", file, ZWS_HOST="winpc")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.calls("ssh")[-1]
+        self.assertIn("-t", args)
+        self.assertIn("ControlPath=/tmp/zcm-%C", args)
+        self.assertEqual(args[-2], "winpc")
+        remote = subprocess.run(["/bin/sh", "-c", args[-1]], env=self.env,
+                                capture_output=True, text=True, timeout=3)
+        self.assertEqual(remote.returncode, 0, remote.stderr)
+        self.assertEqual(self.calls("zmx"), [[file]])
+        # Execute the generated remote command with a recorder, including a gone cwd.
+        probe = self.root / "probe"
+        probe.write_text('#!/bin/sh\n' + 'printf "%s\\n" "$PWD" "$EDITOR" "$@"\n')
+        probe.chmod(0o700)
+        for directory, expected in ((str(folder), str(folder)), ("/gone/folder", str(self.root))):
+            self.run_script("zrun", directory, str(probe), file, ZWS_HOST="winpc")
+            remote = subprocess.run(["/bin/sh", "-c", self.calls("ssh")[-1][-1]],
+                                    env=self.env, capture_output=True, text=True, timeout=3)
+            self.assertEqual(remote.stdout.splitlines(), [expected, "nvim", file])
+        self.run_script("zrun", str(folder), "/opt/homebrew/bin/hunk", "diff", ZWS_HOST="winpc")
+        self.assertEqual(shlex.split(self.calls("ssh")[-1][-1])[-2:], ["hunk", "diff"])
+        for code, message in (("97", "hunk is not installed on winpc"),
+                              ("255", "winpc unreachable")):
+            (self.root / "ssh-codes").write_text(code)
+            result = subprocess.run([str(self.root / "zrun"), str(folder), "hunk", "diff"],
+                                    input="x", env=dict(self.env, ZWS_HOST="winpc"),
+                                    capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.stdout, message + "\n")
+            self.assertEqual(result.returncode, int(code))
 
     def test_zhost_transport_quoting_validation_and_deadline(self):
         result = self.run_script("zhost", "box", "zmx", "kill", "a b", "it's")

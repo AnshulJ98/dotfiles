@@ -182,6 +182,73 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(float((self.root / ".main-quit").read_text()), main_time)
 
 
+class HostLinkTests(unittest.TestCase):
+    def test_url_hints_use_same_host_hook_and_mac_keeps_default(self):
+        from unittest.mock import Mock, patch
+        with tempfile.TemporaryDirectory() as directory:
+            m = load(directory)
+            w = Window("dev", 1)
+            boss = types.SimpleNamespace(window_id_map={7: w})
+            original = Mock()
+            data = dict(customize_processing="zkitty.py", type="url",
+                        match=["file:///host/a.py", "https://example.org"],
+                        groupdicts=[{}, {}])
+            hints = types.SimpleNamespace(handle_result=original)
+            with patch.dict(sys.modules, {"kittens.hints.main": hints}), \
+                    patch.object(m.zkitty, "open_url", side_effect=[True, False]) as opener:
+                with patch.dict(os.environ, ZWS_HOST="winpc"):
+                    m.zkitty.handle_result([], data, 7, boss, [])
+                self.assertEqual(opener.call_count, 2)
+                forwarded = original.call_args.args[1]
+                self.assertEqual(forwarded["match"], ["https://example.org"])
+                self.assertEqual(forwarded["groupdicts"], [{}])
+                self.assertEqual(forwarded["customize_processing"], "")
+                original.reset_mock()
+                opener.reset_mock()
+                with patch.dict(os.environ, ZWS_HOST=""):
+                    m.zkitty.handle_result([], data, 7, boss, [])
+                opener.assert_not_called()
+                self.assertEqual(original.call_args.args[1]["match"], data["match"])
+                self.assertEqual(data["customize_processing"], "zkitty.py")
+
+    def test_host_hook_routes_files_and_paths_without_mac_fallback(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST="winpc"):
+            w = Window("dev", 1)
+            w.id = 7
+            w.screen = types.SimpleNamespace(last_reported_cwd=b"kitty-shell-cwd://box/home/x")
+            boss = Boss([w], w, "")
+            m = load(directory, boss)
+            m.on_resize(boss, w, {})
+            self.assertIs(w.open_url_handler, m.zkitty.open_url)
+            for url, args in (
+                ("file://AnshulJoshi/home/x/a%20b.py#12", ("+12", "--", "/home/x/a b.py")),
+                ("file:///home/x/a.md", ("--", "/home/x/a.md")),
+                ("src/a.ts:7", ("+7", "--", "src/a.ts")),
+                ("a.py:7", ("+7", "--", "a.py")),
+                ("src/a.ts", ("--", "src/a.ts")),
+            ):
+                boss.calls.clear()
+                self.assertTrue(w.open_url_handler(boss, w, url, 0, "/mac/wrong"))
+                self.assertEqual(boss.calls, [(
+                    "launch", "--type=overlay", "--match=id:7", "/bin/bash",
+                    str(KITTY_DIR / "bin/zrun"), "/home/x", "nvim", *args)])
+            boss.calls.clear()
+            self.assertTrue(w.open_url_handler(boss, w, "file:///host/a.png#12", 1, ""))
+            self.assertEqual(len(boss.calls), 1)
+            self.assertNotIn("nvim", boss.calls[0])
+            self.assertIn("/host/a.png lives on winpc", boss.calls[0])
+            boss.calls.clear()
+            self.assertFalse(w.open_url_handler(boss, w, "https://example.org/a.md", 0, ""))
+            self.assertFalse(w.open_url_handler(boss, w, "http://example.org", 0, ""))
+            with patch.dict(os.environ, ZWS_HOST=""):
+                self.assertFalse(w.open_url_handler(boss, w, "file:///host/a.md", 0, ""))
+                mac = Window("dev", 2)
+                m.on_resize(boss, mac, {})
+                self.assertFalse(hasattr(mac, "open_url_handler"))
+            self.assertEqual(boss.calls, [])
+
+
 class SavingTests(unittest.TestCase):
     def test_place_sets_the_leading_new_os_window_from_the_layout(self):
         cases = [
@@ -662,6 +729,43 @@ class NamesTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
+    def test_real_kitty_open_actions_and_hint_processor_contract(self):
+        code = f"""
+import os, sys
+sys.dont_write_bytecode = True
+from pathlib import Path
+from types import SimpleNamespace as NS
+from kitty.open_actions import actions_for_url
+from kitty.fast_data_types import set_options
+from kitty.options.types import defaults
+set_options(defaults)
+from kittens.hints.main import load_custom_processor
+processor = load_custom_processor({str(KITTY_DIR / 'zkitty.py')!r})
+import zkitty
+text = Path({str(KITTY_DIR / 'open-actions.conf')!r}).read_text()
+for url, expected in [
+    ('src/a.ts:7', ('sh', '-c', 'exec nvim "+$' + '{{1##*:}}" -- "$' + '{{1%:*}}"', '_', 'src/a.ts:7')),
+    ('file:///a.py#12', ('nvim', '+12', '--', '/a.py')),
+    ('file:///a.ts', ('nvim', '--', '/a.ts')),
+    ('file:///a.csv', ('nvim', '--', '/a.csv')),
+]:
+    action, = actions_for_url(url, text)
+    assert action.func == 'launch', action
+    assert action.args[:8] == ('--type=overlay', '--cwd=current', '/bin/bash', '-c',
+        'exec /bin/bash ~/.config/kitty/bin/zrun "$@"', '_', '.', expected[0]), action
+    assert action.args[7:] == expected, action
+calls = []
+window = NS(id=7, screen=NS(last_reported_cwd=b'kitty-shell-cwd://box/host/folder'))
+boss = NS(window_id_map={{7: window}}, call_remote_control=lambda w, args: calls.append(args))
+os.environ['ZWS_HOST'] = 'winpc'
+processor['handle_result']([], dict(customize_processing='zkitty.py', type='url', programs=[],
+    match=['file://AnshulJoshi/host/a.py#12'], groupdicts=[{{}}]), 7, boss, [])
+assert calls == [('launch', '--type=overlay', '--match=id:7', '/bin/bash', zkitty.ZRUN,
+                  '/host/folder', 'nvim', '+12', '--', '/host/a.py')], calls
+"""
+        result = subprocess.run([KITTY, "+runpy", code], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     @unittest.skipUnless(os.path.exists(KITTY), "kitty is not installed")
     def test_kitty_still_has_the_internals_workspaces_py_uses(self):
         code = (f"import sys; sys.dont_write_bytecode = True; sys.path.insert(0, {str(KITTY_DIR)!r}); "
