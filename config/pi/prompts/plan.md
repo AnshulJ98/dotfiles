@@ -178,7 +178,8 @@ Per slice, in this order:
    <description>"` commits, merges `--no-ff` into `auto/<effort>`, runs
    every merged slice's `tests` there, removes the worktree and ticks
    `AUTO.md`. When it says one rework, append the sensors' reasons to
-   the spec file and dispatch again.
+   the spec file and dispatch again; when scout's output carries a rerun hint,
+   the rework passes the `--model` it names.
 
 You never fix by hand in an auto run. The only file you edit is
 `AUTO.md`; the harness blocks the rest of the run's checkout and every
