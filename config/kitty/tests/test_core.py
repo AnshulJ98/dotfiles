@@ -78,6 +78,20 @@ class CoreTests(unittest.TestCase):
                 self.assertEqual(data.count(b' '), 3)
                 self.assertEqual(data.count(b'\n'), 1)
 
+    def test_answer_with_host(self):
+        for name, pi, host, directory, expected in [
+            ('n', '', '', '/ignored', b': zq n -\n'),
+            ('n', '', 'box', '', b': zq n - box -\n'),
+            ('my name', '/p/s.jsonl', 'box', '/home/a/my dir',
+             b': zq my%20name %2Fp%2Fs.jsonl box %2Fhome%2Fa%2Fmy%20dir\n'),
+            ('n', '', 'a b', 'x\ny', b': zq n - a%20b x%0Ay\n'),
+        ]:
+            with self.subTest(host=host, directory=directory):
+                data = core.answer(name, pi, host, directory)
+                self.assertEqual(data, expected)
+                self.assertEqual(data.count(b' '), 5 if host else 3)
+                self.assertEqual(data.count(b'\n'), 1)
+
     def test_worst(self):
         rows = [([], ''), (['unknown'], 'unknown'), (['unknown', 'idle'], 'idle')]
         rows += [([state], state) for state in core.RANK]

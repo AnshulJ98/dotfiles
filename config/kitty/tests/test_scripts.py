@@ -88,8 +88,10 @@ class ScriptTests(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.root), TMPDIR=str(self.root),
                         ZWS_DIR=str(self.root / "workspaces"), FAKE_ROOT=str(self.root),
                         PATH=str(self.root) + ":" + os.environ["PATH"])
+        for name in ("KITTY_WINDOW_ID", "KITTY_LISTEN_ON", "KITTY_PID", "ZMX_SESSION"):
+            self.env.pop(name, None)
         for cmd in ("kitten", "zmx", "timeout", "lsof", "open", "pgrep", "aerospace",
-                    "fzf", "plain-shell", "find", "zpick-rows", "kitty", "ps"):
+                    "fzf", "plain-shell", "find", "zpick-rows", "kitty", "ps", "ssh"):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
@@ -185,6 +187,45 @@ class ScriptTests(unittest.TestCase):
         commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
         self.assertEqual(commands, ["timeout", "zmx", "zmx"])
         self.assertNotIn(b"SetUserVar=holder", output)
+
+    def test_pane_host_answer_runs_zmx_on_the_host_over_shared_ssh(self):
+        host = self.root / "host"
+        folder = host / "my dir"
+        folder.mkdir(parents=True)
+        self.pane_start(f': zq box%20name - box {quote(str(folder), safe="")}\n'.encode())
+        args, = self.calls("ssh")
+        self.assertEqual(args[:-1], ["-tt", "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/zcm-%C",
+                                     "-o", "ControlPersist=600", "box"])
+        remote = args[-1]
+        self.assertIn(" attach box\\ name", remote)
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("timeout"), [])
+        self.assertEqual(self.calls("plain-shell"), [])
+        # Run it as the host's non-interactive shell would, with zmx only in ~/.local/bin.
+        zmx = host / ".local/bin/zmx"
+        zmx.parent.mkdir(parents=True)
+        zmx.write_text('#!/bin/sh\nprintf "%s\\n" "$PWD" "$ZDOTDIR" "$ZMX_NO_DETACH_KEY" '
+                       '"$KITTY_SHELL_INTEGRATION" "$@" > "$HOME/ran"\n')
+        zmx.chmod(0o700)
+        integration = host / ".local/kitty.app/lib/kitty/shell-integration/zsh"
+        integration.mkdir(parents=True)
+        linux = "/usr/lib/kitty/shell-integration/zsh"
+        result = subprocess.run(["/bin/sh", "-c", remote], env={"HOME": str(host), "PATH": "/usr/bin:/bin"},
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ran = (host / "ran").read_text().splitlines()
+        self.assertEqual(os.path.realpath(ran[0]), os.path.realpath(folder))
+        self.assertEqual(ran[1:], [linux if os.path.isdir(linux) else str(integration),
+                                   "1", "enabled", "attach", "box name"])
+
+    def test_pane_host_answer_without_folder_and_option_like_host(self):
+        self.pane_start(b': zq n - box -\n')
+        args, = self.calls("ssh")
+        self.assertNotIn("cd ", args[-1])
+        (self.root / "calls").unlink()
+        output = self.pane_start(b': zq n - -oProxyCommand%3Dtouch%20x -\n')
+        self.assertIn(b"refusing ssh host", output)
+        self.assert_plain_shell_only()
 
     def test_pane_reply_waits_for_silent_read_after_prompt(self):
         script = self.root / "zshell"
@@ -408,6 +449,38 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         destination = self.calls("kitten")[-1][-1]
         self.assertEqual(Path(destination).read_text(), "new_os_window\ncd /cwd space\nlaunch\n")
+
+    def test_new_host_writes_host_vars_and_keeps_kitty_on_a_local_folder(self):
+        result = self.run_script("zws", "new", "--host", "box", "/home/a/proj")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = Path(self.calls("kitten")[-1][-1])
+        self.assertEqual(path.name, "proj.kitty-session")
+        lines = path.read_text().splitlines()
+        self.assertEqual(lines[0], "cd " + str(self.root))
+        self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "host=box", "--var", "host_dir=/home/a/proj"])
+        result = self.run_script("zws", "new", "--window", "--host", "box")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = Path(self.calls("kitten")[-1][-1])
+        self.assertEqual(path.name, "home.kitty-session")
+        self.assertEqual(path.read_text(), "new_os_window\ncd " + str(self.root) + "\nlaunch --var host=box\n")
+        result = self.run_script("zws", "new", "--ask", "--host", "box", "/srv/app")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("kitten")[-1][-4:], ["app", str(self.root), "box", "/srv/app"])
+        result = self.run_script("zws", "create", "named", str(self.root), "Shown", "box", "/srv/app")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = (Path(self.env["ZWS_DIR"]) / "named.kitty-session").read_text().splitlines()
+        self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "ws_name=Shown", "--var", "host=box",
+                                                 "--var", "host_dir=/srv/app"])
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("ssh"), [])
+
+    def test_new_host_rejects_option_like_or_missing_host(self):
+        for args in (("--host", "-oProxyCommand=x"), ("--host", "a b"), ("--host",)):
+            with self.subTest(args=args):
+                result = self.run_script("zws", "new", *args)
+                self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(Path(self.env["ZWS_DIR"], "home.kitty-session").exists())
+        self.assertFalse((self.root / "calls").exists())
 
     def test_create_rejects_traversal_and_controls_without_navigation(self):
         for args in (("../escape", "/cwd"), ("..", "/cwd"), ("bad\nlaunch", "/cwd"),
