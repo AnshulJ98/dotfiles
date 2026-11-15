@@ -23,7 +23,7 @@
 #
 # The run is the worktree of this repo whose root holds AUTO.md; AUTO_RUN=<path>
 # picks one when there are several. State is in <git-common-dir>/pi-auto/<effort>/
-# (base, tests.log, and per slice .new .tests .runs .tree .merged .log).
+# (base, tests.log, and per slice .new .tests .spec .runs .tree .merged .log).
 # Every command after start writes "session: $PI_SESSION_ID" into AUTO.md when
 # pi's bash tool set that variable (a bg_run job has none and leaves the line
 # as it is); extensions/auto-run.ts sends that session back to the slices.
@@ -175,6 +175,7 @@ dispatch)
   slice_base="$(git -C "$S" merge-base HEAD "$BRANCH")" || die 1 "slice/$name shares no commit with $BRANCH"
   [ -s "$STATE/$name.runs" ] || [ -z "$(git -C "$S" status --porcelain)" ] ||
     die 1 "slice/$name's worktree has changes before its first dispatch ($(git -C "$S" status --porcelain | head -n 5 | tr '\n' ' ')). A worker starts from a clean worktree: undo a hand edit there, and have git ignore what the worktree hook leaves"
+  cp "$spec" "$STATE/$name.spec" || die 1 "could not keep the dispatched spec for slice/$name"
   before="$(cksum <"$RUN/AUTO.md")"
   tick "the worker on slice/$name is still running"
   (cd "$S" && PI_WORKER_BASE="$slice_base" "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"

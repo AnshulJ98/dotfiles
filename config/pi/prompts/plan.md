@@ -204,6 +204,8 @@ the base: `auto-slice review`, in the foreground. It
 runs `scout --review <base-sha>` in the run worktree, which reviews
 `git diff <base-sha>...HEAD` and `git log --first-parent
 <base-sha>..HEAD` against the spec in `AUTO.md` as `review.md` does,
+with each slice's dispatched spec attached too (kept by `auto-slice dispatch`)
+so each slice is checked against its own target and `mechanism:`,
 checks by reading that each bug fix's new test fails without the fix,
 and records the tip it reviewed. The merge hook refuses to merge
 `auto/<effort>` into any branch until that record exists. A later
