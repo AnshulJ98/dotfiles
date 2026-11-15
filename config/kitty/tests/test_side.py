@@ -140,6 +140,24 @@ class SideTests(unittest.TestCase):
                 self.assertNotIn(os.path.basename(os.path.expanduser('~')), plain)
                 self.assertNotIn('project', plain)
 
+    def test_host_plain_folder_answer_names_folder_not_space(self):
+        rows = self.load_rows()
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "Dev"
+            folder.mkdir()
+            with patch.object(rows, "run", side_effect=AssertionError("not git")):
+                data = rows.side_facts([str(folder)], False)
+            git = self.side.HostGit()
+            obj = view(str(folder))
+            obj["spaces"][0]["name"] = obj["current"] = "dev"
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(self.side, "write") as write:
+                self.side.render(obj, git, "")
+                self.assertIn("dev", write.call_args.args[0])
+                git.home, git.refs = data["home"], data["refs"]
+                self.side.render(obj, git, "")
+                self.assertIn("Dev", write.call_args.args[0])
+                self.assertNotIn("dev", write.call_args.args[0])
+
     def test_host_failure_keeps_last_good_names_and_branches(self):
         git = self.side.HostGit()
         obj = view('/host/repo/sub')

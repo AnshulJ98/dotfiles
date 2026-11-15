@@ -48,6 +48,14 @@ if cmd == "ps":
 if cmd == "lsof":
     if mode == "lsof-hang": time.sleep(30)
     print("n" + str(root / "live cwd"))
+if mode == "restore" and cmd == "kitten" and "--to" in args:
+    address = args[args.index("--to") + 1]
+    if (root / ("ready-" + pathlib.Path(address).name)).exists():
+        print('[{"platform_window_id": 42}]')
+    sys.exit(0)
+if mode == "restore" and cmd in ("open", "kitty"):
+    address = args[args.index("--listen-on") + 1]
+    (root / ("ready-" + pathlib.Path(address).name)).touch()
 if cmd == "kitten":
     if "focus-window" in args and mode == "focus-fail-both": sys.exit(1)
     if "--to" in args:
@@ -546,6 +554,47 @@ class ScriptTests(unittest.TestCase):
                 self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
                 self.assertTrue(all(a[2] == "unix:" + str(self.root / "socket-box") for a in self.calls("kitten")))
                 self.assertEqual(self.calls("ssh"), [])
+
+    def test_main_restores_only_attached_missing_hosts_in_background(self):
+        state = self.root / ".local/state/kitty"
+        state.mkdir(parents=True)
+        (state / ".main-quit").write_text("100")
+        for host, record in (("one", "attached"), ("two", "attached"), ("running", "attached"),
+                             ("closed", "90"), ("host-first", "96"), ("main-first", "104"),
+                             ("too-early", "94"), ("bad host", "attached")):
+            folder = state / "hosts" / host
+            folder.mkdir(parents=True)
+            (folder / ".attached").write_text(record)
+        (state / "hosts/never-attached").mkdir()
+        (self.root / "ready-socket-running").touch()
+        result = self.run_script("kmain", MODE="restore")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        opens = self.calls("open" if sys.platform == "darwin" else "kitty")
+        self.assertEqual(len(opens), 5)
+        self.assertNotIn("-g", opens[0])
+        for host in ("one", "two", "host-first", "main-first"):
+            call, = [c for c in opens if "--title" in c and c[c.index("--title") + 1] == host]
+            self.assertIn("unix:" + str(self.root / ("socket-" + host)), call)
+            folder = state / "hosts" / host
+            self.assertIn(str(folder / "main.kitty-session"), call)
+            self.assertEqual((folder / ".attached").read_text(), "attached")
+            if sys.platform == "darwin":
+                self.assertIn("-g", call)
+                self.assertIn("ZWS_HOST=" + host, call)
+                self.assertIn("ZWS_DIR=" + str(folder), call)
+        self.assertEqual(self.calls("aerospace"), [])
+        again = self.run_script("kmain", MODE="restore")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertEqual(self.calls("open" if sys.platform == "darwin" else "kitty"), opens)
+        self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
+
+    def test_host_start_and_focus_reset_the_attachment(self):
+        record = self.root / ".local/state/kitty/hosts/box/.attached"
+        self.assertEqual(self.run_script("kmain", "box").returncode, 0)
+        self.assertEqual(record.read_text(), "attached")
+        record.write_text("100")
+        self.assertEqual(self.run_script("kmain", "box").returncode, 0)
+        self.assertEqual(record.read_text(), "attached")
 
     def test_main_rejects_invalid_hosts_without_calls(self):
         for host in ("-oProxyCommand=x", "../box", "a b", "a@box", "", "box\n"):
