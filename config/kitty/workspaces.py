@@ -252,7 +252,9 @@ def _lifecycle(timer_id: int | None = None) -> None:
         if pid <= 0:
             raise ValueError('invalid main pid')
         os.kill(pid, 0)
-    except (OSError, ValueError):
+    except PermissionError:
+        return  # A live pid owned by another user is not evidence the Mac kitty is gone.
+    except (FileNotFoundError, ProcessLookupError, ValueError):
         if _seen_main:
             _save()
             _quitting = True  # SIGTERM closes windows individually; preserve .open
@@ -434,10 +436,10 @@ def on_quit(boss, window, data) -> None:
 def on_close(boss, window, data) -> None:
     if not zkitty.instance_host() or _quitting:
         return
-    # A normal last close still lists that window. SIGTERM lists none, even on its
-    # first callback. Intermediate closes (including sidebar toggles) must not detach.
+    # Last-pane closes can still list themselves; whole OS window closes and outside
+    # SIGTERM can already list none. Only our own self-end (_quitting) keeps attachment.
     windows = list(boss.all_windows)
-    if len(windows) == 1 and windows[0] is window:
+    if not windows or (len(windows) == 1 and windows[0] is window):
         try:
             os.unlink(ATTACHED)
         except FileNotFoundError:

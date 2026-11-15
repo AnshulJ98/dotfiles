@@ -72,6 +72,22 @@ class IntentTests(unittest.TestCase):
     def goto(self, name):
         return (None, ('action', 'goto_session', str(Path(self.directory.name) / (name + '.kitty-session'))))
 
+    def test_host_cwd_never_uses_local_child_folder(self):
+        pane = NS(screen=NS(last_reported_cwd=None), cwd_of_child='/mac/folder')
+        with patch.dict(os.environ, ZWS_HOST='box'):
+            self.assertEqual(zkitty.cwd(pane), '')
+            pane.screen.last_reported_cwd = b'kitty-shell-cwd://box/host/folder'
+            self.assertEqual(zkitty.cwd(pane), '/host/folder')
+        pane.screen.last_reported_cwd = None
+        self.assertEqual(zkitty.cwd(pane), '/mac/folder')
+
+    def test_host_new_without_folder_leaves_home_to_the_host(self):
+        self.boss.active_window = NS(created_in_session_name='dev',
+                                    screen=NS(last_reported_cwd=None), cwd_of_child='/mac/folder')
+        with patch.dict(os.environ, ZWS_HOST='box'):
+            self.assertEqual(zkitty.run(self.boss, ['new']), [('new', '')])
+        self.assertEqual(self.boss.calls[-1][1][-2:], ('new', ''))
+
     def test_host_and_mac_launchers(self):
         for host in ("", "winpc"):
             with patch.dict(os.environ, ZWS_HOST=host):
