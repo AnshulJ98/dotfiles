@@ -48,6 +48,7 @@ _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
 _named: set[int] = set()
 _ready: set[int] = set()
 _sent: dict[int, bytes] = {}
+_ports_started = False
 
 
 INTERNALS = (
@@ -340,6 +341,11 @@ def on_resize(boss, window, data) -> None:
 
 @_safe
 def on_load(boss, data) -> None:
+    global _ports_started
+    if zkitty.instance_host() and not _ports_started:
+        boss.call_remote_control(None, ('launch', '--type=background',
+                                       os.path.join(FOLDER, 'bin/zports'), 'run', str(os.getpid())))
+        _ports_started = True
     add_timer(_safe(_restore), 1.0, False)
     add_timer(_safe(_check), 1.0, False)
     add_timer(_safe(_clock), 1.0, False)

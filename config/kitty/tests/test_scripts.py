@@ -943,7 +943,7 @@ elif args[:1] == ["attach"]:
                              capture_output=True, text=True, timeout=3)
 
     def test_scripts_are_executable(self):
-        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun"):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun", "zports"):
             with self.subTest(name=name):
                 self.assertEqual((BIN / name).stat().st_mode & 0o111, 0o111)
 
