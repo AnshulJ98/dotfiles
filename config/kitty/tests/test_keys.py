@@ -83,6 +83,7 @@ class KeyConfigTests(unittest.TestCase):
         config = tomllib.loads((ROOT / "config/aerospace/aerospace.toml").read_text())
         bindings = config["mode"]["main"]["binding"]
         self.assertEqual(bindings["cmd-enter"], "exec-and-forget $HOME/.config/kitty/bin/kmain")
+        self.assertEqual(bindings["cmd-shift-enter"], "exec-and-forget $HOME/.config/kitty/bin/kmain winpc")
         # a throwaway kitty: plain zsh in place of bin/zshell, so no zmx session and no sidebar
         self.assertEqual(bindings["cmd-alt-enter"], "exec-and-forget open -n -a kitty --args -o shell=/bin/zsh")
         # kitty puts its own folder on its children's PATH, and macOS finds the app by name.

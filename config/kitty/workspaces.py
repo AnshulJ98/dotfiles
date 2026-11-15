@@ -1,12 +1,12 @@
 # Workspace watcher: zkitty runs key/sidebar intents; bin/zws and bin/zpick handle prompts.
-#  - keeps a session file per open workspace in ~/.local/state/kitty/workspaces, so goto_session
+#  - keeps a session file per open workspace in $ZWS_DIR (default ~/.local/state/kitty/workspaces), so goto_session
 #    reopens it with its tabs, splits and panes (transient=1 scout panes are not saved).
 #    Saves are debounced: the tab bar redraws on
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
 #  - answers bin/zshell's zq query once per pane with its holder and pi_session, and for a
-#    workspace bound to an ssh host (host= var) that host and the remote folder.
+#    host instance (ZWS_HOST in its environment) that host and the remote folder.
 #  - accepts ready/zdo only from role=sidebar windows launched with bin/zside.
 #  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
