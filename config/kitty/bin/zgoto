@@ -5,7 +5,8 @@
 # fill in for remote_control_script (0.50.0, boss.py), so then the focused window is looked up.
 # --key (ctrl+\, zmx-pick's key elsewhere): the same, but a pane running ssh gets the key itself,
 # so the remote zmx-pick has it. ssh may run in kitty's pane or inside the pane's zmx session,
-# whose terminal kitty does not see.
+# whose terminal kitty does not see. A pane of a host workspace (user var host) is kitty's own:
+# its remote zmx has the detach key off, so the picker opens here.
 export PATH=/opt/homebrew/bin:$PATH
 read -r state wid < <(kitten @ ls 2>/dev/null | python3 -c '
 import json, os, subprocess, sys
@@ -33,8 +34,8 @@ for o in json.load(sys.stdin):
 w = windows.get(wid, {})
 if key and st != "focused" and w:
     fg = {os.path.basename(p["cmdline"][0]) for p in w.get("foreground_processes", []) if p.get("cmdline")}
-    holder = w.get("user_vars", {}).get("holder", "")
-    if fg & REMOTE or (holder and inside(holder) in REMOTE):
+    holder, host = (w.get("user_vars", {}).get(k, "") for k in ("holder", "host"))
+    if not host and (fg & REMOTE or (holder and inside(holder) in REMOTE)):
         st = "remote"
 print(st, wid if wid.isdigit() else "")' "$1" "${2:-}")
 case $state in

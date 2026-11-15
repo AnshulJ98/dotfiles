@@ -2,21 +2,43 @@
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
 # The watcher (workspaces.py) supplies the session name over this pane's terminal: the saved
 # holder=<name>, or a new folder-based one. Without an answer or without zmx, run plain zsh.
+# In a workspace bound to an ssh host the answer adds the host and a remote folder, and the
+# zmx session runs there over one shared ssh connection.
 export PATH=/opt/homebrew/bin:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
 [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
 
-name= pi_session=
+name= pi_session= host= dir=
 if [ -t 0 ] && [ -t 2 ] &&
    IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
    [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
+  IFS=' ' read -r d e f <<<"$d"
   printf -v name '%b' "${c//%/\\x}"
   [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
+  [ -z "$e" ] || [ "$e" = - ] || printf -v host '%b' "${e//%/\\x}"
+  [ -z "$f" ] || [ "$f" = - ] || printf -v dir '%b' "${f//%/\\x}"
 fi
 if [ -z "$name" ]; then
   echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
   exec "$SHELL_BIN" -il
+fi
+
+if [ -n "$host" ]; then
+  # Any pane can set user vars, so a host that ssh would read as an option is refused.
+  case $host in
+    [A-Za-z0-9]*) ;;
+    *) echo "zshell: refusing ssh host '$host'; starting plain shell" >&2; exec "$SHELL_BIN" -il ;;
+  esac
+  remote=
+  [ -z "$dir" ] || remote="cd $(printf %q "$dir") 2>/dev/null; "
+  remote+='for d in /usr/lib/kitty/shell-integration/zsh ~/.local/kitty.app/lib/kitty/shell-integration/zsh; do [ -d "$d" ] && export ZDOTDIR=$d && break; done; '
+  remote+="ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec \"\$(command -v zmx || echo ~/.local/bin/zmx)\" attach $(printf %q "$name")"
+  # %C keeps the control socket path under macOS's 103-byte limit. The keepalive ends a dead link
+  # in 45 s: ssh -O check cannot see one, and a new pane over it would hang. -q: sshd allows 10
+  # sessions a connection; past that ssh opens its own and would print two notices in the pane.
+  exec ssh -tt -q -o ControlMaster=auto -o ControlPath=/tmp/zcm-%C -o ControlPersist=600 \
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$host" "$remote"
 fi
 
 if ! existing=$(timeout 3 "$ZMX" ls --short 2>/dev/null); then

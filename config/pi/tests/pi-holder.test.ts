@@ -47,3 +47,29 @@ test("kitty notifications: settled completion and input prompts, not turns, abor
     }
   }
 });
+
+test("pi reports to the terminal inside kitty or inside a zmx session (a host pane, the iPad), nowhere else", async () => {
+  const saved = { kitty: process.env.KITTY_WINDOW_ID, zmx: process.env.ZMX_SESSION };
+  const chunks: string[] = [];
+  const write = test.mock.method(process.stdout, "write", (chunk: string | Uint8Array) => {
+    chunks.push(String(chunk));
+    return true;
+  });
+  try {
+    for (const [kitty, zmx, reports] of [[undefined, undefined, false], ["42", undefined, true], [undefined, "dev-1", true]] as const) {
+      for (const [key, value] of [["KITTY_WINDOW_ID", kitty], ["ZMX_SESSION", zmx]] as const) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+      chunks.length = 0;
+      const handlers = new Map<string, Handler>();
+      piHolder({ on: (name: string, fn: Handler) => handlers.set(name, fn) } as never);
+      await handlers.get("session_start")?.({}, { sessionManager: { getSessionFile: () => "/s/a.jsonl" }, model: { id: "m" }, getContextUsage: () => undefined });
+      assert.equal(chunks.some((s) => s.startsWith("\x1b]1337;SetUserVar=pi_session=")), reports, `kitty=${kitty} zmx=${zmx}`);
+    }
+  } finally {
+    write.mock.restore();
+    for (const [key, value] of [["KITTY_WINDOW_ID", saved.kitty], ["ZMX_SESSION", saved.zmx]] as const) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
