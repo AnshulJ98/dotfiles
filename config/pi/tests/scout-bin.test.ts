@@ -37,6 +37,8 @@ provider-error)
   if [ "$PI_SCOUT_MODE" = rw ]; then
     printf '{"verdict":"%s","reasons":["run ended: error"],"retriesUsed":0}\\n' "\${FAKE_VERDICT:-CANNOT-RUN}" >"$PI_WORKER_REPORT"
   fi
+  # pi's session-format.md: a run its provider cut off ends on an assistant message with stopReason error
+  [ -n "$dir" ] && echo '{"type":"message","message":{"role":"assistant","stopReason":"error"}}' >>"$dir/s.jsonl"
   echo "provider error"; exit "\${FAKE_RC:-1}" ;;
 blocked) printf '%s\\n' '**Blocked on me**' '- step 2 needs src/b.ts, outside files-allowed' '' '**Changed**' '- a.txt' ;;
 error) echo "model error 404"; echo 1 >"$SCOUT_PANE_RC" ;;
@@ -210,6 +212,7 @@ test("success, PASS/FAIL verdicts, timeout and signals do not offer a fallback",
 		[true, "provider-error", { FAKE_VERDICT: "FAIL" }, 1],
 		[true, "provider-error", { FAKE_RC: "143" }, 143],
 		[false, "provider-error", { FAKE_RC: "143" }, 143],
+		[false, "missing", { FAKE_RC: "7" }, 7], // a read scout that failed without a provider error
 		[true, "hang", {}, 124],
 		[false, "hang", {}, 124],
 	] as const) {
@@ -418,13 +421,18 @@ test("--review attaches dispatched slice specs after AUTO.md, including beside r
 	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
 	const state = join(repo, ".git", "pi-auto", "x");
 	mkdirSync(state, { recursive: true });
-	for (const name of ["a", "b"]) writeFileSync(join(state, `${name}.spec`), SPEC);
+	for (const name of ["a", "b"]) {
+		writeFileSync(join(state, `${name}.spec`), SPEC);
+		writeFileSync(join(state, `${name}.merged`), "");
+	}
+	writeFileSync(join(state, "c.spec"), SPEC); // dispatched, never merged: not part of the diff under review
 	const base = git("rev-parse", "HEAD~1");
 	const review = () => spawnSync(SCOUT, ["--review", base], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
 	const attachments = `@${repo}/AUTO.md @${state}/a.spec @${state}/b.spec`;
 	const checkSpecs = (run: ReturnType<typeof review>) => {
 		assert.equal(run.status, 0, run.stderr);
 		assert.ok(run.stdout.includes(attachments), run.stdout);
+		assert.doesNotMatch(run.stdout, /c\.spec/);
 		assert.match(run.stdout, /each slice's spec.*attached/i);
 		assert.match(run.stdout, /target and `mechanism:` line.*yardstick/);
 	};
