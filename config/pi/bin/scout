@@ -42,9 +42,10 @@
 #                  so scout reads it from PI_WORKER_REPORT instead).
 #   --web          Read scouts only: web research tools via pi-web-access,
 #                  plus the Reddit skill when installed. Not with --rw/--spec/--review.
-#   --model        Default MODEL below (WORKER_MODEL with --rw). On the work
-#                  laptop, edit them by hand. Hardcoded on purpose: a
-#                  per-machine switch is config for one line.
+#   --model        Default MODEL below; --rw uses openai-codex/gpt-6.1-sol.
+#                  Fallbacks: openai-codex/gpt-6.1-terra for scouts,
+#                  anthropic/claude-sonnet-5-5 for workers. On the work laptop,
+#                  edit ids by hand. Hardcoded on purpose: no per-machine switch.
 #   --thinking     low|medium|high|xhigh. Default low; high with --rw.
 #                  max is refused: it drifts out of scope.
 #   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
@@ -119,8 +120,11 @@ event() {
   [ -n "${REVIEW_BASE:-}" ] && role=review
   { mkdir -p "$dir" && printf '%s %s %s %s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$role" "$$" "$1" "$2" >>"$dir/events.log"; } 2>/dev/null || true
 }
-MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
-WORKER_MODEL="anthropic/claude-sonnet-5-5" # --rw; tested too: github-copilot/kimi-k3
+# work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
+MODEL="anthropic/claude-sonnet-5-5"            # read scouts
+MODEL_FALLBACK="openai-codex/gpt-6.1-terra"    # when Anthropic quota is out
+WORKER_MODEL="openai-codex/gpt-6.1-sol"        # --rw, thinking high
+WORKER_MODEL_FALLBACK="anthropic/claude-sonnet-5-5" # when Codex quota is out
 MODEL_SET=0
 THINKING=""
 TIMEOUT=""
@@ -522,7 +526,7 @@ watch_stall() {
 # The verdict, digest and stderr summary for every exit except SIGKILL. With
 # --rw, verdict.json is written here when the sensors did not get to it.
 conclude() {
-  local rc=$1 reason=""
+  local rc=$1 reason="" ended_error=0 fallback="$MODEL_FALLBACK"
   [ -n "${MONITOR:-}" ] && kill "$MONITOR" 2>/dev/null
   [ -s "$ERR" ] && grep -v '^WORKER-SENSORS:' "$ERR" >&2
   if [ -s "$STALLED" ]; then
@@ -544,9 +548,20 @@ conclude() {
     VERDICT="$(node -e '
       const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
       console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"
+    fallback="$WORKER_MODEL_FALLBACK"
+    if node -e '
+      const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+      process.exit(r.verdict === "CANNOT-RUN" && r.reasons.includes("run ended: error") ? 0 : 1);
+    ' "$PI_WORKER_REPORT"; then ended_error=1; fi
     # The sensors' own verdict line can land in the digest too (a non -p pi, or
     # the model quoting it); the one from the report is the only one kept.
     { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+  elif [ "$rc" -ne 0 ]; then
+    ended_error=1
+  fi
+  if [ "$ended_error" = 1 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 143 ] &&
+    [ ! -s "$STALLED" ] && [ "$MODEL" != "$fallback" ]; then
+    echo "scout: the run ended on an error; if ${MODEL%%/*} quota is out, rerun with --model $fallback" >&2
   fi
   if [ -f "$OUT" ]; then cat "$OUT"; fi
   # Where the run's files are, what it cost, and whether a worker left something under Blocked on me: a PASS
