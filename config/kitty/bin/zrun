@@ -5,7 +5,7 @@ shift
 [ "$#" -gt 0 ] || exit 2
 host=${ZWS_HOST:-}
 [ -n "$host" ] || exec "$@"
-[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9_.@-]*$ ]] || exit 2
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 2
 
 # Homebrew paths belong only to the Mac. The box resolves these via its PATH.
 program=$1
@@ -13,6 +13,7 @@ shift
 case ${program##*/} in
   hunk) program=hunk ;;
   nvim) program=nvim ;;
+  zsh) program=zsh ;;
 esac
 quote() {
   local value=$1

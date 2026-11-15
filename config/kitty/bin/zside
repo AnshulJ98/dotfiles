@@ -160,6 +160,7 @@ class HostGit:
         self.proc = None
         self.address = self.here = self.there = self.home = ''
         self.down = self.initialized = self.version_asked = False
+        self.failed, self.kind = False, ''
         self.next_refresh = 0
 
     def request(self, paths, current, now):
@@ -188,7 +189,6 @@ class HostGit:
                 source = open(os.path.join(folder, 'zpick-rows'), 'rb')
                 cmd = [os.path.join(folder, 'zhost'), host, 'python3', '-', '--side-facts',
                        'cached' if self.version_asked else 'version', *paths]
-                self.version_asked = True
             self.proc = subprocess.Popen(cmd, stdin=source or subprocess.DEVNULL,
                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                          env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
@@ -202,7 +202,7 @@ class HostGit:
                 source.close()
 
     def collect(self, ready, now):
-        if getattr(self, 'failed', False):
+        if self.failed:
             self.failed = False
             if self.kind == 'host':
                 self.down = True
@@ -241,6 +241,7 @@ class HostGit:
                 self.cache = {top: (now, status) for top, status in data['counts'].items()}
                 if isinstance(data.get('version'), str) and data['version']:
                     self.there = data['version']
+                    self.version_asked = True
                 self.down = False
             except ValueError:
                 self.down = True
