@@ -1,12 +1,12 @@
 # Workspace watcher: zkitty runs key/sidebar intents; bin/zws and bin/zpick handle prompts.
-#  - keeps a session file per open workspace in ~/.local/state/kitty/workspaces, so goto_session
+#  - keeps a session file per open workspace in $ZWS_DIR (default ~/.local/state/kitty/workspaces), so goto_session
 #    reopens it with its tabs, splits and panes (transient=1 scout panes are not saved).
 #    Saves are debounced: the tab bar redraws on
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
 #  - answers bin/zshell's zq query once per pane with its holder and pi_session, and for a
-#    workspace bound to an ssh host (host= var) that host and the remote folder.
+#    host instance (ZWS_HOST in its environment) that host and the remote folder.
 #  - accepts ready/zdo only from role=sidebar windows launched with bin/zside.
 #  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
@@ -16,6 +16,7 @@ import shlex
 import shutil
 import time
 import sys
+import unicodedata
 from importlib import import_module
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
@@ -32,6 +33,9 @@ _log = zkitty.log
 _safe = zkitty.safe
 OPEN = os.path.join(DIR, '.open')
 OFF = os.path.join(DIR, '.sidebar-off')
+STATE = os.path.expanduser('~/.local/state/kitty')
+ATTACHED = os.path.join(DIR, '.attached')
+_seen_main = False
 _save_pending = False
 _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
@@ -48,7 +52,7 @@ _sent: dict[int, bytes] = {}
 
 INTERNALS = (
     ('kitty.boss:Boss', 'all_windows all_tabs all_tab_managers active_window active_tab call_remote_control'),
-    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at'),
+    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at open_url_handler'),
     ('kitty.child:Child', 'argv'),
     ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
     ('kitty.fast_data_types:Screen', 'last_reported_cwd columns cursor draw'),
@@ -164,10 +168,18 @@ def _label(boss) -> None:
             continue
         # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
         # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
+        host = zkitty.instance_host()
+        if host:
+            script = ('"$1" "$2" "$3" "$4" "$5" "$6" >/dev/null 2>&1 || '
+                      'kitten @ set-user-vars --match "id:$7" zlabel=retry')
+            args = (os.path.join(FOLDER, 'bin/zhost'), host, 'zmx', 'set')
+        else:
+            script = ('"$1" set "$2" "$3" >/dev/null 2>&1 || '
+                      'kitten @ set-user-vars --match "id:$4" zlabel=retry')
+            args = (zmx,)
         boss.call_remote_control(None, (
             'launch', '--type=background', '--allow-remote-control', 'sh', '-c',
-            '"$1" set "$2" "$3" >/dev/null 2>&1 || kitten @ set-user-vars --match "id:$4" zlabel=retry',
-            'sh', zmx, holder, 'space=' + zcore.label(name), str(w.id)))
+            script, 'sh', *args, holder, 'space=' + zcore.label(name), str(w.id)))
         _labelled[holder] = name
 
 
@@ -215,6 +227,40 @@ def _restore(timer_id: int | None = None) -> None:
     for name in todo:
         boss.call_remote_control(None, ('action', 'goto_session', _file(name)))
     _owner = True
+    _lifecycle()
+    add_timer(_safe(_lifecycle), 2.0, True)
+
+
+def _record(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'w') as f:
+        f.write(str(value))
+    os.replace(path + '.tmp', path)
+
+
+def _lifecycle(timer_id: int | None = None) -> None:
+    global _seen_main, _quitting
+    if not _owner or _quitting:
+        return
+    pidfile = os.path.join(STATE, '.main-pid')
+    if not zkitty.instance_host():
+        _record(pidfile, os.getpid())
+        return
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read())
+        if pid <= 0:
+            raise ValueError('invalid main pid')
+        os.kill(pid, 0)
+    except PermissionError:
+        return  # A live pid owned by another user is not evidence the Mac kitty is gone.
+    except (FileNotFoundError, ProcessLookupError, ValueError):
+        if _seen_main:
+            _save()
+            _quitting = True  # SIGTERM closes windows individually; preserve .open
+            os.kill(os.getpid(), 15)  # no quit confirmation, no subprocess in kitty's thread
+    else:
+        _seen_main = True  # follow a replacement too, not only the first pid
 
 
 def _docks(tab) -> list:
@@ -286,6 +332,13 @@ def _clock(timer_id: int | None = None) -> None:
 
 
 @_safe
+def on_resize(boss, window, data) -> None:
+    # Every new window is resized before use, including overlays and restored panes.
+    if zkitty.instance_host():
+        window.open_url_handler = zkitty.open_url
+
+
+@_safe
 def on_load(boss, data) -> None:
     add_timer(_safe(_restore), 1.0, False)
     add_timer(_safe(_check), 1.0, False)
@@ -316,6 +369,19 @@ def on_program_status_change(boss, window, data) -> None:
 
 @_safe
 def on_set_user_var(boss, window, data) -> None:
+    if data.get('key') == 'zworktree':
+        # kitty decodes OSC 1337's base64 before this callback. Never save/replay the report.
+        directory = data.get('value', '')
+        if not directory:
+            return
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zworktree'))
+        if (zkitty.instance_host() and directory.startswith('/')
+                and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
+                            for c in directory)):
+            boss.call_remote_control(None, (
+                'launch', '--type=background', '--allow-remote-control',
+                zkitty.ZWS, 'here', directory))
+        return
     if data.get('key') == 'zside' and data.get('value') == 'toggle':
         if os.path.exists(OFF):
             os.remove(OFF)
@@ -356,6 +422,25 @@ def on_set_user_var(boss, window, data) -> None:
 @_safe
 def on_quit(boss, window, data) -> None:
     global _quitting
-    if data.get('confirmed'):
+    if data.get('confirmed') and not data.get('aborted'):
+        when = time.time()
         _save()
+        if not _quitting and (zkitty.instance_host() or _owner):
+            # A numeric attachment is a user quit, except when a Mac quit is within 5 s.
+            # Keep both timestamps: either process can be the first to quit on logout.
+            _record(ATTACHED if zkitty.instance_host() else os.path.join(STATE, '.main-quit'), when)
         _quitting = True
+
+
+@_safe
+def on_close(boss, window, data) -> None:
+    if not zkitty.instance_host() or _quitting:
+        return
+    # Last-pane closes can still list themselves; whole OS window closes and outside
+    # SIGTERM can already list none. Only our own self-end (_quitting) keeps attachment.
+    windows = list(boss.all_windows)
+    if not windows or (len(windows) == 1 and windows[0] is window):
+        try:
+            os.unlink(ATTACHED)
+        except FileNotFoundError:
+            pass

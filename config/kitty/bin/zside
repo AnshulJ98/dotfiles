@@ -153,7 +153,102 @@ class Git:
         return changed
 
 
-def rows(view, info, menu, cols, lines):
+class HostGit:
+    """One nonblocking job at a time; all remote disk/git access goes through zhost."""
+    def __init__(self):
+        self.cache, self.refs, self.queue = {}, {}, []
+        self.proc = None
+        self.address = self.here = self.there = self.home = ''
+        self.down = self.initialized = self.version_asked = False
+        self.failed, self.kind = False, ''
+        self.next_refresh = 0
+
+    def request(self, paths, current, now):
+        if self.proc or self.queue or now < self.next_refresh:
+            return
+        if not self.initialized:
+            self.queue.extend([('address', []), ('here', [])])
+            self.initialized = True
+        self.queue.append(('host', list(dict.fromkeys(paths))))
+        self.next_refresh = now + 3
+
+    def start(self, now):
+        if self.proc or not self.queue:
+            return
+        self.kind, paths = self.queue.pop(0)
+        host = os.environ.get('ZWS_HOST', '')
+        source = None
+        self.started, self.output = now, b''
+        try:
+            if self.kind == 'address':
+                cmd = ['ssh', '-G', host]
+            elif self.kind == 'here':
+                cmd = ['zmx', 'version']
+            else:
+                folder = os.path.dirname(os.path.abspath(__file__))
+                source = open(os.path.join(folder, 'zpick-rows'), 'rb')
+                cmd = [os.path.join(folder, 'zhost'), host, 'python3', '-', '--side-facts',
+                       'cached' if self.version_asked else 'version', *paths]
+            self.proc = subprocess.Popen(cmd, stdin=source or subprocess.DEVNULL,
+                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                         env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+            os.set_blocking(self.proc.stdout.fileno(), False)
+        except OSError:
+            # collect() reports the failure on the next loop, so it triggers a redraw.
+            self.output = b''
+            self.failed = True
+        finally:
+            if source:
+                source.close()
+
+    def collect(self, ready, now):
+        if self.failed:
+            self.failed = False
+            if self.kind == 'host':
+                self.down = True
+            return True
+        if not self.proc:
+            return False
+        p = self.proc
+        if p.stdout in ready:
+            self.output += os.read(p.stdout.fileno(), 65536)
+        if now - self.started > 3 and p.poll() is None:
+            p.kill()
+        code = p.poll()
+        if code is None:
+            return False
+        self.output += p.stdout.read() or b''
+        p.stdout.close()
+        self.proc = None
+        text = self.output.decode('utf-8', errors='replace')
+        if self.kind == 'address':
+            self.address = next((parts[1] for parts in map(str.split, text.splitlines())
+                                 if len(parts) == 2 and parts[0].lower() == 'hostname'), '') if code == 0 else ''
+        elif self.kind == 'here':
+            lines = text.splitlines()
+            fields = lines[0].split() if code == 0 and lines else []
+            self.here = fields[-1] if len(fields) > 1 else ''
+        else:
+            try:
+                data = json.loads(text) if code == 0 else None
+                if (not isinstance(data, dict) or not isinstance(data.get('home'), str)
+                        or not isinstance(data.get('refs'), dict) or not isinstance(data.get('counts'), dict)
+                        or not all(isinstance(p, str) and isinstance(v, list) and len(v) == 2
+                                   and all(isinstance(s, str) for s in v) for p, v in data['refs'].items())
+                        or not all(isinstance(p, str) and isinstance(s, str) for p, s in data['counts'].items())):
+                    raise ValueError('invalid host snapshot')
+                self.home, self.refs = data['home'], data['refs']
+                self.cache = {top: (now, status) for top, status in data['counts'].items()}
+                if isinstance(data.get('version'), str) and data['version']:
+                    self.there = data['version']
+                    self.version_asked = True
+                self.down = False
+            except ValueError:
+                self.down = True
+        return True
+
+
+def rows(view, info, menu, cols, lines, host_info=None):
     spaces = {s['name']: s for s in view['spaces']}
     agents, current = view['agents'], view['current']
 
@@ -166,7 +261,18 @@ def rows(view, info, menu, cols, lines):
             out.append(f'\x1b[0;{bg}{sgr}m{text}')
         return ''.join(out) + f'\x1b[0;{bg}39m' + ' ' * (cols - used) + '\x1b[0m'
 
-    top: list[tuple[str, tuple | None]] = [(line([(' spaces', '1;97')]), None), (line([]), None)]
+    host = os.environ.get('ZWS_HOST', '')
+    header, colour = ' spaces', '1;97'
+    if host:
+        address = getattr(host_info, 'address', '')
+        header = ' ' + host + (' ' + address if address and address != host else '')
+        if getattr(host_info, 'down', False):
+            header, colour = header + ' down', '2;31'
+    top: list[tuple[str, tuple | None]] = [(line([(header, colour)]), None)]
+    here, there = getattr(host_info, 'here', ''), getattr(host_info, 'there', '')
+    if host and here and there and here != there:
+        top.append((line([(' zmx ' + there + ', here ' + here, '2')]), None))
+    top.append((line([]), None))
     for number, (name, sp) in enumerate(spaces.items(), 1):  # cmd+alt+N goes to space N
         shown, branch, status = info[name]
         glyph, colour = ICON.get(sp['state'], ICON[''])
@@ -213,12 +319,18 @@ def render(view, git, menu):
     info, tops = {}, {}
     for sp in view['spaces']:
         cwd, name = sp['cwd'], sp['name']
-        top, branch = repo(cwd)
-        folder = 'home' if cwd == os.path.expanduser('~') else os.path.basename(top or cwd)
+        host = os.environ.get('ZWS_HOST', '')
+        branch, top = git.refs.get(cwd, ('', '')) if host else ('', '')
+        if not host:
+            top, branch = repo(cwd)
+        home = git.home if host else os.path.expanduser('~')
+        folder = 'home' if cwd and cwd == home else os.path.basename(top or cwd)
+        if host and cwd not in git.refs:
+            folder = name
         shown = sp['shown'] or (folder if cwd else name)
         info[name] = shown, branch, git.cache.get(top, (0, ''))[1]
-        tops[name] = top
-    body, clicks = rows(view, info, menu, *shutil.get_terminal_size((24, 40)))
+        tops[name] = cwd if host else top
+    body, clicks = rows(view, info, menu, *shutil.get_terminal_size((24, 40)), host_info=git)
     write('\x1b[?2026h\x1b[H' + '\r\n'.join(body) + '\x1b[?2026l')
 
     return clicks, tops
@@ -241,7 +353,7 @@ def main() -> None:
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     clicks, menu, buffer, view = [], '', b'', None
-    git = Git()
+    git = HostGit() if os.environ.get('ZWS_HOST', '') else Git()
     wake_r, wake_w = os.pipe()
     os.set_blocking(wake_w, False)
     old_wake = signal.set_wakeup_fd(wake_w)
@@ -253,7 +365,8 @@ def main() -> None:
 
         while True:
             inputs = [fd, wake_r] + ([git.proc.stdout] if git.proc else [])
-            ready, _, _ = select.select(inputs, [], [], .1 if git.proc or git.queue else None)
+            pending = git.proc or git.queue or getattr(git, 'failed', False)
+            ready, _, _ = select.select(inputs, [], [], .1 if pending else None)
             draw, refresh = False, False
             if wake_r in ready:
                 os.read(wake_r, 4096)
