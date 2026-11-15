@@ -48,27 +48,23 @@ def cwd(window) -> str:
     return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
 
 
-def hosted(boss, session) -> list:
-    """The panes of a workspace bound to an ssh host (zws new --host)."""
-    return [w for w in (boss.all_windows if session else ())
-            if w.created_in_session_name == session and w.user_vars.get('host')]
+def instance_host() -> str:
+    return os.environ.get('ZWS_HOST', '')
 
 
 def attach(boss, window) -> None:
     saved = window.user_vars.get('holder', '')
-    # kitty gives a split no session, so the pane's own tab also supplies host peers.
-    tab = next((list(t) for t in getattr(boss, 'all_tabs', ()) if any(w is window for w in t)), [])
-    peers = []
-    for w in hosted(boss, getattr(window, 'created_in_session_name', None)) + [
-            w for w in tab if w.user_vars.get('host')]:
-        if w is not window and not any(w is p for p in peers):
-            peers.append(w)
-    # The pane focused before this one: the new pane opens in its remote folder.
-    active = max(peers, key=lambda w: w.last_focused_at, default=None)
-    host = window.user_vars.get('host', '') or (active.user_vars['host'] if active else '')
+    host = instance_host() if window.user_vars.get('role') != 'sidebar' else ''
     directory = ''
     if host and not saved:
-        directory = cwd(active) if active else window.user_vars.get('host_dir', '')
+        # kitty gives a split no session, so its own tab also supplies remote peers.
+        session = getattr(window, 'created_in_session_name', None)
+        tab = next((list(t) for t in getattr(boss, 'all_tabs', ()) if any(w is window for w in t)), [])
+        peers = [w for w in list(getattr(boss, 'all_windows', ())) + tab
+                 if w is not window and w.user_vars.get('role') != 'sidebar'
+                 and ((session and w.created_in_session_name == session) or w in tab)]
+        active = max(peers, key=lambda w: w.last_focused_at, default=None)
+        directory = (cwd(active) if active else '') or window.user_vars.get('host_dir', '')
         name = zcore.holder(directory or '~', '~', uuid.uuid4().hex[:12])
     else:
         name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
@@ -110,7 +106,7 @@ def run(boss, words) -> list[tuple]:
     if words in (['tab'], ['tab', 'here']):
         # A host workspace's folders are remote; attach() hands them to the new pane.
         directory = (cwd(active) if active and words == ['tab', 'here']
-                     and not hosted(boss, current) else '')
+                     and not instance_host() else '')
         boss.call_remote_control(active, (
             'launch', '--type=tab', *(('--cwd', directory) if directory else ()),
             *(('--add-to-session', current) if current else ())))
