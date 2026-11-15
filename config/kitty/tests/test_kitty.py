@@ -72,6 +72,19 @@ class IntentTests(unittest.TestCase):
     def goto(self, name):
         return (None, ('action', 'goto_session', str(Path(self.directory.name) / (name + '.kitty-session'))))
 
+    def test_host_and_mac_launchers(self):
+        for host in ("", "winpc"):
+            with patch.dict(os.environ, ZWS_HOST=host):
+                for word, command in (("hunk", ("/opt/homebrew/bin/hunk", "diff")),
+                                      ("shell", ("/bin/zsh", "-il"))):
+                    self.boss.calls.clear()
+                    zkitty.run(self.boss, [word])
+                    self.assertEqual(self.boss.calls, [(None, (
+                        "launch", "--type=tab", "--match=id:7",
+                        *(("--tab-title", "hunk", "--add-to-session=!") if word == "hunk" else ()),
+                        *(("--cwd=current",) if not host else ()),
+                        "/bin/bash", str(ROOT / "bin/zrun"), "/live folder", *command))])
+
     def test_navigation_and_noops(self):
         for words, ops, calls in [
             (['switch', '2'], [('goto', 'beta')], [self.goto('beta')]),
