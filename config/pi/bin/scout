@@ -18,8 +18,9 @@
 #                  check: line: a worker gets a plan, not a title.
 #   --review BASE  The one review of a run: prompts/review.md over
 #                  BASE...HEAD, read-only, with review.prompt.md, AGENTS.md
-#                  (--ctx) and a root AUTO.md as the brief. Needs a clean
-#                  tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
+#                  (--ctx) and a root AUTO.md as the brief, plus dispatched
+#                  slice specs on auto/<effort> (target and mechanism: yardstick).
+#                  Needs a clean tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
 #                  sha>; config/git/bin/auto-guard refuses to merge an auto/*
 #                  branch whose tip has no such record. Thinking high, 900s.
 #                  A second and third review of the same base read only the
@@ -269,10 +270,21 @@ if [ -n "$REVIEW_BASE" ]; then
   }
   REVIEW_TARGET="\`git diff $REVIEW_BASE...HEAD\` and \`git log --first-parent $REVIEW_BASE..HEAD\`, every slice of the run at once"
   REVIEW_TOP="$(git rev-parse --show-toplevel)"
+  REVIEW_SLICE_SPECS=0
   if [ -z "${BRIEF_FILE:-}" ] && [ -f "$REVIEW_TOP/AUTO.md" ]; then
     BRIEF_FILE="$REVIEW_TOP/AUTO.md"
     BRIEF=("@$BRIEF_FILE")
     REVIEW_TARGET="$REVIEW_TARGET, against the spec in the attached AUTO.md"
+    # bin/auto-slice owns pi-auto/<effort> and writes the dispatched .spec files.
+    REVIEW_BRANCH="$(git branch --show-current)"
+    case "$REVIEW_BRANCH" in auto/*)
+      for spec in "$(git rev-parse --path-format=absolute --git-common-dir)/pi-auto/${REVIEW_BRANCH#auto/}"/*.spec; do
+        [ -f "$spec" ] || continue
+        BRIEF+=("@$spec")
+        REVIEW_SLICE_SPECS=1
+      done
+      ;;
+    esac
   fi
   if [ "$REVIEW_ROUND" -gt 1 ]; then
     REVIEW_TARGET="\`git diff $REVIEW_PREV..HEAD\`, the fixes made since round $((REVIEW_ROUND - 1)) of the review of \`$REVIEW_BASE..HEAD\`${BRIEF_FILE:+ (its spec is in the attached AUTO.md)}. This is round $REVIEW_ROUND of 3: judge whether this diff resolves the last round's findings and what it breaks; anything outside this diff is out of scope unless the diff caused it"
@@ -280,6 +292,9 @@ if [ -n "$REVIEW_BASE" ]; then
       BRIEF+=("@$REVIEW_DIR/$REVIEW_PREV.findings")
       REVIEW_TARGET="$REVIEW_TARGET. The last round's findings are attached"
     fi
+  fi
+  if [ "$REVIEW_SLICE_SPECS" = 1 ]; then
+    REVIEW_TARGET="$REVIEW_TARGET. Each slice's spec is also attached; its target and \`mechanism:\` line are the yardstick for that slice"
   fi
   REVIEW_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$REVIEW_MD")"
   # Split on the literal $@ instead of ${body/..}: bash 5.2 expands & in a replacement
