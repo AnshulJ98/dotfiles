@@ -53,7 +53,133 @@ def load(state_dir: str, boss: Boss | None = None) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location("workspaces", KITTY_DIR / "workspaces.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    state = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(state.cleanup)
+    module.STATE = state.name
     return module
+
+
+class LifecycleTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        env = patch.dict(os.environ, ZWS_HOST="box")
+        env.start()
+        self.addCleanup(env.stop)
+        self.window = Window("dev", 1)
+        self.boss = Boss([self.window], self.window, "launch\n")
+        self.directory = self.root / "hosts/box"
+        self.directory.mkdir(parents=True)
+        self.record = self.directory / ".attached"
+        self.record.write_text("attached")
+        self.module = load(str(self.directory), self.boss)
+        self.module.STATE = str(self.root)
+        self.module._owner = True
+
+    def test_user_close_only_detaches_on_confirmed_quit_or_last_live_window(self):
+        m = self.module
+        m.on_quit(self.boss, None, {"confirmed": False})
+        m.on_quit(self.boss, None, {"confirmed": True, "aborted": True})
+        self.assertFalse(m._quitting)
+        self.assertEqual(self.record.read_text(), "attached")
+        m.on_close(self.boss, self.window, {})
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
+        self.boss.all_windows = []  # SIGTERM callbacks: already empty
+        m.on_close(self.boss, self.window, {})
+        self.assertEqual(self.record.read_text(), "attached")
+        self.boss.all_windows = [self.window]
+        m.on_quit(self.boss, None, {"confirmed": True})
+        self.assertNotEqual(self.record.read_text(), "attached")
+        m.on_close(self.boss, self.window, {})
+        self.assertTrue(self.record.exists())
+
+    def test_host_closed_before_restore_is_still_detached(self):
+        m = self.module
+        m._owner = False
+        m.on_close(self.boss, self.window, {})
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
+        m.on_quit(self.boss, None, {"confirmed": True})
+        self.assertNotEqual(self.record.read_text(), "attached")
+
+    def test_nonlast_and_mac_close_do_not_change_attachment(self):
+        from unittest.mock import patch
+        self.boss.all_windows.append(Window("other", 1))
+        self.module.on_close(self.boss, self.window, {})
+        self.assertEqual(self.record.read_text(), "attached")
+        with patch.dict(os.environ, ZWS_HOST=""):
+            self.boss.all_windows = [self.window]
+            self.module.on_close(self.boss, self.window, {})
+            self.module.on_quit(self.boss, None, {"confirmed": True})
+        self.assertEqual(self.record.read_text(), "attached")
+
+    def test_follow_waits_for_live_main_then_saves_and_terminates_without_detaching(self):
+        from unittest.mock import patch
+        m = self.module
+        pidfile = self.root / ".main-pid"
+        with patch.object(m.os, "kill") as kill:
+            m._lifecycle()
+            kill.assert_not_called()
+            pidfile.write_text("123")
+            kill.side_effect = ProcessLookupError
+            m._lifecycle()  # stale record, never seen
+            self.assertFalse(m._quitting)
+            kill.side_effect = None
+            m._lifecycle()
+            pidfile.write_text("456")  # replacement is alive
+            m._lifecycle()
+            self.assertFalse(m._quitting)
+            self.assertNotIn((os.getpid(), 15), [c.args for c in kill.call_args_list])
+            kill.side_effect = lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()) if sig == 0 else None
+            m._lifecycle()
+            self.assertTrue(m._quitting)
+            kill.assert_called_with(os.getpid(), 15)
+        self.assertEqual(self.record.read_text(), "attached")
+        self.assertEqual((self.directory / ".open").read_text(), "dev\n")
+        self.boss.all_windows = []
+        m.on_close(self.boss, self.window, {})
+        m._save()
+        self.assertEqual((self.directory / ".open").read_text(), "dev\n")
+        self.assertEqual(self.record.read_text(), "attached")
+
+    def test_only_workspace_main_publishes_and_host_checks_every_two_seconds(self):
+        from unittest.mock import patch
+        m = self.module
+        with patch.object(m, "add_timer") as timer, patch.object(m.os, "kill") as kill:
+            m._restore()
+            self.assertIn((2.0, True), [c.args[1:] for c in timer.call_args_list])
+            kill.assert_not_called()
+        with patch.dict(os.environ, ZWS_HOST=""), patch.object(m.os, "kill") as kill:
+            m._owner = False
+            self.boss.all_windows = []
+            m._restore()
+            self.assertFalse((self.root / ".main-pid").exists())
+            self.boss.all_windows = [self.window]
+            with patch.object(m, "add_timer") as timer:
+                m._restore()
+                self.assertIn((2.0, True), [c.args[1:] for c in timer.call_args_list])
+            self.assertEqual((self.root / ".main-pid").read_text(), str(os.getpid()))
+            kill.assert_not_called()
+
+    def test_quit_order_is_recorded_for_restore_in_both_orders(self):
+        from unittest.mock import patch
+        for host_time, main_time in ((100, 104), (104, 100), (100, 106)):
+            with self.subTest(host_time=host_time, main_time=main_time):
+                host = load(str(self.directory), self.boss)
+                mac_dir = self.root / "workspaces"
+                mac_dir.mkdir(exist_ok=True)
+                mac = load(str(mac_dir), self.boss)
+                host.STATE = mac.STATE = str(self.root)
+                host._owner = mac._owner = True
+                events = sorted([(host_time, "box", host), (main_time, "", mac)], key=lambda e: e[0])
+                for when, name, module in events:
+                    with patch.dict(os.environ, ZWS_HOST=name), patch.object(module.time, "time", return_value=when):
+                        module.on_quit(self.boss, None, {"confirmed": True})
+                self.assertEqual(float(self.record.read_text()), host_time)
+                self.assertEqual(float((self.root / ".main-quit").read_text()), main_time)
 
 
 class SavingTests(unittest.TestCase):
