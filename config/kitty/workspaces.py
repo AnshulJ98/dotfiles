@@ -16,6 +16,7 @@ import shlex
 import shutil
 import time
 import sys
+import unicodedata
 from importlib import import_module
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
@@ -366,6 +367,18 @@ def on_program_status_change(boss, window, data) -> None:
 
 @_safe
 def on_set_user_var(boss, window, data) -> None:
+    if data.get('key') == 'zworktree':
+        # kitty decodes OSC 1337's base64 before this callback. Never save/replay the report.
+        directory = data.get('value', '')
+        if directory:
+            boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zworktree'))
+        if (zkitty.instance_host() and directory.startswith('/')
+                and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
+                            for c in directory)):
+            boss.call_remote_control(None, (
+                'launch', '--type=background', '--allow-remote-control',
+                zkitty.ZWS, 'here', directory))
+        return
     if data.get('key') == 'zside' and data.get('value') == 'toggle':
         if os.path.exists(OFF):
             os.remove(OFF)
