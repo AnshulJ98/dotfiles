@@ -398,6 +398,19 @@ class SavingTests(unittest.TestCase):
 
 
 class IntentWatcherTests(unittest.TestCase):
+    def test_unset_worktree_report_does_nothing_and_logs_nothing(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(module, "add_timer") as timer:
+                for value in (None, ""):
+                    module.on_set_user_var(boss, Window("dev", 1),
+                                           {"key": "zworktree", "value": value})
+                    self.assertEqual(boss.calls, [])
+                    self.assertEqual(list(Path(directory).iterdir()), [])
+                    timer.assert_not_called()
+
     def test_worktree_report_is_cleared_and_forwarded_only_on_host(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as directory:

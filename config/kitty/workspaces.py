@@ -370,8 +370,9 @@ def on_set_user_var(boss, window, data) -> None:
     if data.get('key') == 'zworktree':
         # kitty decodes OSC 1337's base64 before this callback. Never save/replay the report.
         directory = data.get('value', '')
-        if directory:
-            boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zworktree'))
+        if not directory:
+            return
+        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zworktree'))
         if (zkitty.instance_host() and directory.startswith('/')
                 and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
                             for c in directory)):

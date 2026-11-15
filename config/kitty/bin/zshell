@@ -34,6 +34,31 @@ if [ -n "$host" ]; then
   remote='z=$(command -v zmx || echo ~/.local/bin/zmx); [ -x "$z" ] || exit 97; '
   [ -z "$dir" ] || remote+="cd $(printf %q "$dir") 2>/dev/null; "
   remote+='for d in /usr/lib/kitty/shell-integration/zsh ~/.local/kitty.app/lib/kitty/shell-integration/zsh; do [ -d "$d" ] && export ZDOTDIR=$d && break; done; '
+  # Bash cannot retain a decoded NUL; do not turn a truncated path into a resume.
+  case $d in *%00*) pi_session= ;; esac
+  if [ -n "$pi_session" ]; then
+    # Decide anew on the host on every retry. Single quotes also keep control bytes inert;
+    # python rejects those paths before opening them (the host needs no new dotfiles).
+    quoted_pi=${pi_session//\'/\'\\\'\'}
+    remote+="p='$quoted_pi'; n=$(printf %q "$name"); "
+    remote+='if existing=$("$z" ls --short 2>/dev/null) &&
+      ! printf "%s\n" "$existing" | grep -Fx -- "$n" >/dev/null &&
+      [ -f "$p" ] && cwd=$(python3 -c '\''
+import json,sys,unicodedata
+p=sys.argv[1]
+if any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029" for c in p):
+    sys.exit(1)
+try:
+    with open(p) as f: cwd=json.loads(f.readline()).get("cwd","")
+except (OSError, ValueError):
+    cwd=""
+print(cwd if isinstance(cwd,str) else "")
+'\'' "$p" 2>/dev/null); then
+      ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec "$z" attach "$n" zsh -ilc '\''
+cd "$1" 2>/dev/null || cd "$HOME"; pi --session "$2"; exec "$0" -il
+'\'' zsh "${cwd:-$HOME}" "$p"
+    fi; '
+  fi
   remote+="ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec \"\$z\" attach $(printf %q "$name")"
   # %C stays under macOS's socket path limit; a dead link ends after 15 s x (2 + 1) = 45 s.
   # -q hides ssh's notices when sshd's session limit forces an unshared connection.
