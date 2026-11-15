@@ -25,8 +25,10 @@ still open) gets this view instead of a plan; print it and stop:
   grilling a wrong premise settles the wrong decisions.
 
 A spec with several deliverables is a slice loop: list the slices
-first, one line each, `<n>. <name>, branch slice/<name>, decisions
-<numbers>`, in dependency order. Then plan slice 1 as below. Each
+first, one line each,
+`<n>. <name>, branch slice/<name>, decisions <numbers>[, risk]`, in
+dependency order. Mark `risk` a slice that changes a public interface,
+persistence, concurrency or security. Then plan slice 1 as below. Each
 slice plan opens by restating, verbatim, the spec decisions it
 covers, so the review has its yardstick in reach.
 
@@ -134,9 +136,9 @@ Start, or resume when the run's `AUTO.md` exists:
 2. Ask now any unknown in the slices that changes what gets built.
    Headless, such an unknown is a stop, never a default.
 3. Print the confirmation: base branch and sha, `auto/<effort>`, each
-   slice with its `tests`, the worker model, grants beyond the default,
-   `AUTO.md`. Ask start, change or cancel with `ask_user`; if it can't
-   run (headless), proceed.
+   slice with its `tests` and `risk` mark, the worker model and its
+   effort, grants beyond the default, `AUTO.md`. Ask start, change or
+   cancel with `ask_user`; if it can't run (headless), proceed.
 4. `auto-slice start <effort>` makes the run worktree and prints its
    path; write `AUTO.md` there. On resume, nothing is made.
 
@@ -151,18 +153,28 @@ Per slice, in this order:
 
 1. `auto-slice new <name>` makes the slice's worktree beside the repo
    and prints its path. Never `git worktree add`.
-2. Plan the slice as above against the code in that worktree as it is
-   now: read the files it touches, then print the plan with its
-   `mechanism:` line, numbered steps and `check:` lines, and write the
-   closing block with the plan after it to a file outside the repo. A
-   line of the slice list is not a plan: scout refuses a spec without
-   steps and checks, and the script refuses one written before the
-   worktree existed.
+2. Write the slice's spec to a file outside the repo; do not print it.
+   It holds the closing block, then the spec decisions this slice
+   covers, verbatim; `intent:` why the slice exists, in one line;
+   `target:` what is true when the slice is done;
+   `mechanism:` one line naming the module or seam that owns the
+   change; numbered acceptance checks, each `<observable result> →
+   check: <command or observation>`; and the non-goals. Read only what
+   those lines need: enough of the worktree to list `files-allowed`
+   and to see that no earlier slice changed an interface this one
+   assumes. The worker reads the code and chooses the steps. A line of
+   the slice list is not a spec: scout refuses one without numbered
+   checks, and the script refuses one written before the worktree
+   existed.
 3. `auto-slice dispatch <name> <spec-file>` runs the worker there, in
    the foreground. It can take 15 minutes: the harness leaves
    `auto-slice` out of the bash timeout, and scout bounds the worker.
 4. The sensors gate the slice; there is no review per slice. When the
-   script says the slice passed, `auto-slice merge <name> "<type>:
+   script says the slice passed, read the worker's Route line. If the
+   slice is marked `risk` in the list, or Route departs from the spec's
+   `mechanism:`, read the slice's diff before merging, and stop
+   (`stopped: route <name>`) when it breaks a spec decision or the
+   Design rule. Otherwise, `auto-slice merge <name> "<type>:
    <description>"` commits, merges `--no-ff` into `auto/<effort>`, runs
    every merged slice's `tests` there, removes the worktree and ticks
    `AUTO.md`. When it says one rework, append the sensors' reasons to

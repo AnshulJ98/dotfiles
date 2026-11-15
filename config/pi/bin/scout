@@ -375,12 +375,12 @@ if [ "$RW" = 1 ]; then
     echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2
     exit 2
   }
-  # A spec is a plan, not a title: /plan numbers its steps and gives each a check.
+  # A spec needs numbered steps or acceptance checks, each with a check: line.
   SPEC_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$BRIEF_FILE")"
   if ! grep -Eq '^[[:space:]]*[0-9]+[.)][[:space:]]' <<<"$SPEC_BODY" || ! grep -q 'check:' <<<"$SPEC_BODY"; then
     [ -n "${SPEC_TMP:-}" ] && BRIEF_FILE="spec on stdin"
     event scout.refused "no plan in the spec"
-    echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps, each with a check: line (run /plan on the slice first)" >&2
+    echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps or acceptance checks, each with a check: line" >&2
     exit 2
   fi
   if [ -n "${SPEC_TMP:-}" ]; then
