@@ -44,7 +44,7 @@ def age(seconds: float) -> str:
 
 
 def short(path: str, home: str) -> str:
-    return '~' + path[len(home):] if home and path.startswith(home) else path
+    return '~' + path[len(home):] if home and (path == home or path.startswith(home + '/')) else path
 
 
 def fit(text: str, width: int) -> str:

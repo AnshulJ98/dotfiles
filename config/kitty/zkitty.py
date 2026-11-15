@@ -54,7 +54,8 @@ def is_sidebar(window) -> bool:
 
 
 def cwd(window) -> str:
-    return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
+    reported = zcore.cwd_of(window.screen.last_reported_cwd, '')
+    return reported if instance_host() else reported or window.cwd_of_child or ''
 
 
 def instance_host() -> str:
@@ -190,7 +191,7 @@ def run(boss, words) -> list[tuple]:
     if words and words[0] == 'new':
         if words not in (['new'], ['new', 'ask'], ['new', 'window']):
             return []
-        directory = (cwd(active) if active else '') or os.path.expanduser('~')
+        directory = (cwd(active) if active else '') or ('' if instance_host() else os.path.expanduser('~'))
         flag = ('--' + words[1],) if len(words) == 2 else ()
         boss.call_remote_control(active, (
             'launch', '--type=background', '--allow-remote-control', ZWS, 'new', *flag, directory))

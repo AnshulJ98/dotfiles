@@ -1,15 +1,17 @@
 #!/bin/bash
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
 # The watcher (workspaces.py) supplies the session name over this pane's terminal: the saved
-# holder=<name>, or a new folder-based one. Without an answer or without zmx, run plain zsh.
+# holder=<name>, or a new folder-based one. Only Mac panes fall back to plain zsh.
 # In a workspace bound to an ssh host the answer adds the host and a remote folder, and the
 # zmx session runs there over one shared ssh connection. Lost links retry without a local shell;
 # the pane keeps its screen until zmx repaints, and waits for a key after two minutes offline.
 export PATH=/opt/homebrew/bin:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
-[ -x "$ZMX" ] || exec "$SHELL_BIN" -il
+[ -n "${ZWS_HOST:-}" ] || [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
 
+tries=0
+while :; do
 name= pi_session= host= dir=
 if [ -t 0 ] && [ -t 2 ] &&
    IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
@@ -20,17 +22,33 @@ if [ -t 0 ] && [ -t 2 ] &&
   [ -z "$e" ] || [ "$e" = - ] || printf -v host '%b' "${e//%/\\x}"
   [ -z "$f" ] || [ "$f" = - ] || printf -v dir '%b' "${f//%/\\x}"
 fi
-if [ -z "$name" ]; then
+if [ -n "${ZWS_HOST:-}" ]; then
+  [ -n "$name" ] && [ -n "$host" ] && break
+  tries=$((tries + 1))
+  if [ "$tries" -ge 3 ]; then
+    echo "zshell: the workspace watcher did not answer; enter retries" >&2
+    IFS= read -r -s -n 1 key || exit 1
+    tries=0
+  fi
+elif [ -z "$name" ]; then
   echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
   exec "$SHELL_BIN" -il
+else
+  break
 fi
+done
 
 if [ -n "$host" ]; then
   # Any pane can set user vars, so a host that ssh would read as an option is refused.
-  case $host in
-    [A-Za-z0-9]*) ;;
-    *) echo "zshell: refusing ssh host '$host'; starting plain shell" >&2; exec "$SHELL_BIN" -il ;;
-  esac
+  if ! [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    if [ -n "${ZWS_HOST:-}" ]; then
+      echo "zshell: refusing ssh host '$host'; press a key to close" >&2
+      IFS= read -r -s -n 1 key
+      exit 1
+    fi
+    echo "zshell: refusing ssh host '$host'; starting plain shell" >&2
+    exec "$SHELL_BIN" -il
+  fi
   remote='z=$(command -v zmx || echo ~/.local/bin/zmx); [ -x "$z" ] || exit 97; '
   [ -z "$dir" ] || remote+="cd $(printf %q "$dir") 2>/dev/null; "
   remote+='for d in /usr/lib/kitty/shell-integration/zsh ~/.local/kitty.app/lib/kitty/shell-integration/zsh; do [ -d "$d" ] && export ZDOTDIR=$d && break; done; '

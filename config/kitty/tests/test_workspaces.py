@@ -78,6 +78,33 @@ class LifecycleTests(unittest.TestCase):
         self.module.STATE = str(self.root)
         self.module._owner = True
 
+    def test_whole_os_window_close_detaches_even_when_kitty_already_emptied_it(self):
+        windows = [self.window, Window("dev", 1), Window("other", 1), Window("other", 1)]
+        windows[1].user_vars["role"] = windows[3].user_vars["role"] = "sidebar"
+        self.boss.all_windows = []
+        self.boss.os_window_map = {}
+        for window in windows:
+            self.module.on_close(self.boss, window, {})
+            self.assertFalse(self.record.exists())
+
+    def test_one_by_one_closes_only_detach_at_last_pane(self):
+        windows = [self.window, Window("other", 1), Window("other", 1)]
+        for index, window in enumerate(windows):
+            self.boss.all_windows = windows[index:]
+            self.module.on_close(self.boss, window, {})
+            self.assertEqual(self.record.exists(), index < 2)
+
+    def test_permission_to_signal_main_is_not_required_to_keep_host_alive(self):
+        from unittest.mock import patch
+        m = self.module
+        m._seen_main = True
+        (self.root / ".main-pid").write_text("123")
+        with patch.object(m.os, "kill", side_effect=PermissionError) as kill:
+            m._lifecycle()
+            kill.assert_called_once_with(123, 0)
+        self.assertFalse(m._quitting)
+        self.assertEqual(self.record.read_text(), "attached")
+
     def test_user_close_only_detaches_on_confirmed_quit_or_last_live_window(self):
         m = self.module
         m.on_quit(self.boss, None, {"confirmed": False})
@@ -87,9 +114,10 @@ class LifecycleTests(unittest.TestCase):
         m.on_close(self.boss, self.window, {})
         self.assertFalse(self.record.exists())
         self.record.write_text("attached")
-        self.boss.all_windows = []  # SIGTERM callbacks: already empty
+        self.boss.all_windows = []  # Outside SIGTERM is indistinguishable from an OS window close.
         m.on_close(self.boss, self.window, {})
-        self.assertEqual(self.record.read_text(), "attached")
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
         self.boss.all_windows = [self.window]
         m.on_quit(self.boss, None, {"confirmed": True})
         self.assertNotEqual(self.record.read_text(), "attached")
