@@ -23,7 +23,7 @@
 #
 # The run is the worktree of this repo whose root holds AUTO.md; AUTO_RUN=<path>
 # picks one when there are several. State is in <git-common-dir>/pi-auto/<effort>/
-# (base, tests.log, and per slice .new .tests .runs .tree .merged .log).
+# (base, tests.log, and per slice .new .tests .spec .runs .tree .merged .log).
 # Every command after start writes "session: $PI_SESSION_ID" into AUTO.md when
 # pi's bash tool set that variable (a bg_run job has none and leaves the line
 # as it is); extensions/auto-run.ts sends that session back to the slices.
@@ -150,7 +150,7 @@ new)
     S="$(tree_of "slice/$name")"
   fi
   : >"$STATE/$name.new"
-  printf 'slice: %s\nPlan slice/%s against that worktree as it is now, write the spec to a file outside the repo, then: auto-slice dispatch %s <spec-file>\n' "$S" "$name" "$name"
+  printf "slice: %s\nWrite slice/%s's spec against that worktree as it is now, to a file outside the repo, then: auto-slice dispatch %s <spec-file>\n" "$S" "$name" "$name"
   ;;
 dispatch)
   name="${1:-}"
@@ -161,7 +161,7 @@ dispatch)
   S="$(tree_of "slice/$name")"
   [ -n "$S" ] || die 2 "no worktree for slice/$name; first: auto-slice new $name"
   [ -r "$spec" ] || die 2 "spec not readable: $spec"
-  [ "$spec" -nt "$STATE/$name.new" ] || die 1 "$spec is older than slice/$name's worktree. A slice is planned against the code as it is after the last merge: read it there, then write the spec"
+  [ "$spec" -nt "$STATE/$name.new" ] || die 1 "$spec is older than slice/$name's worktree. A slice's spec is written against the code as it is after the last merge: read it there, then write the spec"
   failed="$(grep -vc '^PASS ' "$STATE/$name.runs" 2>/dev/null || true)"
   [ "${failed:-0}" -lt 2 ] || die 1 "slice/$name has had its dispatch and its rework and passed neither (a stop condition). Add 'stopped: $name failed after rework' to AUTO.md and report"
   tests="$(awk '/^---[[:space:]]*$/ { n++; next } n == 1 && /^tests:/ { sub(/^tests:[[:space:]]*/, ""); t = $0 } END { print t }' "$spec")"
@@ -175,6 +175,7 @@ dispatch)
   slice_base="$(git -C "$S" merge-base HEAD "$BRANCH")" || die 1 "slice/$name shares no commit with $BRANCH"
   [ -s "$STATE/$name.runs" ] || [ -z "$(git -C "$S" status --porcelain)" ] ||
     die 1 "slice/$name's worktree has changes before its first dispatch ($(git -C "$S" status --porcelain | head -n 5 | tr '\n' ' ')). A worker starts from a clean worktree: undo a hand edit there, and have git ignore what the worktree hook leaves"
+  cp "$spec" "$STATE/$name.spec" || die 1 "could not keep the dispatched spec for slice/$name"
   before="$(cksum <"$RUN/AUTO.md")"
   tick "the worker on slice/$name is still running"
   (cd "$S" && PI_WORKER_BASE="$slice_base" "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"
