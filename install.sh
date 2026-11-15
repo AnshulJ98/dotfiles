@@ -198,6 +198,8 @@ else
 fi
 link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
 link "$DOT/config/pi/web-search.json" "$HOME/.pi/agent/web-search.json"   # pi-web-access: deferred tools, result cap
+mkdir -p "$HOME/.pi/agent/pi-blackhole"   # pi-blackhole keeps its state beside the config
+link "$DOT/config/pi/pi-blackhole-config.json" "$HOME/.pi/agent/pi-blackhole/pi-blackhole-config.json"
 link "$DOT/config/pi/bin"           "$HOME/.pi/agent/bin"   # scout wrapper, referenced by AGENTS.md
 link "$DOT/config/pi/themes"      "$HOME/.pi/agent/themes"
 # Ensure pi has its active file even on a re-run with an existing current link.
