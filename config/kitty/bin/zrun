@@ -23,6 +23,11 @@ quote() {
 remote='export PATH=/usr/local/bin:$HOME/.local/bin:$PATH EDITOR=nvim; '
 remote+="cd -- $(quote "$directory") 2>/dev/null || cd; "
 remote+="command -v $(quote "$program") >/dev/null 2>&1 || exit 97; "
+if [ "$program" = zsh ]; then
+  # As bin/zshell's panes: kitty's shell integration reports the folder and sets the title.
+  remote+='for d in /usr/lib/kitty/shell-integration/zsh ~/.local/kitty.app/lib/kitty/shell-integration/zsh; do [ -d "$d" ] && export ZDOTDIR=$d && break; done; '
+  remote+='export KITTY_SHELL_INTEGRATION=enabled; '
+fi
 remote+="exec $(quote "$program")"
 for arg in "$@"; do remote+=" $(quote "$arg")"; done
 ssh -t -q -o ControlPath=/tmp/zcm-%C -o ControlMaster=no -o ConnectTimeout=5 \

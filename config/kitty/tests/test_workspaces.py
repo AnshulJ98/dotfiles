@@ -499,6 +499,14 @@ class IntentWatcherTests(unittest.TestCase):
                 events.clear()
                 module.on_set_user_var(boss, window, {'key': 'zq', 'value': ''})
                 self.assertEqual(events, [])
+                # A host pane whose answer was lost asks again and gets answered again.
+                with patch.dict(os.environ, ZWS_HOST='box'):
+                    for _ in range(2):
+                        events.clear()
+                        module.on_set_user_var(boss, window, {'key': 'zq', 'value': '1'})
+                        self.assertEqual(events, [b': zq saved %2Fp%2Fs.jsonl box -\n',
+                                                  ('set-user-vars', '--match=id:8', 'zq'),
+                                                  ('set-user-vars', '--match=id:8', 'host=box')])
                 timer.assert_not_called()
             boss.all_tabs = []
             module._push(boss)

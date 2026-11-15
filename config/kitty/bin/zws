@@ -15,10 +15,10 @@ self=$(realpath "$0")
 go() { kitten @ action goto_session "$DIR/$1.kitty-session"; }
 
 # A free session name for a folder: its lower-cased name, then -2, -3...
-unique() { # cwd
+unique() { # cwd [home]
   local open= base name n=2
   [ ! -f "$DIR/.open" ] || open=$(<"$DIR/.open")
-  base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$1" = "$HOME" ] && base=home
+  base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$1" = "${2:-$HOME}" ] && base=home
   name=$base
   while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
   echo "$name"
@@ -74,7 +74,11 @@ case ${1:-} in
       esac
     done
     # A host workspace's folder is remote (the panes' remote home if absent); kitty starts it in ~.
-    if [ -n "$host" ]; then remote=${1:-} cwd=$HOME; name=$(unique "${1:-$HOME}")
+    # The box's home is unknown here without ssh; a user folder at the top of /home is taken as it.
+    if [ -n "$host" ]; then
+      remote=${1:-} cwd=$HOME home=$HOME
+      case $remote in /home/*/*) ;; /root|/home/?*) home=$remote ;; esac
+      name=$(unique "${remote:-$HOME}" "$home")
     else remote= cwd=${1:-$HOME}; name=$(unique "$cwd"); fi
     case $mode in
       --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n" "$3" "$4"' "$name" "$cwd" ${host:+"$host" "$remote"} ;;

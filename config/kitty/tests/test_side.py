@@ -82,7 +82,7 @@ class SideTests(unittest.TestCase):
         self.assertEqual(rows.short('/home/alice/repo', '/home/alice'), '~/repo')
         self.assertEqual(rows.short('/home/alice-other/repo', '/home/alice'), '/home/alice-other/repo')
 
-    def test_host_version_is_requested_until_a_reply_contains_it(self):
+    def test_host_version_is_requested_until_the_host_replies(self):
         git = self.side.HostGit()
         self.assertEqual(git.kind, '')
         self.assertFalse(git.failed)
@@ -105,8 +105,11 @@ class SideTests(unittest.TestCase):
             if version:
                 data['version'] = version
             git.proc, git.output, git.started = proc, json.dumps(data).encode(), 8
+            git.version_asked = False
             self.assertTrue(git.collect([], 9))
-            self.assertEqual(git.version_asked, bool(version))
+            # A host without zmx replies with no version; asking again every poll costs a zmx run there.
+            self.assertTrue(git.version_asked)
+            self.assertEqual(git.there, version or '')
 
     def test_host_fetch_is_async_remote_only_and_recovers(self):
         git = self.side.HostGit()
