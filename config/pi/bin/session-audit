@@ -16,7 +16,9 @@ import os from "node:os";
 import path from "node:path";
 
 const args = process.argv.slice(2);
-const root = args.find((a) => !a.startsWith("--")) ?? path.join(os.homedir(), ".pi/agent/sessions");
+const root =
+  args.find((a) => !a.startsWith("--")) ??
+  path.join(os.homedir(), ".pi/agent/sessions");
 const TOP = 20;
 
 function* jsonlFiles(dir) {
@@ -28,10 +30,18 @@ function* jsonlFiles(dir) {
 }
 
 function modelsTable() {
-  const median = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] ?? 0;
+  const median = (a) =>
+    [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] ?? 0;
   const groups = new Map();
   const group = (key) => {
-    if (!groups.has(key)) groups.set(key, { sessions: new Set(), reasoning: [], tools: [], chars: [], compactions: 0 });
+    if (!groups.has(key))
+      groups.set(key, {
+        sessions: new Set(),
+        reasoning: [],
+        tools: [],
+        chars: [],
+        compactions: 0,
+      });
     return groups.get(key);
   };
   let files = 0;
@@ -49,7 +59,8 @@ function modelsTable() {
       } catch {
         continue; // a session cut off mid-write
       }
-      if (entry.type === "thinking_level_change") level = entry.thinkingLevel ?? level;
+      if (entry.type === "thinking_level_change")
+        level = entry.thinkingLevel ?? level;
       if (entry.type === "compaction" && key) group(key).compactions++;
       const msg = entry.type === "message" ? entry.message : undefined;
       if (!msg) continue;
@@ -57,7 +68,8 @@ function modelsTable() {
         turn = { reasoning: 0, tools: 0 };
         continue;
       }
-      if (msg.role !== "assistant" || !turn || !Array.isArray(msg.content)) continue;
+      if (msg.role !== "assistant" || !turn || !Array.isArray(msg.content))
+        continue;
       key = `${msg.model ?? "?"}:${msg.thinkingLevel ?? level}`;
       const toolCalls = msg.content.filter((c) => c.type === "toolCall").length;
       turn.tools += toolCalls;
@@ -67,14 +79,27 @@ function modelsTable() {
       g.sessions.add(file);
       g.reasoning.push(turn.reasoning);
       g.tools.push(turn.tools);
-      g.chars.push(msg.content.reduce((n, c) => n + (c.type === "text" ? c.text.length : 0), 0));
+      g.chars.push(
+        msg.content.reduce(
+          (n, c) => n + (c.type === "text" ? c.text.length : 0),
+          0,
+        ),
+      );
       turn = undefined;
     }
   }
-  console.log(`${files} session files under ${root.replace(os.homedir(), "~")}, medians per turn\n`);
-  console.log("| model:thinking | sessions | turns | reasoning tokens | tool calls | final chars | compactions |\n|---|---|---|---|---|---|---|");
-  for (const [key, g] of [...groups].sort((a, b) => b[1].tools.length - a[1].tools.length || a[0].localeCompare(b[0]))) {
-    console.log(`| ${key} | ${g.sessions.size} | ${g.tools.length} | ${median(g.reasoning)} | ${median(g.tools)} | ${median(g.chars)} | ${g.compactions} |`);
+  console.log(
+    `${files} session files under ${root.replace(os.homedir(), "~")}, medians per turn\n`,
+  );
+  console.log(
+    "| model:thinking | sessions | turns | reasoning tokens | tool calls | final chars | compactions |\n|---|---|---|---|---|---|---|",
+  );
+  for (const [key, g] of [...groups].sort(
+    (a, b) => b[1].tools.length - a[1].tools.length || a[0].localeCompare(b[0]),
+  )) {
+    console.log(
+      `| ${key} | ${g.sessions.size} | ${g.tools.length} | ${median(g.reasoning)} | ${median(g.tools)} | ${median(g.chars)} | ${g.compactions} |`,
+    );
   }
 }
 if (args.includes("--models")) {
@@ -83,28 +108,79 @@ if (args.includes("--models")) {
 }
 
 // Program plus the word that says what it does: `git diff`, `node --test`, `npm run build`.
-const SUBCOMMAND = new Set(["git", "npm", "pnpm", "yarn", "bun", "npx", "brew", "gh", "docker", "aws", "cdk", "pi", "uv", "cargo", "go"]);
+const SUBCOMMAND = new Set([
+  "git",
+  "npm",
+  "pnpm",
+  "yarn",
+  "bun",
+  "npx",
+  "brew",
+  "gh",
+  "docker",
+  "aws",
+  "cdk",
+  "pi",
+  "uv",
+  "cargo",
+  "go",
+]);
 function shape(segment) {
-  const words = segment.trim().replace(/^(\w+=\S+\s+)+/, "").split(/\s+/).filter(Boolean);
+  const words = segment
+    .trim()
+    .replace(/^(\w+=\S+\s+)+/, "")
+    .split(/\s+/)
+    .filter(Boolean);
   let [prog, ...rest] = words;
   if (!prog) return undefined;
   if (prog === "cd") return undefined;
-  if (prog === "sudo" || prog === "time" || prog === "timeout") [prog, ...rest] = /^\d/.test(rest[0] ?? "") ? rest.slice(1) : rest;
+  if (prog === "sudo" || prog === "time" || prog === "timeout")
+    [prog, ...rest] = /^\d/.test(rest[0] ?? "") ? rest.slice(1) : rest;
   prog = path.basename(prog ?? "");
   if (!prog) return undefined;
   if (SUBCOMMAND.has(prog)) {
     const sub = rest.find((w) => !w.startsWith("-"));
-    return sub ? `${prog} ${sub === "run" ? `run ${rest[rest.indexOf(sub) + 1] ?? ""}`.trim() : sub}` : prog;
+    return sub
+      ? `${prog} ${sub === "run" ? `run ${rest[rest.indexOf(sub) + 1] ?? ""}`.trim() : sub}`
+      : prog;
   }
-  if (prog === "node" || prog === "python3" || prog === "python" || prog === "bash" || prog === "sh") {
+  if (
+    prog === "node" ||
+    prog === "python3" ||
+    prog === "python" ||
+    prog === "bash" ||
+    prog === "sh"
+  ) {
     const arg = rest.find((w) => !w.startsWith("-") || w === "--test");
-    return arg ? `${prog} ${arg === "--test" ? "--test" : path.basename(arg.replace(/['"]/g, ""))}` : prog;
+    return arg
+      ? `${prog} ${arg === "--test" ? "--test" : path.basename(arg.replace(/['"]/g, ""))}`
+      : prog;
   }
   return prog;
 }
 // The commands of a bash call: split on && || ; and newlines, keep each pipeline's first stage, and drop
 // shell syntax and plumbing, which say nothing about the work.
-const PLUMBING = new Set(["for", "do", "done", "if", "then", "else", "fi", "while", "echo", "printf", "sleep", "true", "exit", "export", "set", "[", "test", "{", "}"]);
+const PLUMBING = new Set([
+  "for",
+  "do",
+  "done",
+  "if",
+  "then",
+  "else",
+  "fi",
+  "while",
+  "echo",
+  "printf",
+  "sleep",
+  "true",
+  "exit",
+  "export",
+  "set",
+  "[",
+  "test",
+  "{",
+  "}",
+]);
 const HEREDOC = /<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2(?=\n|$)/g;
 const segments = (cmd) =>
   cmd
@@ -117,7 +193,10 @@ const segments = (cmd) =>
 const CATEGORIES = [
   ["tests", /\btests?\b|assert|coverage|fixture/i],
   ["types", /\bany\b|return type|\btype\b|interface\b|unknown/i],
-  ["errors", /swallow|catch|throw|error handling|exit code|non-zero|fails? (open|closed)/i],
+  [
+    "errors",
+    /swallow|catch|throw|error handling|exit code|non-zero|fails? (open|closed)/i,
+  ],
   ["concurrency", /race|concurren|parallel|await|stampede|retry|backoff/i],
   ["input", /inject|escap|quot|travers|encod|validat|sanitiz/i],
   ["limits", /timeout|ttl|evict|size|limit|cap\b|unbounded|memory/i],
@@ -186,12 +265,17 @@ for (const file of jsonlFiles(root)) {
           const s = shape(seg);
           if (!s) continue;
           bump(shapeSessions, shapeCount, s, id);
-          if (lastShape && lastShape !== s) bump(seqSessions, seqCount, `${lastShape} -> ${s}`, id);
+          if (lastShape && lastShape !== s)
+            bump(seqSessions, seqCount, `${lastShape} -> ${s}`, id);
           lastShape = s;
         }
       } else if (part.name === "read" && typeof args.path === "string") {
-        const p = args.path.replace(/^@/, "").replace(/^~(?=\/|$)/, os.homedir());
-        const abs = path.resolve(cwd || os.homedir(), p).replace(os.homedir(), "~");
+        const p = args.path
+          .replace(/^@/, "")
+          .replace(/^~(?=\/|$)/, os.homedir());
+        const abs = path
+          .resolve(cwd || os.homedir(), p)
+          .replace(os.homedir(), "~");
         bump(readSessions, readCount, abs, id);
       }
     }
@@ -204,14 +288,26 @@ const rank = (sessions, counts, min = 2) =>
     .filter(([, n]) => n >= min)
     .sort((a, b) => b[1] - a[1] || b[2] - a[2] || a[0].localeCompare(b[0]));
 
-const cell = (s) => (s.length > 110 ? `${s.slice(0, 107)}...` : s).replace(/\|/g, "\\|");
+const cell = (s) =>
+  (s.length > 110 ? `${s.slice(0, 107)}...` : s).replace(/\|/g, "\\|");
 const rows = [
-  ...rank(cmdSessions, cmdCount).slice(0, TOP).map((r) => ["cmd", ...r]),
-  ...rank(shapeSessions, shapeCount).slice(0, TOP).map((r) => ["shape", ...r]),
-  ...rank(seqSessions, seqCount).slice(0, TOP).map((r) => ["seq", ...r]),
-  ...rank(readSessions, readCount).slice(0, TOP).map((r) => ["read", ...r]),
+  ...rank(cmdSessions, cmdCount)
+    .slice(0, TOP)
+    .map((r) => ["cmd", ...r]),
+  ...rank(shapeSessions, shapeCount)
+    .slice(0, TOP)
+    .map((r) => ["shape", ...r]),
+  ...rank(seqSessions, seqCount)
+    .slice(0, TOP)
+    .map((r) => ["seq", ...r]),
+  ...rank(readSessions, readCount)
+    .slice(0, TOP)
+    .map((r) => ["read", ...r]),
   ...rank(reviewSessions, reviewCount, 1).map((r) => ["review", ...r]),
 ];
-console.log(`${files} session files, ${calls} tool calls, under ${root.replace(os.homedir(), "~")}\n`);
+console.log(
+  `${files} session files, ${calls} tool calls, under ${root.replace(os.homedir(), "~")}\n`,
+);
 console.log("| kind | item | sessions | count |\n|---|---|---|---|");
-for (const [kind, item, n, count] of rows) console.log(`| ${kind} | \`${cell(item)}\` | ${n} | ${count} |`);
+for (const [kind, item, n, count] of rows)
+  console.log(`| ${kind} | \`${cell(item)}\` | ${n} | ${count} |`);

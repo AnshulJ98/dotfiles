@@ -23,13 +23,33 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const posix = path.posix;
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__", "fixture", "fixtures", "__fixtures__"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".venv",
+  "venv",
+  "__pycache__",
+  "fixture",
+  "fixtures",
+  "__fixtures__",
+]);
 const JS_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
-const LANGS = { ".ts": "TypeScript", ".tsx": "Tsx", ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript", ".py": "Python" };
+const LANGS = {
+  ".ts": "TypeScript",
+  ".tsx": "Tsx",
+  ".js": "JavaScript",
+  ".jsx": "JavaScript",
+  ".mjs": "JavaScript",
+  ".cjs": "JavaScript",
+  ".py": "Python",
+};
 const langOf = (f) => LANGS[posix.extname(f)];
 const byPath = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const isPlainName = (s) => /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(s);
-const collapse = (s) => s.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim();
+const collapse = (s) =>
+  s.replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim();
 
 function fail(message) {
   process.stderr.write(`map: ${message}\n`);
@@ -50,13 +70,28 @@ function checkDir(p) {
 function isSource(rel) {
   const parts = rel.split("/");
   const base = parts.at(-1);
-  if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p)) || !LANGS[posix.extname(base)]) return false;
-  return !(base.endsWith(".d.ts") || /\.(test|spec)\./.test(base) || base.endsWith("_test.py") || /^test_.*\.py$/.test(base));
+  if (
+    parts.slice(0, -1).some((p) => SKIP_DIRS.has(p)) ||
+    !LANGS[posix.extname(base)]
+  )
+    return false;
+  return !(
+    base.endsWith(".d.ts") ||
+    /\.(test|spec)\./.test(base) ||
+    base.endsWith("_test.py") ||
+    /^test_.*\.py$/.test(base)
+  );
 }
 
 function isGitRoot(dir) {
-  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir, encoding: "utf8" });
-  return top.status === 0 && fs.realpathSync(top.stdout.trim()) === fs.realpathSync(dir);
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: dir,
+    encoding: "utf8",
+  });
+  return (
+    top.status === 0 &&
+    fs.realpathSync(top.stdout.trim()) === fs.realpathSync(dir)
+  );
 }
 
 // Repo-relative source paths, git's view when repo is a work tree root, a walk otherwise.
@@ -64,11 +99,18 @@ function listFiles(repo) {
   const isGit = isGitRoot(repo);
   const files = [];
   if (isGit) {
-    const ls = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
-    for (const f of ls.stdout.split("\0")) if (f && isSource(f) && fs.existsSync(path.join(repo, f))) files.push(f);
+    const ls = spawnSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+      { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 },
+    );
+    for (const f of ls.stdout.split("\0"))
+      if (f && isSource(f) && fs.existsSync(path.join(repo, f))) files.push(f);
   } else {
     const walk = (dir) => {
-      for (const e of fs.readdirSync(path.join(repo, dir), { withFileTypes: true })) {
+      for (const e of fs.readdirSync(path.join(repo, dir), {
+        withFileTypes: true,
+      })) {
         const rel = dir ? `${dir}/${e.name}` : e.name;
         if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(rel);
         else if (e.isFile() && isSource(rel)) files.push(rel);
@@ -76,7 +118,12 @@ function listFiles(repo) {
     };
     walk("");
   }
-  const sha = isGit ? spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout?.trim() : "";
+  const sha = isGit
+    ? spawnSync("git", ["rev-parse", "--short", "HEAD"], {
+        cwd: repo,
+        encoding: "utf8",
+      }).stdout?.trim()
+    : "";
   return { files: [...new Set(files)].sort(byPath), sha: sha || "no-git" };
 }
 
@@ -86,12 +133,26 @@ const inExport = { kind: "export_statement", inside: { kind: "program" } };
 
 function jsRules(lang) {
   const ts = lang !== "JavaScript";
-  const decls = ["function_declaration", "generator_function_declaration", "class_declaration", ...(ts ? ["abstract_class_declaration"] : [])];
-  const varDecl = { any: kinds("lexical_declaration", "variable_declaration"), inside: inExport };
+  const decls = [
+    "function_declaration",
+    "generator_function_declaration",
+    "class_declaration",
+    ...(ts ? ["abstract_class_declaration"] : []),
+  ];
+  const varDecl = {
+    any: kinds("lexical_declaration", "variable_declaration"),
+    inside: inExport,
+  };
   return {
     edges: {
-      imp: { kind: "string", inside: { kind: "import_statement", field: "source" } },
-      rex: { kind: "string", inside: { kind: "export_statement", field: "source" } },
+      imp: {
+        kind: "string",
+        inside: { kind: "import_statement", field: "source" },
+      },
+      rex: {
+        kind: "string",
+        inside: { kind: "export_statement", field: "source" },
+      },
       dyn: { pattern: "import($SRC)" },
       req: { pattern: "require($SRC)" },
     },
@@ -99,36 +160,76 @@ function jsRules(lang) {
       exp: inExport,
       // Where an export's header ends: a declaration's body, an exported arrow's body, a const's value.
       cut: {
-        any: kinds(...decls, "function_expression", "generator_function", "class", "arrow_function", ...(ts ? ["internal_module"] : [])),
+        any: kinds(
+          ...decls,
+          "function_expression",
+          "generator_function",
+          "class",
+          "arrow_function",
+          ...(ts ? ["internal_module"] : []),
+        ),
         inside: inExport,
         has: { field: "body", pattern: "$B" },
       },
-      arrow: { kind: "arrow_function", inside: { field: "value", kind: "variable_declarator", inside: varDecl }, has: { field: "body", pattern: "$B" } },
-      value: { kind: "variable_declarator", inside: varDecl, has: { field: "value", pattern: "$B" } },
-      top: { any: kinds(...decls), inside: { kind: "program" }, has: { field: "name", pattern: "$N" } },
-      topvar: { kind: "variable_declarator", inside: { kind: "lexical_declaration", inside: { kind: "program" } }, has: { field: "name", pattern: "$N" } },
+      arrow: {
+        kind: "arrow_function",
+        inside: {
+          field: "value",
+          kind: "variable_declarator",
+          inside: varDecl,
+        },
+        has: { field: "body", pattern: "$B" },
+      },
+      value: {
+        kind: "variable_declarator",
+        inside: varDecl,
+        has: { field: "value", pattern: "$B" },
+      },
+      top: {
+        any: kinds(...decls),
+        inside: { kind: "program" },
+        has: { field: "name", pattern: "$N" },
+      },
+      topvar: {
+        kind: "variable_declarator",
+        inside: { kind: "lexical_declaration", inside: { kind: "program" } },
+        has: { field: "name", pattern: "$N" },
+      },
       call: { pattern: "$FN($$$)" },
     },
   };
 }
 
-const pyTop = { any: [{ kind: "module" }, { kind: "decorated_definition", inside: { kind: "module" } }] };
+const pyTop = {
+  any: [
+    { kind: "module" },
+    { kind: "decorated_definition", inside: { kind: "module" } },
+  ],
+};
 const RULES = {
   TypeScript: jsRules("TypeScript"),
   Tsx: jsRules("Tsx"),
   JavaScript: jsRules("JavaScript"),
   Python: {
-    edges: { pyimp: { any: kinds("import_statement", "import_from_statement") } },
+    edges: {
+      pyimp: { any: kinds("import_statement", "import_from_statement") },
+    },
     detail: {
       pydef: {
         any: kinds("function_definition", "class_definition"),
         inside: pyTop,
-        all: [{ has: { field: "name", pattern: "$N" } }, { has: { field: "body", pattern: "$B" } }],
+        all: [
+          { has: { field: "name", pattern: "$N" } },
+          { has: { field: "body", pattern: "$B" } },
+        ],
       },
       all: {
         kind: "assignment",
         inside: { kind: "expression_statement", inside: { kind: "module" } },
-        all: [{ has: { field: "left", regex: "^__all__$" } }, { has: { field: "right", pattern: "$V" } }],
+        all: [
+          { has: { field: "left", regex: "^__all__$" } },
+          { has: { field: "right", pattern: "$V" } },
+        ],
       },
       call: { pattern: "$FN($$$)" },
     },
@@ -138,14 +239,19 @@ const RULES = {
 const exec = promisify(execFile);
 async function scan(repo, lang, rules, files) {
   if (files.length === 0) return [];
-  const yaml = Object.entries(rules).map(([id, rule]) => JSON.stringify({ id, language: lang, rule })).join("\n---\n");
+  const yaml = Object.entries(rules)
+    .map(([id, rule]) => JSON.stringify({ id, language: lang, rule }))
+    .join("\n---\n");
   // Every match carries its whole source line, so a minified bundle can emit megabytes per match:
   // chunk by source bytes to keep each JSON reply well under V8's string limit.
   const chunks = [[]];
   let bytes = 0;
   for (const f of files) {
     const size = fs.statSync(path.join(repo, f)).size;
-    if (chunks.at(-1).length && (bytes + size > 4e6 || chunks.at(-1).length >= 1000)) {
+    if (
+      chunks.at(-1).length &&
+      (bytes + size > 4e6 || chunks.at(-1).length >= 1000)
+    ) {
       chunks.push([]);
       bytes = 0;
     }
@@ -156,7 +262,11 @@ async function scan(repo, lang, rules, files) {
   // and ast-grep is multi-threaded itself, so a large repo would otherwise start dozens at once.
   const outs = [];
   for (const c of chunks) {
-    const { stdout } = await exec("ast-grep", ["scan", "--inline-rules", yaml, "--json=compact", "--", ...c], { cwd: repo, maxBuffer: 1 << 29 });
+    const { stdout } = await exec(
+      "ast-grep",
+      ["scan", "--inline-rules", yaml, "--json=compact", "--", ...c],
+      { cwd: repo, maxBuffer: 1 << 29 },
+    );
     outs.push(JSON.parse(stdout || "[]").map(slim));
   }
   return outs.flat();
@@ -177,7 +287,7 @@ const at = (mv) => mv.range.byteOffset.start;
 // --- resolution ---
 function stripJsonc(s) {
   let out = "";
-  for (let i = 0; i < s.length; ) {
+  for (let i = 0; i < s.length;) {
     if (s[i] === '"') {
       let j = i + 1;
       while (j < s.length && s[j] !== '"') j += s[j] === "\\" ? 2 : 1;
@@ -196,12 +306,15 @@ function stripJsonc(s) {
 function makeResolver(repo, known) {
   const readJson = (rel) => {
     try {
-      return JSON.parse(stripJsonc(fs.readFileSync(path.join(repo, rel), "utf8")));
+      return JSON.parse(
+        stripJsonc(fs.readFileSync(path.join(repo, rel), "utf8")),
+      );
     } catch {
       return null;
     }
   };
-  const inRepo = (p) => p && !p.startsWith("../") && p !== ".." && !path.isAbsolute(p);
+  const inRepo = (p) =>
+    p && !p.startsWith("../") && p !== ".." && !path.isAbsolute(p);
 
   // `paths` of one config plus one level of in-repo `extends`, with the dir they resolve against.
   function loadAliases(rel) {
@@ -209,19 +322,32 @@ function makeResolver(repo, known) {
     if (!cfg) return null;
     const dir = posix.dirname(rel);
     const opts = cfg.compilerOptions ?? {};
-    let base = typeof opts.baseUrl === "string" ? posix.join(dir, opts.baseUrl) : undefined;
+    let base =
+      typeof opts.baseUrl === "string"
+        ? posix.join(dir, opts.baseUrl)
+        : undefined;
     let paths = opts.paths;
     let pathsDir = dir;
-    if (typeof cfg.extends === "string" && (cfg.extends.startsWith(".") || path.isAbsolute(cfg.extends))) {
-      let ext = path.relative(repo, path.resolve(repo, dir, cfg.extends)).split(path.sep).join("/");
+    if (
+      typeof cfg.extends === "string" &&
+      (cfg.extends.startsWith(".") || path.isAbsolute(cfg.extends))
+    ) {
+      let ext = path
+        .relative(repo, path.resolve(repo, dir, cfg.extends))
+        .split(path.sep)
+        .join("/");
       if (!ext.endsWith(".json")) ext += ".json";
       const parent = inRepo(ext) ? readJson(ext) : null;
       const popts = parent?.compilerOptions ?? {};
       const pdir = posix.dirname(ext);
-      if (base === undefined && typeof popts.baseUrl === "string") base = posix.join(pdir, popts.baseUrl);
-      if (paths === undefined && popts.paths) [paths, pathsDir] = [popts.paths, pdir];
+      if (base === undefined && typeof popts.baseUrl === "string")
+        base = posix.join(pdir, popts.baseUrl);
+      if (paths === undefined && popts.paths)
+        [paths, pathsDir] = [popts.paths, pdir];
     }
-    return paths && typeof paths === "object" ? { paths, root: base ?? pathsDir } : null;
+    return paths && typeof paths === "object"
+      ? { paths, root: base ?? pathsDir }
+      : null;
   }
 
   const configs = new Map();
@@ -235,7 +361,9 @@ function makeResolver(repo, known) {
         break;
       }
       seen.push(dir);
-      const cfg = ["tsconfig.json", "jsconfig.json"].map((n) => posix.join(dir, n)).find((f) => fs.existsSync(path.join(repo, f)));
+      const cfg = ["tsconfig.json", "jsconfig.json"]
+        .map((n) => posix.join(dir, n))
+        .find((f) => fs.existsSync(path.join(repo, f)));
       if (cfg) {
         found = loadAliases(cfg);
         break;
@@ -257,23 +385,48 @@ function makeResolver(repo, known) {
         continue;
       }
       const [pre, suf] = [key.slice(0, star), key.slice(star + 1)];
-      if (spec.length >= pre.length + suf.length && spec.startsWith(pre) && spec.endsWith(suf) && (!best || pre.length > best.pre.length)) {
-        best = { pre, targets, mid: spec.slice(pre.length, spec.length - suf.length) };
+      if (
+        spec.length >= pre.length + suf.length &&
+        spec.startsWith(pre) &&
+        spec.endsWith(suf) &&
+        (!best || pre.length > best.pre.length)
+      ) {
+        best = {
+          pre,
+          targets,
+          mid: spec.slice(pre.length, spec.length - suf.length),
+        };
       }
     }
-    return best ? best.targets.map((t) => posix.join(alias.root, String(t).replace("*", () => best.mid))) : [];
+    return best
+      ? best.targets.map((t) =>
+          posix.join(
+            alias.root,
+            String(t).replace("*", () => best.mid),
+          ),
+        )
+      : [];
   }
 
   function relative(p) {
     const cands = [];
     const twin = /\.(js|jsx|mjs|cjs)$/.exec(p);
-    if (twin) cands.push(`${p.slice(0, -twin[0].length)}.ts`, `${p.slice(0, -twin[0].length)}.tsx`);
-    cands.push(p, ...JS_EXTS.map((e) => p + e), ...JS_EXTS.map((e) => `${p}/index${e}`));
+    if (twin)
+      cands.push(
+        `${p.slice(0, -twin[0].length)}.ts`,
+        `${p.slice(0, -twin[0].length)}.tsx`,
+      );
+    cands.push(
+      p,
+      ...JS_EXTS.map((e) => p + e),
+      ...JS_EXTS.map((e) => `${p}/index${e}`),
+    );
     return cands.find((c) => known.has(c)) ?? null;
   }
 
   function js(file, spec) {
-    if (/^\.\.?(\/|$)/.test(spec)) return [relative(posix.join(posix.dirname(file), spec))];
+    if (/^\.\.?(\/|$)/.test(spec))
+      return [relative(posix.join(posix.dirname(file), spec))];
     const alias = aliasesFor(file);
     for (const target of alias ? aliasTargets(alias, spec) : []) {
       const hit = relative(target);
@@ -285,19 +438,47 @@ function makeResolver(repo, known) {
   const roots = [".", "src", ...pyprojectDirs(repo)];
   const first = (cands) => cands.find((c) => known.has(c));
   function py(file, text) {
-    const t = text.replace(/\\\n/g, " ").replace(/#[^\n]*/g, "").replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
-    const names = (list) => list.split(",").map((s) => s.trim().split(" ")[0]).filter((n) => n && n !== "*");
+    const t = text
+      .replace(/\\\n/g, " ")
+      .replace(/#[^\n]*/g, "")
+      .replace(/[()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const names = (list) =>
+      list
+        .split(",")
+        .map((s) => s.trim().split(" ")[0])
+        .filter((n) => n && n !== "*");
     const from = /^from (\.*)([\p{L}\p{N}_.]*) import (.+)$/u.exec(t);
     if (!from) {
-      const mods = names(t.replace(/^import /, "")).map((m) => m.replace(/\./g, "/"));
-      return mods.map((m) => roots.map((r) => first([posix.join(r, `${m}.py`), posix.join(r, m, "__init__.py")])).find(Boolean));
+      const mods = names(t.replace(/^import /, "")).map((m) =>
+        m.replace(/\./g, "/"),
+      );
+      return mods.map((m) =>
+        roots
+          .map((r) =>
+            first([posix.join(r, `${m}.py`), posix.join(r, m, "__init__.py")]),
+          )
+          .find(Boolean),
+      );
     }
     const [, dots, mod, list] = from;
-    const bases = dots ? [posix.join(posix.dirname(file), ...Array(dots.length - 1).fill(".."))] : roots;
+    const bases = dots
+      ? [posix.join(posix.dirname(file), ...Array(dots.length - 1).fill(".."))]
+      : roots;
     for (const base of bases) {
       const dir = posix.join(base, mod.replace(/\./g, "/"));
-      const pkg = first([...(mod ? [`${dir}.py`] : []), posix.join(dir, "__init__.py")]);
-      const hits = names(list).map((n) => first([posix.join(dir, `${n}.py`), posix.join(dir, n, "__init__.py")]) ?? pkg);
+      const pkg = first([
+        ...(mod ? [`${dir}.py`] : []),
+        posix.join(dir, "__init__.py"),
+      ]);
+      const hits = names(list).map(
+        (n) =>
+          first([
+            posix.join(dir, `${n}.py`),
+            posix.join(dir, n, "__init__.py"),
+          ]) ?? pkg,
+      );
       if (pkg || hits.some(Boolean)) return hits.length ? hits : [pkg];
     }
     return [];
@@ -318,25 +499,38 @@ function pyprojectDirs(repo) {
   for (const line of text.split("\n")) {
     const head = /^\s*\[([^\]]+)\]\s*$/.exec(line);
     if (head) section = head[1].trim();
-    else if (section === "tool.setuptools") body += /^\s*package-dir\s*=\s*\{(.*)\}\s*$/.exec(line)?.[1] ?? "";
+    else if (section === "tool.setuptools")
+      body += /^\s*package-dir\s*=\s*\{(.*)\}\s*$/.exec(line)?.[1] ?? "";
     else if (section === "tool.setuptools.package-dir") body += `${line}\n`;
   }
-  return [...body.matchAll(/["'][^"']*["']\s*=\s*["']([^"']+)["']/g)].map((m) => posix.normalize(m[1]));
+  return [...body.matchAll(/["'][^"']*["']\s*=\s*["']([^"']+)["']/g)].map((m) =>
+    posix.normalize(m[1]),
+  );
 }
 
 // --- per-file exports and internals ---
 function jsDetail(ms) {
-  const exps = ms.filter((m) => m.rule === "exp").sort((a, b) => a.start - b.start);
+  const exps = ms
+    .filter((m) => m.rule === "exp")
+    .sort((a, b) => a.start - b.start);
   const local = new Set();
   const exports = exps.map((e) => {
     const list = /^export\s+(?:type\s+)?\{([^}]*)\}\s*;?$/.exec(e.text);
-    for (const part of list?.[1].split(",") ?? []) local.add(part.trim().replace(/^type\s+/, "").split(/\s+/)[0]);
+    for (const part of list?.[1].split(",") ?? [])
+      local.add(
+        part
+          .trim()
+          .replace(/^type\s+/, "")
+          .split(/\s+/)[0],
+      );
     const cuts = [];
     for (const m of ms) {
       if (m.start < e.start || m.end > e.end) continue;
       if (m.rule === "cut") cuts.push(at(m.mv.B));
       if (m.rule === "value") {
-        const arrow = ms.find((a) => a.rule === "arrow" && a.start === at(m.mv.B));
+        const arrow = ms.find(
+          (a) => a.rule === "arrow" && a.start === at(m.mv.B),
+        );
         cuts.push(arrow ? at(arrow.mv.B) : at(m.mv.B));
       }
     }
@@ -344,29 +538,57 @@ function jsDetail(ms) {
       const whole = e.text.trimEnd().replace(/;$/, "");
       const dflt = /^export\s+default\s+([\s\S]*)$/.exec(whole)?.[1].trim();
       if (dflt !== undefined && isPlainName(dflt)) local.add(dflt);
-      return dflt === undefined || isPlainName(dflt) || /^interface\b/.test(dflt) ? whole : "export default";
+      return dflt === undefined ||
+        isPlainName(dflt) ||
+        /^interface\b/.test(dflt)
+        ? whole
+        : "export default";
     }
-    const head = Buffer.from(e.text).subarray(0, Math.min(...cuts) - e.start).toString();
+    const head = Buffer.from(e.text)
+      .subarray(0, Math.min(...cuts) - e.start)
+      .toString();
     return collapse(head.replace(/\s*(=>|=)\s*$/, ""));
   });
   const internals = ms
-    .filter((m) => (m.rule === "top" || m.rule === "topvar") && isPlainName(m.mv.N.text) && !local.has(m.mv.N.text))
+    .filter(
+      (m) =>
+        (m.rule === "top" || m.rule === "topvar") &&
+        isPlainName(m.mv.N.text) &&
+        !local.has(m.mv.N.text),
+    )
     .map((m) => ({ name: m.mv.N.text, lines: m.lines }));
   return { exports, internals };
 }
 
 function pyDetail(ms) {
   const v = ms.filter((m) => m.rule === "all").at(-1)?.mv.V?.text;
-  const all = v?.startsWith("[") ? new Set([...v.matchAll(/(["'])(.*?)\1/g)].map((x) => x[2])) : null;
+  const all = v?.startsWith("[")
+    ? new Set([...v.matchAll(/(["'])(.*?)\1/g)].map((x) => x[2]))
+    : null;
   const defs = ms
     .filter((m) => m.rule === "pydef")
     .sort((a, b) => a.start - b.start)
     .map((m) => {
-      const head = Buffer.from(m.text).subarray(0, at(m.mv.B) - m.start).toString();
+      const head = Buffer.from(m.text)
+        .subarray(0, at(m.mv.B) - m.start)
+        .toString();
       const name = m.mv.N.text;
-      return { name, lines: m.lines, header: collapse(head.trimEnd().replace(/:\s*#[^\n]*$/, ":").replace(/:$/, "")), exported: all ? all.has(name) : !name.startsWith("_") };
+      return {
+        name,
+        lines: m.lines,
+        header: collapse(
+          head
+            .trimEnd()
+            .replace(/:\s*#[^\n]*$/, ":")
+            .replace(/:$/, ""),
+        ),
+        exported: all ? all.has(name) : !name.startsWith("_"),
+      };
     });
-  return { exports: defs.filter((d) => d.exported).map((d) => d.header), internals: defs.filter((d) => !d.exported) };
+  return {
+    exports: defs.filter((d) => d.exported).map((d) => d.header),
+    internals: defs.filter((d) => !d.exported),
+  };
 }
 
 // Strongly connected components (Tarjan), each sorted by path.
@@ -409,7 +631,11 @@ function readingOrder(files, deps) {
   const pending = comps.map(() => 0);
   const dependents = comps.map(() => []);
   comps.forEach((c, i) => {
-    const needs = new Set(c.flatMap((f) => deps.get(f).map((g) => compOf.get(g))).filter((j) => j !== i));
+    const needs = new Set(
+      c
+        .flatMap((f) => deps.get(f).map((g) => compOf.get(g)))
+        .filter((j) => j !== i),
+    );
     pending[i] = needs.size;
     for (const j of needs) dependents[j].push(i);
   });
@@ -421,10 +647,17 @@ function readingOrder(files, deps) {
     order.push(...comps[i]);
     for (const j of dependents[i]) if (--pending[j] === 0) ready.push(j);
   }
-  return { order, cycles: comps.filter((c) => c.length > 1).sort((a, b) => byPath(a[0], b[0])) };
+  return {
+    order,
+    cycles: comps
+      .filter((c) => c.length > 1)
+      .sort((a, b) => byPath(a[0], b[0])),
+  };
 }
 
-const requireAstGrep = () => spawnSync("ast-grep", ["--version"]).error && fail("ast-grep not found on PATH (brew install ast-grep)");
+const requireAstGrep = () =>
+  spawnSync("ast-grep", ["--version"]).error &&
+  fail("ast-grep not found on PATH (brew install ast-grep)");
 
 // One tree's analysis: repo-wide edges, fan-in and cycles over `files`; exports, internals and
 // call counts for `detailFiles` only (a subset of `files`).
@@ -433,7 +666,18 @@ async function analyze(root, files, detailFiles = files) {
   const langs = Object.keys(RULES);
   const [edgeMatches, detailMatches] = await Promise.all(
     ["edges", "detail"].map(async (kind) =>
-      (await Promise.all(langs.map((l) => scan(root, l, RULES[l][kind], ofLang(kind === "edges" ? files : detailFiles, l))))).flat(),
+      (
+        await Promise.all(
+          langs.map((l) =>
+            scan(
+              root,
+              l,
+              RULES[l][kind],
+              ofLang(kind === "edges" ? files : detailFiles, l),
+            ),
+          ),
+        )
+      ).flat(),
     ),
   );
 
@@ -445,8 +689,10 @@ async function analyze(root, files, detailFiles = files) {
     let targets;
     if (m.rule === "pyimp") targets = resolve.py(m.file, m.text);
     else {
-      const lit = m.rule === "imp" || m.rule === "rex" ? m.text : m.mv.SRC?.text;
-      targets = lit && /^["']/.test(lit) ? resolve.js(m.file, lit.slice(1, -1)) : [];
+      const lit =
+        m.rule === "imp" || m.rule === "rex" ? m.text : m.mv.SRC?.text;
+      targets =
+        lit && /^["']/.test(lit) ? resolve.js(m.file, lit.slice(1, -1)) : [];
     }
     for (const to of targets) {
       if (!to || to === m.file) continue;
@@ -461,7 +707,8 @@ async function analyze(root, files, detailFiles = files) {
     for (const [to, ks] of tos) {
       edgeCount++;
       importers.set(to, [...(importers.get(to) ?? []), from]);
-      if (ks.has("rex")) reexporters.set(to, [...(reexporters.get(to) ?? []), from]);
+      if (ks.has("rex"))
+        reexporters.set(to, [...(reexporters.get(to) ?? []), from]);
     }
   }
 
@@ -495,31 +742,69 @@ async function analyze(root, files, detailFiles = files) {
   for (const m of detailMatches) {
     const name = m.rule === "call" ? m.mv.FN?.text : undefined;
     const family = calls[langOf(m.file) === "Python" ? "py" : "js"];
-    if (name && isPlainName(name)) family.set(name, (family.get(name) ?? 0) + 1);
+    if (name && isPlainName(name))
+      family.set(name, (family.get(name) ?? 0) + 1);
   }
-  const details = new Map(detailFiles.map((f) => [f, (langOf(f) === "Python" ? pyDetail : jsDetail)(byFile.get(f))]));
+  const details = new Map(
+    detailFiles.map((f) => [
+      f,
+      (langOf(f) === "Python" ? pyDetail : jsDetail)(byFile.get(f)),
+    ]),
+  );
 
   // Repo-wide cycles (components over every edge, not only a module's), computed on demand.
-  const cycles = () => components(files, new Map(files.map((f) => [f, [...edges.get(f).keys()]]))).filter((c) => c.length > 1);
+  const cycles = () =>
+    components(
+      files,
+      new Map(files.map((f) => [f, [...edges.get(f).keys()]])),
+    ).filter((c) => c.length > 1);
   return { known, edges, edgeCount, fanIn, details, calls, cycles };
 }
 
 async function moduleMap(repo, arg) {
-  const moduleDir = path.relative(repo, checkDir(path.resolve(repo, arg))).split(path.sep).join("/") || ".";
-  if (moduleDir === ".." || moduleDir.startsWith("../") || path.isAbsolute(moduleDir)) fail(`not inside ${repo}: ${arg}`);
+  const moduleDir =
+    path
+      .relative(repo, checkDir(path.resolve(repo, arg)))
+      .split(path.sep)
+      .join("/") || ".";
+  if (
+    moduleDir === ".." ||
+    moduleDir.startsWith("../") ||
+    path.isAbsolute(moduleDir)
+  )
+    fail(`not inside ${repo}: ${arg}`);
   requireAstGrep();
 
   const { files, sha } = listFiles(repo);
   const inModule = (f) => moduleDir === "." || f.startsWith(`${moduleDir}/`);
   const moduleFiles = files.filter(inModule);
   const analysis = await analyze(repo, files, moduleFiles);
-  const deps = new Map(moduleFiles.map((f) => [f, [...analysis.edges.get(f).keys()].filter(inModule)]));
-  return renderModule(moduleDir, sha, moduleFiles, readingOrder(moduleFiles, deps), analysis);
+  const deps = new Map(
+    moduleFiles.map((f) => [
+      f,
+      [...analysis.edges.get(f).keys()].filter(inModule),
+    ]),
+  );
+  return renderModule(
+    moduleDir,
+    sha,
+    moduleFiles,
+    readingOrder(moduleFiles, deps),
+    analysis,
+  );
 }
 
-function renderModule(moduleDir, sha, moduleFiles, { order, cycles }, { edgeCount, fanIn, details, calls }) {
+function renderModule(
+  moduleDir,
+  sha,
+  moduleFiles,
+  { order, cycles },
+  { edgeCount, fanIn, details, calls },
+) {
   const now = new Date();
-  const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
+  const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+    .map((n) => String(n).padStart(2, "0"))
+    .join("-");
   const out = [
     `# ${moduleDir} map input`,
     "",
@@ -529,11 +814,21 @@ function renderModule(moduleDir, sha, moduleFiles, { order, cycles }, { edgeCoun
     "",
     ...order.map((f, i) => `${i + 1}. ${f}`),
   ];
-  if (cycles.length) out.push("", "Cycles:", ...cycles.map((c) => `- ${[...c, c[0]].join(" -> ")}`));
+  if (cycles.length)
+    out.push(
+      "",
+      "Cycles:",
+      ...cycles.map((c) => `- ${[...c, c[0]].join(" -> ")}`),
+    );
 
   out.push("", "## Fan-in", "", "| file | in | imported by |", "|---|---|---|");
-  const rows = moduleFiles.map((f) => ({ f, by: fanIn(f) })).sort((a, b) => b.by.length - a.by.length || byPath(a.f, b.f));
-  for (const { f, by } of rows) out.push(`| ${f} | ${by.length} | ${by.length ? by.join(", ") : "entry or unused"} |`);
+  const rows = moduleFiles
+    .map((f) => ({ f, by: fanIn(f) }))
+    .sort((a, b) => b.by.length - a.by.length || byPath(a.f, b.f));
+  for (const { f, by } of rows)
+    out.push(
+      `| ${f} | ${by.length} | ${by.length ? by.join(", ") : "entry or unused"} |`,
+    );
 
   out.push("", "## Exports");
   const internals = [];
@@ -541,9 +836,17 @@ function renderModule(moduleDir, sha, moduleFiles, { order, cycles }, { edgeCoun
     const isPy = langOf(f) === "Python";
     const detail = details.get(f);
     const family = calls[isPy ? "py" : "js"];
-    for (const d of detail.internals) internals.push({ ...d, file: f, calls: family.get(d.name) ?? 0 });
+    for (const d of detail.internals)
+      internals.push({ ...d, file: f, calls: family.get(d.name) ?? 0 });
     const none = isPy ? "# no exports" : "// no exports";
-    out.push("", `### ${f}`, "", isPy ? "```py" : "```ts", ...(detail.exports.length ? detail.exports : [none]), "```");
+    out.push(
+      "",
+      `### ${f}`,
+      "",
+      isPy ? "```py" : "```ts",
+      ...(detail.exports.length ? detail.exports : [none]),
+      "```",
+    );
   }
 
   out.push(
@@ -555,8 +858,15 @@ function renderModule(moduleDir, sha, moduleFiles, { order, cycles }, { edgeCoun
     "| internal | file | calls | lines |",
     "|---|---|---|---|",
   );
-  internals.sort((a, b) => b.calls - a.calls || b.lines - a.lines || byPath(a.file, b.file) || byPath(a.name, b.name));
-  for (const r of internals) out.push(`| ${r.name} | ${r.file} | ${r.calls} | ${r.lines} |`);
+  internals.sort(
+    (a, b) =>
+      b.calls - a.calls ||
+      b.lines - a.lines ||
+      byPath(a.file, b.file) ||
+      byPath(a.name, b.name),
+  );
+  for (const r of internals)
+    out.push(`| ${r.name} | ${r.file} | ${r.calls} | ${r.lines} |`);
   if (internals.length === 0) out.push("| (none) | | | |");
   return out;
 }
@@ -572,12 +882,21 @@ async function extract(repo, sha, dir) {
     child.stderr.on("data", (d) => (err += d));
     const done = new Promise((resolve, reject) => {
       child.on("error", reject);
-      child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(err.trim() || `${cmd} exited with ${code}`))));
+      child.on("close", (code) =>
+        code === 0
+          ? resolve()
+          : reject(new Error(err.trim() || `${cmd} exited with ${code}`)),
+      );
     });
     return { child, done };
   };
-  const archive = run("git", ["archive", "--format=tar", sha], { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
-  const tar = run("tar", ["-x", "-f", "-", "-C", dir], { stdio: ["pipe", "ignore", "pipe"] });
+  const archive = run("git", ["archive", "--format=tar", sha], {
+    cwd: repo,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const tar = run("tar", ["-x", "-f", "-", "-C", dir], {
+    stdio: ["pipe", "ignore", "pipe"],
+  });
   tar.child.stdin.on("error", () => {}); // EPIPE when tar stops early; its exit status says why
   archive.child.stdout.pipe(tar.child.stdin);
   const sides = [archive, tar];
@@ -596,10 +915,14 @@ async function extract(repo, sha, dir) {
 async function diffMap(repo, base) {
   if (!isGitRoot(repo)) fail(`not a git work tree root: ${repo}`);
   requireAstGrep();
-  const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
+  const git = (...args) =>
+    spawnSync("git", args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
   const rev = git("rev-parse", "--end-of-options", `${base}^{commit}`, "--");
-  const revs = (rev.stdout ?? "").split("\n").filter((l) => l && l !== "--end-of-options" && l !== "--");
-  if (rev.status !== 0 || revs.length !== 1) fail(rev.stderr?.trim() || `not a single commit: ${base}`);
+  const revs = (rev.stdout ?? "")
+    .split("\n")
+    .filter((l) => l && l !== "--end-of-options" && l !== "--");
+  if (rev.status !== 0 || revs.length !== 1)
+    fail(rev.stderr?.trim() || `not a single commit: ${base}`);
   const sha = revs[0];
   const sources = (...args) => {
     const r = git(...args);
@@ -608,7 +931,15 @@ async function diffMap(repo, base) {
   };
   // Renames are a delete plus an add, so the old path is listed too.
   const touched = new Set([
-    ...sources("diff", "--name-only", "-z", "--no-renames", "--diff-filter=ADMR", sha, "--"),
+    ...sources(
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "--diff-filter=ADMR",
+      sha,
+      "--",
+    ),
     ...sources("ls-files", "--others", "--exclude-standard", "-z"),
   ]);
   const nowFiles = listFiles(repo).files;
@@ -634,8 +965,20 @@ async function diffMap(repo, base) {
     const [now, was] = sides.map((s) => s.value);
     const rows = [...touched]
       .filter((f) => now.known.has(f) || was.known.has(f))
-      .map((file) => ({ file, change: !was.known.has(file) ? "added" : !now.known.has(file) ? "deleted" : "modified" }));
-    return diffData(git("rev-parse", "--short", sha).stdout.trim(), rows, now, was);
+      .map((file) => ({
+        file,
+        change: !was.known.has(file)
+          ? "added"
+          : !now.known.has(file)
+            ? "deleted"
+            : "modified",
+      }));
+    return diffData(
+      git("rev-parse", "--short", sha).stdout.trim(),
+      rows,
+      now,
+      was,
+    );
   } finally {
     cleanup();
     process.off("exit", cleanup);
@@ -646,21 +989,39 @@ async function diffMap(repo, base) {
 // The --diff result as data: `--json` prints it, renderDiff turns it into markdown.
 function diffData(base, touched, now, was) {
   const files = touched
-    .map((t) => ({ ...t, importedBy: (t.change === "deleted" ? was : now).fanIn(t.file) }))
-    .sort((a, b) => b.importedBy.length - a.importedBy.length || byPath(a.file, b.file));
+    .map((t) => ({
+      ...t,
+      importedBy: (t.change === "deleted" ? was : now).fanIn(t.file),
+    }))
+    .sort(
+      (a, b) =>
+        b.importedBy.length - a.importedBy.length || byPath(a.file, b.file),
+    );
 
-  const edgeKeys = (a) => new Map([...a.edges].flatMap(([from, tos]) => [...tos.keys()].map((to) => [`${from}\0${to}`, [from, to]])));
+  const edgeKeys = (a) =>
+    new Map(
+      [...a.edges].flatMap(([from, tos]) =>
+        [...tos.keys()].map((to) => [`${from}\0${to}`, [from, to]]),
+      ),
+    );
   const [edgesWas, edgesNow] = [edgeKeys(was), edgeKeys(now)];
-  const onlyEdges = (a, b) => [...a].filter(([k]) => !b.has(k)).map(([, e]) => e);
+  const onlyEdges = (a, b) =>
+    [...a].filter(([k]) => !b.has(k)).map(([, e]) => e);
 
   // A cycle is its member set: new when no base component has the same members, resolved the other way.
   const cycleKeys = (a) => new Map(a.cycles().map((c) => [c.join("\0"), c]));
   const [cyclesWas, cyclesNow] = [cycleKeys(was), cycleKeys(now)];
-  const only = (a, b) => [...a].filter(([k]) => !b.has(k)).sort((x, y) => byPath(x[0], y[0])).map(([, c]) => c);
+  const only = (a, b) =>
+    [...a]
+      .filter(([k]) => !b.has(k))
+      .sort((x, y) => byPath(x[0], y[0]))
+      .map(([, c]) => c);
 
   const exports = [];
   for (const { file } of files) {
-    const [before, after] = [was, now].map((a) => a.details.get(file)?.exports ?? []);
+    const [before, after] = [was, now].map(
+      (a) => a.details.get(file)?.exports ?? [],
+    );
     const added = [...new Set(after.filter((h) => !before.includes(h)))];
     const removed = [...new Set(before.filter((h) => !after.includes(h)))];
     if (added.length + removed.length) exports.push({ file, added, removed });
@@ -668,8 +1029,14 @@ function diffData(base, touched, now, was) {
   return {
     base,
     files,
-    edges: { added: onlyEdges(edgesNow, edgesWas), removed: onlyEdges(edgesWas, edgesNow) },
-    cycles: { added: only(cyclesNow, cyclesWas), resolved: only(cyclesWas, cyclesNow) },
+    edges: {
+      added: onlyEdges(edgesNow, edgesWas),
+      removed: onlyEdges(edgesWas, edgesNow),
+    },
+    cycles: {
+      added: only(cyclesNow, cyclesWas),
+      resolved: only(cyclesWas, cyclesNow),
+    },
     exports,
   };
 }
@@ -685,22 +1052,49 @@ function renderDiff({ base: short, files: rows, edges, cycles, exports }) {
     "",
     "| file | in | change | imported by |",
     "|---|---|---|---|",
-    ...rows.map(({ file, change, importedBy: by }) => `| ${file} | ${by.length}${by.length >= 10 ? " (!)" : ""} | ${change} | ${by.length ? by.join(", ") : "entry or unused"} |`),
+    ...rows.map(
+      ({ file, change, importedBy: by }) =>
+        `| ${file} | ${by.length}${by.length >= 10 ? " (!)" : ""} | ${change} | ${by.length ? by.join(", ") : "entry or unused"} |`,
+    ),
   ];
   if (rows.length === 0) out.push("| (none) | | | |");
 
-  const edgeLines = [...edges.added.map((e) => ["+", ...e]), ...edges.removed.map((e) => ["-", ...e])]
+  const edgeLines = [
+    ...edges.added.map((e) => ["+", ...e]),
+    ...edges.removed.map((e) => ["-", ...e]),
+  ]
     .sort((a, b) => byPath(a[1], b[1]) || byPath(a[2], b[2]))
     .map(([sign, from, to]) => `${sign} ${from} -> ${to}`);
-  out.push("", "## Import edges", "", ...(edgeLines.length ? edgeLines : ["(none)"]));
+  out.push(
+    "",
+    "## Import edges",
+    "",
+    ...(edgeLines.length ? edgeLines : ["(none)"]),
+  );
 
   const loop = (c) => [...c, c[0]].join(" -> ");
-  const cycleLines = [...cycles.added.map((c) => `High: new cycle ${loop(c)}`), ...cycles.resolved.map((c) => `Resolved: ${loop(c)}`)];
-  out.push("", "## Cycles", "", ...(cycleLines.length ? cycleLines : ["(none)"]));
+  const cycleLines = [
+    ...cycles.added.map((c) => `High: new cycle ${loop(c)}`),
+    ...cycles.resolved.map((c) => `Resolved: ${loop(c)}`),
+  ];
+  out.push(
+    "",
+    "## Cycles",
+    "",
+    ...(cycleLines.length ? cycleLines : ["(none)"]),
+  );
 
   out.push("", "## Export changes");
-  const signed = (sign, headers) => headers.flatMap((h) => h.split("\n").map((l) => `${sign} ${l}`));
-  for (const { file, added, removed } of exports) out.push("", `### ${file}`, "", ...signed("+", added), ...signed("-", removed));
+  const signed = (sign, headers) =>
+    headers.flatMap((h) => h.split("\n").map((l) => `${sign} ${l}`));
+  for (const { file, added, removed } of exports)
+    out.push(
+      "",
+      `### ${file}`,
+      "",
+      ...signed("+", added),
+      ...signed("-", removed),
+    );
   if (exports.length === 0) out.push("", "(none)");
   return out;
 }
@@ -710,18 +1104,24 @@ async function main() {
   const diff = args[1] === "--diff";
   const json = diff && args[3] === "--json";
   if (args.length !== (diff ? (json ? 4 : 3) : 2)) {
-    fail("usage: node map.mjs <repo> <module-dir> | node map.mjs <repo> --diff <base> [--json]");
+    fail(
+      "usage: node map.mjs <repo> <module-dir> | node map.mjs <repo> --diff <base> [--json]",
+    );
   }
   const repo = checkDir(path.resolve(args[0]));
   if (diff) {
     const data = await diffMap(repo, args[2]);
-    process.stdout.write(json ? `${JSON.stringify(data)}\n` : `${renderDiff(data).join("\n")}\n`);
+    process.stdout.write(
+      json ? `${JSON.stringify(data)}\n` : `${renderDiff(data).join("\n")}\n`,
+    );
     return;
   }
   process.stdout.write(`${(await moduleMap(repo, args[1])).join("\n")}\n`);
 }
 
 main().catch((err) => {
-  process.stderr.write(`map: ${(err.stderr || err.message || String(err)).trim()}\n`);
+  process.stderr.write(
+    `map: ${(err.stderr || err.message || String(err)).trim()}\n`,
+  );
   process.exit(1);
 });

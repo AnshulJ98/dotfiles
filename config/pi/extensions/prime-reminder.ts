@@ -37,7 +37,9 @@ const REMINDER =
 function autoRunPointer(sessionId: string): string {
   try {
     const run = ownRun(process.cwd(), sessionId);
-    return run ? ` You are orchestrating an auto run: re-read ${run}/AUTO.md before anything else.` : "";
+    return run
+      ? ` You are orchestrating an auto run: re-read ${run}/AUTO.md before anything else.`
+      : "";
   } catch {
     return ""; // the reminder still goes out
   }
@@ -80,7 +82,8 @@ export default function (pi: ExtensionAPI) {
     // itself is guarded — an uncaught throw inside setTimeout kills the pi
     // process (learned 2026-07-23). Fail-open: if the send is still lost,
     // the armed reminder above injects on the user's next prompt.
-    const manualInterrupt = event.reason === "manual" && !event.willRetry && !fromCap;
+    const manualInterrupt =
+      event.reason === "manual" && !event.willRetry && !fromCap;
     if ((manualInterrupt || (fromCap && capInterrupted)) && !resumeScheduled) {
       resumeScheduled = true; // dedup: one resume per compaction cycle
       // Debug notifies must never throw: ctx.ui's getter asserts the runtime
@@ -102,7 +105,10 @@ export default function (pi: ExtensionAPI) {
           // send on the ExtensionAPI object; the events ctx lacks it (calling
           // it there throws "not a function" — the silent resume failure).
           pi.sendUserMessage(RESUME);
-          debugNotify("prime-reminder: RESUME sendUserMessage returned", "info");
+          debugNotify(
+            "prime-reminder: RESUME sendUserMessage returned",
+            "info",
+          );
         } catch (e) {
           // reminder remains armed; never crash the harness from a timer
           debugNotify(

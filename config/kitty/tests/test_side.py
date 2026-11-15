@@ -1,45 +1,63 @@
 """Pure renderer checks and a real raw-pty draw-before-git regression."""
+
 import base64
 import fcntl
 import importlib.machinery
 import importlib.util
 import json
 import os
-from pathlib import Path
 import pty
 import re
 import select
-import subprocess
 import struct
-import termios
+import subprocess
 import sys
 import tempfile
+import termios
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
-SCRIPT = Path(__file__).resolve().parents[1] / 'bin/zside'
+SCRIPT = Path(__file__).resolve().parents[1] / "bin/zside"
 
 
 def load(script=SCRIPT):
-    loader = importlib.machinery.SourceFileLoader('zside_test', str(script))
-    module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader = importlib.machinery.SourceFileLoader("zside_test", str(script))
+    module = importlib.util.module_from_spec(
+        importlib.util.spec_from_loader(loader.name, loader)
+    )
     with patch.dict(os.environ):
         loader.exec_module(module)
     return module
 
 
-def view(cwd=''):
-    return dict(v=1, current='a', spaces=[
-        dict(name='a', shown='', cwd=cwd, state='working', tabs=1),
-        dict(name='b', shown='Bee', cwd='', state='', tabs=1)],
-        agents=[dict(pane=7, space='a', tab=1, app='pi', state='working',
-                     model='sonnet', ctx='25%', on=True)])
+def view(cwd=""):
+    return dict(
+        v=1,
+        current="a",
+        spaces=[
+            dict(name="a", shown="", cwd=cwd, state="working", tabs=1),
+            dict(name="b", shown="Bee", cwd="", state="", tabs=1),
+        ],
+        agents=[
+            dict(
+                pane=7,
+                space="a",
+                tab=1,
+                app="pi",
+                state="working",
+                model="sonnet",
+                ctx="25%",
+                on=True,
+            )
+        ],
+    )
 
 
 def frame(obj):
-    return b'\x1b_zv' + json.dumps(obj).encode() + b'\x1b\\'
+    return b"\x1b_zv" + json.dumps(obj).encode() + b"\x1b\\"
 
 
 class PortTests(unittest.TestCase):
@@ -47,190 +65,279 @@ class PortTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.script = self.root / 'scripts/zside'
+        self.script = self.root / "scripts/zside"
         self.script.parent.mkdir()
-        self.script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(self.root)))
+        self.script.write_text(
+            SCRIPT.read_text().replace("/opt/homebrew/bin", str(self.root))
+        )
         self.side = load(self.script)
-        env = patch.dict(os.environ, ZWS_HOST='box', ZWS_DIR=str(self.root),
-                         PATH=str(self.root) + ':/usr/bin:/bin')
+        env = patch.dict(
+            os.environ,
+            ZWS_HOST="box",
+            ZWS_DIR=str(self.root),
+            PATH=str(self.root) + ":/usr/bin:/bin",
+        )
         env.start()
         self.addCleanup(env.stop)
-        self.record = dict(forwards={
-            '3000': dict(local=3000, target='127.0.0.1', active=True, automatic=True, program=None),
-            '5432': dict(local=5433, target='127.0.0.1', active=True, automatic=False, program='postgres'),
-            '8080': dict(local=8080, target='127.0.0.1', active=False, automatic=True, program='server')
-        }, stopped=[9000], waiting=[9001, 9002])
+        self.record = dict(
+            forwards={
+                "3000": dict(
+                    local=3000,
+                    target="127.0.0.1",
+                    active=True,
+                    automatic=True,
+                    program=None,
+                ),
+                "5432": dict(
+                    local=5433,
+                    target="127.0.0.1",
+                    active=True,
+                    automatic=False,
+                    program="postgres",
+                ),
+                "8080": dict(
+                    local=8080,
+                    target="127.0.0.1",
+                    active=False,
+                    automatic=True,
+                    program="server",
+                ),
+            },
+            stopped=[9000],
+            waiting=[9001, 9002],
+        )
         self.save()
 
     def save(self):
-        (self.root / 'ports.json').write_text(json.dumps(self.record))
+        (self.root / "ports.json").write_text(json.dumps(self.record))
 
-    def draw(self, menu=''):
-        return self.side.rows(view(), {'a': ('Repo', 'topic', ''), 'b': ('Bee', '', '')},
-                              menu, 60, 30)
+    def draw(self, menu=""):
+        return self.side.rows(
+            view(), {"a": ("Repo", "topic", ""), "b": ("Bee", "", "")}, menu, 60, 30
+        )
 
     def test_host_rows_marks_waiting_inactive_and_space_positions(self):
         body, clicks = self.draw()
-        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row).strip() for row in body]
-        self.assertIn('ports', plain)
-        self.assertIn('3000 auto', plain)
-        self.assertIn('5433→5432 hand postgres', plain)
-        self.assertIn('8080 auto server', plain)
-        self.assertIn('2 more not forwarded', plain)
-        self.assertIn('\x1b[0;2m 8080 auto server', body[plain.index('8080 auto server')])
-        self.assertIn('\x1b[0;2m 2 more not forwarded', body[plain.index('2 more not forwarded')])
-        self.assertNotIn('9000', ''.join(body))
-        self.assertEqual(clicks[plain.index('5433→5432 hand postgres')], ('port', '5432', 5433))
-        with patch.dict(os.environ, ZWS_HOST=''):
+        plain = [re.sub(r"\x1b\[[0-9;]*m", "", row).strip() for row in body]
+        self.assertIn("ports", plain)
+        self.assertIn("3000 auto", plain)
+        self.assertIn("5433→5432 hand postgres", plain)
+        self.assertIn("8080 auto server", plain)
+        self.assertIn("2 more not forwarded", plain)
+        self.assertIn(
+            "\x1b[0;2m 8080 auto server", body[plain.index("8080 auto server")]
+        )
+        self.assertIn(
+            "\x1b[0;2m 2 more not forwarded", body[plain.index("2 more not forwarded")]
+        )
+        self.assertNotIn("9000", "".join(body))
+        self.assertEqual(
+            clicks[plain.index("5433→5432 hand postgres")], ("port", "5432", 5433)
+        )
+        with patch.dict(os.environ, ZWS_HOST=""):
             mac_body, mac_clicks = self.draw()
-        self.assertNotIn(' ports', ''.join(mac_body))
-        end = plain.index('ports') - 1
+        self.assertNotIn(" ports", "".join(mac_body))
+        end = plain.index("ports") - 1
         self.assertEqual(body[2:end], mac_body[2:end])
         self.assertEqual(clicks[:end], mac_clicks[:end])
 
     def test_missing_invalid_records_and_empty_record(self):
-        path = self.root / 'ports.json'
+        path = self.root / "ports.json"
         path.unlink()
-        self.assertNotIn(' ports', ''.join(self.draw()[0]))
-        for bad in ('{', '[]', '{}', '{"forwards": [], "waiting": []}',
-                    json.dumps(dict(self.record, waiting=None)),
-                    json.dumps(dict(self.record, forwards={'bad': {}})),
-                    json.dumps(dict(self.record, forwards={'22': dict(active=True, automatic=True)})),
-                    json.dumps(dict(self.record, forwards={'22': dict(local='bad')}))):
+        self.assertNotIn(" ports", "".join(self.draw()[0]))
+        for bad in (
+            "{",
+            "[]",
+            "{}",
+            '{"forwards": [], "waiting": []}',
+            json.dumps(dict(self.record, waiting=None)),
+            json.dumps(dict(self.record, forwards={"bad": {}})),
+            json.dumps(
+                dict(self.record, forwards={"22": dict(active=True, automatic=True)})
+            ),
+            json.dumps(dict(self.record, forwards={"22": dict(local="bad")})),
+        ):
             with self.subTest(bad=bad):
                 path.write_text(bad)
-                self.assertNotIn(' ports', ''.join(self.draw()[0]))
-        path.write_bytes(b'\xff')
-        self.assertNotIn(' ports', ''.join(self.draw()[0]))
+                self.assertNotIn(" ports", "".join(self.draw()[0]))
+        path.write_bytes(b"\xff")
+        self.assertNotIn(" ports", "".join(self.draw()[0]))
         self.record = dict(forwards={}, stopped=[], waiting=[])
         self.save()
-        self.assertIn(('port-forward', ''), self.draw()[1])
+        self.assertIn(("port-forward", ""), self.draw()[1])
 
     def test_pty_refreshes_record_and_dispatches_sgr_clicks(self):
         script = self.script
-        fake = ("import json, os, pathlib, sys\n"
-                "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
-                "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n")
-        for name in ('ssh', 'zmx', 'zhost', 'open', 'zports', 'zws'):
-            path = (script.parent if name in ('zhost', 'zports', 'zws') else self.root) / name
-            path.write_text('#!' + sys.executable + '\n' + fake)
+        fake = (
+            "import json, os, pathlib, sys\n"
+            "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
+            "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n"
+        )
+        for name in ("ssh", "zmx", "zhost", "open", "zports", "zws"):
+            path = (
+                script.parent if name in ("zhost", "zports", "zws") else self.root
+            ) / name
+            path.write_text("#!" + sys.executable + "\n" + fake)
             path.chmod(0o700)
-        (script.parent / 'zpick-rows').write_text('')
+        (script.parent / "zpick-rows").write_text("")
         master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 60, 0, 0))
-        proc = subprocess.Popen(['/usr/bin/python3', str(script)], stdin=slave, stdout=slave,
-                                stderr=subprocess.PIPE,
-                                env=dict(os.environ, PATH=str(self.root) + ':' + os.environ['PATH']))
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 60, 0, 0))
+        proc = subprocess.Popen(
+            ["/usr/bin/python3", str(script)],
+            stdin=slave,
+            stdout=slave,
+            stderr=subprocess.PIPE,
+            env=dict(os.environ, PATH=str(self.root) + ":" + os.environ["PATH"]),
+        )
         os.close(slave)
         output = bytearray()
+
         def until(needle):
             deadline = time.monotonic() + 4
             while needle not in output:
                 self.assertLess(time.monotonic(), deadline, bytes(output))
-                if select.select([master], [], [], .02)[0]:
+                if select.select([master], [], [], 0.02)[0]:
                     output.extend(os.read(master, 65536))
-        def click(button, action, menu=''):
-            clicks = self.side.rows(view(), {'a': ('a', '', ''), 'b': ('Bee', '', '')},
-                                    menu, 60, 30)[1]
+
+        def click(button, action, menu=""):
+            clicks = self.side.rows(
+                view(), {"a": ("a", "", ""), "b": ("Bee", "", "")}, menu, 60, 30
+            )[1]
             row = clicks.index(action) + 1
-            os.write(master, f'\x1b[<{button};2;{row}M'.encode())
+            os.write(master, f"\x1b[<{button};2;{row}M".encode())
+
         try:
-            until(b'zside=cmVhZHk=')
+            until(b"zside=cmVhZHk=")
             os.write(master, frame(view()))
-            until(b'box down')
-            self.assertIn('5433→5432'.encode(), output)
-            click(0, ('port', '5432', 5433))
-            click(2, ('port', '5432', 5433))
-            until(b'Open in browser')
+            until(b"box down")
+            self.assertIn("5433→5432".encode(), output)
+            click(0, ("port", "5432", 5433))
+            click(2, ("port", "5432", 5433))
+            until(b"Open in browser")
             output.clear()
-            click(0, ('port-stop', '5432'), ('port', '5432'))
-            until(b'\x1b[?2026l')
+            click(0, ("port-stop", "5432"), ("port", "5432"))
+            until(b"\x1b[?2026l")
             output.clear()
-            click(0, ('port-forward', ''))
-            until(b'\x1b[?2026l')
+            click(0, ("port-forward", ""))
+            until(b"\x1b[?2026l")
             # Drain the click redraws before changing the record: only the timer can wake it now.
-            deadline = time.monotonic() + .3
+            deadline = time.monotonic() + 0.3
             while time.monotonic() < deadline:
-                if select.select([master], [], [], .02)[0]:
+                if select.select([master], [], [], 0.02)[0]:
                     output.extend(os.read(master, 65536))
-            self.record['forwards']['5432']['local'] = 5434
+            self.record["forwards"]["5432"]["local"] = 5434
             self.save()
             output.clear()
-            until('5434→5432'.encode())
-            calls = [json.loads(row) for row in (self.root / 'calls').read_text().splitlines()]
-            self.assertIn(['open', ['http://localhost:5433']], calls)
-            self.assertIn(['zports', ['stop', '5432']], calls)
-            self.assertIn(['zws', ['forward-port']], calls)
-            self.assertEqual([c for c in calls if c[0] == 'ssh'], [['ssh', ['-G', 'box']]])
+            until("5434→5432".encode())
+            calls = [
+                json.loads(row)
+                for row in (self.root / "calls").read_text().splitlines()
+            ]
+            self.assertIn(["open", ["http://localhost:5433"]], calls)
+            self.assertIn(["zports", ["stop", "5432"]], calls)
+            self.assertIn(["zws", ["forward-port"]], calls)
+            self.assertEqual(
+                [c for c in calls if c[0] == "ssh"], [["ssh", ["-G", "box"]]]
+            )
             self.assertIsNone(proc.poll())
         finally:
             os.close(master)
             if proc.poll() is None:
                 proc.terminate()
             proc.wait(timeout=3)
-            self.assertEqual(proc.stderr.read(), b'')
+            self.assertEqual(proc.stderr.read(), b"")
             proc.stderr.close()
 
     def test_render_rereads_record_without_remote_work(self):
         git = self.side.HostGit()
-        with patch.object(self.side, 'write') as write, \
-                patch.object(self.side.subprocess, 'run', side_effect=AssertionError('process')):
-            self.side.render(view(), git, '')
-            self.assertIn('5433→5432', write.call_args.args[0])
-            self.record['forwards']['5432']['local'] = 5434
+        with (
+            patch.object(self.side, "write") as write,
+            patch.object(
+                self.side.subprocess, "run", side_effect=AssertionError("process")
+            ),
+        ):
+            self.side.render(view(), git, "")
+            self.assertIn("5433→5432", write.call_args.args[0])
+            self.record["forwards"]["5432"]["local"] = 5434
             self.save()
-            self.side.render(view(), git, '')
-            self.assertIn('5434→5432', write.call_args.args[0])
-            self.assertNotIn('5433→5432', write.call_args.args[0])
+            self.side.render(view(), git, "")
+            self.assertIn("5434→5432", write.call_args.args[0])
+            self.assertNotIn("5433→5432", write.call_args.args[0])
 
     def test_stop_failures_are_dim_persist_and_clear_on_success(self):
-        for failure in (subprocess.CompletedProcess([], 1, '', 'zports: no running engine\n'),
-                        OSError('cannot execute'), subprocess.TimeoutExpired('zports', 3)):
+        for failure in (
+            subprocess.CompletedProcess([], 1, "", "zports: no running engine\n"),
+            OSError("cannot execute"),
+            subprocess.TimeoutExpired("zports", 3),
+        ):
             with self.subTest(failure=failure):
-                kwargs = {'side_effect': failure} if isinstance(failure, Exception) else {'return_value': failure}
-                with patch.object(self.side.subprocess, 'run', **kwargs) as run:
-                    self.side.act(('port-stop', '5432'))
-                self.assertEqual(run.call_args.args[0],
-                                 (str(self.script.parent / 'zports'), 'stop', '5432'))
+                kwargs = (
+                    {"side_effect": failure}
+                    if isinstance(failure, Exception)
+                    else {"return_value": failure}
+                )
+                with patch.object(self.side.subprocess, "run", **kwargs) as run:
+                    self.side.act(("port-stop", "5432"))
+                self.assertEqual(
+                    run.call_args.args[0],
+                    (str(self.script.parent / "zports"), "stop", "5432"),
+                )
                 body, clicks = self.draw()
-                error = body[next(i for i, row in enumerate(body) if ' ports' in row) + 1]
-                self.assertIn('\x1b[0;2m', error)
-                self.assertIn(str(failure) if isinstance(failure, Exception) else failure.stderr.strip(), error)
-                self.assertIn(('port', '5432', 5433), clicks)
+                error = body[
+                    next(i for i, row in enumerate(body) if " ports" in row) + 1
+                ]
+                self.assertIn("\x1b[0;2m", error)
+                self.assertIn(
+                    str(failure)
+                    if isinstance(failure, Exception)
+                    else failure.stderr.strip(),
+                    error,
+                )
+                self.assertIn(("port", "5432", 5433), clicks)
                 self.assertEqual(self.draw()[0], body)
-                with patch.object(self.side.subprocess, 'run',
-                                  return_value=subprocess.CompletedProcess([], 0, '', '')):
-                    self.side.act(('port-stop', '5432'))
+                with patch.object(
+                    self.side.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, "", ""),
+                ):
+                    self.side.act(("port-stop", "5432"))
                 self.assertNotEqual(self.draw()[0], body)
-                self.assertEqual(self.side.PORT_ERROR, '')
+                self.assertEqual(self.side.PORT_ERROR, "")
 
     def test_click_menu_open_and_stop_use_local_cli(self):
-        fake = ("import json, os, pathlib, sys\n"
-                "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
-                "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n")
-        for name in ('open', 'zports'):
-            path = (self.script.parent if name == 'zports' else self.root) / name
-            path.write_text('#!' + sys.executable + '\n' + fake)
+        fake = (
+            "import json, os, pathlib, sys\n"
+            "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
+            "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n"
+        )
+        for name in ("open", "zports"):
+            path = (self.script.parent if name == "zports" else self.root) / name
+            path.write_text("#!" + sys.executable + "\n" + fake)
             path.chmod(0o700)
-        action = next(c for c in self.draw()[1] if c and c[:2] == ('port', '5432'))
-        menu = self.side.context_menu(action, '')
+        action = next(c for c in self.draw()[1] if c and c[:2] == ("port", "5432"))
+        menu = self.side.context_menu(action, "")
         body, clicks = self.draw(menu)
-        self.assertIn('Open in browser', ''.join(body))
-        self.assertIn('Stop forwarding', ''.join(body))
-        self.assertEqual(self.side.context_menu(action, menu), '')
-        self.assertEqual(self.side.context_menu(('space', 'a'), menu), 'a')
-        with patch.dict(os.environ, PATH=str(self.root) + ':' + os.environ['PATH']):
+        self.assertIn("Open in browser", "".join(body))
+        self.assertIn("Stop forwarding", "".join(body))
+        self.assertEqual(self.side.context_menu(action, menu), "")
+        self.assertEqual(self.side.context_menu(("space", "a"), menu), "a")
+        with patch.dict(os.environ, PATH=str(self.root) + ":" + os.environ["PATH"]):
             self.side.act(action)
-            self.side.act(next(c for c in clicks if c and c[0] == 'port-open'))
-            self.side.act(next(c for c in clicks if c and c[0] == 'port-stop'))
-        self.assertEqual([json.loads(row) for row in (self.root / 'calls').read_text().splitlines()],
-                         [['open', ['http://localhost:5433']], ['open', ['http://localhost:5433']],
-                          ['zports', ['stop', '5432']]])
-        with patch.object(self.side, 'run') as run:
-            self.side.act(('port-forward', ''))
-            run.assert_called_once_with(self.side.ZWS, 'forward-port')
+            self.side.act(next(c for c in clicks if c and c[0] == "port-open"))
+            self.side.act(next(c for c in clicks if c and c[0] == "port-stop"))
+        self.assertEqual(
+            [json.loads(row) for row in (self.root / "calls").read_text().splitlines()],
+            [
+                ["open", ["http://localhost:5433"]],
+                ["open", ["http://localhost:5433"]],
+                ["zports", ["stop", "5432"]],
+            ],
+        )
+        with patch.object(self.side, "run") as run:
+            self.side.act(("port-forward", ""))
+            run.assert_called_once_with(self.side.ZWS, "forward-port")
             run.reset_mock()
-            self.side.act(('port', '3000', None))
+            self.side.act(("port", "3000", None))
             run.assert_not_called()
 
 
@@ -239,95 +346,131 @@ class SideTests(unittest.TestCase):
         self.side = load()
 
     def test_worktree_menu_needs_a_branch_on_mac_and_host(self):
-        info = {'a': ('Repo', 'topic', ''), 'b': ('Bee', '', '')}
-        for host in ('', 'winpc'):
-            for space, expected in (('a', ['rename', 'close', 'new', 'open']),
-                                    ('b', ['rename', 'close'])):
-                with self.subTest(host=host, space=space), patch.dict(os.environ, ZWS_HOST=host):
-                    _, clicks = self.side.rows(view('/host/repo'), info, space, 60, 30)
-                    self.assertEqual([c[1] for c in clicks if c and c[0] == 'menu'], expected)
+        info = {"a": ("Repo", "topic", ""), "b": ("Bee", "", "")}
+        for host in ("", "winpc"):
+            for space, expected in (
+                ("a", ["rename", "close", "new", "open"]),
+                ("b", ["rename", "close"]),
+            ):
+                with (
+                    self.subTest(host=host, space=space),
+                    patch.dict(os.environ, ZWS_HOST=host),
+                ):
+                    _, clicks = self.side.rows(view("/host/repo"), info, space, 60, 30)
+                    self.assertEqual(
+                        [c[1] for c in clicks if c and c[0] == "menu"], expected
+                    )
 
     def test_host_header_down_address_and_versions(self):
         git = self.side.HostGit()
-        info = {'a': ('Repo', '', ''), 'b': ('Bee', '', '')}
-        def draw(host='box'):
+        info = {"a": ("Repo", "", ""), "b": ("Bee", "", "")}
+
+        def draw(host="box"):
             with patch.dict(os.environ, ZWS_HOST=host):
-                return self.side.rows(view(), info, '', 60, 24, git)[0]
-        git.address = '192.168.2.35'
-        self.assertIn(' box 192.168.2.35', draw()[0])
+                return self.side.rows(view(), info, "", 60, 24, git)[0]
+
+        git.address = "192.168.2.35"
+        self.assertIn(" box 192.168.2.35", draw()[0])
         git.down = True
-        self.assertIn('\x1b[0;2;31m box 192.168.2.35 down', draw()[0])
+        self.assertIn("\x1b[0;2;31m box 192.168.2.35 down", draw()[0])
         git.down = False
-        for address in ('box', ''):
+        for address in ("box", ""):
             git.address = address
-            self.assertEqual(re.sub(r'\x1b\[[0-9;]*m', '', draw()[0]).strip(), 'box')
-        git.here, git.there = '1.0.1', '2.0.0'
-        self.assertIn('\x1b[0;2m zmx 2.0.0, here 1.0.1', draw()[1])
-        for version in ('1.0.1', ''):
+            self.assertEqual(re.sub(r"\x1b\[[0-9;]*m", "", draw()[0]).strip(), "box")
+        git.here, git.there = "1.0.1", "2.0.0"
+        self.assertIn("\x1b[0;2m zmx 2.0.0, here 1.0.1", draw()[1])
+        for version in ("1.0.1", ""):
             git.there = version
-            self.assertNotIn('zmx', ''.join(draw()))
-        self.assertIn(' spaces', draw('')[0])
+            self.assertNotIn("zmx", "".join(draw()))
+        self.assertIn(" spaces", draw("")[0])
 
     def test_short_only_abbreviates_the_home_directory_not_sibling_prefixes(self):
         rows = self.load_rows()
-        self.assertEqual(rows.short('/home/alice', '/home/alice'), '~')
-        self.assertEqual(rows.short('/home/alice/repo', '/home/alice'), '~/repo')
-        self.assertEqual(rows.short('/home/alice-other/repo', '/home/alice'), '/home/alice-other/repo')
+        self.assertEqual(rows.short("/home/alice", "/home/alice"), "~")
+        self.assertEqual(rows.short("/home/alice/repo", "/home/alice"), "~/repo")
+        self.assertEqual(
+            rows.short("/home/alice-other/repo", "/home/alice"),
+            "/home/alice-other/repo",
+        )
 
     def test_host_version_is_requested_until_the_host_replies(self):
         git = self.side.HostGit()
-        self.assertEqual(git.kind, '')
+        self.assertEqual(git.kind, "")
         self.assertFalse(git.failed)
         git.initialized = True
-        with patch.object(self.side.subprocess, 'Popen', side_effect=OSError) as popen:
+        with patch.object(self.side.subprocess, "Popen", side_effect=OSError) as popen:
             for now in (0, 4):
-                git.request(['/host/repo'], '/host/repo', now)
+                git.request(["/host/repo"], "/host/repo", now)
                 git.start(now)
-                self.assertEqual(popen.call_args.args[0][5], 'version')
+                self.assertEqual(popen.call_args.args[0][5], "version")
                 self.assertFalse(git.version_asked)
                 self.assertTrue(git.collect([], now + 1))
         from unittest.mock import Mock
+
         pipe = Mock()
-        pipe.read.return_value = b''
+        pipe.read.return_value = b""
         proc = Mock(stdout=pipe)
         proc.poll.return_value = 0
-        git.kind = 'host'
-        for version in (None, '2.0.0'):
-            data = dict(home='/host', refs={}, counts={})
+        git.kind = "host"
+        for version in (None, "2.0.0"):
+            data = dict(home="/host", refs={}, counts={})
             if version:
-                data['version'] = version
+                data["version"] = version
             git.proc, git.output, git.started = proc, json.dumps(data).encode(), 8
             git.version_asked = False
             self.assertTrue(git.collect([], 9))
             # A host without zmx replies with no version; asking again every poll costs a zmx run there.
             self.assertTrue(git.version_asked)
-            self.assertEqual(git.there, version or '')
+            self.assertEqual(git.there, version or "")
 
     def test_host_fetch_is_async_remote_only_and_recovers(self):
         git = self.side.HostGit()
+
         class Pipe:
-            def fileno(self): return 42
-            def read(self): return b''
-            def close(self): pass
+            def fileno(self):
+                return 42
+
+            def read(self):
+                return b""
+
+            def close(self):
+                pass
+
         class Process:
             stdout = Pipe()
             code = None
-            def poll(self): return self.code
-            def kill(self): self.code = -9
+
+            def poll(self):
+                return self.code
+
+            def kill(self):
+                self.code = -9
+
         proc = Process()
-        data = dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo']},
-                    counts={'/host/repo': '↑2 ↓1'}, version='2.0.0')
-        with patch.dict(os.environ, ZWS_HOST='box'), \
-                patch.object(self.side, 'repo', side_effect=AssertionError('local .git')), \
-                patch.object(self.side.subprocess, 'run', side_effect=AssertionError('blocking')), \
-                patch.object(self.side.subprocess, 'Popen', return_value=proc) as popen, \
-                patch.object(self.side.os, 'set_blocking'), patch.object(self.side, 'write') as write:
-            _, tops = self.side.render(view('/host/repo/sub'), git, '')
+        data = dict(
+            home="/host",
+            refs={"/host/repo/sub": ["topic", "/host/repo"]},
+            counts={"/host/repo": "↑2 ↓1"},
+            version="2.0.0",
+        )
+        with (
+            patch.dict(os.environ, ZWS_HOST="box"),
+            patch.object(self.side, "repo", side_effect=AssertionError("local .git")),
+            patch.object(
+                self.side.subprocess, "run", side_effect=AssertionError("blocking")
+            ),
+            patch.object(self.side.subprocess, "Popen", return_value=proc) as popen,
+            patch.object(self.side.os, "set_blocking"),
+            patch.object(self.side, "write") as write,
+        ):
+            _, tops = self.side.render(view("/host/repo/sub"), git, "")
             popen.assert_not_called()
-            git.request(tops.values(), tops['a'], 0)
+            git.request(tops.values(), tops["a"], 0)
             # Metadata is also collected without a blocking run, once per sidebar.
-            for expected, output in ((['ssh', '-G', 'box'], b'hostname 192.168.2.35\n'),
-                                     (['zmx', 'version'], b'zmx\t\t1.0.1\n')):
+            for expected, output in (
+                (["ssh", "-G", "box"], b"hostname 192.168.2.35\n"),
+                (["zmx", "version"], b"zmx\t\t1.0.1\n"),
+            ):
                 proc.code = None
                 git.start(0)
                 self.assertEqual(popen.call_args.args[0], expected)
@@ -335,46 +478,64 @@ class SideTests(unittest.TestCase):
                 self.assertTrue(git.collect([], 1))
             git.start(1)
             args = popen.call_args.args[0]
-            self.assertEqual(args[:5], [str(SCRIPT.parent / 'zhost'), 'box', 'python3', '-', '--side-facts'])
-            self.assertIn('/host/repo/sub', args)
-            self.assertEqual(popen.call_args.kwargs['stdin'].name, str(SCRIPT.parent / 'zpick-rows'))
+            self.assertEqual(
+                args[:5],
+                [str(SCRIPT.parent / "zhost"), "box", "python3", "-", "--side-facts"],
+            )
+            self.assertIn("/host/repo/sub", args)
+            self.assertEqual(
+                popen.call_args.kwargs["stdin"].name, str(SCRIPT.parent / "zpick-rows")
+            )
             git.output, proc.code = json.dumps(data).encode(), 0
             self.assertTrue(git.collect([], 2))
-            self.side.render(view('/host/repo/sub'), git, '')
-            self.assertIn('repo', write.call_args.args[0])
-            self.assertIn('topic', write.call_args.args[0])
-            self.assertIn('↑2', write.call_args.args[0])
+            self.side.render(view("/host/repo/sub"), git, "")
+            self.assertIn("repo", write.call_args.args[0])
+            self.assertIn("topic", write.call_args.args[0])
+            self.assertIn("↑2", write.call_args.args[0])
             self.assertFalse(git.down)
-            for code, payload in ((255, b''), (124, b''), (0, b'bad'), (None, b''), (0, json.dumps(data).encode())):
-                git.request(tops.values(), tops['a'], 10)
+            for code, payload in (
+                (255, b""),
+                (124, b""),
+                (0, b"bad"),
+                (None, b""),
+                (0, json.dumps(data).encode()),
+            ):
+                git.request(tops.values(), tops["a"], 10)
                 git.start(10)
-                self.assertEqual(popen.call_args.args[0][5], 'cached')
+                self.assertEqual(popen.call_args.args[0][5], "cached")
                 git.output, proc.code = payload, code
                 self.assertTrue(git.collect([], 14))
                 self.assertEqual(git.down, payload != json.dumps(data).encode())
-                self.side.render(view('/host/repo/sub'), git, '')
-                self.assertEqual(' down' in write.call_args.args[0], git.down)
+                self.side.render(view("/host/repo/sub"), git, "")
+                self.assertEqual(" down" in write.call_args.args[0], git.down)
                 git.next_refresh = 0
-            self.assertEqual(git.address, '192.168.2.35')
-            self.assertEqual((git.here, git.there), ('1.0.1', '2.0.0'))
+            self.assertEqual(git.address, "192.168.2.35")
+            self.assertEqual((git.here, git.there), ("1.0.1", "2.0.0"))
 
     def test_host_without_facts_uses_space_names_or_renames_not_mac_folders(self):
-        obj = view(os.path.expanduser('~'))
-        obj['spaces'][1].update(cwd=os.path.expanduser('~'), shown='')
-        obj['spaces'].append(dict(name='c', cwd='/mac/project', shown='Renamed', state='', tabs=1))
+        obj = view(os.path.expanduser("~"))
+        obj["spaces"][1].update(cwd=os.path.expanduser("~"), shown="")
+        obj["spaces"].append(
+            dict(name="c", cwd="/mac/project", shown="Renamed", state="", tabs=1)
+        )
         git = self.side.HostGit()
         for down in (False, True):
             git.down = down
-            with self.subTest(down=down), patch.dict(os.environ, ZWS_HOST='box'), \
-                    patch.object(self.side, 'repo', side_effect=AssertionError('local .git')), \
-                    patch.object(self.side, 'write') as write:
-                self.side.render(obj, git, '')
-                plain = re.sub(r'\x1b\[[0-9;]*m', '', write.call_args.args[0])
-                self.assertIn(' 1 ◐ a ', plain)
-                self.assertIn(' 2 · b ', plain)
-                self.assertIn(' 3 · Renamed ', plain)
-                self.assertNotIn(os.path.basename(os.path.expanduser('~')), plain)
-                self.assertNotIn('project', plain)
+            with (
+                self.subTest(down=down),
+                patch.dict(os.environ, ZWS_HOST="box"),
+                patch.object(
+                    self.side, "repo", side_effect=AssertionError("local .git")
+                ),
+                patch.object(self.side, "write") as write,
+            ):
+                self.side.render(obj, git, "")
+                plain = re.sub(r"\x1b\[[0-9;]*m", "", write.call_args.args[0])
+                self.assertIn(" 1 ◐ a ", plain)
+                self.assertIn(" 2 · b ", plain)
+                self.assertIn(" 3 · Renamed ", plain)
+                self.assertNotIn(os.path.basename(os.path.expanduser("~")), plain)
+                self.assertNotIn("project", plain)
 
     def test_host_plain_folder_answer_names_folder_not_space(self):
         rows = self.load_rows()
@@ -386,7 +547,10 @@ class SideTests(unittest.TestCase):
             git = self.side.HostGit()
             obj = view(str(folder))
             obj["spaces"][0]["name"] = obj["current"] = "dev"
-            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(self.side, "write") as write:
+            with (
+                patch.dict(os.environ, ZWS_HOST="box"),
+                patch.object(self.side, "write") as write,
+            ):
                 self.side.render(obj, git, "")
                 self.assertIn("dev", write.call_args.args[0])
                 git.home, git.refs = data["home"], data["refs"]
@@ -396,127 +560,198 @@ class SideTests(unittest.TestCase):
 
     def test_host_failure_keeps_last_good_names_and_branches(self):
         git = self.side.HostGit()
-        obj = view('/host/repo/sub')
-        obj['spaces'][1].update(cwd='/host', shown='')
-        data = dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo'],
-                                       '/host': ['', '']}, counts={'/host/repo': '↑2'})
+        obj = view("/host/repo/sub")
+        obj["spaces"][1].update(cwd="/host", shown="")
+        data = dict(
+            home="/host",
+            refs={"/host/repo/sub": ["topic", "/host/repo"], "/host": ["", ""]},
+            counts={"/host/repo": "↑2"},
+        )
+
         class Pipe:
-            def read(self): return b''
-            def close(self): pass
+            def read(self):
+                return b""
+
+            def close(self):
+                pass
+
         class Process:
             stdout = Pipe()
-            def __init__(self, code): self.code = code
-            def poll(self): return self.code
-        with patch.dict(os.environ, ZWS_HOST='box'), patch.object(self.side, 'write') as write:
-            for code, payload in ((0, json.dumps(data).encode()), (255, b'')):
-                git.kind, git.started, git.proc, git.output = 'host', 0, Process(code), payload
+
+            def __init__(self, code):
+                self.code = code
+
+            def poll(self):
+                return self.code
+
+        with (
+            patch.dict(os.environ, ZWS_HOST="box"),
+            patch.object(self.side, "write") as write,
+        ):
+            for code, payload in ((0, json.dumps(data).encode()), (255, b"")):
+                git.kind, git.started, git.proc, git.output = (
+                    "host",
+                    0,
+                    Process(code),
+                    payload,
+                )
                 self.assertTrue(git.collect([], 1))
                 self.assertEqual(git.down, code != 0)
-                self.side.render(obj, git, '')
-                plain = re.sub(r'\x1b\[[0-9;]*m', '', write.call_args.args[0])
-                self.assertIn(' 1 ◐ repo ', plain)
-                self.assertIn('topic ↑2', plain)
-                self.assertIn(' 2 · home ', plain)
-                self.assertEqual(' down' in plain, code != 0)
+                self.side.render(obj, git, "")
+                plain = re.sub(r"\x1b\[[0-9;]*m", "", write.call_args.args[0])
+                self.assertIn(" 1 ◐ repo ", plain)
+                self.assertIn("topic ↑2", plain)
+                self.assertIn(" 2 · home ", plain)
+                self.assertEqual(" down" in plain, code != 0)
 
     def test_host_side_facts_counts_version_and_stdin(self):
         rows = self.load_rows()
-        with patch.object(rows, 'git_ref', return_value=('topic', '/repo')), \
-                patch.object(rows, 'run', side_effect=['1\t2', 'zmx\t\t1.0.1\n']) as run:
-            data = rows.side_facts(['/repo/sub'], True)
-        self.assertEqual(data['refs']['/repo/sub'], ('topic', '/repo'))
-        self.assertEqual(data['counts']['/repo'], '↑2 ↓1')
-        self.assertEqual(data['version'], '1.0.1')
-        self.assertEqual(run.call_args_list[0].args,
-                         ('git', '-C', '/repo', 'rev-list', '--left-right', '--count', '@{u}...HEAD'))
-        with patch.object(rows, 'run') as run:
-            self.assertEqual(rows.side_facts([], False)['version'], '')
+        with (
+            patch.object(rows, "git_ref", return_value=("topic", "/repo")),
+            patch.object(rows, "run", side_effect=["1\t2", "zmx\t\t1.0.1\n"]) as run,
+        ):
+            data = rows.side_facts(["/repo/sub"], True)
+        self.assertEqual(data["refs"]["/repo/sub"], ("topic", "/repo"))
+        self.assertEqual(data["counts"]["/repo"], "↑2 ↓1")
+        self.assertEqual(data["version"], "1.0.1")
+        self.assertEqual(
+            run.call_args_list[0].args,
+            (
+                "git",
+                "-C",
+                "/repo",
+                "rev-list",
+                "--left-right",
+                "--count",
+                "@{u}...HEAD",
+            ),
+        )
+        with patch.object(rows, "run") as run:
+            self.assertEqual(rows.side_facts([], False)["version"], "")
             run.assert_not_called()
-        result = subprocess.run([sys.executable, '-', '--side-facts', 'cached', '/no/such/path'],
-                                input=(SCRIPT.parent / 'zpick-rows').read_text(),
-                                capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            [sys.executable, "-", "--side-facts", "cached", "/no/such/path"],
+            input=(SCRIPT.parent / "zpick-rows").read_text(),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)['refs']['/no/such/path'], ['', ''])
+        self.assertEqual(json.loads(result.stdout)["refs"]["/no/such/path"], ["", ""])
 
     def test_left_clicks_emit_only_intents_and_menu_still_uses_zws(self):
-        with patch.object(self.side.subprocess, 'run', side_effect=AssertionError('process')), \
-             patch.object(self.side.subprocess, 'Popen', side_effect=AssertionError('process')), \
-             patch.object(self.side, 'write') as write:
-            for action, words in [(('space', 'beta'), 'space beta'), (('pane', 41, 'beta'), 'pane 41')]:
+        with (
+            patch.object(
+                self.side.subprocess, "run", side_effect=AssertionError("process")
+            ),
+            patch.object(
+                self.side.subprocess, "Popen", side_effect=AssertionError("process")
+            ),
+            patch.object(self.side, "write") as write,
+        ):
+            for action, words in [
+                (("space", "beta"), "space beta"),
+                (("pane", 41, "beta"), "pane 41"),
+            ]:
                 self.side.act(action)
                 wire = write.call_args.args[0]
                 encoded = base64.b64encode(words.encode()).decode()
-                self.assertEqual(wire, '\x1b]1337;SetUserVar=zdo=' + encoded + '\x07')
-                self.assertEqual(base64.b64decode(wire.split('zdo=')[1][:-1]).decode(), words)
+                self.assertEqual(wire, "\x1b]1337;SetUserVar=zdo=" + encoded + "\x07")
+                self.assertEqual(
+                    base64.b64decode(wire.split("zdo=")[1][:-1]).decode(), words
+                )
             self.assertEqual(write.call_count, 2)
             self.side.act(None)
             self.assertEqual(write.call_count, 2)
-        with patch.object(self.side, 'run') as run:
-            self.side.act(('menu', 'rename', 'beta', '/repo'))
-            run.assert_called_once_with(self.side.ZWS, 'rename', 'beta')
+        with patch.object(self.side, "run") as run:
+            self.side.act(("menu", "rename", "beta", "/repo"))
+            run.assert_called_once_with(self.side.ZWS, "rename", "beta")
 
     def test_repo_directory_worktrees_detached_and_missing_head(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            normal = root / 'normal'
-            (normal / '.git').mkdir(parents=True)
-            head = normal / '.git/HEAD'
-            head.write_text('ref: refs/heads/feature/topic\n')
-            (normal / 'sub').mkdir()
-            for cwd in (normal, normal / 'sub'):
-                self.assertEqual(self.side.repo(str(cwd)), (str(normal), 'feature/topic'))
-            for pointer in (str(normal / '.git'), '../normal/.git'):
-                worktree = root / 'worktree'
+            normal = root / "normal"
+            (normal / ".git").mkdir(parents=True)
+            head = normal / ".git/HEAD"
+            head.write_text("ref: refs/heads/feature/topic\n")
+            (normal / "sub").mkdir()
+            for cwd in (normal, normal / "sub"):
+                self.assertEqual(
+                    self.side.repo(str(cwd)), (str(normal), "feature/topic")
+                )
+            for pointer in (str(normal / ".git"), "../normal/.git"):
+                worktree = root / "worktree"
                 worktree.mkdir(exist_ok=True)
-                (worktree / '.git').write_text('gitdir: ' + pointer + '\n')
-                self.assertEqual(self.side.repo(str(worktree)), (str(worktree), 'feature/topic'))
-            head.write_text('123deadbeef\n')
-            self.assertEqual(self.side.repo(str(normal)), (str(normal), 'HEAD'))
+                (worktree / ".git").write_text("gitdir: " + pointer + "\n")
+                self.assertEqual(
+                    self.side.repo(str(worktree)), (str(worktree), "feature/topic")
+                )
+            head.write_text("123deadbeef\n")
+            self.assertEqual(self.side.repo(str(normal)), (str(normal), "HEAD"))
             head.unlink()
-            self.assertEqual(self.side.repo(str(normal)), (str(normal), ''))
-            self.assertEqual(self.side.repo(str(root)), ('', ''))
-            self.assertEqual(self.side.repo(''), ('', ''))
+            self.assertEqual(self.side.repo(str(normal)), (str(normal), ""))
+            self.assertEqual(self.side.repo(str(root)), ("", ""))
+            self.assertEqual(self.side.repo(""), ("", ""))
 
     def test_git_ceiling_directories_stop_the_search_like_git_does(self):
         # Where a parent folder is itself a checkout (Homebrew's prefix), folders under it are not its repo.
-        loader = importlib.machinery.SourceFileLoader('zpick_rows_test', str(SCRIPT.parent / 'zpick-rows'))
-        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader = importlib.machinery.SourceFileLoader(
+            "zpick_rows_test", str(SCRIPT.parent / "zpick-rows")
+        )
+        rows = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(rows)
         with tempfile.TemporaryDirectory() as directory:
-            outer = Path(directory).resolve() / 'outer'
-            (outer / '.git').mkdir(parents=True)
-            (outer / '.git/HEAD').write_text('ref: refs/heads/main\n')
-            inner = outer / 'mine/project'
+            outer = Path(directory).resolve() / "outer"
+            (outer / ".git").mkdir(parents=True)
+            (outer / ".git/HEAD").write_text("ref: refs/heads/main\n")
+            inner = outer / "mine/project"
             inner.mkdir(parents=True)
-            self.assertEqual(self.side.repo(str(inner)), (str(outer), 'main'))
-            self.assertEqual(rows.git_ref(str(inner)), ('main', str(outer)))
-            with patch.dict(os.environ, GIT_CEILING_DIRECTORIES=f'/nowhere:{outer}/'):
-                self.assertEqual(self.side.repo(str(inner)), ('', ''))
-                self.assertEqual(rows.git_ref(str(inner)), ('', ''))
+            self.assertEqual(self.side.repo(str(inner)), (str(outer), "main"))
+            self.assertEqual(rows.git_ref(str(inner)), ("main", str(outer)))
+            with patch.dict(os.environ, GIT_CEILING_DIRECTORIES=f"/nowhere:{outer}/"):
+                self.assertEqual(self.side.repo(str(inner)), ("", ""))
+                self.assertEqual(rows.git_ref(str(inner)), ("", ""))
                 # git still finds a repo when started in the ceiling itself
-                self.assertEqual(self.side.repo(str(outer)), (str(outer), 'main'))
-                self.assertEqual(rows.git_ref(str(outer)), ('main', str(outer)))
+                self.assertEqual(self.side.repo(str(outer)), (str(outer), "main"))
+                self.assertEqual(rows.git_ref(str(outer)), ("main", str(outer)))
 
-    def picker_rows(self, view, ls, kitty=None, files=None, home=None, origin=''):
-        loader = importlib.machinery.SourceFileLoader('zpick_rows_x', str(SCRIPT.parent / 'zpick-rows'))
-        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    def picker_rows(self, view, ls, kitty=None, files=None, home=None, origin=""):
+        loader = importlib.machinery.SourceFileLoader(
+            "zpick_rows_x", str(SCRIPT.parent / "zpick-rows")
+        )
+        rows = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(rows)
+
         def run(*cmd):
-            if cmd[:2] == ('zmx', 'ls'):
+            if cmd[:2] == ("zmx", "ls"):
                 return ls
-            return json.dumps(kitty or []) if cmd[0] == 'kitten' else ''
-        with tempfile.TemporaryDirectory() as directory, patch.object(rows, 'run', run), \
-                patch.object(rows, 'DIR', directory), patch.object(rows, 'HOME', home or rows.HOME), \
-                patch.object(sys, 'argv', ['zpick-rows', view, origin]), patch('builtins.print') as out:
+            return json.dumps(kitty or []) if cmd[0] == "kitten" else ""
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(rows, "run", run),
+            patch.object(rows, "DIR", directory),
+            patch.object(rows, "HOME", home or rows.HOME),
+            patch.object(sys, "argv", ["zpick-rows", view, origin]),
+            patch("builtins.print") as out,
+        ):
             for name, text in (files or {}).items():
-                Path(directory, name + '.kitty-session').write_text(text)
+                Path(directory, name + ".kitty-session").write_text(text)
             rows.main()
-        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
-        return [(l[0], l[1], re.sub(r'\x1b\[[0-9;]*m', '', l[5])) for l in lines]
+        lines = [l.split("\t") for l in out.call_args[0][0].split("\n")]
+        return [(l[0], l[1], re.sub(r"\x1b\[[0-9;]*m", "", l[5])) for l in lines]
 
     def load_rows(self):
-        loader = importlib.machinery.SourceFileLoader('host_rows', str(SCRIPT.parent / 'zpick-rows'))
-        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader = importlib.machinery.SourceFileLoader(
+            "host_rows", str(SCRIPT.parent / "zpick-rows")
+        )
+        module = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(module)
         return module
 
@@ -526,283 +761,572 @@ class SideTests(unittest.TestCase):
             repo = Path(directory) / "repo"
             (repo / ".git").mkdir(parents=True)
             (repo / ".git/HEAD").write_text("ref: refs/heads/topic\n")
+
             def run(*cmd):
-                return {"zmx": "name=s\tpid=12\tclients=0\tcwd=file://box/old",
-                        "lsof": f"p12\nn{repo}\n",
-                        "ps": "12 13 /bin/zsh\n13 13 /bin/vim\n"}.get(cmd[0], "")
-            with patch.object(rows, 'run', run):
+                return {
+                    "zmx": "name=s\tpid=12\tclients=0\tcwd=file://box/old",
+                    "lsof": f"p12\nn{repo}\n",
+                    "ps": "12 13 /bin/zsh\n13 13 /bin/vim\n",
+                }.get(cmd[0], "")
+
+            with patch.object(rows, "run", run):
                 data = rows.facts([directory])
-                self.assertEqual(data['sessions']['s']['cwd'], str(repo))
-                self.assertEqual(data['sessions']['s']['proc'], 'vim')
-                self.assertEqual(data['refs'][str(repo)], ('topic', str(repo)))
-                self.assertEqual(data['refs'][directory], ('', ''))
-                with patch.object(sys, 'argv', ['zpick-rows', '--facts', directory]),                         patch('builtins.print') as out:
+                self.assertEqual(data["sessions"]["s"]["cwd"], str(repo))
+                self.assertEqual(data["sessions"]["s"]["proc"], "vim")
+                self.assertEqual(data["refs"][str(repo)], ("topic", str(repo)))
+                self.assertEqual(data["refs"][directory], ("", ""))
+                with (
+                    patch.object(sys, "argv", ["zpick-rows", "--facts", directory]),
+                    patch("builtins.print") as out,
+                ):
                     rows.main()
-                self.assertEqual(json.loads(out.call_args.args[0])['sessions']['s']['proc'], 'vim')
+                self.assertEqual(
+                    json.loads(out.call_args.args[0])["sessions"]["s"]["proc"], "vim"
+                )
         # The exact file must also work on stdin; the facts path cannot rely on __file__.
-        result = subprocess.run([sys.executable, '-', '--facts', '/no/such/path'],
-                                input=(SCRIPT.parent / 'zpick-rows').read_text(),
-                                capture_output=True, text=True, timeout=20)
+        result = subprocess.run(
+            [sys.executable, "-", "--facts", "/no/such/path"],
+            input=(SCRIPT.parent / "zpick-rows").read_text(),
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('/no/such/path', json.loads(result.stdout)['refs'])
+        self.assertIn("/no/such/path", json.loads(result.stdout)["refs"])
 
     def test_host_rows_use_only_host_facts_and_survive_fetch_failure(self):
         rows = self.load_rows()
-        pane = dict(id=1, title='shell', cwd='/mac/home', is_active=True, session_name='dev',
-                    user_vars={'holder': 's'}, foreground_processes=[{'cmdline': ['ssh']}])
-        kitty = [dict(is_active=True, tabs=[dict(id=7, title='tab', is_active=True, windows=[pane])])]
-        data = dict(home='/remote', now=1000, refs={'/remote/repo/sub': ['topic', '/remote/repo'],
-                                                 '/closed': ['closed-ref', '/closed']},
-                    sessions={'s': dict(name='s', cwd='/remote/repo/sub', proc='vim', created='940'),
-                              'loose': dict(name='loose', cwd='/remote', proc='zsh', created='940', clients='0')})
+        pane = dict(
+            id=1,
+            title="shell",
+            cwd="/mac/home",
+            is_active=True,
+            session_name="dev",
+            user_vars={"holder": "s"},
+            foreground_processes=[{"cmdline": ["ssh"]}],
+        )
+        kitty = [
+            dict(
+                is_active=True,
+                tabs=[dict(id=7, title="tab", is_active=True, windows=[pane])],
+            )
+        ]
+        data = dict(
+            home="/remote",
+            now=1000,
+            refs={
+                "/remote/repo/sub": ["topic", "/remote/repo"],
+                "/closed": ["closed-ref", "/closed"],
+            },
+            sessions={
+                "s": dict(name="s", cwd="/remote/repo/sub", proc="vim", created="940"),
+                "loose": dict(
+                    name="loose", cwd="/remote", proc="zsh", created="940", clients="0"
+                ),
+            },
+        )
         calls = []
+
         def run(*cmd):
             calls.append(cmd)
-            self.assertEqual(cmd[0], 'kitten')
+            self.assertEqual(cmd[0], "kitten")
             return json.dumps(kitty)
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST='box'),                 patch.object(rows, 'DIR', directory), patch.object(rows, 'run', run):
-            Path(directory, 'closed.kitty-session').write_text(
-                'cd /mac/home\nlaunch --var=host_dir=/closed --var=holder=old\n')
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, ZWS_HOST="box"),
+            patch.object(rows, "DIR", directory),
+            patch.object(rows, "run", run),
+        ):
+            Path(directory, "closed.kitty-session").write_text(
+                "cd /mac/home\nlaunch --var=host_dir=/closed --var=holder=old\n"
+            )
             for answer in (data, None):
-                with patch.object(rows, 'fetch_facts', return_value=answer) as fetch,                         patch.object(rows, 'git_ref', side_effect=AssertionError('local git')),                         patch.object(sys, 'argv', ['zpick-rows', 'all']), patch('builtins.print') as out:
+                with (
+                    patch.object(rows, "fetch_facts", return_value=answer) as fetch,
+                    patch.object(
+                        rows, "git_ref", side_effect=AssertionError("local git")
+                    ),
+                    patch.object(sys, "argv", ["zpick-rows", "all"]),
+                    patch("builtins.print") as out,
+                ):
                     rows.main()
-                self.assertIn('/closed', fetch.call_args.args[1])
-                lines = [l.split('\t') for l in out.call_args.args[0].splitlines()]
-                self.assertIn(('pane', '1'), [(l[0], l[1]) for l in lines])
+                self.assertIn("/closed", fetch.call_args.args[1])
+                lines = [l.split("\t") for l in out.call_args.args[0].splitlines()]
+                self.assertIn(("pane", "1"), [(l[0], l[1]) for l in lines])
                 if answer:
-                    self.assertIn('repo', lines[0][5]); self.assertIn('topic', lines[0][5])
-                    self.assertIn('vim', lines[1][5]); self.assertIn('1m', lines[1][5])
-                    det, = [l for l in lines if l[0] == 'det']
-                    self.assertEqual(det[1], 'loose'); self.assertIn('~', det[5])
-                    self.assertIn('closed-ref', lines[-1][5])
+                    self.assertIn("repo", lines[0][5])
+                    self.assertIn("topic", lines[0][5])
+                    self.assertIn("vim", lines[1][5])
+                    self.assertIn("1m", lines[1][5])
+                    (det,) = [l for l in lines if l[0] == "det"]
+                    self.assertEqual(det[1], "loose")
+                    self.assertIn("~", det[5])
+                    self.assertIn("closed-ref", lines[-1][5])
                 else:
-                    self.assertEqual(lines[0][0], 'hdr'); self.assertIn('box unreachable', lines[0][5])
-                    self.assertFalse(any(l[0] == 'det' for l in lines))
-                    self.assertIn('dev', lines[1][5]); self.assertNotIn('home', lines[1][5])
-            with patch.object(rows, 'fetch_facts') as fetch, patch.object(rows, 'run', return_value=''),                     patch.object(sys, 'argv', ['zpick-rows', 'zmx']), patch('builtins.print'):
+                    self.assertEqual(lines[0][0], "hdr")
+                    self.assertIn("box unreachable", lines[0][5])
+                    self.assertFalse(any(l[0] == "det" for l in lines))
+                    self.assertIn("dev", lines[1][5])
+                    self.assertNotIn("home", lines[1][5])
+            with (
+                patch.object(rows, "fetch_facts") as fetch,
+                patch.object(rows, "run", return_value=""),
+                patch.object(sys, "argv", ["zpick-rows", "zmx"]),
+                patch("builtins.print"),
+            ):
                 rows.main()
             fetch.assert_not_called()
 
     def test_host_home_unknown_workspace_and_detached_outage_keep_kitty_tree(self):
         rows = self.load_rows()
+
         def pane(i):
-            return dict(id=i, title='pane', cwd='/mac/home', is_active=True, session_name='saved',
-                        user_vars={'holder': str(i)})
-        kitty = [dict(is_active=True, tabs=[dict(id=7, title='pair', is_active=True,
-                                                windows=[pane(1), pane(2)])])]
-        home = dict(home='/remote', now=1000, refs={},
-                    sessions={'1': dict(name='1', cwd='/remote', proc='zsh')})
-        for view, data, shown in (('all', home, 'home'), ('all', dict(home, sessions={}), 'saved'),
-                                  ('detached', None, 'saved')):
-            with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST='box'), \
-                    patch.object(rows, 'DIR', directory), \
-                    patch.object(rows, 'run', side_effect=lambda *cmd: json.dumps(kitty)), \
-                    patch.object(rows, 'fetch_facts', return_value=data), \
-                    patch.object(sys, 'argv', ['zpick-rows', view]), patch('builtins.print') as out:
+            return dict(
+                id=i,
+                title="pane",
+                cwd="/mac/home",
+                is_active=True,
+                session_name="saved",
+                user_vars={"holder": str(i)},
+            )
+
+        kitty = [
+            dict(
+                is_active=True,
+                tabs=[
+                    dict(id=7, title="pair", is_active=True, windows=[pane(1), pane(2)])
+                ],
+            )
+        ]
+        home = dict(
+            home="/remote",
+            now=1000,
+            refs={},
+            sessions={"1": dict(name="1", cwd="/remote", proc="zsh")},
+        )
+        for view, data, shown in (
+            ("all", home, "home"),
+            ("all", dict(home, sessions={}), "saved"),
+            ("detached", None, "saved"),
+        ):
+            with (
+                tempfile.TemporaryDirectory() as directory,
+                patch.dict(os.environ, ZWS_HOST="box"),
+                patch.object(rows, "DIR", directory),
+                patch.object(rows, "run", side_effect=lambda *cmd: json.dumps(kitty)),
+                patch.object(rows, "fetch_facts", return_value=data),
+                patch.object(sys, "argv", ["zpick-rows", view]),
+                patch("builtins.print") as out,
+            ):
                 rows.main()
-            lines = [l.split('\t') for l in out.call_args.args[0].splitlines()]
-            ws, = [l for l in lines if l[0] == 'ws']
+            lines = [l.split("\t") for l in out.call_args.args[0].splitlines()]
+            (ws,) = [l for l in lines if l[0] == "ws"]
             self.assertIn(shown, ws[5])
-            self.assertIn(('tab', '7'), [(l[0], l[1]) for l in lines])
-            self.assertEqual([l[1] for l in lines if l[0] == 'pane'], ['1', '2'])
+            self.assertIn(("tab", "7"), [(l[0], l[1]) for l in lines])
+            self.assertEqual([l[1] for l in lines if l[0] == "pane"], ["1", "2"])
 
     def test_first_non_sidebar_folder_and_quoted_host_folder_refs(self):
         with tempfile.TemporaryDirectory() as directory:
-            repo = Path(directory) / 'repo'
-            (repo / '.git').mkdir(parents=True)
-            (repo / '.git/HEAD').write_text('ref: refs/heads/main\n')
+            repo = Path(directory) / "repo"
+            (repo / ".git").mkdir(parents=True)
+            (repo / ".git/HEAD").write_text("ref: refs/heads/main\n")
+
             def pane(i, cwd, role):
-                return dict(id=i, title='pane', cwd=cwd, is_active=True, session_name='ws',
-                            user_vars={'role': role})
-            kitty = [dict(is_active=True, tabs=[dict(id=1, title='tab', is_active=True,
-                     windows=[pane(1, '/sidebar', 'sidebar'), pane(2, str(repo), '')])])]
-            got = self.picker_rows('all', '', kitty)
-            self.assertIn('repo', got[0][2]); self.assertIn('main', got[0][2])
+                return dict(
+                    id=i,
+                    title="pane",
+                    cwd=cwd,
+                    is_active=True,
+                    session_name="ws",
+                    user_vars={"role": role},
+                )
+
+            kitty = [
+                dict(
+                    is_active=True,
+                    tabs=[
+                        dict(
+                            id=1,
+                            title="tab",
+                            is_active=True,
+                            windows=[
+                                pane(1, "/sidebar", "sidebar"),
+                                pane(2, str(repo), ""),
+                            ],
+                        )
+                    ],
+                )
+            ]
+            got = self.picker_rows("all", "", kitty)
+            self.assertIn("repo", got[0][2])
+            self.assertIn("main", got[0][2])
             rows = self.load_rows()
-            Path(directory, 'closed.kitty-session').write_text(
-                'cd /mac\nlaunch --var=host_dir="/remote/a b" --var=host_dir=/second\n')
-            data = dict(home='/remote', now=1000, sessions={}, refs={'/remote/a b': ['branch', '']})
-            with patch.dict(os.environ, ZWS_HOST='box'), patch.object(rows, 'DIR', directory), \
-                    patch.object(rows, 'run', return_value='[]'), \
-                    patch.object(rows, 'fetch_facts', return_value=data) as fetch, \
-                    patch.object(sys, 'argv', ['zpick-rows', 'detached']), patch('builtins.print') as out:
+            Path(directory, "closed.kitty-session").write_text(
+                'cd /mac\nlaunch --var=host_dir="/remote/a b" --var=host_dir=/second\n'
+            )
+            data = dict(
+                home="/remote",
+                now=1000,
+                sessions={},
+                refs={"/remote/a b": ["branch", ""]},
+            )
+            with (
+                patch.dict(os.environ, ZWS_HOST="box"),
+                patch.object(rows, "DIR", directory),
+                patch.object(rows, "run", return_value="[]"),
+                patch.object(rows, "fetch_facts", return_value=data) as fetch,
+                patch.object(sys, "argv", ["zpick-rows", "detached"]),
+                patch("builtins.print") as out,
+            ):
                 rows.main()
-            self.assertEqual(fetch.call_args.args[1], ['/remote/a b'])
-            self.assertIn('branch', out.call_args.args[0])
+            self.assertEqual(fetch.call_args.args[1], ["/remote/a b"])
+            self.assertIn("branch", out.call_args.args[0])
 
     def test_fetch_pipes_this_file_with_second_deadline_and_handles_errors(self):
         rows = self.load_rows()
-        data = dict(home='/h', now=1, sessions={}, refs={})
-        for result in (subprocess.CompletedProcess([], 0, json.dumps(data)),
-                       subprocess.CompletedProcess([], 1, ''),
-                       subprocess.CompletedProcess([], 0, 'bad'),
-                       subprocess.CompletedProcess([], 0, '[]'),
-                       subprocess.TimeoutExpired('zhost', 3)):
-            with patch.object(rows.subprocess, 'run') as run:
+        data = dict(home="/h", now=1, sessions={}, refs={})
+        for result in (
+            subprocess.CompletedProcess([], 0, json.dumps(data)),
+            subprocess.CompletedProcess([], 1, ""),
+            subprocess.CompletedProcess([], 0, "bad"),
+            subprocess.CompletedProcess([], 0, "[]"),
+            subprocess.TimeoutExpired("zhost", 3),
+        ):
+            with patch.object(rows.subprocess, "run") as run:
                 if isinstance(result, Exception):
                     run.side_effect = result
                 else:
                     run.return_value = result
-                self.assertEqual(rows.fetch_facts('box', ['/a b', "it's"]),
-                                 data if getattr(result, 'stdout', '') == json.dumps(data) else None)
-                args, = run.call_args.args
-                self.assertEqual(args, [str(SCRIPT.parent / 'zhost'), 'box', 'python3', '-',
-                                        '--facts', '/a b', "it's"])
-                self.assertEqual(run.call_args.kwargs['timeout'], 3)
-                self.assertEqual(run.call_args.kwargs['input'], (SCRIPT.parent / 'zpick-rows').read_text())
+                self.assertEqual(
+                    rows.fetch_facts("box", ["/a b", "it's"]),
+                    data if getattr(result, "stdout", "") == json.dumps(data) else None,
+                )
+                (args,) = run.call_args.args
+                self.assertEqual(
+                    args,
+                    [
+                        str(SCRIPT.parent / "zhost"),
+                        "box",
+                        "python3",
+                        "-",
+                        "--facts",
+                        "/a b",
+                        "it's",
+                    ],
+                )
+                self.assertEqual(run.call_args.kwargs["timeout"], 3)
+                self.assertEqual(
+                    run.call_args.kwargs["input"],
+                    (SCRIPT.parent / "zpick-rows").read_text(),
+                )
 
     def test_picker_rows_keep_the_session_zmx_marks_as_current(self):
         # Inside a session, zmx ls points at it with an arrow; zmx-pick must still list it.
-        ls = ('  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n'
-              '\u2192 name=here\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n')
-        self.assertEqual([r[1] for r in self.picker_rows('zmx', ls) if r[0] == 'det'], ['logs', 'here'])
+        ls = (
+            "  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n"
+            "\u2192 name=here\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n"
+        )
+        self.assertEqual(
+            [r[1] for r in self.picker_rows("zmx", ls) if r[0] == "det"],
+            ["logs", "here"],
+        )
 
     def test_picker_rows_tab_with_one_pane_is_one_row(self):
         def pane(i, title, holder):
-            return {'id': i, 'title': title, 'cwd': '/srv', 'is_active': i != 3, 'session_name': 'lab',
-                    'user_vars': {'holder': holder}, 'foreground_processes': [{'cmdline': ['zsh']}]}
-        kitty = [{'is_active': True, 'tabs': [
-            {'id': 7, 'title': 'solo', 'is_active': True, 'windows': [pane(1, 'solo', 'h1')]},
-            {'id': 8, 'title': 'pair', 'is_active': False, 'windows': [pane(2, 'left', 'h2'), pane(3, 'right', 'h3')]}]}]
-        got = self.picker_rows('all', '', kitty)
-        self.assertEqual([(k, t) for k, t, _ in got], [('ws', 'lab'), ('pane', '1'), ('tab', '8'), ('pane', '2'), ('pane', '3')])
-        self.assertTrue(got[1][2].lstrip(' ├─').startswith('solo '), got[1][2])
-        self.assertIn('zsh', got[1][2])  # the pane's columns sit on the tab's row
-        self.assertIn('2 tabs', got[0][2])
+            return {
+                "id": i,
+                "title": title,
+                "cwd": "/srv",
+                "is_active": i != 3,
+                "session_name": "lab",
+                "user_vars": {"holder": holder},
+                "foreground_processes": [{"cmdline": ["zsh"]}],
+            }
 
-    def test_picker_rows_zmx_view_groups_by_kitty_space_where_a_session_file_names_it(self):
+        kitty = [
+            {
+                "is_active": True,
+                "tabs": [
+                    {
+                        "id": 7,
+                        "title": "solo",
+                        "is_active": True,
+                        "windows": [pane(1, "solo", "h1")],
+                    },
+                    {
+                        "id": 8,
+                        "title": "pair",
+                        "is_active": False,
+                        "windows": [pane(2, "left", "h2"), pane(3, "right", "h3")],
+                    },
+                ],
+            }
+        ]
+        got = self.picker_rows("all", "", kitty)
+        self.assertEqual(
+            [(k, t) for k, t, _ in got],
+            [("ws", "lab"), ("pane", "1"), ("tab", "8"), ("pane", "2"), ("pane", "3")],
+        )
+        self.assertTrue(got[1][2].lstrip(" ├─").startswith("solo "), got[1][2])
+        self.assertIn("zsh", got[1][2])  # the pane's columns sit on the tab's row
+        self.assertIn("2 tabs", got[0][2])
+
+    def test_picker_rows_zmx_view_groups_by_kitty_space_where_a_session_file_names_it(
+        self,
+    ):
         # A session sits in the space whose session file holds it, wherever its process has gone;
         # one no file names falls back to its folder.
-        ls = ''.join(f'  name={n}\tpid=1{i}\tclients=1\tcreated=1\tcwd=file://box{c}\n' for i, (n, c) in enumerate((
-            ('dev-1', '/work/Dev'), ('dev-2', '/work/Dev/dotfiles'), ('dot-1', '/elsewhere'), ('loose', '/srv'))))
-        files = {'dev': 'new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\nnew_tab\nlaunch --var=holder=dev-2\n',
-                 'dotfiles': 'new_tab\ncd /work/Dev/dotfiles\nlaunch --var=holder=dot-1\n'}
-        got = self.picker_rows('zmx', ls, files=files)
-        self.assertEqual([(k, t) for k, t, _ in got], [
-            ('hdr', ''), ('det', 'dev-1'), ('det', 'dev-2'), ('hdr', ''), ('det', 'dot-1'), ('hdr', ''), ('det', 'loose')])
-        self.assertTrue(got[0][2].lstrip(' ◇').startswith('Dev 2 sessions'), got[0][2])
-        self.assertTrue(got[3][2].lstrip(' ◇').startswith('elsewhere 1 session'), got[3][2])  # named as cmd+alt+g names it
-        self.assertTrue(got[5][2].lstrip(' ◇').startswith('srv 1 session'), got[5][2])
+        ls = "".join(
+            f"  name={n}\tpid=1{i}\tclients=1\tcreated=1\tcwd=file://box{c}\n"
+            for i, (n, c) in enumerate(
+                (
+                    ("dev-1", "/work/Dev"),
+                    ("dev-2", "/work/Dev/dotfiles"),
+                    ("dot-1", "/elsewhere"),
+                    ("loose", "/srv"),
+                )
+            )
+        )
+        files = {
+            "dev": "new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\nnew_tab\nlaunch --var=holder=dev-2\n",
+            "dotfiles": "new_tab\ncd /work/Dev/dotfiles\nlaunch --var=holder=dot-1\n",
+        }
+        got = self.picker_rows("zmx", ls, files=files)
+        self.assertEqual(
+            [(k, t) for k, t, _ in got],
+            [
+                ("hdr", ""),
+                ("det", "dev-1"),
+                ("det", "dev-2"),
+                ("hdr", ""),
+                ("det", "dot-1"),
+                ("hdr", ""),
+                ("det", "loose"),
+            ],
+        )
+        self.assertTrue(got[0][2].lstrip(" ◇").startswith("Dev 2 sessions"), got[0][2])
+        self.assertTrue(
+            got[3][2].lstrip(" ◇").startswith("elsewhere 1 session"), got[3][2]
+        )  # named as cmd+alt+g names it
+        self.assertTrue(got[5][2].lstrip(" ◇").startswith("srv 1 session"), got[5][2])
 
     def test_picker_rows_put_a_detached_session_under_the_space_its_label_names(self):
         # kitty drops a closed pane from the session file; the space label zmx keeps still places it
-        line = lambda n, c, extra='': f'  name={n}\tpid=1\tclients={c}\tcreated=1\tcwd=file://box/srv{extra}\n'
-        ls = (line('dev-1', 1).replace('/srv', '/work/Dev') + line('loose', 0) + line('was-dev', 0, '\tspace=646576') +
-              line('was-gone', 0, '\tspace=6d79207370616365') + line('bad', 0, '\tspace=!'))
-        files = {'dev': 'new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\n'}
-        got = self.picker_rows('zmx', ls, files=files)
-        self.assertEqual([(k, t) for k, t, _ in got], [
-            ('hdr', ''), ('det', 'dev-1'), ('det', 'was-dev'), ('hdr', ''), ('det', 'loose'), ('det', 'bad'),
-            ('hdr', ''), ('det', 'was-gone')])
-        self.assertTrue(got[0][2].lstrip(' ◇').startswith('Dev 2 sessions'), got[0][2])
-        self.assertIn('· attached', got[1][2]); self.assertNotIn('attached', got[2][2])
-        self.assertTrue(got[6][2].lstrip(' ◇').startswith('my space 1 session'), got[6][2])  # its file is gone
+        line = lambda n, c, extra="": (
+            f"  name={n}\tpid=1\tclients={c}\tcreated=1\tcwd=file://box/srv{extra}\n"
+        )
+        ls = (
+            line("dev-1", 1).replace("/srv", "/work/Dev")
+            + line("loose", 0)
+            + line("was-dev", 0, "\tspace=646576")
+            + line("was-gone", 0, "\tspace=6d79207370616365")
+            + line("bad", 0, "\tspace=!")
+        )
+        files = {"dev": "new_tab\ncd /work/Dev\nlaunch --var=holder=dev-1\n"}
+        got = self.picker_rows("zmx", ls, files=files)
+        self.assertEqual(
+            [(k, t) for k, t, _ in got],
+            [
+                ("hdr", ""),
+                ("det", "dev-1"),
+                ("det", "was-dev"),
+                ("hdr", ""),
+                ("det", "loose"),
+                ("det", "bad"),
+                ("hdr", ""),
+                ("det", "was-gone"),
+            ],
+        )
+        self.assertTrue(got[0][2].lstrip(" ◇").startswith("Dev 2 sessions"), got[0][2])
+        self.assertIn("· attached", got[1][2])
+        self.assertNotIn("attached", got[2][2])
+        self.assertTrue(
+            got[6][2].lstrip(" ◇").startswith("my space 1 session"), got[6][2]
+        )  # its file is gone
 
     def test_picker_rows_zmx_view_lists_every_session_without_kitty(self):
         # zmx-pick outside kitty: no kitty calls, attached sessions listed too, no closed workspaces.
-        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx', str(SCRIPT.parent / 'zpick-rows'))
-        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader = importlib.machinery.SourceFileLoader(
+            "zpick_rows_zmx", str(SCRIPT.parent / "zpick-rows")
+        )
+        rows = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(rows)
-        ls = ('  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n'
-              '  name=pi-agent\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n')
+        ls = (
+            "  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n"
+            "  name=pi-agent\tpid=12\tclients=1\tcreated=1\tcwd=file://box/srv\n"
+        )
         calls = []
+
         def run(*cmd):
             calls.append(cmd[0])
-            return ls if cmd[:2] == ('zmx', 'ls') else ''
-        with tempfile.TemporaryDirectory() as directory, patch.object(rows, 'run', run), \
-                patch.object(rows, 'DIR', directory), patch.object(sys, 'argv', ['zpick-rows', 'zmx']), \
-                patch('builtins.print') as out:
-            Path(directory, 'closed.kitty-session').write_text('cd /x\nlaunch\n')
+            return ls if cmd[:2] == ("zmx", "ls") else ""
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(rows, "run", run),
+            patch.object(rows, "DIR", directory),
+            patch.object(sys, "argv", ["zpick-rows", "zmx"]),
+            patch("builtins.print") as out,
+        ):
+            Path(directory, "closed.kitty-session").write_text("cd /x\nlaunch\n")
             rows.main()
-        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
-        self.assertNotIn('kitten', calls)
-        self.assertEqual([(l[0], l[1]) for l in lines], [('hdr', ''), ('det', 'logs'), ('det', 'pi-agent')])
-        self.assertIn('sessions', lines[0][5])
-        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in lines]
-        self.assertTrue(shown[1].lstrip(' └├─').startswith('logs '), shown[1])  # the name leads: fzf searches it
-        self.assertTrue(shown[2].lstrip(' └├─').startswith('pi-agent · attached'), shown[2])
-        self.assertTrue(shown[0].lstrip(' ◇').startswith('srv 2 sessions'), shown[0])  # the folder heads them
-        self.assertNotIn('kitty', shown[2])
+        lines = [l.split("\t") for l in out.call_args[0][0].split("\n")]
+        self.assertNotIn("kitten", calls)
+        self.assertEqual(
+            [(l[0], l[1]) for l in lines],
+            [("hdr", ""), ("det", "logs"), ("det", "pi-agent")],
+        )
+        self.assertIn("sessions", lines[0][5])
+        shown = [re.sub(r"\x1b\[[0-9;]*m", "", l[5]) for l in lines]
+        self.assertTrue(
+            shown[1].lstrip(" └├─").startswith("logs "), shown[1]
+        )  # the name leads: fzf searches it
+        self.assertTrue(
+            shown[2].lstrip(" └├─").startswith("pi-agent · attached"), shown[2]
+        )
+        self.assertTrue(
+            shown[0].lstrip(" ◇").startswith("srv 2 sessions"), shown[0]
+        )  # the folder heads them
+        self.assertNotIn("kitty", shown[2])
 
     def test_picker_rows_zmx_view_groups_sessions_by_checkout(self):
         # cmd+alt+g's workspace level, rebuilt from where each session is: one group per git
         # checkout (its branch alongside) or plain folder, and home as "home".
-        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx2', str(SCRIPT.parent / 'zpick-rows'))
-        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader = importlib.machinery.SourceFileLoader(
+            "zpick_rows_zmx2", str(SCRIPT.parent / "zpick-rows")
+        )
+        rows = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(rows)
         with tempfile.TemporaryDirectory() as root:
-            repo, other, home = (os.path.join(root, d) for d in ('repo', 'notes', 'home'))
-            os.makedirs(os.path.join(repo, '.git'))
-            os.makedirs(os.path.join(repo, 'sub'))
-            Path(repo, '.git', 'HEAD').write_text('ref: refs/heads/main\n')
-            ls = ''.join(f'  name={n}\tpid=1{i}\tclients=0\tcreated=1\tcwd=file://box{c}\n' for i, (n, c) in enumerate((
-                ('alpha', repo), ('logs', other), ('beta', os.path.join(repo, 'sub')), ('shell', home))))
-            with patch.object(rows, 'run', lambda *cmd: ls if cmd[:2] == ('zmx', 'ls') else ''), \
-                    patch.object(rows, 'HOME', home), patch.object(rows, 'DIR', root), \
-                    patch.object(sys, 'argv', ['zpick-rows', 'zmx']), patch('builtins.print') as out:
+            repo, other, home = (
+                os.path.join(root, d) for d in ("repo", "notes", "home")
+            )
+            os.makedirs(os.path.join(repo, ".git"))
+            os.makedirs(os.path.join(repo, "sub"))
+            Path(repo, ".git", "HEAD").write_text("ref: refs/heads/main\n")
+            ls = "".join(
+                f"  name={n}\tpid=1{i}\tclients=0\tcreated=1\tcwd=file://box{c}\n"
+                for i, (n, c) in enumerate(
+                    (
+                        ("alpha", repo),
+                        ("logs", other),
+                        ("beta", os.path.join(repo, "sub")),
+                        ("shell", home),
+                    )
+                )
+            )
+            with (
+                patch.object(
+                    rows, "run", lambda *cmd: ls if cmd[:2] == ("zmx", "ls") else ""
+                ),
+                patch.object(rows, "HOME", home),
+                patch.object(rows, "DIR", root),
+                patch.object(sys, "argv", ["zpick-rows", "zmx"]),
+                patch("builtins.print") as out,
+            ):
                 rows.main()
-        lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
-        self.assertEqual([(l[0], l[1]) for l in lines], [
-            ('hdr', ''), ('det', 'alpha'), ('det', 'beta'), ('hdr', ''), ('det', 'logs'), ('hdr', ''), ('det', 'shell')])
-        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in lines]
-        self.assertTrue(shown[0].lstrip(' ◇').startswith('repo 2 sessions'), shown[0])
-        self.assertTrue(shown[0].rstrip().endswith('main'), shown[0])
-        self.assertTrue(shown[1].lstrip(' ├─').startswith('alpha '), shown[1])
-        self.assertIn('sub', shown[2])  # a session below the checkout's top says where
-        self.assertTrue(shown[3].lstrip(' ◇').startswith('notes 1 session'), shown[3])
-        self.assertTrue(shown[5].lstrip(' ◇').startswith('home'), shown[5])
+        lines = [l.split("\t") for l in out.call_args[0][0].split("\n")]
+        self.assertEqual(
+            [(l[0], l[1]) for l in lines],
+            [
+                ("hdr", ""),
+                ("det", "alpha"),
+                ("det", "beta"),
+                ("hdr", ""),
+                ("det", "logs"),
+                ("hdr", ""),
+                ("det", "shell"),
+            ],
+        )
+        shown = [re.sub(r"\x1b\[[0-9;]*m", "", l[5]) for l in lines]
+        self.assertTrue(shown[0].lstrip(" ◇").startswith("repo 2 sessions"), shown[0])
+        self.assertTrue(shown[0].rstrip().endswith("main"), shown[0])
+        self.assertTrue(shown[1].lstrip(" ├─").startswith("alpha "), shown[1])
+        self.assertIn("sub", shown[2])  # a session below the checkout's top says where
+        self.assertTrue(shown[3].lstrip(" ◇").startswith("notes 1 session"), shown[3])
+        self.assertTrue(shown[5].lstrip(" ◇").startswith("home"), shown[5])
 
-    def test_picker_rows_zmx_attached_mark_survives_a_long_name_and_detached_view_drops_them(self):
-        loader = importlib.machinery.SourceFileLoader('zpick_rows_zmx3', str(SCRIPT.parent / 'zpick-rows'))
-        rows = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    def test_picker_rows_zmx_attached_mark_survives_a_long_name_and_detached_view_drops_them(
+        self,
+    ):
+        loader = importlib.machinery.SourceFileLoader(
+            "zpick_rows_zmx3", str(SCRIPT.parent / "zpick-rows")
+        )
+        rows = importlib.util.module_from_spec(
+            importlib.util.spec_from_loader(loader.name, loader)
+        )
         loader.exec_module(rows)
-        long = 'dotfiles-337362b2-3f92-4c90-bc63-a12d354ccb81'
-        ls = (f'  name={long}\tpid=11\tclients=1\tcreated=1\tcwd=file://box/srv\n'
-              '  name=logs\tpid=12\tclients=0\tcreated=1\tcwd=file://box/srv\n')
+        long = "dotfiles-337362b2-3f92-4c90-bc63-a12d354ccb81"
+        ls = (
+            f"  name={long}\tpid=11\tclients=1\tcreated=1\tcwd=file://box/srv\n"
+            "  name=logs\tpid=12\tclients=0\tcreated=1\tcwd=file://box/srv\n"
+        )
         out = {}
-        for view in ('zmx', 'zmx-detached'):
-            with tempfile.TemporaryDirectory() as directory, \
-                    patch.object(rows, 'run', lambda *cmd: ls if cmd[:2] == ('zmx', 'ls') else ''), \
-                    patch.object(rows, 'DIR', directory), patch.object(rows, 'WIDTH', 60), \
-                    patch.object(sys, 'argv', ['zpick-rows', view]), patch('builtins.print') as p:
+        for view in ("zmx", "zmx-detached"):
+            with (
+                tempfile.TemporaryDirectory() as directory,
+                patch.object(
+                    rows, "run", lambda *cmd: ls if cmd[:2] == ("zmx", "ls") else ""
+                ),
+                patch.object(rows, "DIR", directory),
+                patch.object(rows, "WIDTH", 60),
+                patch.object(sys, "argv", ["zpick-rows", view]),
+                patch("builtins.print") as p,
+            ):
                 rows.main()
-            out[view] = [l.split('\t') for l in p.call_args[0][0].split('\n')]
-        shown = [re.sub(r'\x1b\[[0-9;]*m', '', l[5]) for l in out['zmx']]
-        self.assertIn('· attached', shown[1])
-        self.assertIn('…', shown[1])  # the name gives way, not the mark
-        self.assertEqual([(l[0], l[1]) for l in out['zmx-detached']], [('hdr', ''), ('det', 'logs')])
+            out[view] = [l.split("\t") for l in p.call_args[0][0].split("\n")]
+        shown = [re.sub(r"\x1b\[[0-9;]*m", "", l[5]) for l in out["zmx"]]
+        self.assertIn("· attached", shown[1])
+        self.assertIn("…", shown[1])  # the name gives way, not the mark
+        self.assertEqual(
+            [(l[0], l[1]) for l in out["zmx-detached"]], [("hdr", ""), ("det", "logs")]
+        )
 
     def test_rows_layout_actions_and_purity(self):
-        obj = view('/repo')
+        obj = view("/repo")
         before = json.dumps(obj)
-        body, clicks = self.side.rows(obj, {'a': ('Repo', 'main', '↑2 ↓1'), 'b': ('Bee', '', '')},
-                                      'a', 32, 24)
-        plain = [re.sub(r'\x1b\[[0-9;]*m', '', r) for r in body]
+        body, clicks = self.side.rows(
+            obj, {"a": ("Repo", "main", "↑2 ↓1"), "b": ("Bee", "", "")}, "a", 32, 24
+        )
+        plain = [re.sub(r"\x1b\[[0-9;]*m", "", r) for r in body]
         self.assertEqual(len(body), 24)
         self.assertEqual(len(clicks), 24)
-        self.assertIn('48;5;8', body[2])
+        self.assertIn("48;5;8", body[2])
         # cmd+alt+N's number, then the state glyph; the branch lines up under the name
-        self.assertEqual(plain[2], ' 1 ◐ Repo'.ljust(32))
-        self.assertEqual(plain[3], '     main ↑2 ↓1'.ljust(32))
-        self.assertEqual(plain[8], ' 2 · Bee'.ljust(32))
-        self.assertIn('main ↑2 ↓1', plain[3])
-        self.assertEqual(clicks[2:4], [('space', 'a')] * 2)
-        self.assertIn('Rename', plain[4])
-        self.assertIn('Open worktree', plain[7])
-        self.assertEqual(clicks[4], ('menu', 'rename', 'a', '/repo'))
-        self.assertIn('pi · Repo 1', plain[-2])
-        self.assertIn('sonnet · 25%', plain[-1])
-        self.assertEqual(clicks[-2:], [('pane', 7, '')] * 2)
+        self.assertEqual(plain[2], " 1 ◐ Repo".ljust(32))
+        self.assertEqual(plain[3], "     main ↑2 ↓1".ljust(32))
+        self.assertEqual(plain[8], " 2 · Bee".ljust(32))
+        self.assertIn("main ↑2 ↓1", plain[3])
+        self.assertEqual(clicks[2:4], [("space", "a")] * 2)
+        self.assertIn("Rename", plain[4])
+        self.assertIn("Open worktree", plain[7])
+        self.assertEqual(clicks[4], ("menu", "rename", "a", "/repo"))
+        self.assertIn("pi · Repo 1", plain[-2])
+        self.assertIn("sonnet · 25%", plain[-1])
+        self.assertEqual(clicks[-2:], [("pane", 7, "")] * 2)
         self.assertEqual(json.dumps(obj), before)
         for height in (0, 1, 3, 6):
-            self.assertEqual(len(self.side.rows(obj, {'a': ('a', '', ''), 'b': ('b', '', '')},
-                                                '', 24, height)[0]), height)
+            self.assertEqual(
+                len(
+                    self.side.rows(
+                        obj, {"a": ("a", "", ""), "b": ("b", "", "")}, "", 24, height
+                    )[0]
+                ),
+                height,
+            )
 
     def test_agent_in_unlisted_workspace_uses_its_name(self):
         obj = view()
-        obj['agents'][0]['space'] = 'gone'
-        body, _ = self.side.rows(obj, {'a': ('A', '', ''), 'b': ('B', '', '')}, '', 32, 24)
-        self.assertTrue(any('pi · gone 1' in row for row in body))
+        obj["agents"][0]["space"] = "gone"
+        body, _ = self.side.rows(
+            obj, {"a": ("A", "", ""), "b": ("B", "", "")}, "", 32, 24
+        )
+        self.assertTrue(any("pi · gone 1" in row for row in body))
 
     def test_frames_at_every_cut_and_stray_bytes(self):
         split, wire = self.side.split_input, frame(view())
@@ -810,122 +1334,169 @@ class SideTests(unittest.TestCase):
             rest, mouse, first, tick = split(wire[:cut])
             tail, more, second, tock = split(rest + wire[cut:])
             self.assertEqual([v for v in (first, second) if v is not None], [view()])
-            self.assertEqual((tail, mouse + more, tick or tock), (b'', [], False))
-        for junk in (b'letters', b'\x1b[A', b'\x1b', json.dumps(view()).encode() + b'\n', b'\n'):
+            self.assertEqual((tail, mouse + more, tick or tock), (b"", [], False))
+        for junk in (
+            b"letters",
+            b"\x1b[A",
+            b"\x1b",
+            json.dumps(view()).encode() + b"\n",
+            b"\n",
+        ):
             self.assertEqual(split(junk)[1:], ([], None, False))
             rest, mouse, obj, tick = split(junk + wire + junk + wire + junk)
             self.assertEqual((mouse, obj, tick), ([], view(), False))
-            self.assertEqual(rest, b'\x1b' if junk == b'\x1b' else b'')
-        for invalid in ({}, [], dict(view(), v=2), dict(view(), current=0),
-                        dict(view(), spaces={}), dict(view(), agents={})):
+            self.assertEqual(rest, b"\x1b" if junk == b"\x1b" else b"")
+        for invalid in (
+            {},
+            [],
+            dict(view(), v=2),
+            dict(view(), current=0),
+            dict(view(), spaces={}),
+            dict(view(), agents={}),
+        ):
             self.assertIsNone(split(frame(invalid))[2])
-        self.assertIsNone(split(b'\x1b_zvnot json\x1b\\')[2])
+        self.assertIsNone(split(b"\x1b_zvnot json\x1b\\")[2])
 
     def test_large_view_split_across_reads_is_returned_once(self):
-        obj = dict(view(), current='x' * (100 * 1024))
+        obj = dict(view(), current="x" * (100 * 1024))
         wire = frame(obj)
         for cut in (70 * 1024, len(wire) - 1):
             rest, mouse, first, tick = self.side.split_input(wire[:cut])
             tail, more, second, tock = self.side.split_input(rest + wire[cut:])
             self.assertEqual([v for v in (first, second) if v is not None], [obj])
-            self.assertEqual((tail, mouse + more, tick or tock), (b'', [], False))
-            self.assertEqual(self.side.split_input(tail), (b'', [], None, False))
+            self.assertEqual((tail, mouse + more, tick or tock), (b"", [], False))
+            self.assertEqual(self.side.split_input(tail), (b"", [], None, False))
 
     def test_splitter_is_linear_and_bounds_trailing_sequences(self):
-        for data in (b'{' * 1048576, b'\x1b_zv{' * 209716, b'\x1b_zv' + b'{' * 1048576):
+        for data in (b"{" * 1048576, b"\x1b_zv{" * 209716, b"\x1b_zv" + b"{" * 1048576):
             start = time.monotonic()
             rest, mouse, obj, tick = self.side.split_input(data)
-            self.assertLess(time.monotonic() - start, .5)
+            self.assertLess(time.monotonic() - start, 0.5)
             self.assertLessEqual(len(rest), self.side.REST_MAX)
             self.assertEqual((mouse, obj, tick), ([], None, False))
         for size in (self.side.REST_MAX, self.side.REST_MAX + 1):
-            rest = self.side.split_input(b'\x1b_zv' + b'{' * (size - 4))[0]
+            rest = self.side.split_input(b"\x1b_zv" + b"{" * (size - 4))[0]
             self.assertEqual(len(rest), size if size <= self.side.REST_MAX else 0)
 
     def test_render_names_without_a_process_and_repo_each_draw(self):
-        obj = view('/tmp/project')
-        obj['spaces'] += [dict(name='empty', cwd='', shown='', state='', tabs=1),
-                          dict(name='home', cwd=os.path.expanduser('~'), shown='', state='', tabs=1)]
+        obj = view("/tmp/project")
+        obj["spaces"] += [
+            dict(name="empty", cwd="", shown="", state="", tabs=1),
+            dict(name="home", cwd=os.path.expanduser("~"), shown="", state="", tabs=1),
+        ]
         git = self.side.Git()
-        with patch.object(self.side, 'write') as write, patch.object(self.side, 'repo', return_value=('', '')) as repo:
+        with (
+            patch.object(self.side, "write") as write,
+            patch.object(self.side, "repo", return_value=("", "")) as repo,
+        ):
             for _ in range(2):
-                self.side.render(obj, git, '')
+                self.side.render(obj, git, "")
             self.assertEqual(repo.call_count, 8)
             frame = write.call_args.args[0]
-            for name in ('project', 'Bee', 'empty', 'home'):
+            for name in ("project", "Bee", "empty", "home"):
                 self.assertIn(name, frame)
-            self.assertIn('2026h', frame)
+            self.assertIn("2026h", frame)
             self.assertEqual(git.queue, [])
 
     def test_stream_splitter_partial_mouse_glued_views_ticks_junk(self):
         split = self.side.split_input
-        part = b'\x1b[<0;4;'
+        part = b"\x1b[<0;4;"
         rest, mouse, obj, tick = split(part)
         self.assertEqual((rest, mouse, obj, tick), (part, [], None, False))
-        report = b'\x1b[<0;4;3M'
+        report = b"\x1b[<0;4;3M"
         for cut in range(len(report) + 1):
             tail, first, _, _ = split(report[:cut])
             remaining, second, _, _ = split(tail + report[cut:])
-            self.assertEqual(first + second, [(b'0', b'4', b'3', b'M')])
-            self.assertEqual(remaining, b'')
+            self.assertEqual(first + second, [(b"0", b"4", b"3", b"M")])
+            self.assertEqual(remaining, b"")
         wire = frame(view())
         tail, _, partial, _ = split(wire[:10])
         self.assertIsNone(partial)
         self.assertEqual(split(tail + wire[10:])[2], view())
-        rest, mouse, obj, tick = split(rest + b'3M' + wire)
-        self.assertEqual(mouse, [(b'0', b'4', b'3', b'M')])
+        rest, mouse, obj, tick = split(rest + b"3M" + wire)
+        self.assertEqual(mouse, [(b"0", b"4", b"3", b"M")])
         self.assertEqual(obj, view())
-        self.assertEqual(rest, b'')
-        second = dict(view(), current='b')
-        rest, mouse, obj, tick = split(wire + frame(second) + b'\x1b_zt\x1b\\junk\n[]\n{"v":2}\npartial')
+        self.assertEqual(rest, b"")
+        second = dict(view(), current="b")
+        rest, mouse, obj, tick = split(
+            wire + frame(second) + b'\x1b_zt\x1b\\junk\n[]\n{"v":2}\npartial'
+        )
         self.assertEqual(obj, second)
         self.assertTrue(tick)
-        self.assertEqual(rest, b'')
-        self.assertEqual(split(b'\x1b_zt\x1b\\'), (b'', [], None, True))
-        self.assertEqual(split(b'junk\n')[1:], ([], None, False))
+        self.assertEqual(rest, b"")
+        self.assertEqual(split(b"\x1b_zt\x1b\\"), (b"", [], None, True))
+        self.assertEqual(split(b"junk\n")[1:], ([], None, False))
 
     def test_git_queue_throttles_serializes_and_times_out(self):
         git = self.side.Git()
         self.assertIsNone(git.top)
-        git.request(['/a', '/b', '/a'], '/a', 0)
-        self.assertEqual(git.queue, ['/a', '/b'])
+        git.request(["/a", "/b", "/a"], "/a", 0)
+        self.assertEqual(git.queue, ["/a", "/b"])
+
         class Pipe:
-            def fileno(self): return 42
-            def read(self): return b''
-            def close(self): pass
+            def fileno(self):
+                return 42
+
+            def read(self):
+                return b""
+
+            def close(self):
+                pass
+
         class Process:
             stdout = Pipe()
             code = None
-            def poll(self): return self.code
-            def kill(self): self.code = -9
+
+            def poll(self):
+                return self.code
+
+            def kill(self):
+                self.code = -9
+
         proc = Process()
-        with patch.object(self.side.subprocess, 'Popen', return_value=proc) as popen, patch.object(self.side.os, 'set_blocking'):
+        with (
+            patch.object(self.side.subprocess, "Popen", return_value=proc) as popen,
+            patch.object(self.side.os, "set_blocking"),
+        ):
             git.start(0)
             git.start(0)
             self.assertEqual(popen.call_count, 1)
-            self.assertEqual(popen.call_args.args[0],
-                             [self.side.GIT, '-C', '/a', 'rev-list', '--left-right', '--count', '@{u}...HEAD'])
-            self.assertEqual(popen.call_args.kwargs['env']['GIT_OPTIONAL_LOCKS'], '0')
-            git.output, proc.code = b'1\t2\n', 0
+            self.assertEqual(
+                popen.call_args.args[0],
+                [
+                    self.side.GIT,
+                    "-C",
+                    "/a",
+                    "rev-list",
+                    "--left-right",
+                    "--count",
+                    "@{u}...HEAD",
+                ],
+            )
+            self.assertEqual(popen.call_args.kwargs["env"]["GIT_OPTIONAL_LOCKS"], "0")
+            git.output, proc.code = b"1\t2\n", 0
             self.assertTrue(git.collect([], 1))
-            self.assertEqual(git.cache['/a'], (1, '↑2 ↓1'))
+            self.assertEqual(git.cache["/a"], (1, "↑2 ↓1"))
             git.queue.clear()
-            git.request(['/a'], '/a', 3.9)
+            git.request(["/a"], "/a", 3.9)
             self.assertEqual(git.queue, [])
-            git.request(['/a'], '/a', 4)
+            git.request(["/a"], "/a", 4)
             git.start(4)
             proc.code = None
             self.assertTrue(git.collect([], 7.1))
             self.assertEqual(proc.code, -9)
-            self.assertEqual(git.cache['/a'], (7.1, ''))
-        git.request(['/a'], '/other', 37)
+            self.assertEqual(git.cache["/a"], (7.1, ""))
+        git.request(["/a"], "/other", 37)
         self.assertEqual(git.queue, [])
-        git.request(['/a'], '/other', 37.1)
-        self.assertEqual(git.queue, ['/a'])
+        git.request(["/a"], "/other", 37.1)
+        self.assertEqual(git.queue, ["/a"])
 
     def test_host_pty_draws_while_fetch_waits_and_reports_spawn_failure(self):
         for missing in (False, True):
-            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+            with (
+                self.subTest(missing=missing),
+                tempfile.TemporaryDirectory() as directory,
+            ):
                 root = Path(directory)
                 fake = """import json, os, pathlib, sys, time
 root = pathlib.Path(os.environ['FAKE_ROOT'])
@@ -944,53 +1515,86 @@ else:
     print(json.dumps(dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo']},
                          counts={'/host/repo': '↑2 ↓1'}, version='2.0.0')))
 """
-                for name in ('ssh', 'zmx', *(() if missing else ('zhost',))):
+                for name in ("ssh", "zmx", *(() if missing else ("zhost",))):
                     path = root / name
-                    path.write_text('#!' + sys.executable + '\n' + fake)
+                    path.write_text("#!" + sys.executable + "\n" + fake)
                     path.chmod(0o700)
-                (root / 'zpick-rows').write_text((SCRIPT.parent / 'zpick-rows').read_text())
-                script = root / 'zside'
-                script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(root)))
+                (root / "zpick-rows").write_text(
+                    (SCRIPT.parent / "zpick-rows").read_text()
+                )
+                script = root / "zside"
+                script.write_text(
+                    SCRIPT.read_text().replace("/opt/homebrew/bin", str(root))
+                )
                 master, slave = pty.openpty()
-                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 60, 0, 0))
-                proc = subprocess.Popen([sys.executable, str(script)], stdin=slave, stdout=slave,
-                                        stderr=subprocess.PIPE, env=dict(os.environ, FAKE_ROOT=str(root),
-                                        ZWS_HOST='box', PATH=str(root) + ':' + os.environ['PATH']))
+                fcntl.ioctl(
+                    slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 60, 0, 0)
+                )
+                proc = subprocess.Popen(
+                    [sys.executable, str(script)],
+                    stdin=slave,
+                    stdout=slave,
+                    stderr=subprocess.PIPE,
+                    env=dict(
+                        os.environ,
+                        FAKE_ROOT=str(root),
+                        ZWS_HOST="box",
+                        PATH=str(root) + ":" + os.environ["PATH"],
+                    ),
+                )
                 os.close(slave)
                 output = bytearray()
+
                 def until(predicate):
                     deadline = time.monotonic() + 5
                     while not predicate():
                         self.assertLess(time.monotonic(), deadline, bytes(output))
-                        ready, _, _ = select.select([master], [], [], .02)
+                        ready, _, _ = select.select([master], [], [], 0.02)
                         if ready:
                             output.extend(os.read(master, 65536))
+
                 try:
-                    until(lambda: b'zside=cmVhZHk=' in output)
-                    self.assertFalse((root / 'calls').exists())
-                    os.write(master, frame(view('/host/repo/sub')))
-                    until(lambda: b' box' in output and b'\x1b[?2026l' in output)
+                    until(lambda: b"zside=cmVhZHk=" in output)
+                    self.assertFalse((root / "calls").exists())
+                    os.write(master, frame(view("/host/repo/sub")))
+                    until(lambda: b" box" in output and b"\x1b[?2026l" in output)
                     if missing:
                         # No input tick is needed to report a failure to start zhost.
-                        until(lambda: b' down' in output)
+                        until(lambda: b" down" in output)
                     else:
-                        until(lambda: (root / 'calls').exists() and 'zhost' in (root / 'calls').read_text())
-                        self.assertNotIn(b'topic', output)
+                        until(
+                            lambda: (
+                                (root / "calls").exists()
+                                and "zhost" in (root / "calls").read_text()
+                            )
+                        )
+                        self.assertNotIn(b"topic", output)
                         output.clear()
-                        os.write(master, b'\x1b_zt\x1b\\')
-                        until(lambda: b'\x1b[?2026l' in output)
+                        os.write(master, b"\x1b_zt\x1b\\")
+                        until(lambda: b"\x1b[?2026l" in output)
                         self.assertIsNone(proc.poll())
-                        (root / 'release').touch()
-                        until(lambda: b'topic' in output and '↑2 ↓1' in re.sub(
-                            r'\x1b\[[0-9;]*m', '', output.decode(errors='replace')))
-                        self.assertIn(b'zmx 2.0.0, here 1.0.1', output)
-                    self.assertIn(b'box 192.168.2.35', output)
-                    calls = (root / 'calls').read_text().splitlines()
-                    self.assertEqual(calls, ['ssh', 'zmx'] + ([] if missing else ['zhost']))
+                        (root / "release").touch()
+                        until(
+                            lambda: (
+                                b"topic" in output
+                                and "↑2 ↓1"
+                                in re.sub(
+                                    r"\x1b\[[0-9;]*m",
+                                    "",
+                                    output.decode(errors="replace"),
+                                )
+                            )
+                        )
+                        self.assertIn(b"zmx 2.0.0, here 1.0.1", output)
+                    self.assertIn(b"box 192.168.2.35", output)
+                    calls = (root / "calls").read_text().splitlines()
+                    self.assertEqual(
+                        calls, ["ssh", "zmx"] + ([] if missing else ["zhost"])
+                    )
                     os.close(master)
                     master = None
                     self.assertEqual(proc.wait(timeout=5), 0)
-                    self.assertEqual(proc.stderr.read(), b'')
+                    self.assertEqual(proc.stderr.read(), b"")
                 finally:
                     if master is not None:
                         os.close(master)
@@ -999,13 +1603,15 @@ else:
                     proc.wait(timeout=5)
                     proc.stderr.close()
 
-    @unittest.skipUnless(Path('/usr/bin/python3').exists(), '/usr/bin/python3 is missing')
+    @unittest.skipUnless(
+        Path("/usr/bin/python3").exists(), "/usr/bin/python3 is missing"
+    )
     def test_pty_ready_draws_before_git_and_exits_on_close(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            repo = root / 'example-repo'
-            (repo / '.git').mkdir(parents=True)
-            (repo / '.git/HEAD').write_text('ref: refs/heads/feature\n')
+            repo = root / "example-repo"
+            (repo / ".git").mkdir(parents=True)
+            (repo / ".git/HEAD").write_text("ref: refs/heads/feature\n")
             fake = """import os, pathlib, sys, time
 root = pathlib.Path(os.environ['FAKE_ROOT'])
 with (root / 'calls').open('a') as f: f.write(pathlib.Path(sys.argv[0]).name + '\\n')
@@ -1014,17 +1620,27 @@ if pathlib.Path(sys.argv[0]).name == 'git':
     while not (root / 'release').exists(): time.sleep(.01)
     print('1\\t2')
 """
-            for name in ('kitten', 'zmx', 'lsof', 'git'):
+            for name in ("kitten", "zmx", "lsof", "git"):
                 path = root / name
-                path.write_text('#!/usr/bin/python3\n' + fake)
+                path.write_text("#!/usr/bin/python3\n" + fake)
                 path.chmod(0o700)
-            script = root / 'zside'
-            script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(root)))
+            script = root / "zside"
+            script.write_text(
+                SCRIPT.read_text().replace("/opt/homebrew/bin", str(root))
+            )
             master, slave = pty.openpty()
-            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 40, 0, 0))
-            proc = subprocess.Popen(['/usr/bin/python3', str(script)], stdin=slave, stdout=slave,
-                                    stderr=subprocess.PIPE, env=dict(os.environ, FAKE_ROOT=str(root),
-                                    PATH=str(root) + ':' + os.environ['PATH']))
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 40, 0, 0))
+            proc = subprocess.Popen(
+                ["/usr/bin/python3", str(script)],
+                stdin=slave,
+                stdout=slave,
+                stderr=subprocess.PIPE,
+                env=dict(
+                    os.environ,
+                    FAKE_ROOT=str(root),
+                    PATH=str(root) + ":" + os.environ["PATH"],
+                ),
+            )
             os.close(slave)
             output = bytearray()
 
@@ -1032,29 +1648,37 @@ if pathlib.Path(sys.argv[0]).name == 'git':
                 deadline = time.monotonic() + 5
                 while not predicate():
                     self.assertLess(time.monotonic(), deadline, bytes(output))
-                    ready, _, _ = select.select([master], [], [], min(.02, max(0, deadline - time.monotonic())))
+                    ready, _, _ = select.select(
+                        [master], [], [], min(0.02, max(0, deadline - time.monotonic()))
+                    )
                     if ready:
                         output.extend(os.read(master, 65536))
 
             try:
-                until(lambda: b'zside=cmVhZHk=\x07' in output)
-                self.assertNotIn(b'\x1b[?2026h', output)
-                self.assertFalse((root / 'calls').exists())
+                until(lambda: b"zside=cmVhZHk=\x07" in output)
+                self.assertNotIn(b"\x1b[?2026h", output)
+                self.assertFalse((root / "calls").exists())
                 os.write(master, frame(view(str(repo))))
-                until(lambda: b'feature' in output and b'example-repo' in output and b'\x1b[?2026l' in output)
-                self.assertNotIn('↑'.encode(), output)
-                self.assertFalse((root / 'release').exists())
-                until(lambda: (root / 'calls').exists())
-                (root / 'release').touch()
-                until(lambda: '↑2'.encode() in output)
+                until(
+                    lambda: (
+                        b"feature" in output
+                        and b"example-repo" in output
+                        and b"\x1b[?2026l" in output
+                    )
+                )
+                self.assertNotIn("↑".encode(), output)
+                self.assertFalse((root / "release").exists())
+                until(lambda: (root / "calls").exists())
+                (root / "release").touch()
+                until(lambda: "↑2".encode() in output)
                 output.clear()
-                os.write(master, b'\x1b_zt\x1b\\')
-                until(lambda: b'\x1b[?2026l' in output)
-                self.assertEqual((root / 'calls').read_text().splitlines(), ['git'])
+                os.write(master, b"\x1b_zt\x1b\\")
+                until(lambda: b"\x1b[?2026l" in output)
+                self.assertEqual((root / "calls").read_text().splitlines(), ["git"])
                 os.close(master)
                 master = None
                 self.assertEqual(proc.wait(timeout=5), 0)
-                self.assertEqual(proc.stderr.read(), b'')
+                self.assertEqual(proc.stderr.read(), b"")
             finally:
                 if master is not None:
                     os.close(master)

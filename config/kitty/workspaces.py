@@ -14,8 +14,8 @@ import os
 import re
 import shlex
 import shutil
-import time
 import sys
+import time
 import unicodedata
 from importlib import import_module
 
@@ -26,15 +26,20 @@ import zcore
 import zkitty
 
 # Undocumented kitty API names (here and in tab_bar.py) are checked by INTERNALS, FUNCTIONS and _missing below.
-from kitty.fast_data_types import add_timer, get_boss, mark_tab_bar_dirty, wakeup_main_loop
+from kitty.fast_data_types import (
+    add_timer,
+    get_boss,
+    mark_tab_bar_dirty,
+    wakeup_main_loop,
+)
 
 DIR = zkitty.folder()
 _log = zkitty.log
 _safe = zkitty.safe
-OPEN = os.path.join(DIR, '.open')
-OFF = os.path.join(DIR, '.sidebar-off')
-STATE = os.path.expanduser('~/.local/state/kitty')
-ATTACHED = os.path.join(DIR, '.attached')
+OPEN = os.path.join(DIR, ".open")
+OFF = os.path.join(DIR, ".sidebar-off")
+STATE = os.path.expanduser("~/.local/state/kitty")
+ATTACHED = os.path.join(DIR, ".attached")
 _seen_main = False
 _save_pending = False
 _sync_pending = False
@@ -52,47 +57,64 @@ _ports_started = False
 
 
 INTERNALS = (
-    ('kitty.boss:Boss', 'all_windows all_tabs all_tab_managers active_window active_tab call_remote_control'),
-    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at open_url_handler'),
-    ('kitty.child:Child', 'argv'),
-    ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
-    ('kitty.fast_data_types:Screen', 'last_reported_cwd columns cursor draw'),
-    ('kitty.program_status:ProgramStatus', 'as_list'),
-    ('kitty.tabs:TabManager', 'active_tab os_window_id tab_bar_hidden tab_bar_should_be_visible'),
-    ('kitty.tab_bar:TabBarData', 'is_active active_session_name'),
-    ('kitty.tab_bar:DrawData', 'inactive_fg default_bg'),
-    ('kitty.tab_bar:ExtraData', 'for_layout'),
+    (
+        "kitty.boss:Boss",
+        "all_windows all_tabs all_tab_managers active_window active_tab call_remote_control",
+    ),
+    (
+        "kitty.window:Window",
+        "created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at open_url_handler",
+    ),
+    ("kitty.child:Child", "argv"),
+    ("kitty.tabs:Tab", "tab_manager_ref id __iter__ active_window"),
+    ("kitty.fast_data_types:Screen", "last_reported_cwd columns cursor draw"),
+    ("kitty.program_status:ProgramStatus", "as_list"),
+    (
+        "kitty.tabs:TabManager",
+        "active_tab os_window_id tab_bar_hidden tab_bar_should_be_visible",
+    ),
+    ("kitty.tab_bar:TabBarData", "is_active active_session_name"),
+    ("kitty.tab_bar:DrawData", "inactive_fg default_bg"),
+    ("kitty.tab_bar:ExtraData", "for_layout"),
 )
 FUNCTIONS = (
-    ('kitty.fast_data_types', 'add_timer get_boss mark_tab_bar_dirty wakeup_main_loop'),
-    ('kitty.tab_bar', 'draw_tab_with_powerline as_rgb'),
+    ("kitty.fast_data_types", "add_timer get_boss mark_tab_bar_dirty wakeup_main_loop"),
+    ("kitty.tab_bar", "draw_tab_with_powerline as_rgb"),
 )
 
 
 def _missing() -> list[str]:
     missing = []
     for path, names in INTERNALS:
-        module, name = path.split(':')
+        module, name = path.split(":")
         try:
             cls = getattr(import_module(module), name)
         except (ImportError, AttributeError):
             cls = None
-        assigned = getattr(getattr(getattr(cls, '__init__', None), '__code__', None), 'co_names', ())
-        missing.extend(name + '.' + attr for attr in names.split()
-                       if cls is None or not (hasattr(cls, attr) or attr in assigned))
+        assigned = getattr(
+            getattr(getattr(cls, "__init__", None), "__code__", None), "co_names", ()
+        )
+        missing.extend(
+            name + "." + attr
+            for attr in names.split()
+            if cls is None or not (hasattr(cls, attr) or attr in assigned)
+        )
     try:
-        config_dir = import_module('kitty.constants').config_dir
+        config_dir = import_module("kitty.constants").config_dir
     except (ImportError, AttributeError):
         config_dir = None
     if not isinstance(config_dir, str):
-        missing.append('kitty.constants.config_dir')
+        missing.append("kitty.constants.config_dir")
     for module, names in FUNCTIONS:
         try:
             found = import_module(module)
         except ImportError:
             found = None
-        missing.extend(module + '.' + name for name in names.split()
-                       if not callable(getattr(found, name, None)))
+        missing.extend(
+            module + "." + name
+            for name in names.split()
+            if not callable(getattr(found, name, None))
+        )
     return missing
 
 
@@ -102,15 +124,24 @@ def _check(timer_id: int | None = None) -> None:
     if not missing:
         return
     if _check_tries == 0:
-        _log('kitty no longer has: ' + ', '.join(missing))
+        _log("kitty no longer has: " + ", ".join(missing))
     boss = get_boss()
     try:
-        windows = getattr(boss, 'all_windows', None)
+        windows = getattr(boss, "all_windows", None)
         if windows is not None and not list(windows):
-            raise RuntimeError('no window for watcher error tab')
-        boss.call_remote_control(None, ('launch', '--type=tab', '--tab-title',
-                                       'watcher error', '/usr/bin/less', '+G',
-                                       os.path.join(DIR, 'watcher.log')))
+            raise RuntimeError("no window for watcher error tab")
+        boss.call_remote_control(
+            None,
+            (
+                "launch",
+                "--type=tab",
+                "--tab-title",
+                "watcher error",
+                "/usr/bin/less",
+                "+G",
+                os.path.join(DIR, "watcher.log"),
+            ),
+        )
     except Exception:
         if _check_tries >= 10:
             raise  # the timer's _safe wrapper logs the last failure
@@ -119,18 +150,21 @@ def _check(timer_id: int | None = None) -> None:
 
 
 def _file(name: str) -> str:
-    return os.path.join(DIR, name + '.kitty-session')
+    return os.path.join(DIR, name + ".kitty-session")
 
 
 def _names(boss) -> list[str]:
     """Open workspaces, the active one last."""
     names: list[str] = []
     for w in boss.all_windows:
-        if (w.created_in_session_name and w.user_vars.get('transient') != '1'
-                and w.created_in_session_name not in names):
+        if (
+            w.created_in_session_name
+            and w.user_vars.get("transient") != "1"
+            and w.created_in_session_name not in names
+        ):
             names.append(w.created_in_session_name)
     active = boss.active_window
-    current = active.created_in_session_name if active else ''
+    current = active.created_in_session_name if active else ""
     if current in names:
         names.remove(current)
         names.append(current)
@@ -150,37 +184,59 @@ def _place(path: str, own_window: bool) -> None:
         return
     while lines and not lines[0].strip():
         lines.pop(0)
-    if lines and lines[0].strip() == 'new_os_window':
+    if lines and lines[0].strip() == "new_os_window":
         lines.pop(0)
     if own_window:
-        lines.insert(0, 'new_os_window')
-    with open(path + '.tmp', 'w') as f:
-        f.write('\n'.join(lines) + '\n')
-    os.replace(path + '.tmp', path)
+        lines.insert(0, "new_os_window")
+    with open(path + ".tmp", "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(path + ".tmp", path)
 
 
 def _label(boss) -> None:
     """Label each pane's zmx session with its workspace. kitty drops a closed pane from the session
     file; the label stays with the session, so bin/zpick-rows can still place it once detached."""
-    zmx = shutil.which('zmx') or '/opt/homebrew/bin/zmx'
+    zmx = shutil.which("zmx") or "/opt/homebrew/bin/zmx"
     for w in boss.all_windows:
-        name, holder = w.created_in_session_name, w.user_vars.get('holder', '')
-        if not name or not holder or _labelled.get(holder) == name or _refused.get(holder, 0) > 3:
+        name, holder = w.created_in_session_name, w.user_vars.get("holder", "")
+        if (
+            not name
+            or not holder
+            or _labelled.get(holder) == name
+            or _refused.get(holder, 0) > 3
+        ):
             continue
         # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
         # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
         host = zkitty.instance_host()
         if host:
-            script = ('"$1" "$2" "$3" "$4" "$5" "$6" >/dev/null 2>&1 || '
-                      'kitten @ set-user-vars --match "id:$7" zlabel=retry')
-            args = (os.path.join(FOLDER, 'bin/zhost'), host, 'zmx', 'set')
+            script = (
+                '"$1" "$2" "$3" "$4" "$5" "$6" >/dev/null 2>&1 || '
+                'kitten @ set-user-vars --match "id:$7" zlabel=retry'
+            )
+            args = (os.path.join(FOLDER, "bin/zhost"), host, "zmx", "set")
         else:
-            script = ('"$1" set "$2" "$3" >/dev/null 2>&1 || '
-                      'kitten @ set-user-vars --match "id:$4" zlabel=retry')
+            script = (
+                '"$1" set "$2" "$3" >/dev/null 2>&1 || '
+                'kitten @ set-user-vars --match "id:$4" zlabel=retry'
+            )
             args = (zmx,)
-        boss.call_remote_control(None, (
-            'launch', '--type=background', '--allow-remote-control', 'sh', '-c',
-            script, 'sh', *args, holder, 'space=' + zcore.label(name), str(w.id)))
+        boss.call_remote_control(
+            None,
+            (
+                "launch",
+                "--type=background",
+                "--allow-remote-control",
+                "sh",
+                "-c",
+                script,
+                "sh",
+                *args,
+                holder,
+                "space=" + zcore.label(name),
+                str(w.id),
+            ),
+        )
         _labelled[holder] = name
 
 
@@ -194,19 +250,29 @@ def _save(timer_id: int | None = None) -> None:
     os.makedirs(DIR, exist_ok=True)
     where: dict[str, set[int]] = {}  # workspace -> its OS windows
     for w in boss.all_windows:
-        if w.created_in_session_name and w.user_vars.get('transient') != '1':
+        if w.created_in_session_name and w.user_vars.get("transient") != "1":
             where.setdefault(w.created_in_session_name, set()).add(w.os_window_id)
-    first = min((i for ids in where.values() for i in ids), default=0)  # the window workspaces share
+    first = min(
+        (i for ids in where.values() for i in ids), default=0
+    )  # the window workspaces share
     for name in names:
-        boss.call_remote_control(None, ('action', 'save_as_session', '--save-only',
-                                        '--match=' + shlex.quote(f'session:^{re.escape(name)}$ and not var:transient=1'),
-                                        _file(name)))
+        boss.call_remote_control(
+            None,
+            (
+                "action",
+                "save_as_session",
+                "--save-only",
+                "--match="
+                + shlex.quote(f"session:^{re.escape(name)}$ and not var:transient=1"),
+                _file(name),
+            ),
+        )
         _place(_file(name), first not in where.get(name, {first}))
     _label(boss)
     if _owner:
-        with open(OPEN + '.tmp', 'w') as f:
-            f.write(''.join(name + '\n' for name in names))
-        os.replace(OPEN + '.tmp', OPEN)  # a crash mid-write must not empty the list
+        with open(OPEN + ".tmp", "w") as f:
+            f.write("".join(name + "\n" for name in names))
+        os.replace(OPEN + ".tmp", OPEN)  # a crash mid-write must not empty the list
 
 
 def _restore(timer_id: int | None = None) -> None:
@@ -214,19 +280,21 @@ def _restore(timer_id: int | None = None) -> None:
     boss = get_boss()
     names = _names(boss)
     if not names:
-        if not list(boss.all_windows) and _tries < 10:  # loaded before the first window exists
+        if (
+            not list(boss.all_windows) and _tries < 10
+        ):  # loaded before the first window exists
             _tries += 1
             add_timer(_safe(_restore), 0.3, False)
         return  # a plain kitty: no workspace at start
     try:
-        saved = [n for n in open(OPEN).read().split('\n') if n]
+        saved = [n for n in open(OPEN).read().split("\n") if n]
     except OSError:
         saved = []
     todo = [n for n in saved if n not in names and os.path.exists(_file(n))]
     if todo and saved[-1] != todo[-1] and saved[-1] in names:
         todo.append(saved[-1])  # end on the workspace that was active
     for name in todo:
-        boss.call_remote_control(None, ('action', 'goto_session', _file(name)))
+        boss.call_remote_control(None, ("action", "goto_session", _file(name)))
     _owner = True
     _lifecycle()
     add_timer(_safe(_lifecycle), 2.0, True)
@@ -234,16 +302,16 @@ def _restore(timer_id: int | None = None) -> None:
 
 def _record(path, value):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + '.tmp', 'w') as f:
+    with open(path + ".tmp", "w") as f:
         f.write(str(value))
-    os.replace(path + '.tmp', path)
+    os.replace(path + ".tmp", path)
 
 
 def _lifecycle(timer_id: int | None = None) -> None:
     global _seen_main, _quitting
     if not _owner or _quitting:
         return
-    pidfile = os.path.join(STATE, '.main-pid')
+    pidfile = os.path.join(STATE, ".main-pid")
     if not zkitty.instance_host():
         _record(pidfile, os.getpid())
         return
@@ -251,7 +319,7 @@ def _lifecycle(timer_id: int | None = None) -> None:
         with open(pidfile) as f:
             pid = int(f.read())
         if pid <= 0:
-            raise ValueError('invalid main pid')
+            raise ValueError("invalid main pid")
         os.kill(pid, 0)
     except PermissionError:
         return  # A live pid owned by another user is not evidence the Mac kitty is gone.
@@ -259,13 +327,15 @@ def _lifecycle(timer_id: int | None = None) -> None:
         if _seen_main:
             _save()
             _quitting = True  # SIGTERM closes windows individually; preserve .open
-            os.kill(os.getpid(), 15)  # no quit confirmation, no subprocess in kitty's thread
+            os.kill(
+                os.getpid(), 15
+            )  # no quit confirmation, no subprocess in kitty's thread
     else:
         _seen_main = True  # follow a replacement too, not only the first pid
 
 
 def _docks(tab) -> list:
-    return [w for w in tab if w.user_vars.get('role') == 'sidebar']
+    return [w for w in tab if w.user_vars.get("role") == "sidebar"]
 
 
 def _push(boss) -> None:
@@ -275,7 +345,7 @@ def _push(boss) -> None:
         for d in _docks(tab):
             existing.add(d.id)
             if d.id in _ready:
-                line = zcore.line(view, d.created_in_session_name or '', tab.id)
+                line = zcore.line(view, d.created_in_session_name or "", tab.id)
                 if line and line != _sent.get(d.id):
                     d.write_to_child(line)
                     _sent[d.id] = line
@@ -307,13 +377,22 @@ def _sync(timer_id: int | None = None) -> None:
     off = os.path.exists(OFF)
     for tab in list(boss.all_tabs):
         docks = _docks(tab)
-        name = next((w.created_in_session_name for w in tab if w.created_in_session_name and w not in docks), '')
+        name = next(
+            (
+                w.created_in_session_name
+                for w in tab
+                if w.created_in_session_name and w not in docks
+            ),
+            "",
+        )
         if docks and (off or not name):
             for d in docks:
-                boss.call_remote_control(None, ('close-window', f'--match=id:{d.id}'))
+                boss.call_remote_control(None, ("close-window", f"--match=id:{d.id}"))
         elif not docks and name and not off:
             # A sidebar that exits at once would be relaunched forever; three in 10 s is enough.
-            recent = _launched[tab.id] = [t for t in _launched.get(tab.id, []) if time.monotonic() - t < 10]
+            recent = _launched[tab.id] = [
+                t for t in _launched.get(tab.id, []) if time.monotonic() - t < 10
+            ]
             if len(recent) >= 3:
                 continue
             recent.append(time.monotonic())
@@ -326,9 +405,13 @@ def _clock(timer_id: int | None = None) -> None:
 
     The C call skips TabManager.mark_tab_bar_dirty's on_tab_bar_dirty, which would save each minute.
     An idle kitty draws a dirty bar only when its main loop next wakes, so wake it."""
-    add_timer(_safe(_clock), 60.05 - time.time() % 60, False)  # first, so a failure below keeps the clock
+    add_timer(
+        _safe(_clock), 60.05 - time.time() % 60, False
+    )  # first, so a failure below keeps the clock
     for tm in get_boss().all_tab_managers:
-        mark_tab_bar_dirty(tm.os_window_id, not tm.tab_bar_hidden and tm.tab_bar_should_be_visible)
+        mark_tab_bar_dirty(
+            tm.os_window_id, not tm.tab_bar_hidden and tm.tab_bar_should_be_visible
+        )
     wakeup_main_loop()
 
 
@@ -343,8 +426,16 @@ def on_resize(boss, window, data) -> None:
 def on_load(boss, data) -> None:
     global _ports_started
     if zkitty.instance_host() and not _ports_started:
-        boss.call_remote_control(None, ('launch', '--type=background',
-                                       os.path.join(FOLDER, 'bin/zports'), 'run', str(os.getpid())))
+        boss.call_remote_control(
+            None,
+            (
+                "launch",
+                "--type=background",
+                os.path.join(FOLDER, "bin/zports"),
+                "run",
+                str(os.getpid()),
+            ),
+        )
         _ports_started = True
     add_timer(_safe(_restore), 1.0, False)
     add_timer(_safe(_check), 1.0, False)
@@ -364,7 +455,7 @@ def on_tab_bar_dirty(boss, window, data) -> None:
 
 @_safe
 def on_focus_change(boss, window, data) -> None:
-    if data.get('focused'):
+    if data.get("focused"):
         _refresh(boss)
 
 
@@ -375,66 +466,113 @@ def on_program_status_change(boss, window, data) -> None:
 
 @_safe
 def on_set_user_var(boss, window, data) -> None:
-    if data.get('key') == 'zworktree':
+    if data.get("key") == "zworktree":
         # kitty decodes OSC 1337's base64 before this callback. Never save/replay the report.
-        directory = data.get('value', '')
+        directory = data.get("value", "")
         if not directory:
             return
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zworktree'))
-        if (zkitty.instance_host() and directory.startswith('/')
-                and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
-                            for c in directory)):
-            boss.call_remote_control(None, (
-                'launch', '--type=background', '--allow-remote-control',
-                zkitty.ZWS, 'here', directory))
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zworktree")
+        )
+        if (
+            zkitty.instance_host()
+            and directory.startswith("/")
+            and not any(
+                unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
+                for c in directory
+            )
+        ):
+            boss.call_remote_control(
+                None,
+                (
+                    "launch",
+                    "--type=background",
+                    "--allow-remote-control",
+                    zkitty.ZWS,
+                    "here",
+                    directory,
+                ),
+            )
         return
-    if data.get('key') == 'zmdread':
+    if data.get("key") == "zmdread":
         # A box nvim's <leader>mo (config/nvim markdown_reading.lua) sends LINE:PATH; the overlay runs on the box.
-        line, _, path = (data.get('value') or '').partition(':')
+        line, _, path = (data.get("value") or "").partition(":")
         if not path:
             return
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zmdread'))
-        if (zkitty.instance_host() and line.isdecimal() and path.startswith('/')
-                and not any(unicodedata.category(c).startswith('C') or c in '\u2028\u2029'
-                            for c in path)):
-            zkitty.launch_program(boss, window, 'overlay', (
-                'nvim', '--cmd', "let $MD_READING_OVERLAY = '1'", '-R', '-n', '+' + line,
-                '-c', 'autocmd UIEnter * ++once lua vim.schedule(function() vim.cmd.MdRender "toggle" end)',
-                '--', path), ('--title', 'md reading'))
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zmdread")
+        )
+        if (
+            zkitty.instance_host()
+            and line.isdecimal()
+            and path.startswith("/")
+            and not any(
+                unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
+                for c in path
+            )
+        ):
+            zkitty.launch_program(
+                boss,
+                window,
+                "overlay",
+                (
+                    "nvim",
+                    "--cmd",
+                    "let $MD_READING_OVERLAY = '1'",
+                    "-R",
+                    "-n",
+                    "+" + line,
+                    "-c",
+                    'autocmd UIEnter * ++once lua vim.schedule(function() vim.cmd.MdRender "toggle" end)',
+                    "--",
+                    path,
+                ),
+                ("--title", "md reading"),
+            )
         return
-    if data.get('key') == 'zside' and data.get('value') == 'toggle':
+    if data.get("key") == "zside" and data.get("value") == "toggle":
         if os.path.exists(OFF):
             os.remove(OFF)
         else:
             os.makedirs(DIR, exist_ok=True)
-            open(OFF, 'w').close()
+            open(OFF, "w").close()
         # Drop the var again: a saved session would replay it as --var and toggle on restore.
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zside")
+        )
         _sync()
-    elif data.get('key') == 'zside' and data.get('value') == 'ready':
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zside'))
+    elif data.get("key") == "zside" and data.get("value") == "ready":
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zside")
+        )
         if zkitty.is_sidebar(window):
             _ready.add(window.id)
             _sent.pop(window.id, None)
             _push(boss)
-    elif data.get('key') == 'zdo' and data.get('value'):
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zdo'))
+    elif data.get("key") == "zdo" and data.get("value"):
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zdo")
+        )
         if zkitty.is_sidebar(window):
-            zkitty.run(boss, data['value'].split())
-    elif data.get('key') == 'zq' and data.get('value'):
+            zkitty.run(boss, data["value"].split())
+    elif data.get("key") == "zq" and data.get("value"):
         # A host pane asks again when its answer was lost; a Mac pane falls back to zsh instead.
         if window.id not in _named or zkitty.instance_host():
             _named.add(window.id)
             zkitty.attach(boss, window)
         else:
-            boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zq'))
-    elif data.get('key') == 'zlabel' and data.get('value'):
-        boss.call_remote_control(None, ('set-user-vars', f'--match=id:{window.id}', 'zlabel'))
-        holder = window.user_vars.get('holder', '')
+            boss.call_remote_control(
+                None, ("set-user-vars", f"--match=id:{window.id}", "zq")
+            )
+    elif data.get("key") == "zlabel" and data.get("value"):
+        boss.call_remote_control(
+            None, ("set-user-vars", f"--match=id:{window.id}", "zlabel")
+        )
+        holder = window.user_vars.get("holder", "")
         _labelled.pop(holder, None)
         _refused[holder] = _refused.get(holder, 0) + 1
         on_tab_bar_dirty(boss, window, data)  # the next save tries again
-    elif data.get('key') in ('zside', 'zdo', 'zq', 'zlabel'):
+    elif data.get("key") in ("zside", "zdo", "zq", "zlabel"):
         return
     else:  # a rename (ws_name) or pi's model and context use
         on_tab_bar_dirty(boss, window, data)
@@ -443,13 +581,18 @@ def on_set_user_var(boss, window, data) -> None:
 @_safe
 def on_quit(boss, window, data) -> None:
     global _quitting
-    if data.get('confirmed') and not data.get('aborted'):
+    if data.get("confirmed") and not data.get("aborted"):
         when = time.time()
         _save()
         if not _quitting and (zkitty.instance_host() or _owner):
             # A numeric attachment is a user quit, except when a Mac quit is within 5 s.
             # Keep both timestamps: either process can be the first to quit on logout.
-            _record(ATTACHED if zkitty.instance_host() else os.path.join(STATE, '.main-quit'), when)
+            _record(
+                ATTACHED
+                if zkitty.instance_host()
+                else os.path.join(STATE, ".main-quit"),
+                when,
+            )
         _quitting = True
 
 

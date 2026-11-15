@@ -9,6 +9,7 @@ det | closed; target is the session name, tab id, window id, zmx session or sess
 clients is 0 only for a session no terminal is attached to. Inside fzf (FZF_COLUMNS) the right
 hand columns are set flush against the preview.
 """
+
 import json
 import os
 import re
@@ -17,16 +18,26 @@ import subprocess
 import sys
 import time
 
-HOME = os.path.expanduser('~')
-DIR = os.environ.get('ZWS_DIR', os.path.join(HOME, '.local/state/kitty/workspaces'))
-SHELLS = {'zsh', 'bash', 'fish', 'sh'}
-ACCENT = '\033[38;2;68;221;255m'
-STATUS = {'working': '\033[38;2;255;136;68m', 'blocked': '\033[38;2;255;85;85m',
-          'done': '\033[38;2;102;255;136m', 'running': '', 'idle': '\033[2m', 'shell': '\033[2m'}
-DIM, BOLD, OFF = '\033[2m', '\033[1m', '\033[0m'
-ANSI = re.compile(r'\033\[[0-9;]*m')
+HOME = os.path.expanduser("~")
+DIR = os.environ.get("ZWS_DIR", os.path.join(HOME, ".local/state/kitty/workspaces"))
+SHELLS = {"zsh", "bash", "fish", "sh"}
+ACCENT = "\033[38;2;68;221;255m"
+STATUS = {
+    "working": "\033[38;2;255;136;68m",
+    "blocked": "\033[38;2;255;85;85m",
+    "done": "\033[38;2;102;255;136m",
+    "running": "",
+    "idle": "\033[2m",
+    "shell": "\033[2m",
+}
+DIM, BOLD, OFF = "\033[2m", "\033[1m", "\033[0m"
+ANSI = re.compile(r"\033\[[0-9;]*m")
 # fzf's list: its width less the preview and the pointer, marker, scrollbar and border columns
-WIDTH = int(os.environ.get('FZF_COLUMNS') or 0) - int(os.environ.get('FZF_PREVIEW_COLUMNS') or 0) - 5
+WIDTH = (
+    int(os.environ.get("FZF_COLUMNS") or 0)
+    - int(os.environ.get("FZF_PREVIEW_COLUMNS") or 0)
+    - 5
+)
 if WIDTH < 20:  # not in fzf
     WIDTH = 96
 
@@ -35,42 +46,52 @@ def run(*cmd: str) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.TimeoutExpired):
-        return ''
+        return ""
 
 
 def age(seconds: float) -> str:
     s = max(0, int(seconds))
-    return f'{s // 60}m' if s < 3600 else (f'{s // 3600}h' if s < 86400 else f'{s // 86400}d')
+    return (
+        f"{s // 60}m"
+        if s < 3600
+        else (f"{s // 3600}h" if s < 86400 else f"{s // 86400}d")
+    )
 
 
 def short(path: str, home: str) -> str:
-    return '~' + path[len(home):] if home and (path == home or path.startswith(home + '/')) else path
+    return (
+        "~" + path[len(home) :]
+        if home and (path == home or path.startswith(home + "/"))
+        else path
+    )
 
 
 def fit(text: str, width: int) -> str:
-    return text[:width - 1] + '…' if len(text) > width else text.ljust(width)
+    return text[: width - 1] + "…" if len(text) > width else text.ljust(width)
 
 
 def zmx_sessions() -> dict[str, dict[str, str]]:
     # zmx 1.0.1 ls line: tab-separated name= pid= clients= created= cwd= (tests/test_workspaces.py)
     out = {}
-    for line in run('zmx', 'ls').splitlines():
-        line = line.strip().removeprefix('→')  # the arrow marks the session zmx ls ran in
-        f = dict(p.strip().split('=', 1) for p in line.split('\t') if '=' in p)
-        if 'name' in f:
-            f['cwd'] = f.get('cwd', '').split('://', 1)[-1]
-            f['cwd'] = f['cwd'][f['cwd'].find('/'):] if '/' in f['cwd'] else ''
-            out[f['name']] = f
+    for line in run("zmx", "ls").splitlines():
+        line = line.strip().removeprefix(
+            "→"
+        )  # the arrow marks the session zmx ls ran in
+        f = dict(p.strip().split("=", 1) for p in line.split("\t") if "=" in p)
+        if "name" in f:
+            f["cwd"] = f.get("cwd", "").split("://", 1)[-1]
+            f["cwd"] = f["cwd"][f["cwd"].find("/") :] if "/" in f["cwd"] else ""
+            out[f["name"]] = f
     return out
 
 
 def space_label(z: dict) -> str:
     """The workspace kitty labelled this session with (workspaces.py, zcore.label), or ''."""
-    value = z.get('space', '')
+    value = z.get("space", "")
     try:
         return bytes.fromhex(value).decode()
     except ValueError:
-        return ''
+        return ""
 
 
 def spaces() -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str, str]]]:
@@ -78,18 +99,30 @@ def spaces() -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str,
     that holds it, read from the saved session files. The newest file wins. Then the same by file."""
     out, by_file = {}, {}
     try:
-        files = sorted((os.path.join(DIR, f) for f in os.listdir(DIR) if f.endswith('.kitty-session')),
-                       key=os.path.getmtime)
+        files = sorted(
+            (
+                os.path.join(DIR, f)
+                for f in os.listdir(DIR)
+                if f.endswith(".kitty-session")
+            ),
+            key=os.path.getmtime,
+        )
     except OSError:
         return out, by_file
     for path in files:
         try:
-            text = open(path, errors='replace').read()
+            text = open(path, errors="replace").read()
         except OSError:
             continue
-        holders = re.findall(r'--var=holder=(\S+)', text)
-        cd = next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), '')
-        by_file[os.path.basename(path)] = (os.path.basename(path), holders[0] if holders else '', cd)
+        holders = re.findall(r"--var=holder=(\S+)", text)
+        cd = next(
+            (ln[3:].strip() for ln in text.splitlines() if ln.startswith("cd ")), ""
+        )
+        by_file[os.path.basename(path)] = (
+            os.path.basename(path),
+            holders[0] if holders else "",
+            cd,
+        )
         for h in holders:
             out[h] = by_file[os.path.basename(path)]
     return out, by_file
@@ -97,11 +130,15 @@ def spaces() -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str,
 
 def live_cwds(pids: list[str]) -> dict[str, str]:
     """pid -> current folder. zmx ls only knows the folder a session started in."""
-    out, pid = {}, ''
-    for line in run('lsof', '-a', '-d', 'cwd', '-p', ','.join(pids), '-Fn').splitlines() if pids else []:
-        if line.startswith('p'):
+    out, pid = {}, ""
+    for line in (
+        run("lsof", "-a", "-d", "cwd", "-p", ",".join(pids), "-Fn").splitlines()
+        if pids
+        else []
+    ):
+        if line.startswith("p"):
             pid = line[1:]
-        elif line.startswith('n'):
+        elif line.startswith("n"):
             out[pid] = line[1:]
     return out
 
@@ -109,14 +146,19 @@ def live_cwds(pids: list[str]) -> dict[str, str]:
 def foreground() -> dict[int, str]:
     """Session child pid -> name of the foreground program on its terminal."""
     procs = {}
-    for line in run('ps', '-Ao', 'pid=,tpgid=,comm=').splitlines():
+    for line in run("ps", "-Ao", "pid=,tpgid=,comm=").splitlines():
         parts = line.split(None, 2)
         if len(parts) == 3 and parts[0].isdigit():
-            procs[int(parts[0])] = (int(parts[1]) if parts[1].lstrip('-').isdigit() else 0, parts[2])
+            procs[int(parts[0])] = (
+                int(parts[1]) if parts[1].lstrip("-").isdigit() else 0,
+                parts[2],
+            )
+
     def name(pid: int) -> str:
-        tpgid, comm = procs.get(pid, (0, ''))
+        tpgid, comm = procs.get(pid, (0, ""))
         comm = procs.get(tpgid, (0, comm))[1] if tpgid > 0 else comm
-        return os.path.basename(comm).lstrip('-')
+        return os.path.basename(comm).lstrip("-")
+
     return {pid: name(pid) for pid in procs}
 
 
@@ -125,23 +167,31 @@ def git_ref(cwd: str) -> tuple[str, str]:
     subprocess. ('', '') outside a repo."""
     d = cwd
     # git's own setting: the search does not climb into these folders
-    ceilings = {os.path.abspath(p) for p in os.environ.get('GIT_CEILING_DIRECTORIES', '').split(':') if p}
-    while d and d != '/':
-        git = os.path.join(d, '.git')
+    ceilings = {
+        os.path.abspath(p)
+        for p in os.environ.get("GIT_CEILING_DIRECTORIES", "").split(":")
+        if p
+    }
+    while d and d != "/":
+        git = os.path.join(d, ".git")
         try:
-            of = ''
+            of = ""
             if os.path.isfile(git):  # "gitdir: <repo>/.git/worktrees/<name>"
-                git = os.path.join(d, open(git).read().split(':', 1)[1].strip())
-                if '/.git/worktrees/' in git:
-                    of = os.path.basename(git.split('/.git/worktrees/')[0])
-            head = open(os.path.join(git, 'HEAD')).read().strip()
-            name = head.rpartition('refs/heads/')[2] if head.startswith('ref:') else head[:7]
-            return name + (f' · worktree of {of}' if of else ''), d
+                git = os.path.join(d, open(git).read().split(":", 1)[1].strip())
+                if "/.git/worktrees/" in git:
+                    of = os.path.basename(git.split("/.git/worktrees/")[0])
+            head = open(os.path.join(git, "HEAD")).read().strip()
+            name = (
+                head.rpartition("refs/heads/")[2]
+                if head.startswith("ref:")
+                else head[:7]
+            )
+            return name + (f" · worktree of {of}" if of else ""), d
         except (OSError, IndexError):
             d = os.path.dirname(d)
             if d in ceilings:
                 break
-    return '', ''
+    return "", ""
 
 
 def host_folder(text: str) -> str:
@@ -151,23 +201,24 @@ def host_folder(text: str) -> str:
         except ValueError:
             continue
         for arg in args:
-            arg = arg.removeprefix('--var=')
-            if arg.startswith('host_dir='):
-                return arg[len('host_dir='):]
-    return ''
+            arg = arg.removeprefix("--var=")
+            if arg.startswith("host_dir="):
+                return arg[len("host_dir=") :]
+    return ""
 
 
 def facts(paths: list[str]) -> dict:
     """All machine-dependent facts; also runs verbatim on the host via python3 -."""
     zs = zmx_sessions()
-    cwds = live_cwds([z['pid'] for z in zs.values() if z.get('pid', '').isdigit()])
+    cwds = live_cwds([z["pid"] for z in zs.values() if z.get("pid", "").isdigit()])
     fg = foreground()
     for z in zs.values():
-        z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
-        z['proc'] = fg.get(int(z.get('pid', 0) or 0), '')
-    folders = set(paths) | {z['cwd'] for z in zs.values()}
-    return dict(home=HOME, now=time.time(), sessions=zs,
-                refs={p: git_ref(p) for p in folders})
+        z["cwd"] = cwds.get(z.get("pid", ""), z["cwd"])
+        z["proc"] = fg.get(int(z.get("pid", 0) or 0), "")
+    folders = set(paths) | {z["cwd"] for z in zs.values()}
+    return dict(
+        home=HOME, now=time.time(), sessions=zs, refs={p: git_ref(p) for p in folders}
+    )
 
 
 def side_facts(paths: list[str], version: bool) -> dict:
@@ -175,217 +226,390 @@ def side_facts(paths: list[str], version: bool) -> dict:
     refs = {p: git_ref(p) for p in paths}
     counts = {}
     for top in dict.fromkeys(top for _, top in refs.values() if top):
-        values = run('git', '-C', top, 'rev-list', '--left-right', '--count', '@{u}...HEAD').split()
-        status = ''
+        values = run(
+            "git", "-C", top, "rev-list", "--left-right", "--count", "@{u}...HEAD"
+        ).split()
+        status = ""
         if len(values) == 2 and all(v.isdigit() for v in values):
             behind, ahead = map(int, values)
-            status = ' '.join(s for s in ('↑' + str(ahead) if ahead else '',
-                                          '↓' + str(behind) if behind else '') if s)
+            status = " ".join(
+                s
+                for s in (
+                    "↑" + str(ahead) if ahead else "",
+                    "↓" + str(behind) if behind else "",
+                )
+                if s
+            )
         counts[top] = status
-    lines = run('zmx', 'version').splitlines() if version else []
+    lines = run("zmx", "version").splitlines() if version else []
     fields = lines[0].split() if lines else []
-    return dict(home=HOME, refs=refs, counts=counts, version=fields[-1] if len(fields) > 1 else '')
+    return dict(
+        home=HOME,
+        refs=refs,
+        counts=counts,
+        version=fields[-1] if len(fields) > 1 else "",
+    )
 
 
 def fetch_facts(host: str, paths: list[str]):
     try:
         with open(__file__) as source:
             result = subprocess.run(
-                [os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zhost'),
-                 host, 'python3', '-', '--facts', *paths],
-                input=source.read(), capture_output=True, text=True, timeout=3)
+                [
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "zhost"),
+                    host,
+                    "python3",
+                    "-",
+                    "--facts",
+                    *paths,
+                ],
+                input=source.read(),
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
         if result.returncode:
             return None
         data = json.loads(result.stdout)
-        if (isinstance(data, dict) and isinstance(data.get('home'), str)
-                and isinstance(data.get('now'), (int, float))
-                and isinstance(data.get('sessions'), dict) and isinstance(data.get('refs'), dict)):
+        if (
+            isinstance(data, dict)
+            and isinstance(data.get("home"), str)
+            and isinstance(data.get("now"), (int, float))
+            and isinstance(data.get("sessions"), dict)
+            and isinstance(data.get("refs"), dict)
+        ):
             return data
     except (OSError, subprocess.TimeoutExpired, ValueError):
         pass
     return None
 
 
-def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: str) -> str:
-    return '\t'.join((kind, target, holder, cwd, clients, display))
+def row(
+    kind: str, target: str, holder: str, cwd: str, clients: str, display: str
+) -> str:
+    return "\t".join((kind, target, holder, cwd, clients, display))
 
 
-def flush(left: str, rights: list[str], label: str = '', keep: str = '') -> str:
+def flush(left: str, rights: list[str], label: str = "", keep: str = "") -> str:
     """left, the label, then the first of rights that leaves the label room, set against the
     right edge. rights go from the fullest to the leanest; in a narrow list none may fit.
     keep follows the label and is never cut: a long label gives way to it."""
-    for right in [*rights, '']:
-        room = WIDTH - len(ANSI.sub('', left)) - len(ANSI.sub('', right)) - 1
+    for right in [*rights, ""]:
+        room = WIDTH - len(ANSI.sub("", left)) - len(ANSI.sub("", right)) - 1
         if room >= (12 if label else 0):
             break
     if len(label) + len(keep) > room:
-        label = label[:max(0, room - len(keep) - 1)] + '…'
+        label = label[: max(0, room - len(keep) - 1)] + "…"
     label += keep
-    return left + label + ' ' * (room - len(label) + 1) + right
+    return left + label + " " * (room - len(label) + 1) + right
 
 
 def main() -> None:
-    view = sys.argv[1] if len(sys.argv) > 1 else 'all'
-    if view == '--side-facts':
-        print(json.dumps(side_facts(sys.argv[3:], sys.argv[2] == 'version')))
+    view = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if view == "--side-facts":
+        print(json.dumps(side_facts(sys.argv[3:], sys.argv[2] == "version")))
         return
-    if view == '--facts':
+    if view == "--facts":
         print(json.dumps(facts(sys.argv[2:])))
         return
-    origin = sys.argv[2] if len(sys.argv) > 2 else ''
-    zmx = view in ('zmx', 'zmx-detached')  # zmx-pick: no kitty
-    host = os.environ.get('ZWS_HOST', '') if not zmx else ''
-    kitty = [] if zmx else json.loads(run('kitten', '@', 'ls') or '[]')
+    origin = sys.argv[2] if len(sys.argv) > 2 else ""
+    zmx = view in ("zmx", "zmx-detached")  # zmx-pick: no kitty
+    host = os.environ.get("ZWS_HOST", "") if not zmx else ""
+    kitty = [] if zmx else json.loads(run("kitten", "@", "ls") or "[]")
     held, open_ws = set(), []
     workspaces: dict[str, list[dict]] = {}
     named: dict[str, str] = {}  # names given with rename; on panes and sidebars
-    current = ''
+    current = ""
     for o in kitty:
-        for t in o['tabs']:
-            ws = next((w.get('session_name', '') for w in t['windows'] if w.get('session_name')), '')
-            if any(w['user_vars'].get('role') == 'zgoto' for w in t['windows']):
+        for t in o["tabs"]:
+            ws = next(
+                (
+                    w.get("session_name", "")
+                    for w in t["windows"]
+                    if w.get("session_name")
+                ),
+                "",
+            )
+            if any(w["user_vars"].get("role") == "zgoto" for w in t["windows"]):
                 continue
-            named[ws] = named.get(ws) or next((w['user_vars']['ws_name'] for w in t['windows']
-                                               if w['user_vars'].get('ws_name')), '')
-            t['windows'] = [w for w in t['windows'] if w['user_vars'].get('role') != 'sidebar'] or t['windows']
+            named[ws] = named.get(ws) or next(
+                (
+                    w["user_vars"]["ws_name"]
+                    for w in t["windows"]
+                    if w["user_vars"].get("ws_name")
+                ),
+                "",
+            )
+            t["windows"] = [
+                w for w in t["windows"] if w["user_vars"].get("role") != "sidebar"
+            ] or t["windows"]
             workspaces.setdefault(ws, []).append(t)
-            for w in t['windows']:
-                held.add(w['user_vars'].get('holder', ''))
-                if str(w['id']) == origin or (not origin and o['is_active'] and t['is_active'] and w['is_active']):
+            for w in t["windows"]:
+                held.add(w["user_vars"].get("holder", ""))
+                if str(w["id"]) == origin or (
+                    not origin and o["is_active"] and t["is_active"] and w["is_active"]
+                ):
                     current = ws
     where, by_file = spaces()
     saved = {}
     for f in by_file:
         path = os.path.join(DIR, f)
-        with open(path, errors='replace') as source:
+        with open(path, errors="replace") as source:
             text = source.read()
         folder = by_file[f][2]
         if host:
             folder = host_folder(text)
         saved[f] = (text, folder, os.path.getmtime(path))
-    paths = [s[1] for f, s in saved.items() if zmx or f[:-len('.kitty-session')] not in workspaces]
+    paths = [
+        s[1]
+        for f, s in saved.items()
+        if zmx or f[: -len(".kitty-session")] not in workspaces
+    ]
     if not host:
-        paths += [tabs[0]['windows'][0].get('cwd', '') for tabs in workspaces.values()]
+        paths += [tabs[0]["windows"][0].get("cwd", "") for tabs in workspaces.values()]
     data = fetch_facts(host, paths) if host else facts(paths)
     down = data is None
-    data = data or dict(home='', now=0, sessions={}, refs={})
-    home, now, zs, refs = (data[k] for k in ('home', 'now', 'sessions', 'refs'))
+    data = data or dict(home="", now=0, sessions={}, refs={})
+    home, now, zs, refs = (data[k] for k in ("home", "now", "sessions", "refs"))
     if host:
         for o in kitty:
-            for t in o['tabs']:
-                for w in t['windows']:
-                    w['cwd'] = zs.get(w['user_vars'].get('holder', ''), {}).get('cwd', '')
+            for t in o["tabs"]:
+                for w in t["windows"]:
+                    w["cwd"] = zs.get(w["user_vars"].get("holder", ""), {}).get(
+                        "cwd", ""
+                    )
 
     def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
         z = zs.get(holder)
         if z:
-            proc = z.get('proc', '')
-            when = age(now - int(z.get('created', now)))
+            proc = z.get("proc", "")
+            when = age(now - int(z.get("created", now)))
         else:
-            fps = (w.get('foreground_processes') if not host else []) or [{}]
-            proc = os.path.basename((fps[0].get('cmdline') or [''])[0]).lstrip('-')
-            when = age(now - w.get('created_at', now * 1e9) / 1e9)
-        st = (w.get('program_status') or [{}])[0].get('state', '') if w else ''
-        status = st or ('shell' if proc in SHELLS else 'running')
+            fps = (w.get("foreground_processes") if not host else []) or [{}]
+            proc = os.path.basename((fps[0].get("cmdline") or [""])[0]).lstrip("-")
+            when = age(now - w.get("created_at", now * 1e9) / 1e9)
+        st = (w.get("program_status") or [{}])[0].get("state", "") if w else ""
+        status = st or ("shell" if proc in SHELLS else "running")
         return proc, status, when
 
     det = [z for name, z in zs.items() if name not in held]
-    hw = max([len(h) for h in held] + [len(z['name']) for z in det] + [0])  # the session column
+    hw = max(
+        [len(h) for h in held] + [len(z["name"]) for z in det] + [0]
+    )  # the session column
 
     def pane_cols(proc: str, status: str, when: str, holder: str) -> list[str]:
-        state = f'{STATUS.get(status, "")}{fit(status, 8)}{OFF}'
-        return [f'{fit(proc, 8)} {state} {DIM}{when:>3}  {holder:>{hw}}{OFF}',
-                f'{fit(proc, 8)} {state} {DIM}{when:>3}{OFF}', state]
+        state = f"{STATUS.get(status, '')}{fit(status, 8)}{OFF}"
+        return [
+            f"{fit(proc, 8)} {state} {DIM}{when:>3}  {holder:>{hw}}{OFF}",
+            f"{fit(proc, 8)} {state} {DIM}{when:>3}{OFF}",
+            state,
+        ]
 
-    rows = [row('hdr', '', '', '', '', f'{host} unreachable')] if down else []
-    if view == 'all' or down:
+    rows = [row("hdr", "", "", "", "", f"{host} unreachable")] if down else []
+    if view == "all" or down:
         for ws, tabs in workspaces.items():
             open_ws.append(ws)
-            panes = [w for t in tabs for w in t['windows']]
+            panes = [w for t in tabs for w in t["windows"]]
             first = panes[0]  # names the workspace, as in the sidebar
-            holder = first['user_vars'].get('holder', '')
-            cwd = zs.get(holder, {}).get('cwd') or first.get('cwd', '')
-            ref, top = refs.get(cwd, ('', ''))
-            shown = named[ws] or ('home' if cwd and cwd == home else os.path.basename(top or cwd)) or ws
-            mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
-            rows.append(row('ws', ws, holder, first.get('cwd', ''), '', flush(
-                f'{mark} {BOLD}{shown if ws else "(no workspace)"}{OFF} {DIM}{len(tabs)} tab{"s" if len(tabs) > 1 else ""}{OFF}',
-                [f'{DIM}{ref}{OFF}'])))
+            holder = first["user_vars"].get("holder", "")
+            cwd = zs.get(holder, {}).get("cwd") or first.get("cwd", "")
+            ref, top = refs.get(cwd, ("", ""))
+            shown = (
+                named[ws]
+                or ("home" if cwd and cwd == home else os.path.basename(top or cwd))
+                or ws
+            )
+            mark = f"{ACCENT}◆{OFF}" if ws == current else f"{DIM}◇{OFF}"
+            rows.append(
+                row(
+                    "ws",
+                    ws,
+                    holder,
+                    first.get("cwd", ""),
+                    "",
+                    flush(
+                        f"{mark} {BOLD}{shown if ws else '(no workspace)'}{OFF} {DIM}{len(tabs)} tab{'s' if len(tabs) > 1 else ''}{OFF}",
+                        [f"{DIM}{ref}{OFF}"],
+                    ),
+                )
+            )
             for ti, t in enumerate(tabs):
                 last_t = ti == len(tabs) - 1
-                active = next((w for w in t['windows'] if w['is_active']), t['windows'][0])
-                if len(t['windows']) == 1:  # nothing to nest: the tab's row carries its pane
-                    holder = active['user_vars'].get('holder', '')
-                    rows.append(row('pane', str(active['id']), holder, active.get('cwd', ''), '1', flush(
-                        f'  {"└─" if last_t else "├─"} ', pane_cols(*proc_status(active, holder), holder), t['title'])))
+                active = next(
+                    (w for w in t["windows"] if w["is_active"]), t["windows"][0]
+                )
+                if (
+                    len(t["windows"]) == 1
+                ):  # nothing to nest: the tab's row carries its pane
+                    holder = active["user_vars"].get("holder", "")
+                    rows.append(
+                        row(
+                            "pane",
+                            str(active["id"]),
+                            holder,
+                            active.get("cwd", ""),
+                            "1",
+                            flush(
+                                f"  {'└─' if last_t else '├─'} ",
+                                pane_cols(*proc_status(active, holder), holder),
+                                t["title"],
+                            ),
+                        )
+                    )
                     continue
-                rows.append(row('tab', str(t['id']), active['user_vars'].get('holder', ''), active.get('cwd', ''), '',
-                                flush(f'  {"└─" if last_t else "├─"} ', [], t['title'])))
-                for wi, w in enumerate(t['windows']):
-                    holder = w['user_vars'].get('holder', '')
-                    stem = '   ' if last_t else '│  '
-                    branch = '└─' if wi == len(t['windows']) - 1 else '├─'
-                    rows.append(row('pane', str(w['id']), holder, w.get('cwd', ''), '1',
-                                    flush(f'  {stem}{branch} ', pane_cols(*proc_status(w, holder), holder), w['title'])))
+                rows.append(
+                    row(
+                        "tab",
+                        str(t["id"]),
+                        active["user_vars"].get("holder", ""),
+                        active.get("cwd", ""),
+                        "",
+                        flush(f"  {'└─' if last_t else '├─'} ", [], t["title"]),
+                    )
+                )
+                for wi, w in enumerate(t["windows"]):
+                    holder = w["user_vars"].get("holder", "")
+                    stem = "   " if last_t else "│  "
+                    branch = "└─" if wi == len(t["windows"]) - 1 else "├─"
+                    rows.append(
+                        row(
+                            "pane",
+                            str(w["id"]),
+                            holder,
+                            w.get("cwd", ""),
+                            "1",
+                            flush(
+                                f"  {stem}{branch} ",
+                                pane_cols(*proc_status(w, holder), holder),
+                                w["title"],
+                            ),
+                        )
+                    )
     else:
         open_ws = list(workspaces)
 
-    if view == 'zmx-detached':
-        det = [z for z in det if z.get('clients', '0') == '0']
+    if view == "zmx-detached":
+        det = [z for z in det if z.get("clients", "0") == "0"]
     if det and zmx:
         # No kitty to ask: a session sits in the space whose saved session file holds it, named as
         # cmd+alt+g names it; one no file holds is grouped by where it is, the git checkout (branch
         # alongside) or the plain folder.
         groups: dict[str, tuple[str, str, list[tuple[dict, str]]]] = {}
         for z in det:
-            was = space_label(z)  # a closed pane is in no file; its label still names the space
-            space = where.get(z['name']) or by_file.get(was + '.kitty-session')
+            was = space_label(
+                z
+            )  # a closed pane is in no file; its label still names the space
+            space = where.get(z["name"]) or by_file.get(was + ".kitty-session")
             if not space and was:
-                groups.setdefault('label ' + was, (was, '', []))[2].append((z, short(z['cwd'], home)))
+                groups.setdefault("label " + was, (was, "", []))[2].append(
+                    (z, short(z["cwd"], home))
+                )
                 continue
-            cwd = (zs.get(space[1], {}).get('cwd') or space[2]) if space else z['cwd']
-            ref, top = refs.get(cwd, ('', ''))
-            folder = (top or cwd).rstrip('/') or '/'
-            shown = 'home' if folder == home.rstrip('/') else os.path.basename(folder) or folder
-            at = short(z['cwd'], home) if space else os.path.relpath(z['cwd'], folder) if z['cwd'].rstrip('/') != folder else ''
-            groups.setdefault(space[0] if space else folder, (shown, ref, []))[2].append((z, at))
+            cwd = (zs.get(space[1], {}).get("cwd") or space[2]) if space else z["cwd"]
+            ref, top = refs.get(cwd, ("", ""))
+            folder = (top or cwd).rstrip("/") or "/"
+            shown = (
+                "home"
+                if folder == home.rstrip("/")
+                else os.path.basename(folder) or folder
+            )
+            at = (
+                short(z["cwd"], home)
+                if space
+                else os.path.relpath(z["cwd"], folder)
+                if z["cwd"].rstrip("/") != folder
+                else ""
+            )
+            groups.setdefault(space[0] if space else folder, (shown, ref, []))[
+                2
+            ].append((z, at))
         for shown, ref, members in groups.values():
             n = len(members)
-            rows.append(row('hdr', '', '', '', '', flush(
-                f'{DIM}◇{OFF} {BOLD}{shown}{OFF} {DIM}{n} session{"s" if n > 1 else ""}{OFF}',
-                [f'{DIM}{ref}{OFF}'])))
+            rows.append(
+                row(
+                    "hdr",
+                    "",
+                    "",
+                    "",
+                    "",
+                    flush(
+                        f"{DIM}◇{OFF} {BOLD}{shown}{OFF} {DIM}{n} session{'s' if n > 1 else ''}{OFF}",
+                        [f"{DIM}{ref}{OFF}"],
+                    ),
+                )
+            )
             for i, (z, below) in enumerate(members):
-                other = z.get('clients', '0') != '0'
-                proc, status, when = proc_status({}, z['name'])
-                cols = f'{fit(proc, 8)} {STATUS.get(status, "")}{fit(status, 8)}{OFF} {DIM}{when:>3}{OFF}'
+                other = z.get("clients", "0") != "0"
+                proc, status, when = proc_status({}, z["name"])
+                cols = f"{fit(proc, 8)} {STATUS.get(status, '')}{fit(status, 8)}{OFF} {DIM}{when:>3}{OFF}"
                 # the session name leads, so fzf searches it
-                rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
-                    f'  {"└─" if i == n - 1 else "├─"} ', [f'{DIM}{fit(below, 22)}{OFF} {cols}', cols],
-                    z['name'], ' · attached' if other else '')))
+                rows.append(
+                    row(
+                        "det",
+                        z["name"],
+                        z["name"],
+                        z["cwd"],
+                        z.get("clients", "0"),
+                        flush(
+                            f"  {'└─' if i == n - 1 else '├─'} ",
+                            [f"{DIM}{fit(below, 22)}{OFF} {cols}", cols],
+                            z["name"],
+                            " · attached" if other else "",
+                        ),
+                    )
+                )
     elif det:
-        rows.append(row('hdr', '', '', '', '', f'{DIM}detached{OFF}'))
+        rows.append(row("hdr", "", "", "", "", f"{DIM}detached{OFF}"))
         for i, z in enumerate(det):
-            other = z.get('clients', '0') != '0'
-            branch = '└─' if i == len(det) - 1 else '├─'
-            rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
-                f'  {branch} ', pane_cols(*proc_status({}, z['name']), z['name']),
-                short(z['cwd'], home) + (' · other kitty' if other else ''))))
-    closed = [] if zmx else [f for f in sorted(saved) if f[:-len('.kitty-session')] not in open_ws]
+            other = z.get("clients", "0") != "0"
+            branch = "└─" if i == len(det) - 1 else "├─"
+            rows.append(
+                row(
+                    "det",
+                    z["name"],
+                    z["name"],
+                    z["cwd"],
+                    z.get("clients", "0"),
+                    flush(
+                        f"  {branch} ",
+                        pane_cols(*proc_status({}, z["name"]), z["name"]),
+                        short(z["cwd"], home) + (" · other kitty" if other else ""),
+                    ),
+                )
+            )
+    closed = (
+        []
+        if zmx
+        else [f for f in sorted(saved) if f[: -len(".kitty-session")] not in open_ws]
+    )
     if closed:
-        rows.append(row('hdr', '', '', '', '', f'{DIM}closed workspaces{OFF}'))
+        rows.append(row("hdr", "", "", "", "", f"{DIM}closed workspaces{OFF}"))
         for i, f in enumerate(closed):
             path = os.path.join(DIR, f)
             text, folder, modified = saved[f]
-            tabs = max(1, text.count('\nnew_tab') + text.startswith('new_tab'))
-            ref = refs.get(folder, ('', ''))[0]
-            count = f'{tabs} tab{"s" if tabs > 1 else ""}  {age(now - modified):>3}'
-            branch = '└─' if i == len(closed) - 1 else '├─'
-            rows.append(row('closed', path, '', '', '', flush(
-                f'  {branch} ',
-                [f'{DIM}{ref + "  " if ref else ""}{count}{OFF}', f'{DIM}{count}{OFF}'],
-                f[:-len('.kitty-session')])))
-    print('\n'.join(rows))
+            tabs = max(1, text.count("\nnew_tab") + text.startswith("new_tab"))
+            ref = refs.get(folder, ("", ""))[0]
+            count = f"{tabs} tab{'s' if tabs > 1 else ''}  {age(now - modified):>3}"
+            branch = "└─" if i == len(closed) - 1 else "├─"
+            rows.append(
+                row(
+                    "closed",
+                    path,
+                    "",
+                    "",
+                    "",
+                    flush(
+                        f"  {branch} ",
+                        [
+                            f"{DIM}{ref + '  ' if ref else ''}{count}{OFF}",
+                            f"{DIM}{count}{OFF}",
+                        ],
+                        f[: -len(".kitty-session")],
+                    ),
+                )
+            )
+    print("\n".join(rows))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

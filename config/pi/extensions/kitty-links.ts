@@ -20,54 +20,72 @@ const KITTY_TIMEOUT_MS = 3000;
 type Open = ((url: string) => void) & { [WRAPPED]?: true };
 
 /** argv for kitty, or undefined when the link should stay with pi's opener. */
-export function kittyOpenArgs(url: string, env: Record<string, string | undefined>): string[] | undefined {
-	if (!url.startsWith("file://")) return undefined;
-	const socket = env.KITTY_LISTEN_ON;
-	const window = env.KITTY_WINDOW_ID;
-	if (!socket || !window || !/^\d+$/.test(window)) return undefined;
-	return ["@", "--to", socket, "action", "--match", `id:${window}`, "open_url", url];
+export function kittyOpenArgs(
+  url: string,
+  env: Record<string, string | undefined>,
+): string[] | undefined {
+  if (!url.startsWith("file://")) return undefined;
+  const socket = env.KITTY_LISTEN_ON;
+  const window = env.KITTY_WINDOW_ID;
+  if (!socket || !window || !/^\d+$/.test(window)) return undefined;
+  return [
+    "@",
+    "--to",
+    socket,
+    "action",
+    "--match",
+    `id:${window}`,
+    "open_url",
+    url,
+  ];
 }
 
 function viaKitty(fallback: (url: string) => void): Open {
-	const open: Open = (url) => {
-		const args = kittyOpenArgs(url, kittyEnvironment());
-		if (!args) return fallback(url);
-		let failed = false;
-		const fail = () => {
-			if (failed) return;
-			failed = true;
-			fallback(url);
-		};
-		const child = spawn("kitty", args, { stdio: "ignore", detached: true });
-		// A socket that accepts but never answers would leave the click dead
-		const timer = setTimeout(() => {
-			child.kill();
-			fail();
-		}, KITTY_TIMEOUT_MS);
-		timer.unref();
-		child.on("error", () => {
-			clearTimeout(timer);
-			fail();
-		});
-		child.on("exit", (code) => {
-			clearTimeout(timer);
-			if (code !== 0) fail();
-		});
-		child.unref();
-	};
-	open[WRAPPED] = true;
-	return open;
+  const open: Open = (url) => {
+    const args = kittyOpenArgs(url, kittyEnvironment());
+    if (!args) return fallback(url);
+    let failed = false;
+    const fail = () => {
+      if (failed) return;
+      failed = true;
+      fallback(url);
+    };
+    const child = spawn("kitty", args, { stdio: "ignore", detached: true });
+    // A socket that accepts but never answers would leave the click dead
+    const timer = setTimeout(() => {
+      child.kill();
+      fail();
+    }, KITTY_TIMEOUT_MS);
+    timer.unref();
+    child.on("error", () => {
+      clearTimeout(timer);
+      fail();
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) fail();
+    });
+    child.unref();
+  };
+  open[WRAPPED] = true;
+  return open;
 }
 
 export default function (_pi: ExtensionAPI) {
-	const proto = TuiAltScreen.prototype as unknown as { handleSelectionMouseEvent?: (this: { openUrl?: Open }, ...args: unknown[]) => unknown } & {
-		[WRAPPED]?: true;
-	};
-	const original = proto.handleSelectionMouseEvent;
-	if (typeof original !== "function" || proto[WRAPPED]) return;
-	proto[WRAPPED] = true;
-	proto.handleSelectionMouseEvent = function (...args) {
-		if (this.openUrl && !this.openUrl[WRAPPED]) this.openUrl = viaKitty(this.openUrl);
-		return original.apply(this, args);
-	};
+  const proto = TuiAltScreen.prototype as unknown as {
+    handleSelectionMouseEvent?: (
+      this: { openUrl?: Open },
+      ...args: unknown[]
+    ) => unknown;
+  } & {
+    [WRAPPED]?: true;
+  };
+  const original = proto.handleSelectionMouseEvent;
+  if (typeof original !== "function" || proto[WRAPPED]) return;
+  proto[WRAPPED] = true;
+  proto.handleSelectionMouseEvent = function (...args) {
+    if (this.openUrl && !this.openUrl[WRAPPED])
+      this.openUrl = viaKitty(this.openUrl);
+    return original.apply(this, args);
+  };
 }

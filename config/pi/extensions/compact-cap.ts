@@ -47,7 +47,10 @@ export default function (pi: ExtensionAPI) {
 
   interface CapCtx {
     getContextUsage(): { tokens?: number | null } | undefined;
-    compact(options?: { onComplete?: () => void; onError?: (e: Error) => void }): void;
+    compact(options?: {
+      onComplete?: () => void;
+      onError?: (e: Error) => void;
+    }): void;
     ui: { notify(message: string, type: "info" | "warning" | "error"): void };
   }
 
@@ -135,7 +138,9 @@ export default function (pi: ExtensionAPI) {
     description:
       "Compaction safety-net: show state, on|off, or set threshold (e.g. 150k). Session-scoped.",
     getArgumentCompletions: (prefix) =>
-      ["on", "off"].filter((v) => v.startsWith(prefix)).map((v) => ({ value: v, label: v })),
+      ["on", "off"]
+        .filter((v) => v.startsWith(prefix))
+        .map((v) => ({ value: v, label: v })),
     handler: async (args, ctx) => {
       const arg = args.trim().toLowerCase();
       if (arg === "") {
@@ -155,7 +160,10 @@ export default function (pi: ExtensionAPI) {
       }
       if (arg === "on") {
         enabled = true;
-        ctx.ui.notify(`compact-cap: on, threshold ${threshold.toLocaleString()} tokens`, "info");
+        ctx.ui.notify(
+          `compact-cap: on, threshold ${threshold.toLocaleString()} tokens`,
+          "info",
+        );
         return;
       }
       const m = arg.match(/^(\d+(?:\.\d+)?)(k)?$/);
@@ -188,7 +196,10 @@ export default function (pi: ExtensionAPI) {
           return;
         }
       }
-      ctx.ui.notify("compact-cap: usage — /compact-cap [on|off|<tokens>[k]]", "warning");
+      ctx.ui.notify(
+        "compact-cap: usage — /compact-cap [on|off|<tokens>[k]]",
+        "warning",
+      );
     },
   });
 }

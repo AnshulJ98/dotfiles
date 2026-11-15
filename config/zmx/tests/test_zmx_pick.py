@@ -1,10 +1,11 @@
 """zmx-pick: the loop around zpick --zmx, against fake zpick/zmx/shell on PATH."""
+
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 PICK = Path(__file__).resolve().parents[1] / "zmx-pick"
 FAKE = r"""#!/usr/bin/env python3
@@ -41,63 +42,127 @@ class ZmxPick(unittest.TestCase):
 
     def run_pick(self, answers, *args, **env):
         (self.root / "answers").write_text(json.dumps(answers))
-        full = {"PATH": f"{self.root}:/usr/bin:/bin", "HOME": str(self.root), "FAKE_ROOT": str(self.root),
-                "SHELL": str(self.root / "sh"), "ZPICK": str(self.root / "zpick"), "ZMX_NO_DETACH_KEY": "1", **env}
-        self.out = subprocess.run(["bash", str(PICK), *args], env=full, capture_output=True, text=True,
-                                  timeout=10, stdin=subprocess.DEVNULL).stdout
+        full = {
+            "PATH": f"{self.root}:/usr/bin:/bin",
+            "HOME": str(self.root),
+            "FAKE_ROOT": str(self.root),
+            "SHELL": str(self.root / "sh"),
+            "ZPICK": str(self.root / "zpick"),
+            "ZMX_NO_DETACH_KEY": "1",
+            **env,
+        }
+        self.out = subprocess.run(
+            ["bash", str(PICK), *args],
+            env=full,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        ).stdout
         calls = [json.loads(l) for l in (self.root / "calls").read_text().splitlines()]
         return [c for c in calls if c[1][:1] != ["list"]]
 
     def test_attach_back_to_picker_then_shell_on_esc(self):
         calls = self.run_pick([[0, "logs\n"], [0, "newbox\n"], [1, ""]])
-        self.assertEqual([c[:2] for c in calls], [
-            ["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]], ["zpick", ["--zmx"]],
-            ["zmx", ["attach", "newbox"]], ["zpick", ["--zmx"]], ["sh", ["-il"]]])
-        self.assertEqual({c[2] for c in calls if c[0] == "zmx"}, {None}, "ctrl+\\ must detach")
+        self.assertEqual(
+            [c[:2] for c in calls],
+            [
+                ["zpick", ["--zmx"]],
+                ["zmx", ["attach", "logs"]],
+                ["zpick", ["--zmx"]],
+                ["zmx", ["attach", "newbox"]],
+                ["zpick", ["--zmx"]],
+                ["sh", ["-il"]],
+            ],
+        )
+        self.assertEqual(
+            {c[2] for c in calls if c[0] == "zmx"}, {None}, "ctrl+\\ must detach"
+        )
 
     def test_zsh_zmx_attach_goes_through_the_picker(self):
         # a session entered by hand also has a picker to return to with ctrl+\
         env = {"PATH": f"{self.root}:/usr/bin:/bin", "FAKE_ROOT": str(self.root)}
-        subprocess.run(["zsh", "-fc", f"source {PICK.parent / 'zmx.zsh'}; zmx attach work; zmx attach a cmd; zmx ls"],
-                       env=env, check=True, timeout=10)
-        calls = [json.loads(l)[:2] for l in (self.root / "calls").read_text().splitlines()]
-        self.assertEqual(calls, [["zmx-pick", ["work"]], ["zmx", ["attach", "a", "cmd"]], ["zmx", ["ls"]]])
+        subprocess.run(
+            [
+                "zsh",
+                "-fc",
+                f"source {PICK.parent / 'zmx.zsh'}; zmx attach work; zmx attach a cmd; zmx ls",
+            ],
+            env=env,
+            check=True,
+            timeout=10,
+        )
+        calls = [
+            json.loads(l)[:2] for l in (self.root / "calls").read_text().splitlines()
+        ]
+        self.assertEqual(
+            calls,
+            [["zmx-pick", ["work"]], ["zmx", ["attach", "a", "cmd"]], ["zmx", ["ls"]]],
+        )
 
     def test_from_a_shell_key_esc_returns_to_that_shell(self):
         # zmx.zsh's ctrl+\ runs the picker over a live shell; esc must not start another one
         calls = self.run_pick([[0, "logs\n"], [1, ""]], ZMX_PICK_ESC="return")
-        self.assertEqual([c[:2] for c in calls], [["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]], ["zpick", ["--zmx"]]])
+        self.assertEqual(
+            [c[:2] for c in calls],
+            [["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]], ["zpick", ["--zmx"]]],
+        )
 
     def test_zsh_ctrl_backslash_opens_the_picker_outside_a_session(self):
-        import pty, select, time
+        import pty
+        import select
+        import time
+
         for session, expected in (("", [["zmx-pick", []]]), ("inside", [])):
             with self.subTest(session=session):
                 (self.root / "calls").unlink(missing_ok=True)
                 pid, fd = pty.fork()
                 if pid == 0:
-                    os.execve("/bin/zsh", ["zsh", "-fi"], {
-                        "PATH": f"{self.root}:/usr/bin:/bin", "FAKE_ROOT": str(self.root), "TERM": "xterm",
-                        "ZMX_SESSION": session, "PS1": "> ",
-                        "ZDOTDIR": str(self.root)})
-                os.write(fd, f"source {PICK.parent / 'zmx.zsh'}; echo $((6*7))-sourced\n".encode())
-                out, end = b"", time.time() + 5  # a key typed before stty runs is still SIGQUIT
+                    os.execve(
+                        "/bin/zsh",
+                        ["zsh", "-fi"],
+                        {
+                            "PATH": f"{self.root}:/usr/bin:/bin",
+                            "FAKE_ROOT": str(self.root),
+                            "TERM": "xterm",
+                            "ZMX_SESSION": session,
+                            "PS1": "> ",
+                            "ZDOTDIR": str(self.root),
+                        },
+                    )
+                os.write(
+                    fd,
+                    f"source {PICK.parent / 'zmx.zsh'}; echo $((6*7))-sourced\n".encode(),
+                )
+                out, end = (
+                    b"",
+                    time.time() + 5,
+                )  # a key typed before stty runs is still SIGQUIT
                 while time.time() < end and b"42-sourced" not in out:
                     if select.select([fd], [], [], 0.1)[0]:
                         out += os.read(fd, 4096)
                 time.sleep(0.3)
                 os.write(fd, b"\x1c")
                 end = time.time() + (5 if expected else 1.5)
-                while time.time() < end and not (expected and (self.root / "calls").exists()):
+                while time.time() < end and not (
+                    expected and (self.root / "calls").exists()
+                ):
                     if select.select([fd], [], [], 0.1)[0]:
                         os.read(fd, 4096)
                 time.sleep(0.3)
                 os.write(fd, b"exit\n")
                 end = time.time() + 3
                 while time.time() < end and select.select([fd], [], [], 0.1)[0]:
-                    try: os.read(fd, 4096)
-                    except OSError: break
+                    try:
+                        os.read(fd, 4096)
+                    except OSError:
+                        break
                 os.waitpid(pid, 0)
-                calls = (self.root / "calls").read_text().splitlines() if (self.root / "calls").exists() else []
+                calls = (
+                    (self.root / "calls").read_text().splitlines()
+                    if (self.root / "calls").exists()
+                    else []
+                )
                 self.assertEqual([json.loads(l)[:2] for l in calls], expected)
 
     def test_nothing_picked_shows_the_picker_again(self):
@@ -109,16 +174,27 @@ class ZmxPick(unittest.TestCase):
         # over its error.
         calls = self.run_pick([[0, "x/y\n"], [0, "logs\n"], [1, ""]], FAKE_DEAD="x/y")
         self.assertIn("x/y", self.out)
-        self.assertNotIn("logs", self.out, "a session that ran must not trigger the message")
-        self.assertEqual([c[0] for c in calls], ["zpick", "zmx", "zpick", "zmx", "zpick", "sh"])
+        self.assertNotIn(
+            "logs", self.out, "a session that ran must not trigger the message"
+        )
+        self.assertEqual(
+            [c[0] for c in calls], ["zpick", "zmx", "zpick", "zmx", "zpick", "sh"]
+        )
 
     def test_a_named_session_is_entered_through_the_loop(self):
         # zmx-pick NAME replaces zmx attach NAME at any entry point (ssh, Rootshell), so ctrl+\
         # always comes back to the picker.
         calls = self.run_pick([[0, "logs\n"], [1, ""]], "work")
-        self.assertEqual([c[:2] for c in calls], [
-            ["zmx", ["attach", "work"]], ["zpick", ["--zmx"]], ["zmx", ["attach", "logs"]],
-            ["zpick", ["--zmx"]], ["sh", ["-il"]]])
+        self.assertEqual(
+            [c[:2] for c in calls],
+            [
+                ["zmx", ["attach", "work"]],
+                ["zpick", ["--zmx"]],
+                ["zmx", ["attach", "logs"]],
+                ["zpick", ["--zmx"]],
+                ["sh", ["-il"]],
+            ],
+        )
         self.assertEqual({c[2] for c in calls if c[0] == "zmx"}, {None})
 
     def test_a_named_session_inside_a_session_switches_without_the_picker(self):
@@ -130,27 +206,48 @@ class ZmxPick(unittest.TestCase):
         (home / ".local/bin").mkdir(parents=True)
         (home / ".local/bin/zmx").write_text("#!/bin/sh\n")
         (home / ".local/bin/zmx").chmod(0o755)
-        done = subprocess.run(["bash", str(PICK.parent / "install-system"), str(prefix)],
-                              env={"PATH": "/usr/bin:/bin", "HOME": str(home), "USER": "nobody"},
-                              capture_output=True, text=True, timeout=10)
+        done = subprocess.run(
+            ["bash", str(PICK.parent / "install-system"), str(prefix)],
+            env={"PATH": "/usr/bin:/bin", "HOME": str(home), "USER": "nobody"},
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         self.assertEqual(done.returncode, 0, done.stderr)
         link = prefix / "bin/zmx-pick"
-        self.assertTrue(link.resolve().is_relative_to(prefix.resolve()), "must not point into the repo")
+        self.assertTrue(
+            link.resolve().is_relative_to(prefix.resolve()),
+            "must not point into the repo",
+        )
         for part in ("zmx/zmx-pick", "kitty/bin/zpick", "kitty/bin/zpick-rows"):
             self.assertTrue(os.access(prefix / "share/zmx-pick" / part, os.X_OK), part)
         # the installed copy finds its own picker: the same loop, driven by the fakes
         (self.root / "answers").write_text(json.dumps([[1, ""]]))
-        env = {"PATH": f"{self.root}:/usr/bin:/bin", "HOME": str(self.root), "FAKE_ROOT": str(self.root),
-               "SHELL": str(self.root / "sh")}
-        (prefix / "share/zmx-pick/kitty/bin/zpick").write_text((self.root / "zpick").read_text())
-        subprocess.run(["bash", str(link)], env=env, capture_output=True, text=True, timeout=10,
-                       stdin=subprocess.DEVNULL)
+        env = {
+            "PATH": f"{self.root}:/usr/bin:/bin",
+            "HOME": str(self.root),
+            "FAKE_ROOT": str(self.root),
+            "SHELL": str(self.root / "sh"),
+        }
+        (prefix / "share/zmx-pick/kitty/bin/zpick").write_text(
+            (self.root / "zpick").read_text()
+        )
+        subprocess.run(
+            ["bash", str(link)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
         calls = [json.loads(l) for l in (self.root / "calls").read_text().splitlines()]
         self.assertEqual([c[0] for c in calls], ["zpick", "sh"])
 
     def test_inside_a_session_switches_once(self):
         calls = self.run_pick([[0, "bare\n"]], ZMX_SESSION="dotfiles")
-        self.assertEqual([c[:2] for c in calls], [["zpick", ["--zmx"]], ["zmx", ["attach", "bare"]]])
+        self.assertEqual(
+            [c[:2] for c in calls], [["zpick", ["--zmx"]], ["zmx", ["attach", "bare"]]]
+        )
 
 
 if __name__ == "__main__":

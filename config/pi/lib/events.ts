@@ -17,23 +17,36 @@ import { append, logsDir, roleOf, rotate } from "./bash-log.ts";
 const MAX_DETAIL = 300;
 
 /** Every line of the log; bin/scout and bin/auto-slice are tested against it too. */
-export const EVENT_LINE = /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d (main|scout|worker|review|auto) \S+ [a-z]+\.[a-z]+( .*)?$/;
+export const EVENT_LINE =
+  /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d (main|scout|worker|review|auto) \S+ [a-z]+\.[a-z]+( .*)?$/;
 
 export function eventsPath(env: NodeJS.ProcessEnv = process.env): string {
-	return join(logsDir(env), "events.log");
+  return join(logsDir(env), "events.log");
 }
 
-export function eventLine(at: Date, role: string, id: string, kind: string, detail: string): string {
-	const two = (n: number) => String(n).padStart(2, "0");
-	const stamp = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}:${two(at.getSeconds())}`;
-	const flat = detail.replace(/\s+/g, " ").trim();
-	const shown = flat.length > MAX_DETAIL ? `${flat.slice(0, MAX_DETAIL)}\u2026` : flat;
-	return `${stamp} ${role} ${id.slice(-6) || "-"} ${kind} ${shown}`.trimEnd();
+export function eventLine(
+  at: Date,
+  role: string,
+  id: string,
+  kind: string,
+  detail: string,
+): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}:${two(at.getSeconds())}`;
+  const flat = detail.replace(/\s+/g, " ").trim();
+  const shown =
+    flat.length > MAX_DETAIL ? `${flat.slice(0, MAX_DETAIL)}\u2026` : flat;
+  return `${stamp} ${role} ${id.slice(-6) || "-"} ${kind} ${shown}`.trimEnd();
 }
 
 /** Appends one event. Never throws: a log that cannot be written must not break the thing that tripped. */
-export function logEvent(kind: string, detail: string, id = "", env: NodeJS.ProcessEnv = process.env): void {
-	const path = eventsPath(env);
-	rotate(path);
-	append(path, eventLine(new Date(), roleOf(env), id, kind, detail));
+export function logEvent(
+  kind: string,
+  detail: string,
+  id = "",
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const path = eventsPath(env);
+  rotate(path);
+  append(path, eventLine(new Date(), roleOf(env), id, kind, detail));
 }

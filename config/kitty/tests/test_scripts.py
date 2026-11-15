@@ -1,19 +1,20 @@
 """Session-safety regressions: all external/session boundaries live in a temp directory."""
+
 import concurrent.futures
 import json
 import os
-from pathlib import Path
 import pty
 import select
-import shutil
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
-import termios
 import tempfile
+import termios
 import time
 import unittest
+from pathlib import Path
 from urllib.parse import quote
 
 BIN = Path(__file__).resolve().parents[1] / "bin"
@@ -103,14 +104,34 @@ class ScriptTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         colors = self.root / ".config/themes/current/colors.sh"
         colors.parent.mkdir(parents=True)
-        colors.write_text("THEME_ACCENT=\'#aabbcc\'\nTHEME_SEL=\'#123456\'\n")
-        self.env = dict(os.environ, HOME=str(self.root), TMPDIR=str(self.root),
-                        ZWS_DIR=str(self.root / "workspaces"), ZWS_HOST="", FAKE_ROOT=str(self.root),
-                        PATH=str(self.root) + ":" + os.environ["PATH"])
+        colors.write_text("THEME_ACCENT='#aabbcc'\nTHEME_SEL='#123456'\n")
+        self.env = dict(
+            os.environ,
+            HOME=str(self.root),
+            TMPDIR=str(self.root),
+            ZWS_DIR=str(self.root / "workspaces"),
+            ZWS_HOST="",
+            FAKE_ROOT=str(self.root),
+            PATH=str(self.root) + ":" + os.environ["PATH"],
+        )
         for name in ("KITTY_WINDOW_ID", "KITTY_LISTEN_ON", "KITTY_PID", "ZMX_SESSION"):
             self.env.pop(name, None)
-        for cmd in ("kitten", "zmx", "timeout", "lsof", "open", "pgrep", "aerospace",
-                    "fzf", "plain-shell", "find", "zpick-rows", "kitty", "ps", "ssh"):
+        for cmd in (
+            "kitten",
+            "zmx",
+            "timeout",
+            "lsof",
+            "open",
+            "pgrep",
+            "aerospace",
+            "fzf",
+            "plain-shell",
+            "find",
+            "zpick-rows",
+            "kitty",
+            "ps",
+            "ssh",
+        ):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
@@ -119,7 +140,9 @@ class ScriptTests(unittest.TestCase):
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
             source = source.replace("/bin/zsh", str(self.root / "plain-shell"))
-            source = source.replace('"/tmp/kitty-" + host', repr(str(self.root / "socket-")) + " + host")
+            source = source.replace(
+                '"/tmp/kitty-" + host', repr(str(self.root / "socket-")) + " + host"
+            )
             source = source.replace("/tmp/kitty-main", str(self.root / "socket"))
             if name == "zshell":
                 source = source.replace("/tmp/zcm-", str(self.root / "zcm-"))
@@ -128,18 +151,31 @@ class ScriptTests(unittest.TestCase):
                 source = source.replace("sleep 2", "sleep 0.1")
             if name == "zws":
                 for probe in ("zmx", "lsof"):
-                    source = source.replace('["' + probe + '",', '["' + str(self.root / probe) + '",')
+                    source = source.replace(
+                        '["' + probe + '",', '["' + str(self.root / probe) + '",'
+                    )
             path = self.root / name
             path.write_text(source)
             path.chmod(0o700)
 
     def run_script(self, name, *args, **env):
-        return subprocess.run([str(self.root / name), *args], cwd=self.root,
-                              env=dict(self.env, **env), capture_output=True, text=True, timeout=12)
+        return subprocess.run(
+            [str(self.root / name), *args],
+            cwd=self.root,
+            env=dict(self.env, **env),
+            capture_output=True,
+            text=True,
+            timeout=12,
+        )
 
     def calls(self, command):
-        return [args for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())
-                if cmd == command]
+        return [
+            args
+            for cmd, args in map(
+                json.loads, (self.root / "calls").read_text().splitlines()
+            )
+            if cmd == command
+        ]
 
     def pane_start(self, reply, wait_for=None, key=b"x", **env):
         code, output = self.pane_run(reply, wait_for=wait_for, key=key, **env)
@@ -148,31 +184,54 @@ class ScriptTests(unittest.TestCase):
 
     def pane_run(self, reply, wait_for=None, key=b"x", **env):
         # Only these logging fakes are reachable from the pane's PATH.
-        for cmd in ("sed", "basename", "tr", "base64", "grep", "find", "head", "python3",
-                    "sleep", "mkdir", "rmdir"):
+        for cmd in (
+            "sed",
+            "basename",
+            "tr",
+            "base64",
+            "grep",
+            "find",
+            "head",
+            "python3",
+            "sleep",
+            "mkdir",
+            "rmdir",
+        ):
             real = sys.executable if cmd == "python3" else shutil.which(cmd)
             self.assertIsNotNone(real, cmd)
             path = self.root / cmd
-            path.write_text("#!" + sys.executable + "\n" +
-                            "import json, os, sys\n" +
-                            f"with open({str(self.root / 'calls')!r}, 'a') as log:\n" +
-                            f"    log.write(json.dumps([{cmd!r}, sys.argv[1:]]) + '\\n')\n" +
-                            f"os.execv({real!r}, [{real!r}] + sys.argv[1:])\n")
+            path.write_text(
+                "#!"
+                + sys.executable
+                + "\n"
+                + "import json, os, sys\n"
+                + f"with open({str(self.root / 'calls')!r}, 'a') as log:\n"
+                + f"    log.write(json.dumps([{cmd!r}, sys.argv[1:]]) + '\\n')\n"
+                + f"os.execv({real!r}, [{real!r}] + sys.argv[1:])\n"
+            )
             path.chmod(0o700)
         script = self.root / "zshell"
-        script.write_text(script.read_text().replace("/usr/bin/python3", str(self.root / "python3")))
+        script.write_text(
+            script.read_text().replace("/usr/bin/python3", str(self.root / "python3"))
+        )
         (self.root / "calls").touch()
         master, slave = pty.openpty()
         proc = None
         output = bytearray()
         try:
-            proc = subprocess.Popen([str(script)], cwd=self.root,
-                                    env=dict(self.env, PATH=str(self.root), **env),
-                                    stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+            proc = subprocess.Popen(
+                [str(script)],
+                cwd=self.root,
+                env=dict(self.env, PATH=str(self.root), **env),
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                start_new_session=True,
+            )
             os.close(slave)
             slave = None
             deadline = time.monotonic() + 10
-            query = b'\x1b]1337;SetUserVar=zq=MQ==\x07'
+            query = b"\x1b]1337;SetUserVar=zq=MQ==\x07"
             queried = False
             replies = iter(reply if isinstance(reply, list) else [reply])
             query_count = 0
@@ -200,12 +259,12 @@ class ScriptTests(unittest.TestCase):
                         while termios.tcgetattr(master)[3] & termios.ECHO:
                             self.assertIsNone(proc.poll(), bytes(output))
                             self.assertLess(time.monotonic(), deadline, bytes(output))
-                            time.sleep(.001)
+                            time.sleep(0.001)
                         os.write(master, answer)
                 if wait_for is not None and wait_for in output:
                     # The prompt must block, without spinning ssh or falling back.
                     calls = self.calls("ssh")
-                    time.sleep(.15)
+                    time.sleep(0.15)
                     self.assertIsNone(proc.poll(), bytes(output))
                     self.assertEqual(self.calls("ssh"), calls)
                     self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
@@ -216,7 +275,7 @@ class ScriptTests(unittest.TestCase):
             code = proc.wait(timeout=2)
             for answer in reply if isinstance(reply, list) else [reply]:
                 if answer is not None:
-                    self.assertNotIn(answer.rstrip(b'\n'), output)
+                    self.assertNotIn(answer.rstrip(b"\n"), output)
             return code, bytes(output)
         finally:
             if proc is not None:
@@ -228,42 +287,49 @@ class ScriptTests(unittest.TestCase):
             os.close(master)
 
     def test_host_watcher_retries_then_waits_and_asks_again_without_local_shell(self):
-        output = self.pane_start([None, None, None, b': zq n - box -\n'],
-                                 wait_for=b'watcher did not answer; enter retries', ZWS_HOST="box")
-        self.assertEqual(output.count(b'SetUserVar=zq='), 4)
-        self.assertEqual(output.count(b'watcher did not answer'), 1)
+        output = self.pane_start(
+            [None, None, None, b": zq n - box -\n"],
+            wait_for=b"watcher did not answer; enter retries",
+            ZWS_HOST="box",
+        )
+        self.assertEqual(output.count(b"SetUserVar=zq="), 4)
+        self.assertEqual(output.count(b"watcher did not answer"), 1)
         self.assertEqual(len(self.calls("ssh")), 2)
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_host_late_answer_taken_as_the_key_is_dropped_before_asking_again(self):
-        output = self.pane_start([None, None, None, b': zq n - box -\n'],
-                                 wait_for=b'watcher did not answer; enter retries',
-                                 key=b': zq late - box -\n', ZWS_HOST="box")
-        self.assertEqual(output.count(b'SetUserVar=zq='), 4)
+        output = self.pane_start(
+            [None, None, None, b": zq n - box -\n"],
+            wait_for=b"watcher did not answer; enter retries",
+            key=b": zq late - box -\n",
+            ZWS_HOST="box",
+        )
+        self.assertEqual(output.count(b"SetUserVar=zq="), 4)
         self.assertNotIn("late", self.calls("ssh")[-1][-1])
 
     def test_host_watcher_retries_a_missed_read_without_waiting_for_key(self):
-        output = self.pane_start([None, b': zq n - box -\n'], ZWS_HOST="box")
-        self.assertEqual(output.count(b'SetUserVar=zq='), 2)
-        self.assertNotIn(b'watcher did not answer', output)
+        output = self.pane_start([None, b": zq n - box -\n"], ZWS_HOST="box")
+        self.assertEqual(output.count(b"SetUserVar=zq="), 2)
+        self.assertNotIn(b"watcher did not answer", output)
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_host_refused_answer_waits_then_exits_without_local_shell(self):
-        code, output = self.pane_run(b': zq n - box%40bad -\n',
-                                     wait_for=b'refusing ssh host', ZWS_HOST="box")
+        code, output = self.pane_run(
+            b": zq n - box%40bad -\n", wait_for=b"refusing ssh host", ZWS_HOST="box"
+        )
         self.assertNotEqual(code, 0)
-        self.assertNotIn(b'starting plain shell', output)
+        self.assertNotIn(b"starting plain shell", output)
         self.assertEqual(self.calls("plain-shell"), [])
         self.assertEqual(self.calls("ssh"), [])
 
     def test_host_missing_mac_zmx_still_runs_ssh(self):
         (self.root / "zmx").chmod(0o600)
-        self.pane_start(b': zq n - box -\n', ZWS_HOST="box")
+        self.pane_start(b": zq n - box -\n", ZWS_HOST="box")
         self.assertEqual(len(self.calls("ssh")), 2)
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_host_answer_without_host_never_attaches_locally(self):
-        self.pane_start([b': zq n -\n', b': zq n - box -\n'], ZWS_HOST="box")
+        self.pane_start([b": zq n -\n", b": zq n - box -\n"], ZWS_HOST="box")
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("plain-shell"), [])
 
@@ -279,7 +345,9 @@ class ScriptTests(unittest.TestCase):
         before = self.calls("ssh")
         for host in ("a@box", "a/b", "a b", "-box"):
             with self.subTest(host=host):
-                self.assertEqual(self.run_script("zrun", "", "zsh", ZWS_HOST=host).returncode, 2)
+                self.assertEqual(
+                    self.run_script("zrun", "", "zsh", ZWS_HOST=host).returncode, 2
+                )
         self.assertEqual(self.calls("ssh"), before)
 
     def test_zhost_finds_homebrew_timeout_without_it_in_inherited_path(self):
@@ -288,10 +356,19 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("timeout")[0][:2], ["2", "ssh"])
 
     def test_pane_query_fast_path_starts_only_discovery_and_attach(self):
-        output = self.pane_start(b': zq saved%20name -\n')
-        self.assertEqual(self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]])
-        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
-        commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
+        output = self.pane_start(b": zq saved%20name -\n")
+        self.assertEqual(
+            self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]]
+        )
+        self.assertEqual(
+            self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]]
+        )
+        commands = [
+            cmd
+            for cmd, args in map(
+                json.loads, (self.root / "calls").read_text().splitlines()
+            )
+        ]
         self.assertEqual(commands, ["timeout", "zmx", "zmx"])
         self.assertNotIn(b"SetUserVar=holder", output)
 
@@ -300,15 +377,30 @@ class ScriptTests(unittest.TestCase):
         folder = host / "my dir"
         folder.mkdir(parents=True)
         (self.root / "ssh-codes").write_text("255\n255\n0\n0")
-        self.pane_start(f': zq box%20name - box {quote(str(folder), safe="")}\n'.encode())
+        self.pane_start(
+            f": zq box%20name - box {quote(str(folder), safe='')}\n".encode()
+        )
         check, locked_check, opened, args = self.calls("ssh")
-        opts = ["-o", "ControlPath=" + str(self.root / "zcm-%C"), "-o", "ControlPersist=600",
-                "-o", "ConnectTimeout=5", "-o", "ServerAliveInterval=15",
-                "-o", "ServerAliveCountMax=2"]
+        opts = [
+            "-o",
+            "ControlPath=" + str(self.root / "zcm-%C"),
+            "-o",
+            "ControlPersist=600",
+            "-o",
+            "ConnectTimeout=5",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=2",
+        ]
         self.assertEqual(check, ["-q", *opts, "-O", "check", "box"])
         self.assertEqual(locked_check, check)
-        self.assertEqual(opened, ["-q", *opts, "-o", "ControlMaster=auto", "-Nf", "box"])
-        self.assertEqual(args[:-1], ["-tt", "-q", *opts, "-o", "ControlMaster=no", "box"])
+        self.assertEqual(
+            opened, ["-q", *opts, "-o", "ControlMaster=auto", "-Nf", "box"]
+        )
+        self.assertEqual(
+            args[:-1], ["-tt", "-q", *opts, "-o", "ControlMaster=no", "box"]
+        )
         self.assertFalse((self.root / "zcm-lock-box").exists())
         remote = args[-1]
         self.assertIn(" attach box\\ name", remote)
@@ -318,19 +410,34 @@ class ScriptTests(unittest.TestCase):
         # Run it as the host's non-interactive shell would, with zmx only in ~/.local/bin.
         zmx = host / ".local/bin/zmx"
         zmx.parent.mkdir(parents=True)
-        zmx.write_text('#!/bin/sh\nprintf "%s\\n" "$PWD" "$ZDOTDIR" "$ZMX_NO_DETACH_KEY" '
-                       '"$KITTY_SHELL_INTEGRATION" "$@" > "$HOME/ran"\n')
+        zmx.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$PWD" "$ZDOTDIR" "$ZMX_NO_DETACH_KEY" '
+            '"$KITTY_SHELL_INTEGRATION" "$@" > "$HOME/ran"\n'
+        )
         zmx.chmod(0o700)
         integration = host / ".local/kitty.app/lib/kitty/shell-integration/zsh"
         integration.mkdir(parents=True)
         linux = "/usr/lib/kitty/shell-integration/zsh"
-        result = subprocess.run(["/bin/sh", "-c", remote], env={"HOME": str(host), "PATH": "/usr/bin:/bin"},
-                                capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            ["/bin/sh", "-c", remote],
+            env={"HOME": str(host), "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         ran = (host / "ran").read_text().splitlines()
         self.assertEqual(os.path.realpath(ran[0]), os.path.realpath(folder))
-        self.assertEqual(ran[1:], [linux if os.path.isdir(linux) else str(integration),
-                                   "1", "enabled", "attach", "box name"])
+        self.assertEqual(
+            ran[1:],
+            [
+                linux if os.path.isdir(linux) else str(integration),
+                "1",
+                "enabled",
+                "attach",
+                "box name",
+            ],
+        )
 
     def resume_host(self, session, *, present=False, retry=False):
         host = self.root / "host"
@@ -338,24 +445,36 @@ class ScriptTests(unittest.TestCase):
         (host / "bin").mkdir()
         (host / ".zshrc").write_text('export PATH="$HOME/bin:$FAKE_ROOT"\n')
         pi = host / "bin/pi"
-        pi.write_text("#!" + sys.executable + "\n" +
-                      "import json, os, pathlib, sys\n" +
-                      "with (pathlib.Path(os.environ['FAKE_ROOT']) / 'pi-runs').open('a') as f:\n" +
-                      "    f.write(json.dumps([os.getcwd(), sys.argv[1:]]) + '\\n')\n")
+        pi.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + "import json, os, pathlib, sys\n"
+            + "with (pathlib.Path(os.environ['FAKE_ROOT']) / 'pi-runs').open('a') as f:\n"
+            + "    f.write(json.dumps([os.getcwd(), sys.argv[1:]]) + '\\n')\n"
+        )
         pi.chmod(0o700)
         # Only the real interactive zsh's rc adds pi to PATH; the final shell exits.
         shell = self.root / "zsh"
-        shell.write_text("#!" + sys.executable + "\n" +
-                         "import json, os, sys\n" +
-                         "with open(os.environ['FAKE_ROOT'] + '/shell-runs', 'a') as f:\n" +
-                         "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n" +
-                         "if any('c' in a for a in sys.argv[1:2]):\n" +
-                         "    os.execv('/bin/zsh', ['zsh'] + sys.argv[1:])\n")
+        shell.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + "import json, os, sys\n"
+            + "with open(os.environ['FAKE_ROOT'] + '/shell-runs', 'a') as f:\n"
+            + "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            + "if any('c' in a for a in sys.argv[1:2]):\n"
+            + "    os.execv('/bin/zsh', ['zsh'] + sys.argv[1:])\n"
+        )
         shell.chmod(0o700)
         if present:
             (self.root / "host-session").touch()
         ssh = self.root / "ssh"
-        ssh.write_text("#!" + sys.executable + "\n" + r"""
+        ssh.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + r"""
 import json, os, pathlib, subprocess, sys
 root = pathlib.Path(os.environ["FAKE_ROOT"])
 args = sys.argv[1:]
@@ -369,10 +488,15 @@ if drop.exists():
     drop.unlink()
     sys.exit(255)
 sys.exit(code)
-""")
+"""
+        )
         ssh.chmod(0o700)
         zmx = self.root / "zmx"
-        zmx.write_text("#!" + sys.executable + "\n" + r"""
+        zmx.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + r"""
 import json, os, pathlib, subprocess, sys
 root = pathlib.Path(os.environ["FAKE_ROOT"])
 args = sys.argv[1:]
@@ -384,32 +508,41 @@ if args == ["ls", "--short"]:
 elif args[:1] == ["attach"]:
     state.touch()
     if len(args) > 2: sys.exit(subprocess.run(args[2:]).returncode)
-""")
+"""
+        )
         zmx.chmod(0o700)
         if retry:
             (self.root / "drop").touch()
-        reply = f': zq a%2Ab {quote(str(session), safe="")} box -\n'.encode()
+        reply = f": zq a%2Ab {quote(str(session), safe='')} box -\n".encode()
         return self.pane_start(reply)
 
     def test_host_lost_session_resumes_in_quoted_cwd_then_login_shell(self):
         folder = self.root / "own folder ' quoted"
         folder.mkdir()
         session = self.root / "pi session ' quoted.jsonl"
-        session.write_text(json.dumps({"type": "session", "cwd": str(folder)}) + "\nnot json\n")
+        session.write_text(
+            json.dumps({"type": "session", "cwd": str(folder)}) + "\nnot json\n"
+        )
         self.resume_host(session)
         attaches = [a for a in self.calls("zmx") if a[0] == "attach"]
         self.assertEqual(attaches[0][:4], ["attach", "a*b", "zsh", "-ilc"])
-        self.assertEqual(json.loads((self.root / "pi-runs").read_text()),
-                         [str(folder.resolve()), ["--session", str(session)]])
-        shells = list(map(json.loads, (self.root / "shell-runs").read_text().splitlines()))
+        self.assertEqual(
+            json.loads((self.root / "pi-runs").read_text()),
+            [str(folder.resolve()), ["--session", str(session)]],
+        )
+        shells = list(
+            map(json.loads, (self.root / "shell-runs").read_text().splitlines())
+        )
         self.assertEqual(shells[-1], ["-il"])
 
     def test_host_resume_uses_home_when_session_folder_is_gone(self):
         session = self.root / "pi.jsonl"
         session.write_text('{"cwd": "/no/such/folder"}\n')
         self.resume_host(session)
-        self.assertEqual(json.loads((self.root / "pi-runs").read_text()),
-                         [str((self.root / "host").resolve()), ["--session", str(session)]])
+        self.assertEqual(
+            json.loads((self.root / "pi-runs").read_text()),
+            [str((self.root / "host").resolve()), ["--session", str(session)]],
+        )
 
     def test_host_present_session_attaches_plainly(self):
         session = self.root / "pi.jsonl"
@@ -451,7 +584,7 @@ elif args[:1] == ["attach"]:
 
     def host_pane(self, codes, wait_for=None):
         (self.root / "ssh-codes").write_text("\n".join(map(str, codes)))
-        output = self.pane_start(b': zq n - box -\n', wait_for=wait_for)
+        output = self.pane_start(b": zq n - box -\n", wait_for=wait_for)
         self.assertEqual((self.root / "ssh-codes").read_text(), "")
         self.assertEqual(self.calls("plain-shell"), [])
         self.assertEqual(self.calls("zmx"), [])
@@ -502,40 +635,46 @@ elif args[:1] == ["attach"]:
         # One failed open crosses the shortened outage deadline.
         script = self.root / "zshell"
         script.write_text(script.read_text().replace("SECONDS + 5", "SECONDS + 0"))
-        output = self.host_pane([255, 255, 255, 0, 0],
-                                wait_for=b"[box unreachable, enter retries]")
+        output = self.host_pane(
+            [255, 255, 255, 0, 0], wait_for=b"[box unreachable, enter retries]"
+        )
         self.assertEqual(output.count(b"no link, retrying"), 1)
         self.assertEqual(output.count(b"unreachable, enter retries"), 1)
 
     def test_pane_host_session_exit_one_does_not_retry(self):
         (self.root / "ssh-codes").write_text("0\n1")
-        code, output = self.pane_run(b': zq n - box -\n')
+        code, output = self.pane_run(b": zq n - box -\n")
         self.assertEqual(code, 1, output)
         self.assertNotIn(b"retry", output)
         self.assertEqual(len(self.calls("ssh")), 2)
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_pane_host_missing_zmx_waits_for_key_then_attaches(self):
-        output = self.host_pane([0, 97, 0, 0],
-                                wait_for=b"[box has no zmx (PATH, ~/.local/bin); enter retries]")
+        output = self.host_pane(
+            [0, 97, 0, 0],
+            wait_for=b"[box has no zmx (PATH, ~/.local/bin); enter retries]",
+        )
         self.assertNotIn(b"no link", output)
         self.assertEqual(len(self.calls("ssh")), 4)
 
     def test_pane_host_remote_missing_zmx_exits_97(self):
         self.host_pane([0, 0])
         remote = self.calls("ssh")[-1][-1]
-        result = subprocess.run(["/bin/sh", "-c", remote],
-                                env={"HOME": str(self.root / "empty"), "PATH": ""},
-                                capture_output=True, timeout=2)
+        result = subprocess.run(
+            ["/bin/sh", "-c", remote],
+            env={"HOME": str(self.root / "empty"), "PATH": ""},
+            capture_output=True,
+            timeout=2,
+        )
         self.assertEqual(result.returncode, 97, result.stderr)
 
     def test_pane_host_answer_without_folder_and_option_like_host(self):
-        self.pane_start(b': zq n - box -\n')
+        self.pane_start(b": zq n - box -\n")
         check, args = self.calls("ssh")
         self.assertIn("check", check)
         self.assertNotIn("cd ", args[-1])
         (self.root / "calls").unlink()
-        output = self.pane_start(b': zq n - -oProxyCommand%3Dtouch%20x -\n')
+        output = self.pane_start(b": zq n - -oProxyCommand%3Dtouch%20x -\n")
         self.assertIn(b"refusing ssh host", output)
         self.assert_plain_shell_only()
 
@@ -543,24 +682,35 @@ elif args[:1] == ["attach"]:
         script = self.root / "zshell"
         prompt = r"$'\033]1337;SetUserVar=zq=MQ==\007'"
         original = "IFS=' ' read -r -s -t 2 -p " + prompt + " a b c d"
-        delayed = ("{ printf '%s' " + prompt + "; " + shlex.quote(sys.executable) +
-                   " -c 'import time; time.sleep(.1)'; IFS=' ' read -r -s -t 2 a b c d; }")
+        delayed = (
+            "{ printf '%s' "
+            + prompt
+            + "; "
+            + shlex.quote(sys.executable)
+            + " -c 'import time; time.sleep(.1)'; IFS=' ' read -r -s -t 2 a b c d; }"
+        )
         source = script.read_text()
         self.assertEqual(source.count(original), 1)
         script.write_text(source.replace(original, delayed))
-        self.pane_start(b': zq saved%20name -\n')
-        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
+        self.pane_start(b": zq saved%20name -\n")
+        self.assertEqual(
+            self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]]
+        )
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_pane_discovery_allows_slow_fake_startup_within_requested_timeout(self):
-        output = self.pane_start(b': zq saved%20name -\n', MODE="slow-discovery")
-        self.assertEqual(self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]])
-        self.assertEqual(self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]])
+        output = self.pane_start(b": zq saved%20name -\n", MODE="slow-discovery")
+        self.assertEqual(
+            self.calls("timeout"), [["3", str(self.root / "zmx"), "ls", "--short"]]
+        )
+        self.assertEqual(
+            self.calls("zmx"), [["ls", "--short"], ["attach", "saved name"]]
+        )
         self.assertEqual(self.calls("plain-shell"), [])
         self.assertNotIn(b"discovery failed or timed out", output)
 
     def test_pane_query_missing_pi_file_does_not_resume(self):
-        self.pane_start(b': zq old-1 %2Fno%2Fsuch%2Ffile\n')
+        self.pane_start(b": zq old-1 %2Fno%2Fsuch%2Ffile\n")
         self.assertEqual(self.calls("zmx")[-1], ["attach", "old-1"])
         self.assertEqual(self.calls("python3"), [])
         self.assertEqual(self.calls("head"), [])
@@ -568,11 +718,20 @@ elif args[:1] == ["attach"]:
     def test_pane_query_lost_session_resumes_pi(self):
         pi = self.root / "pi session.jsonl"
         pi.write_text('{"cwd": "/tmp"}\n{"ignored": true}\n')
-        self.pane_start(f': zq lost {quote(str(pi), safe="")}\n'.encode())
-        self.assertEqual(self.calls("zmx")[-1], [
-            "attach", "lost", str(self.root / "plain-shell"), "-lc",
-            'cd "$1" 2>/dev/null; pi --session "$2"; exec "$0" -il',
-            str(self.root / "plain-shell"), "/tmp", str(pi)])
+        self.pane_start(f": zq lost {quote(str(pi), safe='')}\n".encode())
+        self.assertEqual(
+            self.calls("zmx")[-1],
+            [
+                "attach",
+                "lost",
+                str(self.root / "plain-shell"),
+                "-lc",
+                'cd "$1" 2>/dev/null; pi --session "$2"; exec "$0" -il',
+                str(self.root / "plain-shell"),
+                "/tmp",
+                str(pi),
+            ],
+        )
         self.assertEqual(self.calls("head"), [["-1", str(pi)]])
         self.assertEqual(len(self.calls("python3")), 1)
         self.assertEqual(self.calls("kitten"), [])
@@ -580,18 +739,25 @@ elif args[:1] == ["attach"]:
     def test_pane_query_existing_session_matches_literal_whole_line(self):
         pi = self.root / "pi.jsonl"
         pi.write_text('{"cwd": "/tmp"}\n')
-        self.pane_start(f': zq a%2Ab {quote(str(pi), safe="")}\n'.encode(),
-                        SESSIONS="prefix\na*b\nsuffix")
+        self.pane_start(
+            f": zq a%2Ab {quote(str(pi), safe='')}\n".encode(),
+            SESSIONS="prefix\na*b\nsuffix",
+        )
         self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
         self.assertEqual(self.calls("python3"), [])
 
     def assert_plain_shell_only(self):
-        commands = [cmd for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())]
+        commands = [
+            cmd
+            for cmd, args in map(
+                json.loads, (self.root / "calls").read_text().splitlines()
+            )
+        ]
         self.assertEqual(commands, ["plain-shell"])
         self.assertEqual(self.calls("plain-shell"), [["-il"]])
 
     def test_pane_invalid_answer_starts_plain_shell(self):
-        output = self.pane_start(b'hello\n', HOLDER="saved")
+        output = self.pane_start(b"hello\n", HOLDER="saved")
         self.assertIn(b"watcher did not answer", output)
         self.assert_plain_shell_only()
 
@@ -612,7 +778,9 @@ elif args[:1] == ["attach"]:
         self.assertEqual(self.run_script("kmain", MODE="starting").returncode, 0)
         reports = self.root / "Library/Logs/DiagnosticReports"
         reports.mkdir(parents=True)
-        old, fresh, other = (reports / n for n in ("zmx-a.ips", "zmx-b.ips", "other.ips"))
+        old, fresh, other = (
+            reports / n for n in ("zmx-a.ips", "zmx-b.ips", "other.ips")
+        )
         for path in (old, fresh, other):
             path.touch()
         ago = time.time() - 2 * 60 * 60
@@ -651,14 +819,26 @@ elif args[:1] == ["attach"]:
         result = self.run_script("kmain", MODE="no-app")
         self.assertEqual(result.returncode, 0, result.stderr)
         session = str(self.root / ".local/state/kitty/workspaces/main.kitty-session")
-        self.assertEqual(self.calls("kitty"), [["--listen-on", "unix:" + str(self.root / "socket"),
-                                                "--session", session]])
+        self.assertEqual(
+            self.calls("kitty"),
+            [
+                [
+                    "--listen-on",
+                    "unix:" + str(self.root / "socket"),
+                    "--session",
+                    session,
+                ]
+            ],
+        )
 
     def test_main_removes_a_dead_socket_but_never_a_live_one(self):
         import socket
+
         path = self.root / "socket"
         with socket.socket(socket.AF_UNIX) as dead:
-            dead.bind(str(path))  # closed without unlinking: what a crashed kitty leaves
+            dead.bind(
+                str(path)
+            )  # closed without unlinking: what a crashed kitty leaves
         self.assertEqual(self.run_script("kmain").returncode, 0)
         self.assertFalse(path.exists())
         self.assertEqual(len(self.calls("open")), 1)
@@ -674,6 +854,7 @@ elif args[:1] == ["attach"]:
         import fcntl
         import runpy
         from unittest.mock import patch
+
         reports = self.root / "Library/Logs/DiagnosticReports"
         reports.mkdir(parents=True)
         paths = [reports / name for name in ("zmx-a.ips", "zmx-b.ips")]
@@ -681,14 +862,20 @@ elif args[:1] == ["attach"]:
             path.touch()
             os.utime(path, (0, 0))
         attempted = []
+
         def unlink(path):
             # A separate open description can acquire the lock only after kmain releases it.
             with (self.root / "socket.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             attempted.append(path)
             raise OSError("cannot delete this report")
-        with patch.dict(os.environ, self.env), patch("sys.argv", ["kmain"]), patch("subprocess.run") as run:
-            run.return_value = subprocess.CompletedProcess([], 0, stdout='[]')
+
+        with (
+            patch.dict(os.environ, self.env),
+            patch("sys.argv", ["kmain"]),
+            patch("subprocess.run") as run,
+        ):
+            run.return_value = subprocess.CompletedProcess([], 0, stdout="[]")
             with patch("os.unlink", side_effect=unlink):
                 runpy.run_path(str(self.root / "kmain"))
         self.assertCountEqual(attempted, paths)
@@ -696,7 +883,7 @@ elif args[:1] == ["attach"]:
 
     def test_failed_and_hung_discovery_falls_back(self):
         for mode in ("fail", "hang"):
-            output = self.pane_start(b': zq saved -\n', MODE=mode)
+            output = self.pane_start(b": zq saved -\n", MODE=mode)
             self.assertIn(b"discovery failed or timed out", output)
         self.assertEqual(self.calls("plain-shell"), [["-il"], ["-il"]])
         self.assertEqual(self.calls("kitten"), [])
@@ -711,8 +898,12 @@ elif args[:1] == ["attach"]:
         self.assertEqual(len(self.calls("open")), 1)
         self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]] * 3)
         self.assertEqual(socket.read_text(), "do not unlink")
-        self.assertEqual((self.root / ".local/state/kitty/workspaces/main.kitty-session").read_text(),
-                         "cd ~\nlaunch\n")
+        self.assertEqual(
+            (
+                self.root / ".local/state/kitty/workspaces/main.kitty-session"
+            ).read_text(),
+            "cd ~\nlaunch\n",
+        )
 
     def test_main_host_starts_with_instance_paths_and_environment_then_focuses(self):
         for mode in ("", "no-app"):
@@ -722,29 +913,67 @@ elif args[:1] == ["attach"]:
                 result = self.run_script("kmain", "box", MODE=mode)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 directory = self.root / ".local/state/kitty/hosts/box"
-                args = ["--listen-on", "unix:" + str(self.root / "socket-box"),
-                        "--session", str(directory / "main.kitty-session"), "--title", "box"]
+                args = [
+                    "--listen-on",
+                    "unix:" + str(self.root / "socket-box"),
+                    "--session",
+                    str(directory / "main.kitty-session"),
+                    "--title",
+                    "box",
+                ]
                 if sys.platform == "darwin":
-                    self.assertEqual(self.calls("open"), [["-n", "-a", "kitty", "--env", "ZWS_HOST=box",
-                                                          "--env", "ZWS_DIR=" + str(directory), "--args", *args]])
+                    self.assertEqual(
+                        self.calls("open"),
+                        [
+                            [
+                                "-n",
+                                "-a",
+                                "kitty",
+                                "--env",
+                                "ZWS_HOST=box",
+                                "--env",
+                                "ZWS_DIR=" + str(directory),
+                                "--args",
+                                *args,
+                            ]
+                        ],
+                    )
                 if sys.platform != "darwin" or mode == "no-app":
                     self.assertEqual(self.calls("kitty"), [args])
-                    self.assertEqual(json.loads((self.root / "started-env").read_text()),
-                                     dict(ZWS_HOST="box", ZWS_DIR=str(directory)))
-                self.assertEqual((directory / "main.kitty-session").read_text(), "cd ~\nlaunch\n")
+                    self.assertEqual(
+                        json.loads((self.root / "started-env").read_text()),
+                        dict(ZWS_HOST="box", ZWS_DIR=str(directory)),
+                    )
+                self.assertEqual(
+                    (directory / "main.kitty-session").read_text(), "cd ~\nlaunch\n"
+                )
                 self.assertTrue((self.root / "socket-box.lock").exists())
                 self.assertEqual(self.run_script("kmain", "box").returncode, 0)
-                self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
-                self.assertTrue(all(a[2] == "unix:" + str(self.root / "socket-box") for a in self.calls("kitten")))
+                self.assertEqual(
+                    self.calls("aerospace"), [["focus", "--window-id", "42"]]
+                )
+                self.assertTrue(
+                    all(
+                        a[2] == "unix:" + str(self.root / "socket-box")
+                        for a in self.calls("kitten")
+                    )
+                )
                 self.assertEqual(self.calls("ssh"), [])
 
     def test_main_restores_only_attached_missing_hosts_in_background(self):
         state = self.root / ".local/state/kitty"
         state.mkdir(parents=True)
         (state / ".main-quit").write_text("100")
-        for host, record in (("one", "attached"), ("two", "attached"), ("running", "attached"),
-                             ("closed", "90"), ("host-first", "96"), ("main-first", "104"),
-                             ("too-early", "94"), ("bad host", "attached")):
+        for host, record in (
+            ("one", "attached"),
+            ("two", "attached"),
+            ("running", "attached"),
+            ("closed", "90"),
+            ("host-first", "96"),
+            ("main-first", "104"),
+            ("too-early", "94"),
+            ("bad host", "attached"),
+        ):
             folder = state / "hosts" / host
             folder.mkdir(parents=True)
             (folder / ".attached").write_text(record)
@@ -756,7 +985,9 @@ elif args[:1] == ["attach"]:
         self.assertEqual(len(opens), 5)
         self.assertNotIn("-g", opens[0])
         for host in ("one", "two", "host-first", "main-first"):
-            call, = [c for c in opens if "--title" in c and c[c.index("--title") + 1] == host]
+            (call,) = [
+                c for c in opens if "--title" in c and c[c.index("--title") + 1] == host
+            ]
             self.assertIn("unix:" + str(self.root / ("socket-" + host)), call)
             folder = state / "hosts" / host
             self.assertIn(str(folder / "main.kitty-session"), call)
@@ -768,7 +999,9 @@ elif args[:1] == ["attach"]:
         self.assertEqual(self.calls("aerospace"), [])
         again = self.run_script("kmain", MODE="restore")
         self.assertEqual(again.returncode, 0, again.stderr)
-        self.assertEqual(self.calls("open" if sys.platform == "darwin" else "kitty"), opens)
+        self.assertEqual(
+            self.calls("open" if sys.platform == "darwin" else "kitty"), opens
+        )
         self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
 
     def test_host_start_and_focus_reset_the_attachment(self):
@@ -794,18 +1027,29 @@ elif args[:1] == ["attach"]:
     def test_main_startup_wait_is_bounded_and_discovery_errors_are_safe(self):
         import runpy
         from unittest.mock import patch
+
         for error in (OSError("missing"), subprocess.TimeoutExpired("kitten", 1)):
+
             def boundary(args, **kwargs):
                 if args[0] == "kitten":
                     self.assertEqual(kwargs["timeout"], 1)
                     raise error
                 return subprocess.CompletedProcess(args, 1 if args[0] == "pgrep" else 0)
-            with patch.dict(os.environ, self.env), patch("sys.argv", ["kmain"]), \
-                    patch("subprocess.run", side_effect=boundary) as run:
-                with patch("time.monotonic", side_effect=[0, 0, 11]), patch("time.sleep"):
+
+            with (
+                patch.dict(os.environ, self.env),
+                patch("sys.argv", ["kmain"]),
+                patch("subprocess.run", side_effect=boundary) as run,
+            ):
+                with (
+                    patch("time.monotonic", side_effect=[0, 0, 11]),
+                    patch("time.sleep"),
+                ):
                     runpy.run_path(str(self.root / "kmain"))
-            self.assertEqual([c.args[0][0] for c in run.call_args_list],
-                             ["kitten", "pgrep", "open", "kitten"])
+            self.assertEqual(
+                [c.args[0][0] for c in run.call_args_list],
+                ["kitten", "pgrep", "open", "kitten"],
+            )
 
     def test_create_publishes_without_clobber_and_quotes_display_name(self):
         directory = Path(self.env["ZWS_DIR"])
@@ -814,8 +1058,14 @@ elif args[:1] == ["attach"]:
         existing.write_bytes(b"original bytes")
         shown = "l'été 'quoted'"
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            results = list(pool.map(lambda _: self.run_script("zws", "create", "repo",
-                                                             "/cwd with spaces", shown), range(5)))
+            results = list(
+                pool.map(
+                    lambda _: self.run_script(
+                        "zws", "create", "repo", "/cwd with spaces", shown
+                    ),
+                    range(5),
+                )
+            )
         self.assertTrue(all(r.returncode == 0 for r in results), results)
         self.assertEqual(existing.read_bytes(), b"original bytes")
         files = list(directory.glob("repo-*.kitty-session"))
@@ -823,7 +1073,9 @@ elif args[:1] == ["attach"]:
         for path in files:
             lines = path.read_text().splitlines()
             self.assertEqual(lines[0], "cd /cwd with spaces")
-            self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "ws_name=" + shown])
+            self.assertEqual(
+                shlex.split(lines[1]), ["launch", "--var", "ws_name=" + shown]
+            )
         self.assertEqual(len(self.calls("kitten")), 5)
         self.assertEqual(len(list(directory.iterdir())), 6)
 
@@ -833,7 +1085,9 @@ elif args[:1] == ["attach"]:
         result = self.run_script("zws", "new", "--window", "/cwd space")
         self.assertEqual(result.returncode, 0, result.stderr)
         destination = self.calls("kitten")[-1][-1]
-        self.assertEqual(Path(destination).read_text(), "new_os_window\ncd /cwd space\nlaunch\n")
+        self.assertEqual(
+            Path(destination).read_text(), "new_os_window\ncd /cwd space\nlaunch\n"
+        )
 
     def test_new_host_writes_host_vars_and_keeps_kitty_on_a_local_folder(self):
         result = self.run_script("zws", "new", "/home/a/proj", ZWS_HOST="box")
@@ -842,30 +1096,58 @@ elif args[:1] == ["attach"]:
         self.assertEqual(path.name, "proj.kitty-session")
         lines = path.read_text().splitlines()
         self.assertEqual(lines[0], "cd " + str(self.root))
-        self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "host=box", "--var", "host_dir=/home/a/proj"])
+        self.assertEqual(
+            shlex.split(lines[1]),
+            ["launch", "--var", "host=box", "--var", "host_dir=/home/a/proj"],
+        )
         result = self.run_script("zws", "new", "--window", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
         path = Path(self.calls("kitten")[-1][-1])
         self.assertEqual(path.name, "home.kitty-session")
-        self.assertEqual(path.read_text(), "new_os_window\ncd " + str(self.root) + "\nlaunch --var host=box\n")
+        self.assertEqual(
+            path.read_text(),
+            "new_os_window\ncd " + str(self.root) + "\nlaunch --var host=box\n",
+        )
         result = self.run_script("zws", "new", "--ask", "/srv/app", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.calls("kitten")[-1][-4:], ["app", str(self.root), "box", "/srv/app"])
-        result = self.run_script("zws", "create", "named", str(self.root), "Shown", "box", "/srv/app")
+        self.assertEqual(
+            self.calls("kitten")[-1][-4:], ["app", str(self.root), "box", "/srv/app"]
+        )
+        result = self.run_script(
+            "zws", "create", "named", str(self.root), "Shown", "box", "/srv/app"
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
-        lines = (Path(self.env["ZWS_DIR"]) / "named.kitty-session").read_text().splitlines()
-        self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "ws_name=Shown", "--var", "host=box",
-                                                 "--var", "host_dir=/srv/app"])
+        lines = (
+            (Path(self.env["ZWS_DIR"]) / "named.kitty-session").read_text().splitlines()
+        )
+        self.assertEqual(
+            shlex.split(lines[1]),
+            [
+                "launch",
+                "--var",
+                "ws_name=Shown",
+                "--var",
+                "host=box",
+                "--var",
+                "host_dir=/srv/app",
+            ],
+        )
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("ssh"), [])
 
     def test_new_host_names_the_box_home_home_without_ssh(self):
-        for folder, expected in (("/home/anshulj", "home"), ("/root", "home-2"),
-                                 ("/home/anshulj/code", "code"), ("/srv/anshulj", "anshulj")):
+        for folder, expected in (
+            ("/home/anshulj", "home"),
+            ("/root", "home-2"),
+            ("/home/anshulj/code", "code"),
+            ("/srv/anshulj", "anshulj"),
+        ):
             with self.subTest(folder=folder):
                 result = self.run_script("zws", "new", folder, ZWS_HOST="box")
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(Path(self.calls("kitten")[-1][-1]).name, expected + ".kitty-session")
+                self.assertEqual(
+                    Path(self.calls("kitten")[-1][-1]).name, expected + ".kitty-session"
+                )
         self.assertEqual(self.calls("ssh"), [])
 
     def test_new_host_rejects_invalid_instance_host(self):
@@ -884,8 +1166,13 @@ elif args[:1] == ["attach"]:
         self.assertNotIn("host=", text)
 
     def test_create_rejects_traversal_and_controls_without_navigation(self):
-        for args in (("../escape", "/cwd"), ("..", "/cwd"), ("bad\nlaunch", "/cwd"),
-                     ("good", "/cwd\nlaunch"), ("good", "/cwd", "bad\x01")):
+        for args in (
+            ("../escape", "/cwd"),
+            ("..", "/cwd"),
+            ("bad\nlaunch", "/cwd"),
+            ("good", "/cwd\nlaunch"),
+            ("good", "/cwd", "bad\x01"),
+        ):
             result = self.run_script("zws", "create", *args)
             self.assertNotEqual(result.returncode, 0)
         self.assertEqual(list(Path(self.env["ZWS_DIR"]).iterdir()), [])
@@ -902,7 +1189,9 @@ elif args[:1] == ["attach"]:
         destination = directory / "cwd-space-3.kitty-session"
         self.assertEqual(destination.read_text(), "cd /cwd space\nlaunch\n")
         self.assertEqual(existing.read_text(), "keep\n")
-        self.assertEqual(self.calls("kitten"), [["@", "action", "goto_session", str(destination)]])
+        self.assertEqual(
+            self.calls("kitten"), [["@", "action", "goto_session", str(destination)]]
+        )
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
 
@@ -913,12 +1202,17 @@ elif args[:1] == ["attach"]:
                 self.assertEqual(result.returncode, 0, result.stderr)
                 call = self.calls("kitten")[-1]
                 if flag == ("--ask",):
-                    self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", str(self.root)])
+                    self.assertEqual(
+                        call[:5],
+                        ["@", "launch", "--type=overlay", "--cwd", str(self.root)],
+                    )
                     self.assertEqual(call[-2:], ["home-3", str(self.root)])
                 else:
                     prefix = "new_os_window\n" if flag else ""
-                    self.assertEqual(Path(call[-1]).read_text(),
-                                     prefix + "cd " + str(self.root) + "\nlaunch\n")
+                    self.assertEqual(
+                        Path(call[-1]).read_text(),
+                        prefix + "cd " + str(self.root) + "\nlaunch\n",
+                    )
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
         self.assertFalse(any("ls" in args for args in self.calls("kitten")))
@@ -926,9 +1220,13 @@ elif args[:1] == ["attach"]:
     def test_new_ask_passes_cwd_and_name_as_whole_overlay_arguments(self):
         result = self.run_script("zws", "new", "--ask", "/cwd space")
         self.assertEqual(result.returncode, 0, result.stderr)
-        call, = self.calls("kitten")
-        self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", "/cwd space"])
-        self.assertEqual(call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"])
+        (call,) = self.calls("kitten")
+        self.assertEqual(
+            call[:5], ["@", "launch", "--type=overlay", "--cwd", "/cwd space"]
+        )
+        self.assertEqual(
+            call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"]
+        )
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
 
@@ -940,56 +1238,74 @@ elif args[:1] == ["attach"]:
         script.chmod(0o700)
         fake = siblings / "zports"
         self.assertIsNone(shutil.which("zports", path=self.env["PATH"]))
-        fake.write_text("#!" + sys.executable + "\n" +
-                        "import json, os, sys\n" +
-                        "with open(os.path.join(os.environ['FAKE_ROOT'], 'port-calls'), 'a') as f:\n" +
-                        "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n" +
-                        "if os.environ.get('PORT_FAIL'):\n" +
-                        "    sys.exit('zports: no running engine')\n")
+        fake.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + "import json, os, sys\n"
+            + "with open(os.path.join(os.environ['FAKE_ROOT'], 'port-calls'), 'a') as f:\n"
+            + "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            + "if os.environ.get('PORT_FAIL'):\n"
+            + "    sys.exit('zports: no running engine')\n"
+        )
         fake.chmod(0o700)
-        for answer, failure, error in (("3000", False, None), ("", False, None),
-                                        ("abc", False, b"Port must be a number"),
-                                        ("0", False, b"Port must be a number"),
-                                        ("65536", False, b"Port must be a number"),
-                                        ("5432", True, b"zports: no running engine"),
-                                        ("3001", "real", b"zports:")):
+        for answer, failure, error in (
+            ("3000", False, None),
+            ("", False, None),
+            ("abc", False, b"Port must be a number"),
+            ("0", False, b"Port must be a number"),
+            ("65536", False, b"Port must be a number"),
+            ("5432", True, b"zports: no running engine"),
+            ("3001", "real", b"zports:"),
+        ):
             with self.subTest(answer=answer, failure=failure):
                 if failure == "real":
                     fake.write_text((BIN / "zports").read_text())
                 result = self.run_script(str(script), "forward-port", ZWS_HOST="box")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 call = self.calls("kitten")[-1]
-                self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", str(self.root)])
+                self.assertEqual(
+                    call[:5], ["@", "launch", "--type=overlay", "--cwd", str(self.root)]
+                )
                 self.assertEqual(call[-1], str(script.resolve()))
                 master, slave = pty.openpty()
-                proc = subprocess.Popen(call[5:], stdin=slave, stdout=slave, stderr=slave,
-                                        env=dict(self.env, ZWS_HOST="box", PORT_FAIL="1" if failure else ""))
+                proc = subprocess.Popen(
+                    call[5:],
+                    stdin=slave,
+                    stdout=slave,
+                    stderr=slave,
+                    env=dict(
+                        self.env, ZWS_HOST="box", PORT_FAIL="1" if failure else ""
+                    ),
+                )
                 os.close(slave)
                 output = bytearray()
+
                 def until(needle):
                     deadline = time.monotonic() + 4
                     while needle not in output:
                         self.assertLess(time.monotonic(), deadline, bytes(output))
-                        if select.select([master], [], [], .02)[0]:
+                        if select.select([master], [], [], 0.02)[0]:
                             output.extend(os.read(master, 65536))
+
                 try:
                     until(b"Forward port:")
                     deadline = time.monotonic() + 2
                     while termios.tcgetattr(master)[3] & termios.ICANON:
                         self.assertLess(time.monotonic(), deadline, bytes(output))
                         self.assertIsNone(proc.poll(), bytes(output))
-                        time.sleep(.001)
+                        time.sleep(0.001)
                     os.write(master, answer.encode() + b"\n")
                     if error:
                         until(b"press a key")
                         self.assertIn(error, output)
-                        time.sleep(.1)
+                        time.sleep(0.1)
                         self.assertIsNone(proc.poll(), bytes(output))
                         os.write(master, b"x")
                     deadline = time.monotonic() + 3
                     while proc.poll() is None:
                         self.assertLess(time.monotonic(), deadline, bytes(output))
-                        if select.select([master], [], [], .02)[0]:
+                        if select.select([master], [], [], 0.02)[0]:
                             try:
                                 output.extend(os.read(master, 65536))
                             except OSError:
@@ -1000,28 +1316,57 @@ elif args[:1] == ["attach"]:
                         proc.kill()
                     proc.wait(timeout=3)
                     os.close(master)
-        self.assertEqual([json.loads(row) for row in (self.root / "port-calls").read_text().splitlines()],
-                         [["forward", "3000"], ["forward", "5432"]])
+        self.assertEqual(
+            [
+                json.loads(row)
+                for row in (self.root / "port-calls").read_text().splitlines()
+            ],
+            [["forward", "3000"], ["forward", "5432"]],
+        )
         self.assertEqual(self.calls("ssh"), [])
 
     def worktree_overlay(self, kind, folder, host="box", branch="topic ' quoted"):
         result = self.run_script("zws", "worktree", kind, folder, ZWS_HOST=host)
         self.assertEqual(result.returncode, 0, result.stderr)
         call = self.calls("kitten")[-1]
-        self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd",
-                                   str(self.root) if host else folder])
+        self.assertEqual(
+            call[:5],
+            [
+                "@",
+                "launch",
+                "--type=overlay",
+                "--cwd",
+                str(self.root) if host else folder,
+            ],
+        )
         command = call[5:]
-        return command, dict(input=branch + "\n", env=dict(self.env, ZWS_HOST=host),
-                             capture_output=True, text=True, timeout=3)
+        return command, dict(
+            input=branch + "\n",
+            env=dict(self.env, ZWS_HOST=host),
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
 
     def test_scripts_are_executable(self):
-        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun", "zports"):
+        for name in (
+            "zshell",
+            "kmain",
+            "zws",
+            "zpick",
+            "zgoto",
+            "zhost",
+            "zrun",
+            "zports",
+        ):
             with self.subTest(name=name):
                 self.assertEqual((BIN / name).stat().st_mode & 0o111, 0o111)
 
     def test_host_worktree_new_executes_real_zrun(self):
         script = self.root / "zws"
-        script.write_text(script.read_text().replace('$(dirname "$self")/zrun', str(BIN / "zrun")))
+        script.write_text(
+            script.read_text().replace('$(dirname "$self")/zrun', str(BIN / "zrun"))
+        )
         folder = "/host/folder ' quoted"
         branch = "topic ' quoted"
         command, options = self.worktree_overlay("new", folder, branch=branch)
@@ -1029,13 +1374,15 @@ elif args[:1] == ["attach"]:
         result = subprocess.run(command, **options)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("Permission denied", result.stderr)
-        args, = self.calls("ssh")
+        (args,) = self.calls("ssh")
         self.assertEqual(args[-2], "box")
         words = shlex.split(args[-1])
         self.assertIn(folder, words)
         start = words.index("exec") + 1
-        self.assertEqual(words[start:start + 7],
-                         ["wt", "switch", "-c", branch, "--no-cd", "-x", "sh"])
+        self.assertEqual(
+            words[start : start + 7],
+            ["wt", "switch", "-c", branch, "--no-cd", "-x", "sh"],
+        )
 
     def test_host_worktree_overlays_use_zrun_and_report_without_host_scripts(self):
         folder = self.root / "host folder ' quoted"
@@ -1043,83 +1390,150 @@ elif args[:1] == ["attach"]:
         branch = "topic ' quoted"
         for kind in ("new", "open"):
             with self.subTest(kind=kind):
-                command, options = self.worktree_overlay(kind, str(folder), branch=branch)
+                command, options = self.worktree_overlay(
+                    kind, str(folder), branch=branch
+                )
                 result = subprocess.run(command, **options)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 args = self.calls("ssh")[-1]
-                self.assertEqual(args[:-1], ["-t", "-q", "-o", "ControlPath=/tmp/zcm-%C",
-                    "-o", "ControlMaster=no", "-o", "ConnectTimeout=5", "-o",
-                    "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", "box"])
+                self.assertEqual(
+                    args[:-1],
+                    [
+                        "-t",
+                        "-q",
+                        "-o",
+                        "ControlPath=/tmp/zcm-%C",
+                        "-o",
+                        "ControlMaster=no",
+                        "-o",
+                        "ConnectTimeout=5",
+                        "-o",
+                        "ServerAliveInterval=15",
+                        "-o",
+                        "ServerAliveCountMax=2",
+                        "box",
+                    ],
+                )
                 remote = args[-1]
                 words = shlex.split(remote)
                 self.assertIn(str(folder), words)
-                wt = words[words.index("exec") + 1:]
+                wt = words[words.index("exec") + 1 :]
                 prefix = ["wt", "switch"] + (["-c", branch] if kind == "new" else [])
-                self.assertEqual(wt[:len(prefix) + 5], prefix + ["--no-cd", "-x", "sh", "--", "-c"])
+                self.assertEqual(
+                    wt[: len(prefix) + 5], prefix + ["--no-cd", "-x", "sh", "--", "-c"]
+                )
                 self.assertEqual(len(wt), len(prefix) + 6)
                 self.assertNotIn(str(self.root / "zws"), remote)
                 # wt -x runs this program in the selected worktree, on an old host checkout.
                 selected = self.root / "worktree space ' quote"
                 selected.mkdir(exist_ok=True)
                 fake_wt = self.root / "wt"
-                fake_wt.write_text("#!" + sys.executable + "\n" +
-                    "import os, pathlib, subprocess, sys\n" +
-                    f"pathlib.Path({str(self.root / 'wt-cwd')!r}).write_text(os.getcwd())\n" +
-                    "args = sys.argv[1:]\n" +
-                    f"sys.exit(subprocess.run([args[args.index('-x') + 1], " +
-                    f"*args[args.index('--') + 1:]], cwd={str(selected)!r}).returncode)\n")
+                fake_wt.write_text(
+                    "#!"
+                    + sys.executable
+                    + "\n"
+                    + "import os, pathlib, subprocess, sys\n"
+                    + f"pathlib.Path({str(self.root / 'wt-cwd')!r}).write_text(os.getcwd())\n"
+                    + "args = sys.argv[1:]\n"
+                    + f"sys.exit(subprocess.run([args[args.index('-x') + 1], "
+                    + f"*args[args.index('--') + 1:]], cwd={str(selected)!r}).returncode)\n"
+                )
                 fake_wt.chmod(0o700)
-                report = subprocess.run(["sh", "-c", remote], env=self.env,
-                                        capture_output=True, timeout=3)
+                report = subprocess.run(
+                    ["sh", "-c", remote], env=self.env, capture_output=True, timeout=3
+                )
                 import base64
+
                 self.assertEqual(report.returncode, 0, report.stderr)
-                self.assertEqual((self.root / "wt-cwd").read_text(), str(folder.resolve()))
-                self.assertEqual(report.stdout, b"\x1b]1337;SetUserVar=zworktree=" +
-                                 base64.b64encode(str(selected.resolve()).encode()) + b"\x07")
+                self.assertEqual(
+                    (self.root / "wt-cwd").read_text(), str(folder.resolve())
+                )
+                self.assertEqual(
+                    report.stdout,
+                    b"\x1b]1337;SetUserVar=zworktree="
+                    + base64.b64encode(str(selected.resolve()).encode())
+                    + b"\x07",
+                )
                 # Feed kitty's decoded OSC value into the watcher, then execute its background
                 # launch with the redirected zws. First report creates; the next goes there.
-                from test_workspaces import Boss, Window, load
                 from unittest.mock import patch
+
+                from test_workspaces import Boss, Window, load
+
                 with patch.dict(os.environ, self.env, ZWS_HOST="box"):
                     boss = Boss([], None, "")
                     module = load(self.env["ZWS_DIR"], boss)
                     with patch.object(module.zkitty, "ZWS", str(self.root / "zws")):
-                        module.on_set_user_var(boss, Window("dev", 1), {
-                            "key": "zworktree",
-                            "value": base64.b64decode(report.stdout.split(b"=", 2)[2][:-1]).decode()})
+                        module.on_set_user_var(
+                            boss,
+                            Window("dev", 1),
+                            {
+                                "key": "zworktree",
+                                "value": base64.b64decode(
+                                    report.stdout.split(b"=", 2)[2][:-1]
+                                ).decode(),
+                            },
+                        )
                     launch = boss.calls[-1]
-                    self.assertEqual(launch[:3], ("launch", "--type=background", "--allow-remote-control"))
-                    opened = subprocess.run(launch[3:], env=os.environ, capture_output=True, timeout=3)
+                    self.assertEqual(
+                        launch[:3],
+                        ("launch", "--type=background", "--allow-remote-control"),
+                    )
+                    opened = subprocess.run(
+                        launch[3:], env=os.environ, capture_output=True, timeout=3
+                    )
                     self.assertEqual(opened.returncode, 0, opened.stderr)
                 destination = Path(self.calls("kitten")[-1][-1])
-                self.assertEqual(self.calls("kitten")[-1][:3], ["@", "action", "goto_session"])
-                self.assertEqual(list(Path(self.env["ZWS_DIR"]).glob("*.kitty-session")), [destination])
+                self.assertEqual(
+                    self.calls("kitten")[-1][:3], ["@", "action", "goto_session"]
+                )
+                self.assertEqual(
+                    list(Path(self.env["ZWS_DIR"]).glob("*.kitty-session")),
+                    [destination],
+                )
                 lines = destination.read_text().splitlines()
                 self.assertEqual(lines[0], "cd " + str(self.root))
-                self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "host=box",
-                                 "--var", "host_dir=" + str(selected.resolve())])
+                self.assertEqual(
+                    shlex.split(lines[1]),
+                    [
+                        "launch",
+                        "--var",
+                        "host=box",
+                        "--var",
+                        "host_dir=" + str(selected.resolve()),
+                    ],
+                )
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("plain-shell"), [])
 
     def test_host_worktree_failures_pause_and_unreachable_uses_zrun_message(self):
-        for code, message in (("1", "wt failed; press a key"), ("255", "box unreachable")):
+        for code, message in (
+            ("1", "wt failed; press a key"),
+            ("255", "box unreachable"),
+        ):
             with self.subTest(code=code):
                 command, options = self.worktree_overlay("open", "/host/repo")
                 (self.root / "ssh-codes").write_text(code)
                 master, slave = pty.openpty()
-                proc = subprocess.Popen(command, env=options["env"], stdin=slave,
-                                        stdout=slave, stderr=slave, start_new_session=True)
+                proc = subprocess.Popen(
+                    command,
+                    env=options["env"],
+                    stdin=slave,
+                    stdout=slave,
+                    stderr=slave,
+                    start_new_session=True,
+                )
                 os.close(slave)
                 output = bytearray()
                 try:
                     deadline = time.monotonic() + 5
                     while message.encode() not in output:
                         self.assertLess(time.monotonic(), deadline, bytes(output))
-                        ready, _, _ = select.select([master], [], [], .05)
+                        ready, _, _ = select.select([master], [], [], 0.05)
                         if ready:
                             output.extend(os.read(master, 65536))
                     calls = self.calls("ssh")
-                    time.sleep(.1)
+                    time.sleep(0.1)
                     self.assertIsNone(proc.poll(), bytes(output))
                     self.assertEqual(self.calls("ssh"), calls)
                     self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
@@ -1136,34 +1550,65 @@ elif args[:1] == ["attach"]:
         pause = '|| { echo; read -n1 -rsp "wt failed; press a key"; }'
         for kind in ("new", "open"):
             command, _ = self.worktree_overlay(kind, "/mac/folder ' quoted", host="")
-            script = ('read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; '
-                      'wt switch -c "$b"' if kind == "new" else 'wt switch')
-            self.assertEqual(command, ["bash", "-c", "export PATH=" + str(self.root) +
-                ':$PATH; ' + script + ' --no-cd -x "$0" -- here ' + pause,
-                str((self.root / "zws").resolve())])
+            script = (
+                'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; '
+                'wt switch -c "$b"'
+                if kind == "new"
+                else "wt switch"
+            )
+            self.assertEqual(
+                command,
+                [
+                    "bash",
+                    "-c",
+                    "export PATH="
+                    + str(self.root)
+                    + ":$PATH; "
+                    + script
+                    + ' --no-cd -x "$0" -- here '
+                    + pause,
+                    str((self.root / "zws").resolve()),
+                ],
+            )
 
     def test_host_here_reuses_host_dir_or_creates_locally_cd_workspace(self):
         folder = "/remote/worktree space ' quoted"
-        for var in ("--var " + shlex.quote("host_dir=" + folder),
-                    shlex.quote("--var=host_dir=" + folder)):
+        for var in (
+            "--var " + shlex.quote("host_dir=" + folder),
+            shlex.quote("--var=host_dir=" + folder),
+        ):
             directory = Path(self.env["ZWS_DIR"])
             directory.mkdir(exist_ok=True)
             existing = directory / "existing.kitty-session"
-            existing.write_text("cd " + str(self.root) + "\nlaunch --var host=box " + var + "\n")
+            existing.write_text(
+                "cd " + str(self.root) + "\nlaunch --var host=box " + var + "\n"
+            )
             result = self.run_script("zws", "here", folder, ZWS_HOST="box")
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.calls("kitten")[-1], ["@", "action", "goto_session", str(existing)])
+            self.assertEqual(
+                self.calls("kitten")[-1], ["@", "action", "goto_session", str(existing)]
+            )
             self.assertEqual(list(directory.glob("*.kitty-session")), [existing])
         result = self.run_script("zws", "here", "/remote/Other Folder", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
         created = Path(self.calls("kitten")[-1][-1])
         self.assertEqual(created.name, "other-folder.kitty-session")
         self.assertEqual(created.read_text().splitlines()[0], "cd " + str(self.root))
-        self.assertEqual(shlex.split(created.read_text().splitlines()[1]),
-                         ["launch", "--var", "host=box", "--var", "host_dir=/remote/Other Folder"])
+        self.assertEqual(
+            shlex.split(created.read_text().splitlines()[1]),
+            ["launch", "--var", "host=box", "--var", "host_dir=/remote/Other Folder"],
+        )
         before = self.calls("kitten")
-        for invalid in ("relative", "/bad\nlaunch", "/bad\x1b", "/bad\x7f", "/bad\u2028"):
-            self.assertNotEqual(self.run_script("zws", "here", invalid, ZWS_HOST="box").returncode, 0)
+        for invalid in (
+            "relative",
+            "/bad\nlaunch",
+            "/bad\x1b",
+            "/bad\x7f",
+            "/bad\u2028",
+        ):
+            self.assertNotEqual(
+                self.run_script("zws", "here", invalid, ZWS_HOST="box").returncode, 0
+            )
         self.assertEqual(self.calls("kitten"), before)
         self.assertEqual(self.calls("ssh"), [])
 
@@ -1171,7 +1616,9 @@ elif args[:1] == ["attach"]:
         folder = self.root / "folder ' quoted"
         folder.mkdir()
         file = "it's a file.py"
-        result = self.run_script("zrun", str(folder), str(self.root / "plain-shell"), "-il")
+        result = self.run_script(
+            "zrun", str(folder), str(self.root / "plain-shell"), "-il"
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls("plain-shell"), [["-il"]])
         shutil.copy(self.root / "plain-shell", self.root / "hunk")
@@ -1188,41 +1635,80 @@ elif args[:1] == ["attach"]:
         self.assertIn("-t", args)
         self.assertIn("ControlPath=/tmp/zcm-%C", args)
         self.assertEqual(args[-2], "winpc")
-        remote = subprocess.run(["/bin/sh", "-c", args[-1]], env=self.env,
-                                capture_output=True, text=True, timeout=3)
+        remote = subprocess.run(
+            ["/bin/sh", "-c", args[-1]],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         self.assertEqual(remote.returncode, 0, remote.stderr)
         self.assertEqual(self.calls("zmx"), [[file]])
         # Execute the generated remote command with a recorder, including a gone cwd.
         probe = self.root / "probe"
-        probe.write_text('#!/bin/sh\n' + 'printf "%s\\n" "$PWD" "$EDITOR" "$@"\n')
+        probe.write_text("#!/bin/sh\n" + 'printf "%s\\n" "$PWD" "$EDITOR" "$@"\n')
         probe.chmod(0o700)
-        for directory, expected in ((str(folder), str(folder)), ("/gone/folder", str(self.root))):
+        for directory, expected in (
+            (str(folder), str(folder)),
+            ("/gone/folder", str(self.root)),
+        ):
             self.run_script("zrun", directory, str(probe), file, ZWS_HOST="winpc")
-            remote = subprocess.run(["/bin/sh", "-c", self.calls("ssh")[-1][-1]],
-                                    env=self.env, capture_output=True, text=True, timeout=3)
+            remote = subprocess.run(
+                ["/bin/sh", "-c", self.calls("ssh")[-1][-1]],
+                env=self.env,
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
             self.assertEqual(remote.stdout.splitlines(), [expected, "nvim", file])
-        self.run_script("zrun", str(folder), "/opt/homebrew/bin/hunk", "diff", ZWS_HOST="winpc")
+        self.run_script(
+            "zrun", str(folder), "/opt/homebrew/bin/hunk", "diff", ZWS_HOST="winpc"
+        )
         self.assertEqual(shlex.split(self.calls("ssh")[-1][-1])[-2:], ["hunk", "diff"])
-        for code, message in (("97", "hunk is not installed on winpc"),
-                              ("255", "winpc unreachable")):
+        for code, message in (
+            ("97", "hunk is not installed on winpc"),
+            ("255", "winpc unreachable"),
+        ):
             (self.root / "ssh-codes").write_text(code)
-            result = subprocess.run([str(self.root / "zrun"), str(folder), "hunk", "diff"],
-                                    input="x", env=dict(self.env, ZWS_HOST="winpc"),
-                                    capture_output=True, text=True, timeout=3)
+            result = subprocess.run(
+                [str(self.root / "zrun"), str(folder), "hunk", "diff"],
+                input="x",
+                env=dict(self.env, ZWS_HOST="winpc"),
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
             self.assertEqual(result.stdout, message + "\n")
             self.assertEqual(result.returncode, int(code))
 
     def test_zhost_transport_quoting_validation_and_deadline(self):
         result = self.run_script("zhost", "box", "zmx", "kill", "a b", "it's")
         self.assertEqual(result.returncode, 0, result.stderr)
-        args, = self.calls("ssh")
-        self.assertEqual(args[:-1], ["-q", "-o", "ControlPath=/tmp/zcm-%C", "-o",
-                                    "ControlMaster=no", "-o", "BatchMode=yes", "-o",
-                                    "ConnectTimeout=2", "box"])
+        (args,) = self.calls("ssh")
+        self.assertEqual(
+            args[:-1],
+            [
+                "-q",
+                "-o",
+                "ControlPath=/tmp/zcm-%C",
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=2",
+                "box",
+            ],
+        )
         self.assertEqual(self.calls("timeout")[0][:2], ["2", "ssh"])
         self.assertTrue(args[-1].startswith("PATH=$PATH:$HOME/.local/bin; "))
-        remote = subprocess.run(["/bin/sh", "-c", args[-1]], env=self.env,
-                                capture_output=True, text=True, timeout=3)
+        remote = subprocess.run(
+            ["/bin/sh", "-c", args[-1]],
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
         self.assertEqual(remote.returncode, 0, remote.stderr)
         self.assertEqual(self.calls("zmx"), [["kill", "a b", "it's"]])
         before = self.calls("ssh")
@@ -1235,9 +1721,14 @@ elif args[:1] == ["attach"]:
         self.assertEqual(self.run_script("zhost", "box", "true").returncode, 23)
 
     def test_zhost_passes_streams_and_times_out_a_frozen_command(self):
-        result = subprocess.run([str(self.root / "zhost"), "box", "cat"], input="the script\n",
-                                env=dict(self.env, MODE="echo"), capture_output=True,
-                                text=True, timeout=5)
+        result = subprocess.run(
+            [str(self.root / "zhost"), "box", "cat"],
+            input="the script\n",
+            env=dict(self.env, MODE="echo"),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         self.assertEqual(result.stdout, "the script\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         started = time.monotonic()
@@ -1248,65 +1739,87 @@ elif args[:1] == ["attach"]:
     def test_picker_host_ticker_and_zmx_override(self):
         script = self.root / "zpick"
         # One real tick per picker, so a killed ticker cannot leave a child logging into the next case.
-        script.write_text(script.read_text().replace("while sleep 2; do", "for tick in 1; do"))
+        script.write_text(
+            script.read_text().replace("while sleep 2; do", "for tick in 1; do")
+        )
         fzf = self.root / "fzf"
-        fzf.write_text(fzf.read_text().replace('if mode == "interrupt": time.sleep(30)',
-                                             'if mode == "interrupt": time.sleep(.8)'))
+        fzf.write_text(
+            fzf.read_text().replace(
+                'if mode == "interrupt": time.sleep(30)',
+                'if mode == "interrupt": time.sleep(.8)',
+            )
+        )
         for extra, remote in (((), True), (("--zmx",), False)):
             (self.root / "calls").unlink(missing_ok=True)
             self.run_script("zpick", *extra, MODE="interrupt", ZWS_HOST="box")
             if remote:
                 self.assertTrue(self.calls("ssh"))
-                self.assertTrue(all(a[-1].endswith("zmx ls ") for a in self.calls("ssh")))
+                self.assertTrue(
+                    all(a[-1].endswith("zmx ls ") for a in self.calls("ssh"))
+                )
                 self.assertEqual(self.calls("zmx"), [])
             else:
                 self.assertTrue(self.calls("zmx"))
                 self.assertEqual(self.calls("ssh"), [])
 
     def test_picker_host_actions_never_touch_local_zmx(self):
-        result = self.run_script("zpick", "--preview", "det", "s", "s", "10", ZWS_HOST="box")
+        result = self.run_script(
+            "zpick", "--preview", "det", "s", "s", "10", ZWS_HOST="box"
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("zmx history s --vt", self.calls("ssh")[-1][-1])
         rows = self.root / "rows"
         rows.write_text("det\ts\ts\t/remote\t0\tshown\n")
-        self.run_script("zpick", "--kill", str(rows), ZWS_HOST="box",
-                        ZPICK_VIEW=str(self.root / "view"))
+        self.run_script(
+            "zpick",
+            "--kill",
+            str(rows),
+            ZWS_HOST="box",
+            ZPICK_VIEW=str(self.root / "view"),
+        )
         self.assertIn("zmx kill s", self.calls("ssh")[-1][-1])
         self.assertEqual(self.calls("zmx"), [])
         result = self.run_script("zpick", "1", ZWS_HOST="box", MODE="attach-host")
         self.assertEqual(result.returncode, 0, result.stderr)
-        launch, = [a for a in self.calls("kitten") if "launch" in a]
+        (launch,) = [a for a in self.calls("kitten") if "launch" in a]
         self.assertNotIn("--cwd", launch)
         self.assertIn("holder=remote", launch)
 
     def test_picker_uses_active_theme_colors(self):
         result = self.run_script("zpick", "1")
         self.assertEqual(result.returncode, 0, result.stderr)
-        args, = self.calls("fzf")
-        self.assertIn("fg:-1,bg:-1,hl:#aabbcc,hl+:#aabbcc,fg+:-1:bold,bg+:#123456,gutter:-1,border:#aabbcc,label:#aabbcc:bold", args)
+        (args,) = self.calls("fzf")
+        self.assertIn(
+            "fg:-1,bg:-1,hl:#aabbcc,hl+:#aabbcc,fg+:-1:bold,bg+:#123456,gutter:-1,border:#aabbcc,label:#aabbcc:bold",
+            args,
+        )
 
     def test_picker_zmx_mode_prints_the_session_and_never_calls_kitty(self):
-        for mode, printed in (("pick:0|||logs", "logs"),             # enter on a row
-                              ("pick:1|newbox||", "newbox"),         # typed name, no match
-                              ("pick:0|dot|ctrl-n|dotfiles", "dot"),  # ctrl-n: the typed name
-                              ("pick:130|||", None)):                # esc
+        for mode, printed in (
+            ("pick:0|||logs", "logs"),  # enter on a row
+            ("pick:1|newbox||", "newbox"),  # typed name, no match
+            ("pick:0|dot|ctrl-n|dotfiles", "dot"),  # ctrl-n: the typed name
+            ("pick:130|||", None),
+        ):  # esc
             with self.subTest(mode=mode):
                 (self.root / "calls").unlink(missing_ok=True)
                 result = self.run_script("zpick", "--zmx", MODE=mode)
                 self.assertEqual(result.returncode, 0 if printed else 1, result.stderr)
                 self.assertEqual(result.stdout, printed + "\n" if printed else "")
                 self.assertEqual(self.calls("kitten"), [])
-                args, = self.calls("fzf")
+                (args,) = self.calls("fzf")
                 self.assertIn("--print-query", args)
                 self.assertNotIn("ctrl-s", " ".join(args))
-                self.assertTrue(any(a.startswith("ctrl-t:") for a in args))  # all <-> detached, as in kitty
+                self.assertTrue(
+                    any(a.startswith("ctrl-t:") for a in args)
+                )  # all <-> detached, as in kitty
 
     def test_picker_keeps_its_list_current(self):
         # a ticker reloads the list over fzf's socket; the cursor stays on its row by kind and target
         for extra in ((), ("--zmx",)):
             (self.root / "calls").unlink(missing_ok=True)
             self.run_script("zpick", *extra, MODE="pick:130|||")
-            args, = self.calls("fzf")
+            (args,) = self.calls("fzf")
             self.assertIn("--track", args)
             self.assertEqual(args[args.index("--id-nth") + 1], "1,2")
             sock = Path(args[args.index("--listen") + 1])
@@ -1318,35 +1831,69 @@ elif args[:1] == ["attach"]:
         # whose remote zmx-pick owns the key. ssh runs in kitty's pane or inside its zmx session.
         # A pane of a host workspace is ours although it runs ssh: its remote zmx has the key off.
         def ls(fg, holder, host):
-            return json.dumps([{"is_focused": True, "tabs": [{"is_focused": True, "windows": [{
-                "id": 7, "is_focused": True, "user_vars": {"holder": holder, **({"host": host} if host else {})},
-                "foreground_processes": [{"pid": 1, "cmdline": fg}]}]}]}])
+            return json.dumps(
+                [
+                    {
+                        "is_focused": True,
+                        "tabs": [
+                            {
+                                "is_focused": True,
+                                "windows": [
+                                    {
+                                        "id": 7,
+                                        "is_focused": True,
+                                        "user_vars": {
+                                            "holder": holder,
+                                            **({"host": host} if host else {}),
+                                        },
+                                        "foreground_processes": [
+                                            {"pid": 1, "cmdline": fg}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            )
+
         zmx = ["/opt/homebrew/bin/zmx", "attach", "old-1"]
-        for fg, holder, ps, host, sent in ((["ssh", "-t", "box"], "", "", "", True),
-                                           (zmx, "old-1", "123 456 -zsh\n456 456 ssh\n", "", True),
-                                           (zmx, "old-1", "123 456 -zsh\n456 456 nvim\n", "", False),
-                                           (["ssh", "-tt", "box", "zmx attach old-1"], "old-1", "", "box", False),
-                                           (["/bin/zsh"], "", "", "", False)):
+        for fg, holder, ps, host, sent in (
+            (["ssh", "-t", "box"], "", "", "", True),
+            (zmx, "old-1", "123 456 -zsh\n456 456 ssh\n", "", True),
+            (zmx, "old-1", "123 456 -zsh\n456 456 nvim\n", "", False),
+            (["ssh", "-tt", "box", "zmx attach old-1"], "old-1", "", "box", False),
+            (["/bin/zsh"], "", "", "", False),
+        ):
             with self.subTest(fg=fg, ps=ps, host=host):
                 (self.root / "calls").unlink(missing_ok=True)
                 # kitty does not fill in @active-kitty-window-id for remote_control_script (0.50.0,
                 # boss.py remote_control_script); zgoto finds the focused window itself
-                result = self.run_script("zgoto", "@active-kitty-window-id", "--key",
-                                         KITTY_LS=ls(fg, holder, host), PS_OUT=ps)
+                result = self.run_script(
+                    "zgoto",
+                    "@active-kitty-window-id",
+                    "--key",
+                    KITTY_LS=ls(fg, holder, host),
+                    PS_OUT=ps,
+                )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 kitten = [a for a in self.calls("kitten") if "ls" not in a]
                 self.assertEqual(kitten[0][:2] == ["@", "send-key"], sent, kitten)
                 if sent:
-                    self.assertEqual(kitten, [["@", "send-key", "--match", "id:7", "ctrl+backslash"]])
+                    self.assertEqual(
+                        kitten, [["@", "send-key", "--match", "id:7", "ctrl+backslash"]]
+                    )
                 else:
                     self.assertEqual(kitten[0][:2], ["@", "launch"])
-                    self.assertEqual(kitten[0][-1], "7")  # zpick starts on the pane it came from
+                    self.assertEqual(
+                        kitten[0][-1], "7"
+                    )  # zpick starts on the pane it came from
 
     def test_picker_fills_the_terminal(self):
         for extra in ((), ("--zmx",)):
             (self.root / "calls").unlink(missing_ok=True)
             self.run_script("zpick", *extra, MODE="pick:130|||")
-            args, = self.calls("fzf")
+            (args,) = self.calls("fzf")
             self.assertNotIn("--margin", args)
             self.assertTrue(any(a.startswith("right,55%") for a in args), args)
 
@@ -1361,12 +1908,17 @@ elif args[:1] == ["attach"]:
     def test_picker_interrupt_cleans_only_owned_directory(self):
         neighbor = self.root / "zpick-view.neighbor"
         neighbor.write_text("keep")
-        proc = subprocess.Popen([str(self.root / "zpick"), "1"], env=dict(self.env, MODE="interrupt"),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        proc = subprocess.Popen(
+            [str(self.root / "zpick"), "1"],
+            env=dict(self.env, MODE="interrupt"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
         try:
             deadline = time.monotonic() + 5
             while not (self.root / "view").exists() and time.monotonic() < deadline:
-                time.sleep(.02)
+                time.sleep(0.02)
             self.assertTrue((self.root / "view").exists())
             view = Path((self.root / "view").read_text())
             self.assertEqual(view.parent.stat().st_mode & 0o777, 0o700)
@@ -1382,8 +1934,18 @@ elif args[:1] == ["attach"]:
     def test_preview_timeout_does_not_own_or_clean_scratch(self):
         view = self.root / "helper-view"
         view.write_text("keep")
-        result = self.run_script("zpick", "--preview", "det", "old-1", "old-1", "10",
-                                 MODE="hang", ZPICK_VIEW=str(view))
+        result = self.run_script(
+            "zpick",
+            "--preview",
+            "det",
+            "old-1",
+            "old-1",
+            "10",
+            MODE="hang",
+            ZPICK_VIEW=str(view),
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(view.read_text(), "keep")
-        self.assertEqual(self.calls("timeout"), [["3", "zmx", "history", "old-1", "--vt"]])
+        self.assertEqual(
+            self.calls("timeout"), [["3", "zmx", "history", "old-1", "--vt"]]
+        )

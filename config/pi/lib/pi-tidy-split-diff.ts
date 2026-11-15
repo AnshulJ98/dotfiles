@@ -17,7 +17,11 @@
  * background), so it follows whatever theme pi is running.
  */
 
-import { getLanguageFromPath, highlightCode, keyHint } from "@earendil-works/pi-coding-agent";
+import {
+  getLanguageFromPath,
+  highlightCode,
+  keyHint,
+} from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 // Local: pi-tidy keeps this in theme-access.ts.
 interface ThemeLike {
@@ -139,9 +143,11 @@ function buildRows(parsed: readonly ParsedLine[]): Row[] {
       continue;
     }
     const removed: ParsedLine[] = [];
-    while (i < parsed.length && parsed[i]!.prefix === "-") removed.push(parsed[i++]!);
+    while (i < parsed.length && parsed[i]!.prefix === "-")
+      removed.push(parsed[i++]!);
     const added: ParsedLine[] = [];
-    while (i < parsed.length && parsed[i]!.prefix === "+") added.push(parsed[i++]!);
+    while (i < parsed.length && parsed[i]!.prefix === "+")
+      added.push(parsed[i++]!);
     if (removed.length === 0 && added.length === 0) {
       i++; // unreachable in practice; never spin on a line we cannot classify
       continue;
@@ -153,8 +159,12 @@ function buildRows(parsed: readonly ParsedLine[]): Row[] {
       const right = added[k];
       rows.push({
         kind: "row",
-        ...(left ? { left: { num: left.num, text: left.text, changed: true } } : {}),
-        ...(right ? { right: { num: right.num, text: right.text, changed: true } } : {}),
+        ...(left
+          ? { left: { num: left.num, text: left.text, changed: true } }
+          : {}),
+        ...(right
+          ? { right: { num: right.num, text: right.text, changed: true } }
+          : {}),
       });
     }
   }
@@ -164,7 +174,11 @@ function buildRows(parsed: readonly ParsedLine[]): Row[] {
 // ── colour ──────────────────────────────────────────────────────────────────
 
 /** The SGR prefix a theme slot expands to, e.g. `\x1b[38;2;166;227;161m`. */
-function sgr(theme: ThemeLike, slot: string, kind: "fg" | "bg" = "fg"): string | undefined {
+function sgr(
+  theme: ThemeLike,
+  slot: string,
+  kind: "fg" | "bg" = "fg",
+): string | undefined {
   try {
     const ansi = kind === "bg" ? theme.bg?.(slot, "x") : theme.fg(slot, "x");
     if (!ansi) return undefined;
@@ -212,7 +226,10 @@ function xterm256(index: number): Rgb {
 /** Read a colour out of an SGR sequence (truecolour, 256, or the basic 16). */
 function sgrRgb(sequence: string | undefined): Rgb | null {
   if (!sequence) return null;
-  const params = sequence.slice(2, -1).split(";").map((part) => Number.parseInt(part, 10));
+  const params = sequence
+    .slice(2, -1)
+    .split(";")
+    .map((part) => Number.parseInt(part, 10));
   const at = params.indexOf(38) >= 0 ? params.indexOf(38) : params.indexOf(48);
   if (at >= 0) {
     if (params[at + 1] === 2) {
@@ -220,7 +237,8 @@ function sgrRgb(sequence: string | undefined): Rgb | null {
       if (r === undefined || g === undefined || b === undefined) return null;
       return { r, g, b };
     }
-    if (params[at + 1] === 5 && params[at + 2] !== undefined) return xterm256(params[at + 2]!);
+    if (params[at + 1] === 5 && params[at + 2] !== undefined)
+      return xterm256(params[at + 2]!);
     return null;
   }
   const code = params[0];
@@ -281,7 +299,9 @@ function buildPalette(theme: ThemeLike): Palette {
   const contextFg = sgr(theme, "toolDiffContext");
   // The row tint has no theme slot, so mix the diff colour into the box
   // background the way an editor would: 14% for the row, 30% for the word.
-  const base = sgrRgb(sgr(theme, "toolSuccessBg", "bg")) ?? sgrRgb(sgr(theme, "toolPendingBg", "bg"));
+  const base =
+    sgrRgb(sgr(theme, "toolSuccessBg", "bg")) ??
+    sgrRgb(sgr(theme, "toolPendingBg", "bg"));
   const added = sgrRgb(addedFg);
   const removed = sgrRgb(removedFg);
   const tint = (color: Rgb | null, hue: number): string | undefined =>
@@ -305,7 +325,9 @@ function buildPalette(theme: ThemeLike): Palette {
 /** Drop control characters (a diff of a file containing ESC must not reach the terminal). */
 function sanitize(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").replace(/\t/g, TAB);
+  return text
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ")
+    .replace(/\t/g, TAB);
 }
 
 function highlighter(filePath: string | undefined): (line: string) => string {
@@ -333,12 +355,19 @@ function highlighter(filePath: string | undefined): (line: string) => string {
 }
 
 /** Longest common prefix and suffix, in code units. */
-function commonEdges(left: string, right: string): { prefix: number; suffix: number } {
+function commonEdges(
+  left: string,
+  right: string,
+): { prefix: number; suffix: number } {
   const max = Math.min(left.length, right.length);
   let prefix = 0;
   while (prefix < max && left[prefix] === right[prefix]) prefix++;
   let suffix = 0;
-  while (suffix < max - prefix && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]) suffix++;
+  while (
+    suffix < max - prefix &&
+    left[left.length - 1 - suffix] === right[right.length - 1 - suffix]
+  )
+    suffix++;
   return { prefix, suffix };
 }
 
@@ -347,7 +376,13 @@ function commonEdges(left: string, right: string): { prefix: number; suffix: num
  * fill. Boundaries are visible-character indices, so escape sequences inside
  * the highlighted text do not shift them.
  */
-function emphasize(rendered: string, start: number, end: number, fill: string, restore: string | undefined): string {
+function emphasize(
+  rendered: string,
+  start: number,
+  end: number,
+  fill: string,
+  restore: string | undefined,
+): string {
   if (end <= start) return rendered;
   const back = restore ?? "\x1b[49m";
   let out = "";
@@ -399,7 +434,8 @@ function layout(width: number, rows: readonly Row[]): Layout | null {
   let maxNumber = 0;
   for (const row of rows) {
     for (const cell of [row.left, row.right]) {
-      if (cell?.num !== null && cell?.num !== undefined) maxNumber = Math.max(maxNumber, cell.num);
+      if (cell?.num !== null && cell?.num !== undefined)
+        maxNumber = Math.max(maxNumber, cell.num);
     }
   }
   // "old" / "new" sit over the number column, so it is at least three wide.
@@ -412,7 +448,11 @@ function layout(width: number, rows: readonly Row[]): Layout | null {
   return { numWidth, pane, content };
 }
 
-function numberFg(changed: boolean, kind: "add" | "remove" | "context", palette: Palette): string {
+function numberFg(
+  changed: boolean,
+  kind: "add" | "remove" | "context",
+  palette: Palette,
+): string {
   if (!changed) return palette.contextFg;
   return kind === "add" ? palette.addedFg : palette.removedFg;
 }
@@ -432,9 +472,19 @@ function renderCell(
   }
   const changed = cell.changed;
   const fg = numberFg(changed, kind, palette);
-  const fill = kind === "add" ? palette.addedBg : kind === "remove" ? palette.removedBg : undefined;
-  const emphFill = kind === "add" ? palette.addedEmphasis : palette.removedEmphasis;
-  const bar = changed ? (kind === "add" ? palette.addedBar : palette.removedBar) : palette.contextFg;
+  const fill =
+    kind === "add"
+      ? palette.addedBg
+      : kind === "remove"
+        ? palette.removedBg
+        : undefined;
+  const emphFill =
+    kind === "add" ? palette.addedEmphasis : palette.removedEmphasis;
+  const bar = changed
+    ? kind === "add"
+      ? palette.addedBar
+      : palette.removedBar
+    : palette.contextFg;
 
   const raw = sanitize(cell.text);
   let body = highlight(raw);
@@ -465,10 +515,16 @@ function renderCell(
  * glance says how lopsided the edit is. Both halves keep at least one cell
  * when both sides are non-zero, so "mostly additions" still shows the red.
  */
-function renderSummary(add: number, remove: number, width: number, palette: Palette): string {
+function renderSummary(
+  add: number,
+  remove: number,
+  width: number,
+  palette: Palette,
+): string {
   const prefix = `${palette.contextFg}↳ diff\x1b[39m ${palette.addedFg}+${add}\x1b[39m ${palette.removedFg}-${remove}\x1b[39m`;
   const room = width - PAD * 2 - visibleWidth(`↳ diff +${add} -${remove} []`);
-  if (add + remove === 0 || room < 2) return pad(`${' '.repeat(PAD)}${prefix}${' '.repeat(PAD)}`, width);
+  if (add + remove === 0 || room < 2)
+    return pad(`${" ".repeat(PAD)}${prefix}${" ".repeat(PAD)}`, width);
   // One cell per changed line (capped), but never so short the ratio is a guess.
   const bar = Math.min(room, 32, Math.max(8, add + remove));
   let added = Math.round((bar * add) / (add + remove));
@@ -476,8 +532,11 @@ function renderSummary(add: number, remove: number, width: number, palette: Pale
   if (add === 0) added = 0;
   if (remove === 0) added = bar;
   const removed = bar - added;
-  const graph = `${palette.contextFg}[${palette.addedFg}${'+'.repeat(added)}${palette.removedFg}${'-'.repeat(removed)}${palette.contextFg}]`;
-  return pad(`${' '.repeat(PAD)}${prefix} ${graph}\x1b[39m${' '.repeat(PAD)}`, width);
+  const graph = `${palette.contextFg}[${palette.addedFg}${"+".repeat(added)}${palette.removedFg}${"-".repeat(removed)}${palette.contextFg}]`;
+  return pad(
+    `${" ".repeat(PAD)}${prefix} ${graph}\x1b[39m${" ".repeat(PAD)}`,
+    width,
+  );
 }
 
 export function renderSplitDiff(input: SplitDiffInput): SplitDiffOutput | null {
@@ -497,7 +556,8 @@ function build(input: SplitDiffInput): SplitDiffOutput | null {
   for (const raw of diff.split("\n")) {
     const line = parseLine(raw);
     if (line) parsed.push(line);
-    else if (raw.trim()) parsed.push({ prefix: " ", num: null, text: raw, skip: false });
+    else if (raw.trim())
+      parsed.push({ prefix: " ", num: null, text: raw, skip: false });
   }
   if (parsed.length === 0) return null;
   const rows = buildRows(parsed);
@@ -523,10 +583,16 @@ function build(input: SplitDiffInput): SplitDiffOutput | null {
   const window = clip(rows, input.maxLines);
   // A zero budget is "just the summary": column headers over nothing read as a
   // rendering bug rather than a setting.
-  if (window.rows.length > 0) lines.push(pad(" ".repeat(PAD) + header + " ".repeat(PAD), width));
+  if (window.rows.length > 0)
+    lines.push(pad(" ".repeat(PAD) + header + " ".repeat(PAD), width));
 
   if (window.above > 0) {
-    lines.push(pad(`${" ".repeat(PAD)}${label(`… ${window.above} line${window.above === 1 ? "" : "s"} above`)}`, width));
+    lines.push(
+      pad(
+        `${" ".repeat(PAD)}${label(`… ${window.above} line${window.above === 1 ? "" : "s"} above`)}`,
+        width,
+      ),
+    );
   }
 
   for (const row of window.rows) {
@@ -534,7 +600,10 @@ function build(input: SplitDiffInput): SplitDiffOutput | null {
       lines.push(pad(`${" ".repeat(PAD)}${label("…")}`, width));
       continue;
     }
-    const spans = row.left && row.right ? commonEdges(row.left.text, row.right.text) : undefined;
+    const spans =
+      row.left && row.right
+        ? commonEdges(row.left.text, row.right.text)
+        : undefined;
     const leftEmphasis =
       row.left && row.right && row.left.changed
         ? {
@@ -595,13 +664,20 @@ function clip(
   rows: readonly Row[],
   maxLines: number | undefined,
 ): { rows: readonly Row[]; above: number; below: number } {
-  const budget = maxLines === undefined ? rows.length : Math.max(0, Math.floor(maxLines));
+  const budget =
+    maxLines === undefined ? rows.length : Math.max(0, Math.floor(maxLines));
   if (budget >= rows.length) return { rows, above: 0, below: 0 };
   if (budget === 0) return { rows: [], above: 0, below: rows.length };
-  const first = rows.findIndex((row) => row.left?.changed || row.right?.changed);
+  const first = rows.findIndex(
+    (row) => row.left?.changed || row.right?.changed,
+  );
   const anchor = first < 0 ? 0 : first;
   const lead = Math.min(Math.floor(budget / 3), budget);
   const start = Math.max(0, Math.min(anchor - lead, rows.length - budget));
   const end = start + budget;
-  return { rows: rows.slice(start, end), above: start, below: rows.length - end };
+  return {
+    rows: rows.slice(start, end),
+    above: start,
+    below: rows.length - end,
+  };
 }

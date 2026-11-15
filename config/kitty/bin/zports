@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import json
 import ipaddress
+import json
 import os
 import re
 import signal
@@ -13,7 +13,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
 
 # Sent on stdin over the existing SSH master; no files are installed on the box.
 SCAN = r"""
@@ -69,9 +68,25 @@ if __name__ == "__main__":
 def detect(host, ssh_port):
     try:
         result = subprocess.run(
-            ["ssh", "-q", "-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
-             "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", host, "python3 - --ports-scan"],
-            input=SCAN, capture_output=True, text=True, timeout=2)
+            [
+                "ssh",
+                "-q",
+                "-o",
+                "ControlPath=/tmp/zcm-%C",
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=2",
+                host,
+                "python3 - --ports-scan",
+            ],
+            input=SCAN,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
         if result.returncode:
             return None
         found = {}
@@ -84,8 +99,13 @@ def detect(host, ssh_port):
                 continue
             if not (address.is_loopback or address.is_unspecified):
                 continue
-            target = ("127.0.0.1" if address.is_unspecified else
-                      f"[{address}]" if address.version == 6 else str(address))
+            target = (
+                "127.0.0.1"
+                if address.is_unspecified
+                else f"[{address}]"
+                if address.version == 6
+                else str(address)
+            )
             previous = found.get(remote)
             if previous is None or target == "127.0.0.1":
                 name = item.get("program") or (previous and previous["program"])
@@ -93,14 +113,22 @@ def detect(host, ssh_port):
             elif not previous["program"]:
                 previous["program"] = item.get("program")
         return found
-    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError,
-            argparse.ArgumentTypeError):
+    except (
+        OSError,
+        subprocess.TimeoutExpired,
+        ValueError,
+        KeyError,
+        TypeError,
+        argparse.ArgumentTypeError,
+    ):
         return None  # A partial/failed scan must never look like an empty box.
 
 
 def configured_port(host):
     try:
-        result = subprocess.run(["ssh", "-G", host], capture_output=True, text=True, timeout=2)
+        result = subprocess.run(
+            ["ssh", "-G", host], capture_output=True, text=True, timeout=2
+        )
         if result.returncode == 0:
             match = re.search(r"^port ([0-9]+)$", result.stdout, re.MULTILINE)
             if match:
@@ -111,14 +139,22 @@ def configured_port(host):
 
 
 def notify(host, added):
-    script = ('on run argv\n'
-              'display notification (item 2 of argv) with title (item 1 of argv)\nend run')
+    script = (
+        "on run argv\n"
+        "display notification (item 2 of argv) with title (item 1 of argv)\nend run"
+    )
     message = ", ".join(f"{remote}→{item['local']}" for remote, item in added)
     try:
-        result = subprocess.run(["osascript", "-e", script, host, message],
-                                capture_output=True, text=True, timeout=2)
+        result = subprocess.run(
+            ["osascript", "-e", script, host, message],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
         if result.returncode:
-            print(f"zports: notification failed: {result.stderr.strip()}", file=sys.stderr)
+            print(
+                f"zports: notification failed: {result.stderr.strip()}", file=sys.stderr
+            )
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"zports: notification failed: {error}", file=sys.stderr)
 
@@ -130,12 +166,23 @@ def port(value):
 
 
 def ssh(host, operation, item=None, remote=None):
-    args = ["ssh", "-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
-            "-o", "BatchMode=yes", "-O", operation]
+    args = [
+        "ssh",
+        "-o",
+        "ControlPath=/tmp/zcm-%C",
+        "-o",
+        "ControlMaster=no",
+        "-o",
+        "BatchMode=yes",
+        "-O",
+        operation,
+    ]
     if item is not None:
         args += ["-L", f"127.0.0.1:{item['local']}:{item['target']}:{remote}"]
     try:
-        result = subprocess.run([*args, host], capture_output=True, text=True, timeout=2)
+        result = subprocess.run(
+            [*args, host], capture_output=True, text=True, timeout=2
+        )
         return result.returncode, result.stdout + result.stderr
     except (OSError, subprocess.TimeoutExpired) as error:
         return 255, str(error)
@@ -148,7 +195,10 @@ def free(local):
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(("127.0.0.1", local))
         # macOS permits the reusable bind above alongside a wildcard listener.
-        for family, address in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        for family, address in (
+            (socket.AF_INET, "127.0.0.1"),
+            (socket.AF_INET6, "::1"),
+        ):
             try:
                 with socket.socket(family) as probe:
                     probe.settimeout(0.2)
@@ -172,9 +222,15 @@ def alive(pid):
 
 
 def engine(directory, host, owner):
-    record = directory / "ports.json"  # sidebar contract: forwards keyed by box port, plus stopped ports
+    record = (
+        directory / "ports.json"
+    )  # sidebar contract: forwards keyed by box port, plus stopped ports
     address = directory / ".ports.sock"
-    state = json.loads(record.read_text()) if record.exists() else dict(forwards={}, stopped=[])
+    state = (
+        json.loads(record.read_text())
+        if record.exists()
+        else dict(forwards={}, stopped=[])
+    )
     for item in state["forwards"].values():
         item.setdefault("automatic", False)
         item.setdefault("program", None)
@@ -207,11 +263,15 @@ def engine(directory, host, owner):
                     if free(item["local"]):
                         return
                     time.sleep(0.05)
-            raise RuntimeError("cancel failed: " + (message.strip() or "local port is still busy"))
+            raise RuntimeError(
+                "cancel failed: " + (message.strip() or "local port is still busy")
+            )
 
     def reconcile(found):
         for remote, item in list(state["forwards"].items()):
-            if item["automatic"] and (remote not in found or item["target"] != found[remote]["target"]):
+            if item["automatic"] and (
+                remote not in found or item["target"] != found[remote]["target"]
+            ):
                 try:
                     cancel(remote, item)
                 except RuntimeError as error:
@@ -230,7 +290,8 @@ def engine(directory, host, owner):
                     state["waiting"].append(int(remote))
                     continue
                 state["forwards"][remote] = dict(
-                    local=None, active=False, automatic=True, **found[remote])
+                    local=None, active=False, automatic=True, **found[remote]
+                )
                 pending.add(remote)
                 count += 1
 
@@ -238,7 +299,9 @@ def engine(directory, host, owner):
         nonlocal master, next_sync, next_scan, ssh_port
         found = None
         code, message = ssh(host, "check")
-        match = re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
+        match = (
+            re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
+        )
         pid = match.group(1) if match else None
         if pid != master:
             master = pid
@@ -249,7 +312,9 @@ def engine(directory, host, owner):
                 ssh_port = configured_port(host)
             found = detect(host, ssh_port) if master and ssh_port is not None else None
             if found is not None:
-                targets.update({remote: item["target"] for remote, item in found.items()})
+                targets.update(
+                    {remote: item["target"] for remote, item in found.items()}
+                )
                 reconcile(found)
             next_scan = time.monotonic() + 2
         if master:
@@ -269,8 +334,15 @@ def engine(directory, host, owner):
                             break  # connection failure, not a local collision; retry next poll
                     local += 1
         save()
-        announced = [(remote, state["forwards"][remote]) for remote in sorted(pending, key=int)
-                     if state["forwards"][remote]["active"]] if found is not None else []
+        announced = (
+            [
+                (remote, state["forwards"][remote])
+                for remote in sorted(pending, key=int)
+                if state["forwards"][remote]["active"]
+            ]
+            if found is not None
+            else []
+        )
         if announced:
             notify(host, announced)
             pending.difference_update(remote for remote, _ in announced)
@@ -285,7 +357,9 @@ def engine(directory, host, owner):
                 destination = targets.get(remote, "127.0.0.1")
             if command not in ("forward", "stop"):
                 raise ValueError("unknown command")
-            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*|\[[0-9a-fA-F:.]+\]", destination):
+            if not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._-]*|\[[0-9a-fA-F:.]+\]", destination
+            ):
                 raise ValueError("invalid target host")
             item = state["forwards"].get(remote)
             if item and (command == "stop" or item["target"] != destination):
@@ -295,7 +369,9 @@ def engine(directory, host, owner):
                 state["stopped"] = sorted(set(state["stopped"]) | {int(remote)})
             else:
                 item = state["forwards"].setdefault(
-                    remote, dict(local=None, target=destination, active=False, program=None))
+                    remote,
+                    dict(local=None, target=destination, active=False, program=None),
+                )
                 item["automatic"] = False
                 state["stopped"] = [p for p in state["stopped"] if p != int(remote)]
             pending.discard(remote)
@@ -328,8 +404,14 @@ def engine(directory, host, owner):
                     try:
                         with connection.makefile("r") as stream:
                             reply = request(json.loads(stream.readline(4096)))
-                    except (ValueError, TypeError, OSError, RuntimeError, KeyError,
-                            argparse.ArgumentTypeError) as error:
+                    except (
+                        ValueError,
+                        TypeError,
+                        OSError,
+                        RuntimeError,
+                        KeyError,
+                        argparse.ArgumentTypeError,
+                    ) as error:
                         reply = dict(error=str(error))
                     try:
                         connection.sendall((json.dumps(reply) + "\n").encode())
@@ -360,7 +442,9 @@ def main():
     host = os.environ.get("ZWS_HOST", "")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", host):
         parser.error("a valid ZWS_HOST is required (no forwarding on Mac)")
-    directory = Path(os.environ.get("ZWS_DIR") or Path.home() / ".local/state/kitty/hosts" / host)
+    directory = Path(
+        os.environ.get("ZWS_DIR") or Path.home() / ".local/state/kitty/hosts" / host
+    )
     if args.command == "run":
         if args.owner <= 0:
             parser.error("owner must be a positive pid")
