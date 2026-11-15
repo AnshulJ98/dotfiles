@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# One bounded host command; ControlPath must match bin/zshell.
+set -u
+export PATH=/opt/homebrew/bin:$PATH
+[ "$#" -ge 2 ] || exit 2
+host=$1; shift
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 2
+remote='PATH=$PATH:$HOME/.local/bin; '
+remote+=$(printf '%q ' "$@")
+exec timeout 2 ssh -q -o ControlPath=/tmp/zcm-%C -o ControlMaster=no \
+  -o BatchMode=yes -o ConnectTimeout=2 "$host" "$remote"

@@ -31,7 +31,13 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
         _current = ''
     if tab.is_active:
         _current = tab.active_session_name
-    end = draw_tab_with_powerline(draw_data, screen, tab, before, max_tab_length, index, is_last, extra_data)
+    tab_data = draw_data
+    if zkitty.instance_host():
+        screen.cursor.fg = as_rgb(0)
+        screen.cursor.bg = as_rgb(int(draw_data.tab_fg(tab)))
+        tab_data = draw_data._replace(active_fg=0, active_bg=draw_data.active_fg,
+                                      inactive_fg=0, inactive_bg=draw_data.inactive_fg)
+    end = draw_tab_with_powerline(tab_data, screen, tab, before, max_tab_length, index, is_last, extra_data)
     if is_last and not extra_data.for_layout:  # a layout pass measures tabs; the right end is not one
         view = zcore.view(zkitty.snapshot(get_boss()))
         text = f' {zcore.status(view, _current, clock())} '

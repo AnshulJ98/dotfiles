@@ -1,14 +1,17 @@
 #!/bin/bash
 # kitty's shell: run every pane's shell inside a zmx session so closing kitty only detaches.
 # The watcher (workspaces.py) supplies the session name over this pane's terminal: the saved
-# holder=<name>, or a new folder-based one. Without an answer or without zmx, run plain zsh.
+# holder=<name>, or a new folder-based one. Only Mac panes fall back to plain zsh.
 # In a workspace bound to an ssh host the answer adds the host and a remote folder, and the
-# zmx session runs there over one shared ssh connection.
+# zmx session runs there over one shared ssh connection. Lost links retry without a local shell;
+# the pane keeps its screen until zmx repaints, and waits for a key after two minutes offline.
 export PATH=/opt/homebrew/bin:$PATH
 ZMX=/opt/homebrew/bin/zmx
 SHELL_BIN=/bin/zsh
-[ -x "$ZMX" ] || exec "$SHELL_BIN" -il
+[ -n "${ZWS_HOST:-}" ] || [ -x "$ZMX" ] || exec "$SHELL_BIN" -il
 
+tries=0
+while :; do
 name= pi_session= host= dir=
 if [ -t 0 ] && [ -t 2 ] &&
    IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
@@ -19,26 +22,114 @@ if [ -t 0 ] && [ -t 2 ] &&
   [ -z "$e" ] || [ "$e" = - ] || printf -v host '%b' "${e//%/\\x}"
   [ -z "$f" ] || [ "$f" = - ] || printf -v dir '%b' "${f//%/\\x}"
 fi
-if [ -z "$name" ]; then
+if [ -n "${ZWS_HOST:-}" ]; then
+  [ -n "$name" ] && [ -n "$host" ] && break
+  tries=$((tries + 1))
+  if [ "$tries" -ge 3 ]; then
+    echo "zshell: the workspace watcher did not answer; enter retries" >&2
+    IFS= read -r -s -n 1 key || exit 1
+    tries=0
+  fi
+elif [ -z "$name" ]; then
   echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
   exec "$SHELL_BIN" -il
+else
+  break
 fi
+done
 
 if [ -n "$host" ]; then
   # Any pane can set user vars, so a host that ssh would read as an option is refused.
-  case $host in
-    [A-Za-z0-9]*) ;;
-    *) echo "zshell: refusing ssh host '$host'; starting plain shell" >&2; exec "$SHELL_BIN" -il ;;
-  esac
-  remote=
-  [ -z "$dir" ] || remote="cd $(printf %q "$dir") 2>/dev/null; "
+  if ! [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    if [ -n "${ZWS_HOST:-}" ]; then
+      echo "zshell: refusing ssh host '$host'; press a key to close" >&2
+      IFS= read -r -s -n 1 key
+      exit 1
+    fi
+    echo "zshell: refusing ssh host '$host'; starting plain shell" >&2
+    exec "$SHELL_BIN" -il
+  fi
+  remote='z=$(command -v zmx || echo ~/.local/bin/zmx); [ -x "$z" ] || exit 97; '
+  [ -z "$dir" ] || remote+="cd $(printf %q "$dir") 2>/dev/null; "
   remote+='for d in /usr/lib/kitty/shell-integration/zsh ~/.local/kitty.app/lib/kitty/shell-integration/zsh; do [ -d "$d" ] && export ZDOTDIR=$d && break; done; '
-  remote+="ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec \"\$(command -v zmx || echo ~/.local/bin/zmx)\" attach $(printf %q "$name")"
-  # %C keeps the control socket path under macOS's 103-byte limit. The keepalive ends a dead link
-  # in 45 s: ssh -O check cannot see one, and a new pane over it would hang. -q: sshd allows 10
-  # sessions a connection; past that ssh opens its own and would print two notices in the pane.
-  exec ssh -tt -q -o ControlMaster=auto -o ControlPath=/tmp/zcm-%C -o ControlPersist=600 \
-    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$host" "$remote"
+  # Bash cannot retain a decoded NUL; do not turn a truncated path into a resume.
+  case $d in *%00*) pi_session= ;; esac
+  if [ -n "$pi_session" ]; then
+    # Decide anew on the host on every retry. Single quotes also keep control bytes inert;
+    # python rejects those paths before opening them (the host needs no new dotfiles).
+    quoted_pi=${pi_session//\'/\'\\\'\'}
+    remote+="p='$quoted_pi'; n=$(printf %q "$name"); "
+    remote+='if existing=$("$z" ls --short 2>/dev/null) &&
+      ! printf "%s\n" "$existing" | grep -Fx -- "$n" >/dev/null &&
+      [ -f "$p" ] && cwd=$(python3 -c '\''
+import json,sys,unicodedata
+p=sys.argv[1]
+if any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029" for c in p):
+    sys.exit(1)
+try:
+    with open(p) as f: cwd=json.loads(f.readline()).get("cwd","")
+except (OSError, ValueError):
+    cwd=""
+print(cwd if isinstance(cwd,str) else "")
+'\'' "$p" 2>/dev/null); then
+      ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec "$z" attach "$n" zsh -ilc '\''
+cd "$1" 2>/dev/null || cd "$HOME"; pi --session "$2"; exec "$0" -il
+'\'' zsh "${cwd:-$HOME}" "$p"
+    fi; '
+  fi
+  remote+="ZMX_NO_DETACH_KEY=1 KITTY_SHELL_INTEGRATION=enabled exec \"\$z\" attach $(printf %q "$name")"
+  # %C stays under macOS's socket path limit; a dead link ends after 15 s x (2 + 1) = 45 s.
+  # -q hides ssh's notices when sshd's session limit forces an unshared connection.
+  opts=(-o ControlPath=/tmp/zcm-%C -o ControlPersist=600 -o ConnectTimeout=5
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
+  shared_connection() {
+    ssh -q "${opts[@]}" -O check "$host" >/dev/null 2>&1 && return 0
+    local lock="/tmp/zcm-lock-$host" until_lock=$((SECONDS + 10)) status
+    while ! mkdir "$lock" 2>/dev/null; do
+      if [ "$SECONDS" -ge "$until_lock" ]; then
+        rmdir "$lock" 2>/dev/null
+        mkdir "$lock" 2>/dev/null || return 255
+        break
+      fi
+      sleep 1
+    done
+    # A sibling may have opened it while we waited. Never open over a live master:
+    # -Nf on an existing connection starts a login shell, not a new master.
+    if ssh -q "${opts[@]}" -O check "$host" >/dev/null 2>&1; then
+      status=0
+    else
+      ssh -q "${opts[@]}" -o ControlMaster=auto -Nf "$host" >/dev/null 2>&1
+      status=$?
+    fi
+    rmdir "$lock" 2>/dev/null
+    return "$status"
+  }
+  outage=0
+  while :; do
+    if shared_connection; then
+      outage=0
+      ssh -tt -q "${opts[@]}" -o ControlMaster=no "$host" "$remote"
+      status=$?
+      if [ "$status" = 97 ]; then
+        printf '[%s has no zmx (PATH, ~/.local/bin); enter retries]\r\n' "$host"
+        IFS= read -r -s -n 1 key || exit 1
+        continue
+      fi
+      [ "$status" = 255 ] || exit "$status"
+    fi
+    if [ "$outage" = 0 ]; then
+      printf '\r\n[%s: no link, retrying]\r\n' "$host"
+      outage=1
+      deadline=$((SECONDS + 120))
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      printf '[%s unreachable, enter retries]\r\n' "$host"
+      IFS= read -r -s -n 1 key || exit 1
+      deadline=$((SECONDS + 120))
+    else
+      sleep 2
+    fi
+  done
 fi
 
 if ! existing=$(timeout 3 "$ZMX" ls --short 2>/dev/null); then

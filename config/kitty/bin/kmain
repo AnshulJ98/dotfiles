@@ -1,9 +1,10 @@
 #!/usr/bin/python3
-# AeroSpace cmd-enter: focus the one workspace kitty, or start it on the main workspace.
+# kmain [HOST]: focus or start one workspace kitty; the ssh host comes from the instance.
 import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import stat
 import subprocess
@@ -12,11 +13,14 @@ import time
 
 # kitty and kitten come from PATH (Homebrew links both, wherever it puts the app); no install folder is named.
 os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ["PATH"]
-sock = "/tmp/kitty-main"
-main = Path.home() / ".local/state/kitty/workspaces/main.kitty-session"
+host = sys.argv[1] if len(sys.argv) > 1 else ""
+if len(sys.argv) > 2 or (len(sys.argv) > 1 and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", host)):
+    print("kmain: invalid host", file=sys.stderr)
+    sys.exit(2)
+state = Path.home() / ".local/state/kitty"
 
 
-def window_id():
+def window_id(sock):
     try:
         result = subprocess.run(["kitten", "@", "--to", "unix:" + sock, "ls"],
                                 capture_output=True, text=True, timeout=1)
@@ -26,7 +30,7 @@ def window_id():
         return None
 
 
-def dead_socket():
+def dead_socket(sock):
     # kitty 0.50.0 binds without unlinking, so the socket a crashed kitty left makes the next
     # one start without remote control ("Invalid listen_on=..., ignoring").
     try:
@@ -42,7 +46,7 @@ def dead_socket():
         return False
 
 
-def focus(wid):
+def focus(sock, wid):
     try:
         if subprocess.run(["aerospace", "focus", "--window-id", str(wid)]).returncode == 0:
             return
@@ -52,28 +56,48 @@ def focus(wid):
     subprocess.run(["kitten", "@", "--to", "unix:" + sock, "focus-window"], check=True, timeout=2)
 
 
-def start():
+def start(host, sock, directory, main, background):
     args = ["--listen-on", "unix:" + sock, "--session", str(main)]
+    if host:
+        args += ["--title", host]
+    env = dict(os.environ, ZWS_HOST=host, ZWS_DIR=str(directory)) if host else dict(os.environ)
+    app_env = ["--env", "ZWS_HOST=" + host, "--env", "ZWS_DIR=" + str(directory)] if host else []
     # macOS finds the app by name in any folder; elsewhere, or when it cannot, run kitty from PATH.
-    if sys.platform == "darwin" and subprocess.run(["open", "-n", "-a", "kitty", "--args", *args],
-                                                   timeout=5).returncode == 0:
+    if sys.platform == "darwin" and subprocess.run(
+            ["open", "-n", *(["-g"] if background else []), "-a", "kitty", *app_env, "--args", *args],
+            timeout=5).returncode == 0:
         return
     subprocess.Popen(["kitty", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
 
 
-# Keep the lock inode: unlinking it would let another starter bypass the lock.
-try:
+def attached(directory):
+    try:
+        record = (directory / ".attached").read_text()
+        return record == "attached" or abs(float(record) - float((state / ".main-quit").read_text())) <= 5
+    except (OSError, ValueError):
+        return False
+
+
+def ensure(host, background=False):
+    sock = "/tmp/kitty-" + host if host else "/tmp/kitty-main"
+    directory = state / ("hosts/" + host if host else "workspaces")
+    main = directory / "main.kitty-session"
+    # Keep the lock inode: unlinking it would let another starter bypass the lock.
     with open(sock + ".lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        wid = window_id()
+        if host:
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / ".attached").write_text("attached")
+        wid = window_id(sock)
         if wid:
-            focus(wid)
+            if not background:
+                focus(sock, wid)
         elif subprocess.run(["pgrep", "-f", "--", "--listen-on unix:" + sock],
                             stdout=subprocess.DEVNULL, timeout=2).returncode == 0:
             pass  # still starting; never remove a potentially active socket
         else:
-            if dead_socket():
+            if dead_socket(sock):
                 os.unlink(sock)
             main.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -81,12 +105,22 @@ try:
                     session.write("cd ~\nlaunch\n")
             except FileExistsError:
                 pass
-            start()
+            start(host, sock, directory, main, background)
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
-                if window_id():
+                if window_id(sock):
                     break
                 time.sleep(0.1)
+            return True
+    return False
+
+
+try:
+    if ensure(host) and not host:
+        for directory in sorted((state / "hosts").glob("*")):
+            if (directory.is_dir() and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", directory.name)
+                    and attached(directory)):
+                ensure(directory.name, background=True)
 finally:
     # zmx 1.0.1 writes a crash report on every session exit (zmx #294).
     reports = Path.home() / "Library/Logs/DiagnosticReports"

@@ -1,0 +1,37 @@
+#!/bin/bash
+# zrun HOST_FOLDER LOCAL_PROGRAM [ARG...]; no local fallback in a host instance.
+directory=$1
+shift
+[ "$#" -gt 0 ] || exit 2
+host=${ZWS_HOST:-}
+[ -n "$host" ] || exec "$@"
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 2
+
+# Homebrew paths belong only to the Mac. The box resolves these via its PATH.
+program=$1
+shift
+case ${program##*/} in
+  hunk) program=hunk ;;
+  nvim) program=nvim ;;
+  zsh) program=zsh ;;
+esac
+quote() {
+  local value=$1
+  value=${value//\'/\'\"\'\"\'}
+  printf "'%s'" "$value"
+}
+remote='export PATH=/usr/local/bin:$HOME/.local/bin:$PATH EDITOR=nvim; '
+remote+="cd -- $(quote "$directory") 2>/dev/null || cd; "
+remote+="command -v $(quote "$program") >/dev/null 2>&1 || exit 97; "
+remote+="exec $(quote "$program")"
+for arg in "$@"; do remote+=" $(quote "$arg")"; done
+ssh -t -q -o ControlPath=/tmp/zcm-%C -o ControlMaster=no -o ConnectTimeout=5 \
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$host" "$remote"
+status=$?
+case $status in
+  97) printf '%s is not installed on %s\n' "${program##*/}" "$host" ;;
+  255) printf '%s unreachable\n' "$host" ;;
+  *) exit "$status" ;;
+esac
+IFS= read -r -s -n 1 key
+exit "$status"

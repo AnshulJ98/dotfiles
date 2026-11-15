@@ -53,7 +53,228 @@ def load(state_dir: str, boss: Boss | None = None) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location("workspaces", KITTY_DIR / "workspaces.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    state = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(state.cleanup)
+    module.STATE = state.name
     return module
+
+
+class LifecycleTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        env = patch.dict(os.environ, ZWS_HOST="box")
+        env.start()
+        self.addCleanup(env.stop)
+        self.window = Window("dev", 1)
+        self.boss = Boss([self.window], self.window, "launch\n")
+        self.directory = self.root / "hosts/box"
+        self.directory.mkdir(parents=True)
+        self.record = self.directory / ".attached"
+        self.record.write_text("attached")
+        self.module = load(str(self.directory), self.boss)
+        self.module.STATE = str(self.root)
+        self.module._owner = True
+
+    def test_whole_os_window_close_detaches_even_when_kitty_already_emptied_it(self):
+        windows = [self.window, Window("dev", 1), Window("other", 1), Window("other", 1)]
+        windows[1].user_vars["role"] = windows[3].user_vars["role"] = "sidebar"
+        self.boss.all_windows = []
+        self.boss.os_window_map = {}
+        for window in windows:
+            self.module.on_close(self.boss, window, {})
+            self.assertFalse(self.record.exists())
+
+    def test_one_by_one_closes_only_detach_at_last_pane(self):
+        windows = [self.window, Window("other", 1), Window("other", 1)]
+        for index, window in enumerate(windows):
+            self.boss.all_windows = windows[index:]
+            self.module.on_close(self.boss, window, {})
+            self.assertEqual(self.record.exists(), index < 2)
+
+    def test_permission_to_signal_main_is_not_required_to_keep_host_alive(self):
+        from unittest.mock import patch
+        m = self.module
+        m._seen_main = True
+        (self.root / ".main-pid").write_text("123")
+        with patch.object(m.os, "kill", side_effect=PermissionError) as kill:
+            m._lifecycle()
+            kill.assert_called_once_with(123, 0)
+        self.assertFalse(m._quitting)
+        self.assertEqual(self.record.read_text(), "attached")
+
+    def test_user_close_only_detaches_on_confirmed_quit_or_last_live_window(self):
+        m = self.module
+        m.on_quit(self.boss, None, {"confirmed": False})
+        m.on_quit(self.boss, None, {"confirmed": True, "aborted": True})
+        self.assertFalse(m._quitting)
+        self.assertEqual(self.record.read_text(), "attached")
+        m.on_close(self.boss, self.window, {})
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
+        self.boss.all_windows = []  # Outside SIGTERM is indistinguishable from an OS window close.
+        m.on_close(self.boss, self.window, {})
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
+        self.boss.all_windows = [self.window]
+        m.on_quit(self.boss, None, {"confirmed": True})
+        self.assertNotEqual(self.record.read_text(), "attached")
+        m.on_close(self.boss, self.window, {})
+        self.assertTrue(self.record.exists())
+
+    def test_host_closed_before_restore_is_still_detached(self):
+        m = self.module
+        m._owner = False
+        m.on_close(self.boss, self.window, {})
+        self.assertFalse(self.record.exists())
+        self.record.write_text("attached")
+        m.on_quit(self.boss, None, {"confirmed": True})
+        self.assertNotEqual(self.record.read_text(), "attached")
+
+    def test_nonlast_and_mac_close_do_not_change_attachment(self):
+        from unittest.mock import patch
+        self.boss.all_windows.append(Window("other", 1))
+        self.module.on_close(self.boss, self.window, {})
+        self.assertEqual(self.record.read_text(), "attached")
+        with patch.dict(os.environ, ZWS_HOST=""):
+            self.boss.all_windows = [self.window]
+            self.module.on_close(self.boss, self.window, {})
+            self.module.on_quit(self.boss, None, {"confirmed": True})
+        self.assertEqual(self.record.read_text(), "attached")
+
+    def test_follow_waits_for_live_main_then_saves_and_terminates_without_detaching(self):
+        from unittest.mock import patch
+        m = self.module
+        pidfile = self.root / ".main-pid"
+        with patch.object(m.os, "kill") as kill:
+            m._lifecycle()
+            kill.assert_not_called()
+            pidfile.write_text("123")
+            kill.side_effect = ProcessLookupError
+            m._lifecycle()  # stale record, never seen
+            self.assertFalse(m._quitting)
+            kill.side_effect = None
+            m._lifecycle()
+            pidfile.write_text("456")  # replacement is alive
+            m._lifecycle()
+            self.assertFalse(m._quitting)
+            self.assertNotIn((os.getpid(), 15), [c.args for c in kill.call_args_list])
+            kill.side_effect = lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()) if sig == 0 else None
+            m._lifecycle()
+            self.assertTrue(m._quitting)
+            kill.assert_called_with(os.getpid(), 15)
+        self.assertEqual(self.record.read_text(), "attached")
+        self.assertEqual((self.directory / ".open").read_text(), "dev\n")
+        self.boss.all_windows = []
+        m.on_close(self.boss, self.window, {})
+        m._save()
+        self.assertEqual((self.directory / ".open").read_text(), "dev\n")
+        self.assertEqual(self.record.read_text(), "attached")
+
+    def test_only_workspace_main_publishes_and_host_checks_every_two_seconds(self):
+        from unittest.mock import patch
+        m = self.module
+        with patch.object(m, "add_timer") as timer, patch.object(m.os, "kill") as kill:
+            m._restore()
+            self.assertIn((2.0, True), [c.args[1:] for c in timer.call_args_list])
+            kill.assert_not_called()
+        with patch.dict(os.environ, ZWS_HOST=""), patch.object(m.os, "kill") as kill:
+            m._owner = False
+            self.boss.all_windows = []
+            m._restore()
+            self.assertFalse((self.root / ".main-pid").exists())
+            self.boss.all_windows = [self.window]
+            with patch.object(m, "add_timer") as timer:
+                m._restore()
+                self.assertIn((2.0, True), [c.args[1:] for c in timer.call_args_list])
+            self.assertEqual((self.root / ".main-pid").read_text(), str(os.getpid()))
+            kill.assert_not_called()
+
+    def test_quit_order_is_recorded_for_restore_in_both_orders(self):
+        from unittest.mock import patch
+        for host_time, main_time in ((100, 104), (104, 100), (100, 106)):
+            with self.subTest(host_time=host_time, main_time=main_time):
+                host = load(str(self.directory), self.boss)
+                mac_dir = self.root / "workspaces"
+                mac_dir.mkdir(exist_ok=True)
+                mac = load(str(mac_dir), self.boss)
+                host.STATE = mac.STATE = str(self.root)
+                host._owner = mac._owner = True
+                events = sorted([(host_time, "box", host), (main_time, "", mac)], key=lambda e: e[0])
+                for when, name, module in events:
+                    with patch.dict(os.environ, ZWS_HOST=name), patch.object(module.time, "time", return_value=when):
+                        module.on_quit(self.boss, None, {"confirmed": True})
+                self.assertEqual(float(self.record.read_text()), host_time)
+                self.assertEqual(float((self.root / ".main-quit").read_text()), main_time)
+
+
+class HostLinkTests(unittest.TestCase):
+    def test_url_hints_use_same_host_hook_and_mac_keeps_default(self):
+        from unittest.mock import Mock, patch
+        with tempfile.TemporaryDirectory() as directory:
+            m = load(directory)
+            w = Window("dev", 1)
+            boss = types.SimpleNamespace(window_id_map={7: w})
+            original = Mock()
+            data = dict(customize_processing="zkitty.py", type="url",
+                        match=["file:///host/a.py", "https://example.org"],
+                        groupdicts=[{}, {}])
+            hints = types.SimpleNamespace(handle_result=original)
+            with patch.dict(sys.modules, {"kittens.hints.main": hints}), \
+                    patch.object(m.zkitty, "open_url", side_effect=[True, False]) as opener:
+                with patch.dict(os.environ, ZWS_HOST="winpc"):
+                    m.zkitty.handle_result([], data, 7, boss, [])
+                self.assertEqual(opener.call_count, 2)
+                forwarded = original.call_args.args[1]
+                self.assertEqual(forwarded["match"], ["https://example.org"])
+                self.assertEqual(forwarded["groupdicts"], [{}])
+                self.assertEqual(forwarded["customize_processing"], "")
+                original.reset_mock()
+                opener.reset_mock()
+                with patch.dict(os.environ, ZWS_HOST=""):
+                    m.zkitty.handle_result([], data, 7, boss, [])
+                opener.assert_not_called()
+                self.assertEqual(original.call_args.args[1]["match"], data["match"])
+                self.assertEqual(data["customize_processing"], "zkitty.py")
+
+    def test_host_hook_routes_files_and_paths_without_mac_fallback(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST="winpc"):
+            w = Window("dev", 1)
+            w.id = 7
+            w.screen = types.SimpleNamespace(last_reported_cwd=b"kitty-shell-cwd://box/home/x")
+            boss = Boss([w], w, "")
+            m = load(directory, boss)
+            m.on_resize(boss, w, {})
+            self.assertIs(w.open_url_handler, m.zkitty.open_url)
+            for url, args in (
+                ("file://AnshulJoshi/home/x/a%20b.py#12", ("+12", "--", "/home/x/a b.py")),
+                ("file:///home/x/a.md", ("--", "/home/x/a.md")),
+                ("src/a.ts:7", ("+7", "--", "src/a.ts")),
+                ("a.py:7", ("+7", "--", "a.py")),
+                ("src/a.ts", ("--", "src/a.ts")),
+            ):
+                boss.calls.clear()
+                self.assertTrue(w.open_url_handler(boss, w, url, 0, "/mac/wrong"))
+                self.assertEqual(boss.calls, [(
+                    "launch", "--type=overlay", "--match=id:7", "/bin/bash",
+                    str(KITTY_DIR / "bin/zrun"), "/home/x", "nvim", *args)])
+            boss.calls.clear()
+            self.assertTrue(w.open_url_handler(boss, w, "file:///host/a.png#12", 1, ""))
+            self.assertEqual(len(boss.calls), 1)
+            self.assertNotIn("nvim", boss.calls[0])
+            self.assertIn("/host/a.png lives on winpc", boss.calls[0])
+            boss.calls.clear()
+            self.assertFalse(w.open_url_handler(boss, w, "https://example.org/a.md", 0, ""))
+            self.assertFalse(w.open_url_handler(boss, w, "http://example.org", 0, ""))
+            with patch.dict(os.environ, ZWS_HOST=""):
+                self.assertFalse(w.open_url_handler(boss, w, "file:///host/a.md", 0, ""))
+                mac = Window("dev", 2)
+                m.on_resize(boss, mac, {})
+                self.assertFalse(hasattr(mac, "open_url_handler"))
+            self.assertEqual(boss.calls, [])
 
 
 class SavingTests(unittest.TestCase):
@@ -114,6 +335,32 @@ class SavingTests(unittest.TestCase):
             a.created_in_session_name = "b"
             module._save()  # a pane moved to another workspace is labelled again
             self.assertEqual(labels(), [("a-1", "space=62")])
+
+    def test_host_label_uses_zhost_and_keeps_retry_and_bookkeeping(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST="box"):
+            a = Window("my space", 1)
+            a.id, a.user_vars["holder"] = 5, "a-1"
+            boss = Boss([a], a, "")
+            module = load(directory, boss)
+            module._label(boss)
+            call, = boss.calls
+            self.assertIn("zlabel=retry", call[5])
+            self.assertEqual(call[-7:], (str(KITTY_DIR / "bin/zhost"), "box", "zmx", "set",
+                                         "a-1", "space=6d79207370616365", "5"))
+            module._label(boss)
+            self.assertEqual(len(boss.calls), 1)
+            fake = Path(directory) / "zhost"
+            fake.write_text("#!/bin/sh\nexit 1\n")
+            fake.chmod(0o700)
+            kitten = Path(directory) / "kitten"
+            kitten.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            kitten.chmod(0o700)
+            result = subprocess.run(["sh", "-c", call[5], "sh", str(fake), *call[-6:]],
+                                    env=dict(os.environ, PATH=directory + ":/usr/bin:/bin"),
+                                    capture_output=True, text=True, timeout=4)
+            self.assertEqual(result.stdout.splitlines(), ["@", "set-user-vars", "--match",
+                                                         "id:5", "zlabel=retry"])
 
     def test_a_label_zmx_refused_is_retried_a_few_times(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -179,6 +426,45 @@ class SavingTests(unittest.TestCase):
 
 
 class IntentWatcherTests(unittest.TestCase):
+    def test_unset_worktree_report_does_nothing_and_logs_nothing(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(module, "add_timer") as timer:
+                for value in (None, ""):
+                    module.on_set_user_var(boss, Window("dev", 1),
+                                           {"key": "zworktree", "value": value})
+                    self.assertEqual(boss.calls, [])
+                    self.assertEqual(list(Path(directory).iterdir()), [])
+                    timer.assert_not_called()
+
+    def test_worktree_report_is_cleared_and_forwarded_only_on_host(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            window = Window("dev", 1)
+            window.id = 7
+            folder = "/remote/worktree space ' quoted"
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(module, "add_timer") as timer:
+                module.on_set_user_var(boss, window, {"key": "zworktree", "value": folder})
+                self.assertEqual(boss.calls, [
+                    ("set-user-vars", "--match=id:7", "zworktree"),
+                    ("launch", "--type=background", "--allow-remote-control",
+                     module.zkitty.ZWS, "here", folder)])
+                timer.assert_not_called()
+                for invalid in ("", "relative", "L3JlbW90ZQ==", "/bad\nlaunch", "/bad\x00",
+                                "/bad\x1b", "/bad\x7f", "/bad\u0085", "/bad\u2028"):
+                    boss.calls.clear()
+                    module.on_set_user_var(boss, window, {"key": "zworktree", "value": invalid})
+                    self.assertFalse(any(c[0] in ("launch", "action") for c in boss.calls))
+                    timer.assert_not_called()
+            with patch.dict(os.environ, ZWS_HOST=""):
+                boss.calls.clear()
+                module.on_set_user_var(boss, window, {"key": "zworktree", "value": folder})
+                self.assertFalse(any(c[0] in ("launch", "action") for c in boss.calls))
+
     def test_pane_query_answers_and_empty_callback_is_ignored(self):
         from types import SimpleNamespace as NS
         from unittest.mock import patch
@@ -510,6 +796,43 @@ class NamesTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
+    def test_real_kitty_open_actions_and_hint_processor_contract(self):
+        code = f"""
+import os, sys
+sys.dont_write_bytecode = True
+from pathlib import Path
+from types import SimpleNamespace as NS
+from kitty.open_actions import actions_for_url
+from kitty.fast_data_types import set_options
+from kitty.options.types import defaults
+set_options(defaults)
+from kittens.hints.main import load_custom_processor
+processor = load_custom_processor({str(KITTY_DIR / 'zkitty.py')!r})
+import zkitty
+text = Path({str(KITTY_DIR / 'open-actions.conf')!r}).read_text()
+for url, expected in [
+    ('src/a.ts:7', ('sh', '-c', 'exec nvim "+$' + '{{1##*:}}" -- "$' + '{{1%:*}}"', '_', 'src/a.ts:7')),
+    ('file:///a.py#12', ('nvim', '+12', '--', '/a.py')),
+    ('file:///a.ts', ('nvim', '--', '/a.ts')),
+    ('file:///a.csv', ('nvim', '--', '/a.csv')),
+]:
+    action, = actions_for_url(url, text)
+    assert action.func == 'launch', action
+    assert action.args[:8] == ('--type=overlay', '--cwd=current', '/bin/bash', '-c',
+        'exec /bin/bash ~/.config/kitty/bin/zrun "$@"', '_', '.', expected[0]), action
+    assert action.args[7:] == expected, action
+calls = []
+window = NS(id=7, screen=NS(last_reported_cwd=b'kitty-shell-cwd://box/host/folder'))
+boss = NS(window_id_map={{7: window}}, call_remote_control=lambda w, args: calls.append(args))
+os.environ['ZWS_HOST'] = 'winpc'
+processor['handle_result']([], dict(customize_processing='zkitty.py', type='url', programs=[],
+    match=['file://AnshulJoshi/host/a.py#12'], groupdicts=[{{}}]), 7, boss, [])
+assert calls == [('launch', '--type=overlay', '--match=id:7', '/bin/bash', zkitty.ZRUN,
+                  '/host/folder', 'nvim', '+12', '--', '/host/a.py')], calls
+"""
+        result = subprocess.run([KITTY, "+runpy", code], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     @unittest.skipUnless(os.path.exists(KITTY), "kitty is not installed")
     def test_kitty_still_has_the_internals_workspaces_py_uses(self):
         code = (f"import sys; sys.dont_write_bytecode = True; sys.path.insert(0, {str(KITTY_DIR)!r}); "

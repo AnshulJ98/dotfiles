@@ -1,14 +1,23 @@
 """Duck-typed kitty adapter: snapshots and intents without starting processes."""
+import mimetypes
 import os
+import re
+import sys
+from urllib.parse import unquote, urlsplit
 import time
 import traceback
 import uuid
 from functools import wraps
 
+# The hints helper can load this file in a fresh interpreter, without the watcher.
+FOLDER = os.path.dirname(os.path.abspath(__file__))
+if FOLDER not in sys.path:
+    sys.path.insert(0, FOLDER)
 import zcore
 
 SIDEBAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zside')
 ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zws')
+ZRUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'zrun')
 WIDTH = '24'
 
 
@@ -45,30 +54,27 @@ def is_sidebar(window) -> bool:
 
 
 def cwd(window) -> str:
-    return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
+    reported = zcore.cwd_of(window.screen.last_reported_cwd, '')
+    return reported if instance_host() else reported or window.cwd_of_child or ''
 
 
-def hosted(boss, session) -> list:
-    """The panes of a workspace bound to an ssh host (zws new --host)."""
-    return [w for w in (boss.all_windows if session else ())
-            if w.created_in_session_name == session and w.user_vars.get('host')]
+def instance_host() -> str:
+    return os.environ.get('ZWS_HOST', '')
 
 
 def attach(boss, window) -> None:
     saved = window.user_vars.get('holder', '')
-    # kitty gives a split no session, so the pane's own tab also supplies host peers.
-    tab = next((list(t) for t in getattr(boss, 'all_tabs', ()) if any(w is window for w in t)), [])
-    peers = []
-    for w in hosted(boss, getattr(window, 'created_in_session_name', None)) + [
-            w for w in tab if w.user_vars.get('host')]:
-        if w is not window and not any(w is p for p in peers):
-            peers.append(w)
-    # The pane focused before this one: the new pane opens in its remote folder.
-    active = max(peers, key=lambda w: w.last_focused_at, default=None)
-    host = window.user_vars.get('host', '') or (active.user_vars['host'] if active else '')
+    host = instance_host() if window.user_vars.get('role') != 'sidebar' else ''
     directory = ''
     if host and not saved:
-        directory = cwd(active) if active else window.user_vars.get('host_dir', '')
+        # kitty gives a split no session, so its own tab also supplies remote peers.
+        session = getattr(window, 'created_in_session_name', None)
+        tab = next((list(t) for t in getattr(boss, 'all_tabs', ()) if any(w is window for w in t)), [])
+        peers = [w for w in list(getattr(boss, 'all_windows', ())) + tab
+                 if w is not window and w.user_vars.get('role') != 'sidebar'
+                 and ((session and w.created_in_session_name == session) or w in tab)]
+        active = max(peers, key=lambda w: w.last_focused_at, default=None)
+        directory = (cwd(active) if active else '') or window.user_vars.get('host_dir', '')
         name = zcore.holder(directory or '~', '~', uuid.uuid4().hex[:12])
     else:
         name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
@@ -104,13 +110,78 @@ def dock(boss, tab_id, name) -> None:
         *(('--var', f'ws_name={named}') if named else ()), SIDEBAR))
 
 
+def launch_program(boss, window, kind, command, options=()):
+    host = instance_host()
+    boss.call_remote_control(None, (
+        'launch', '--type=' + kind, f'--match=id:{window.id}', *options,
+        *(('--cwd=current',) if not host else ()),
+        '/bin/bash', ZRUN, cwd(window), *command))
+
+
+def open_url(boss, window, url, hyperlink_id, reported_cwd):
+    """Intercept before kitty's remote_file kitten; never inspect a host file locally."""
+    if not instance_host():
+        return False
+    path, line = '', ''
+    try:
+        match = re.fullmatch(r'([^:]+):(\d+)', url)
+        parsed = urlsplit(url)
+        if match:
+            path, line = match.groups()
+        elif parsed.scheme == 'file':
+            path = unquote(parsed.path)
+            line = parsed.fragment if parsed.fragment.isdecimal() else ''
+        elif not parsed.scheme:
+            path = unquote(parsed.path)
+        else:
+            return False
+        ext = os.path.splitext(path)[1].lower().lstrip('.')
+        # Keep the same extension exceptions as open-actions (notably .ts).
+        extensions = ('ts tsx mts cts js mjs cjs jsx json jsonc md py sh zsh bash lua toml '
+                      'yaml yml conf go rs rb java kt swift c h cpp hpp css scss html sql '
+                      'txt ini xml tf env lock').split()
+        mime = mimetypes.guess_type(path)[0] or ''
+        if ext in extensions or mime.startswith('text/'):
+            launch_program(boss, window, 'overlay',
+                           ('nvim', *(('+' + line,) if line else ()), '--', path))
+        else:
+            message = path.translate(str.maketrans({c: '?' for c in path if ord(c) < 32}))
+            boss.call_remote_control(None, (
+                'launch', '--type=overlay', f'--match=id:{window.id}', '/bin/sh', '-c',
+                'printf "%s\\n" "$1"; read -r key', '_',
+                message + ' lives on ' + instance_host()))
+    except Exception:
+        log(traceback.format_exc())
+    return True  # failure must not fall through to a Mac opener
+
+
+def handle_result(args, data, target_window_id, boss, extra_cli_args):
+    # URL hints call Boss.open_url directly, bypassing Window.open_url_handler.
+    from kittens.hints.main import handle_result as default_handler
+    remaining = dict(data, customize_processing='')
+    window = boss.window_id_map.get(target_window_id)
+    if instance_host():
+        pairs = [(url, group) for url, group in zip(data['match'], data['groupdicts'])
+                 if url and window and not open_url(boss, window, url, 0, '')]
+        remaining['match'] = [p[0] for p in pairs]
+        remaining['groupdicts'] = [p[1] for p in pairs]
+    default_handler(args, remaining, target_window_id, boss)
+
+
 def run(boss, words) -> list[tuple]:
     active = boss.active_window
     current = (active.created_in_session_name or '') if active else ''
+    if words in (['hunk'], ['shell']):
+        if active:
+            hunk = words == ['hunk']
+            launch_program(boss, active, 'tab',
+                           ('/opt/homebrew/bin/hunk', 'diff') if hunk else ('/bin/zsh', '-il'),
+                           ('--tab-title', 'hunk', '--add-to-session=!') if hunk else ())
+        return []
     if words in (['tab'], ['tab', 'here']):
         # A host workspace's folders are remote; attach() hands them to the new pane.
         directory = (cwd(active) if active and words == ['tab', 'here']
-                     and not hosted(boss, current) else '')
+                     and not instance_host() else '')
         boss.call_remote_control(active, (
             'launch', '--type=tab', *(('--cwd', directory) if directory else ()),
             *(('--add-to-session', current) if current else ())))
@@ -120,7 +191,7 @@ def run(boss, words) -> list[tuple]:
     if words and words[0] == 'new':
         if words not in (['new'], ['new', 'ask'], ['new', 'window']):
             return []
-        directory = (cwd(active) if active else '') or os.path.expanduser('~')
+        directory = (cwd(active) if active else '') or ('' if instance_host() else os.path.expanduser('~'))
         flag = ('--' + words[1],) if len(words) == 2 else ()
         boss.call_remote_control(active, (
             'launch', '--type=background', '--allow-remote-control', ZWS, 'new', *flag, directory))

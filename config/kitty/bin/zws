@@ -2,7 +2,7 @@
 # Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
 #   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
-#     name, --window opens it in an OS window of its own; --host H before CWD runs its panes on ssh host H, CWD there)
+#     name, --window opens it in an OS window of its own; ZWS_HOST comes from the instance, CWD is remote there)
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -30,7 +30,7 @@ create() { # name cwd [shown-name] [window] [host] [remote-dir]
 import os, re, shlex, sys, tempfile, unicodedata
 directory, base, cwd, shown, window, host, remote = sys.argv[1:]
 if (base in (".", "..") or not re.fullmatch(r"[a-zA-Z0-9._-]+", base)
-        or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._@-]*", host))
+        or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", host))
         or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
                for value in (base, cwd, shown, remote) for c in value)):
     sys.exit("zws: invalid workspace name, host or control character")
@@ -66,11 +66,10 @@ PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
   new)
-    shift; mode= host=
+    shift; mode= host=${ZWS_HOST:-}
     while :; do
       case ${1:-} in
         --ask|--window) mode=$1; shift ;;
-        --host) [ -n "${2:-}" ] || { echo "zws: --host needs a name" >&2; exit 2; }; host=$2; shift 2 ;;
         *) break ;;
       esac
     done
@@ -83,7 +82,35 @@ case ${1:-} in
       *) create "$name" "$cwd" '' '' "$host" "$remote" ;;
     esac ;;
   create) create "$2" "$3" "${4:-}" '' "${5:-}" "${6:-}" ;;
-  here) # a workspace on $PWD (wt runs this in the worktree): the one already there, or a new one
+  here) # a workspace on $PWD locally, or on the folder reported by host wt
+    if [ -n "${ZWS_HOST:-}" ]; then
+      remote=${2:-$PWD}
+      found=$(/usr/bin/python3 - "$DIR" "$remote" <<'PY'
+import glob, os, shlex, sys, unicodedata
+directory, remote = sys.argv[1:]
+if not remote.startswith("/") or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
+                                      for c in remote):
+    sys.exit("zws: invalid host folder")
+for path in sorted(glob.glob(os.path.join(directory, "*.kitty-session"))):
+    try:
+        with open(path) as stream:
+            for line in stream:
+                if not line.startswith("launch "):
+                    continue
+                args = shlex.split(line)
+                values = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--var"]
+                values += [arg[6:] for arg in args if arg.startswith("--var=")]
+                if "host_dir=" + remote in values:
+                    print(path)
+                    sys.exit(0)
+    except (OSError, ValueError):
+        continue
+PY
+      ) || exit
+      if [ -n "$found" ]; then kitten @ action goto_session "$found"
+      else create "$(unique "$remote")" "$HOME" '' '' "$ZWS_HOST" "$remote"; fi
+      exit
+    fi
     for f in "$DIR"/*.kitty-session; do
       [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && { kitten @ action goto_session "$f"; exit; }
     done
@@ -91,7 +118,20 @@ case ${1:-} in
   rename) # empty answer: back to the folder's name
     overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2" ;;
   close) kitten @ action close_session "$2" ;;
-  worktree) # wt makes or picks the worktree and runs 'zws here' inside it
+  worktree) # wt makes or picks the worktree and reports it to this instance
+    if [ -n "${ZWS_HOST:-}" ]; then
+      case $2 in
+        new) script='read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; "$1" "$2" wt switch -c "$b"' ;;
+        open) script='"$1" "$2" wt switch' ;;
+        *) exit 2 ;;
+      esac
+      # Only standard host tools: the box may still have an older dotfiles checkout.
+      report='printf "\033]1337;SetUserVar=zworktree=%s\007" "$(printf "%s" "$PWD" | base64 | tr -d "\n")"'
+      # zrun already pauses on a missing program or an unreachable host.
+      pause='|| { case $? in 97|255) ;; *) echo; read -n1 -rsp "wt failed; press a key";; esac; }'
+      overlay "$HOME" "$script"' --no-cd -x sh -- -c "$3" '"$pause" "$(dirname "$self")/zrun" "$3" "$report"
+      exit
+    fi
     case $2 in
       new) overlay "$3" 'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; wt switch -c "$b" --no-cd -x "$0" -- here '"$PAUSE" ;;
       open) overlay "$3" 'wt switch --no-cd -x "$0" -- here '"$PAUSE" ;;
