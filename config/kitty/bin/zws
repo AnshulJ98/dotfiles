@@ -2,7 +2,7 @@
 # Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
 #   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
-#     name, --window opens it in an OS window of its own; --host H before CWD runs its panes on ssh host H, CWD there)
+#     name, --window opens it in an OS window of its own; ZWS_HOST comes from the instance, CWD is remote there)
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -30,7 +30,7 @@ create() { # name cwd [shown-name] [window] [host] [remote-dir]
 import os, re, shlex, sys, tempfile, unicodedata
 directory, base, cwd, shown, window, host, remote = sys.argv[1:]
 if (base in (".", "..") or not re.fullmatch(r"[a-zA-Z0-9._-]+", base)
-        or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._@-]*", host))
+        or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", host))
         or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
                for value in (base, cwd, shown, remote) for c in value)):
     sys.exit("zws: invalid workspace name, host or control character")
@@ -66,11 +66,10 @@ PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
   new)
-    shift; mode= host=
+    shift; mode= host=${ZWS_HOST:-}
     while :; do
       case ${1:-} in
         --ask|--window) mode=$1; shift ;;
-        --host) [ -n "${2:-}" ] || { echo "zws: --host needs a name" >&2; exit 2; }; host=$2; shift 2 ;;
         *) break ;;
       esac
     done

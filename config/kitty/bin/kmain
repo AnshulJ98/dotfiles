@@ -1,9 +1,10 @@
 #!/usr/bin/python3
-# AeroSpace cmd-enter: focus the one workspace kitty, or start it on the main workspace.
+# kmain [HOST]: focus or start one workspace kitty; the ssh host comes from the instance.
 import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import stat
 import subprocess
@@ -12,8 +13,13 @@ import time
 
 # kitty and kitten come from PATH (Homebrew links both, wherever it puts the app); no install folder is named.
 os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ["PATH"]
-sock = "/tmp/kitty-main"
-main = Path.home() / ".local/state/kitty/workspaces/main.kitty-session"
+host = sys.argv[1] if len(sys.argv) > 1 else ""
+if len(sys.argv) > 2 or (len(sys.argv) > 1 and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", host)):
+    print("kmain: invalid host", file=sys.stderr)
+    sys.exit(2)
+sock = "/tmp/kitty-" + host if host else "/tmp/kitty-main"
+directory = Path.home() / ".local/state/kitty" / ("hosts/" + host if host else "workspaces")
+main = directory / "main.kitty-session"
 
 
 def window_id():
@@ -54,12 +60,14 @@ def focus(wid):
 
 def start():
     args = ["--listen-on", "unix:" + sock, "--session", str(main)]
+    env = dict(os.environ, ZWS_HOST=host, ZWS_DIR=str(directory)) if host else dict(os.environ)
+    app_env = ["--env", "ZWS_HOST=" + host, "--env", "ZWS_DIR=" + str(directory)] if host else []
     # macOS finds the app by name in any folder; elsewhere, or when it cannot, run kitty from PATH.
-    if sys.platform == "darwin" and subprocess.run(["open", "-n", "-a", "kitty", "--args", *args],
+    if sys.platform == "darwin" and subprocess.run(["open", "-n", "-a", "kitty", *app_env, "--args", *args],
                                                    timeout=5).returncode == 0:
         return
     subprocess.Popen(["kitty", *args], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
 
 
 # Keep the lock inode: unlinking it would let another starter bypass the lock.
