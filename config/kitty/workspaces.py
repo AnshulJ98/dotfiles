@@ -32,6 +32,9 @@ _log = zkitty.log
 _safe = zkitty.safe
 OPEN = os.path.join(DIR, '.open')
 OFF = os.path.join(DIR, '.sidebar-off')
+STATE = os.path.expanduser('~/.local/state/kitty')
+ATTACHED = os.path.join(DIR, '.attached')
+_seen_main = False
 _save_pending = False
 _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
@@ -223,6 +226,38 @@ def _restore(timer_id: int | None = None) -> None:
     for name in todo:
         boss.call_remote_control(None, ('action', 'goto_session', _file(name)))
     _owner = True
+    _lifecycle()
+    add_timer(_safe(_lifecycle), 2.0, True)
+
+
+def _record(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'w') as f:
+        f.write(str(value))
+    os.replace(path + '.tmp', path)
+
+
+def _lifecycle(timer_id: int | None = None) -> None:
+    global _seen_main, _quitting
+    if not _owner or _quitting:
+        return
+    pidfile = os.path.join(STATE, '.main-pid')
+    if not zkitty.instance_host():
+        _record(pidfile, os.getpid())
+        return
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read())
+        if pid <= 0:
+            raise ValueError('invalid main pid')
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        if _seen_main:
+            _save()
+            _quitting = True  # SIGTERM closes windows individually; preserve .open
+            os.kill(os.getpid(), 15)  # no quit confirmation, no subprocess in kitty's thread
+    else:
+        _seen_main = True  # follow a replacement too, not only the first pid
 
 
 def _docks(tab) -> list:
@@ -364,6 +399,25 @@ def on_set_user_var(boss, window, data) -> None:
 @_safe
 def on_quit(boss, window, data) -> None:
     global _quitting
-    if data.get('confirmed'):
+    if data.get('confirmed') and not data.get('aborted'):
+        when = time.time()
         _save()
+        if not _quitting and (zkitty.instance_host() or _owner):
+            # A numeric attachment is a user quit, except when a Mac quit is within 5 s.
+            # Keep both timestamps: either process can be the first to quit on logout.
+            _record(ATTACHED if zkitty.instance_host() else os.path.join(STATE, '.main-quit'), when)
         _quitting = True
+
+
+@_safe
+def on_close(boss, window, data) -> None:
+    if not zkitty.instance_host() or _quitting:
+        return
+    # A normal last close still lists that window. SIGTERM lists none, even on its
+    # first callback. Intermediate closes (including sidebar toggles) must not detach.
+    windows = list(boss.all_windows)
+    if len(windows) == 1 and windows[0] is window:
+        try:
+            os.unlink(ATTACHED)
+        except FileNotFoundError:
+            pass
