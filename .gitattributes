@@ -1,0 +1,14 @@
+# nvfmt (config/nvim/bin/nvfmt, run by githooks/pre-commit) leaves -nvfmt paths alone.
+# Old configs kept for reference.
+archive/** -nvfmt
+# Tests and eval tasks cite fixture lines, and some fixtures are malformed on purpose.
+**/fixture/** -nvfmt
+**/fixtures/** -nvfmt
+# Theme data in the layout its generator or its source theme uses.
+config/themes/*/** -nvfmt
+# Written by the tool that owns it, which would undo the formatting on its next write.
+claude/settings.json -nvfmt
+config/ccstatusline/settings.json -nvfmt
+config/nvim/nvim-pack-lock.json -nvfmt
+config/pi/settings.json -nvfmt
+vscode-insiders/*.json -nvfmt

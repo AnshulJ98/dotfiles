@@ -133,6 +133,8 @@ link "$DOT/config/git/bin/git-hooks-install" "$HOME/.local/bin/git-hooks-install
 # worktrunk config; worktree-setup is its post-start hook and the post-checkout stub's target.
 link "$DOT/config/worktrunk/config.toml" "$HOME/.config/worktrunk/config.toml"
 link "$DOT/config/git/bin/worktree-setup" "$HOME/.local/bin/worktree-setup"
+# Format and lint with the nvim config's tables, from any directory; githooks/pre-commit runs it.
+link "$DOT/config/nvim/bin/nvfmt" "$HOME/.local/bin/nvfmt"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 if [ "$OS" = Darwin ]; then

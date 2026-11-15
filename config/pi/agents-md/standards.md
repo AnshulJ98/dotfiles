@@ -80,8 +80,10 @@ narrowest type the caller needs.
   Elsewhere, `ast-grep run -p '<pattern>' -r '<rewrite>' -U`.
 - New configs come from the official CLI (`pnpm init`, `tsc --init`,
   `npx shadcn@latest init`), never written by hand.
-- Before committing, fix lint errors in the lines you changed and report
-  pre-existing ones.
+- When the edits are done, run `nvfmt` on the files you changed (bare
+  `nvfmt` takes a git repo's changed files); in a repo with its own format
+  or lint command, run that instead. It formats the files and prints lint
+  findings: fix the ones in lines you changed and report the rest.
 - Branches are lowercase-hyphen with `feature/`, `bugfix/`, `hotfix/`, or
   `refactor/`; `/plan` adds `slice/` and `auto/`. Commits are
   conventional (`<type>: <description>`). Merge to the default branch
