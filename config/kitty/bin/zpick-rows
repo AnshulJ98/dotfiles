@@ -170,6 +170,23 @@ def facts(paths: list[str]) -> dict:
                 refs={p: git_ref(p) for p in folders})
 
 
+def side_facts(paths: list[str], version: bool) -> dict:
+    """Small sidebar snapshot, executed on the host, not on the Mac."""
+    refs = {p: git_ref(p) for p in paths}
+    counts = {}
+    for top in dict.fromkeys(top for _, top in refs.values() if top):
+        values = run('git', '-C', top, 'rev-list', '--left-right', '--count', '@{u}...HEAD').split()
+        status = ''
+        if len(values) == 2 and all(v.isdigit() for v in values):
+            behind, ahead = map(int, values)
+            status = ' '.join(s for s in ('↑' + str(ahead) if ahead else '',
+                                          '↓' + str(behind) if behind else '') if s)
+        counts[top] = status
+    lines = run('zmx', 'version').splitlines() if version else []
+    fields = lines[0].split() if lines else []
+    return dict(home=HOME, refs=refs, counts=counts, version=fields[-1] if len(fields) > 1 else '')
+
+
 def fetch_facts(host: str, paths: list[str]):
     try:
         with open(__file__) as source:
@@ -209,6 +226,9 @@ def flush(left: str, rights: list[str], label: str = '', keep: str = '') -> str:
 
 def main() -> None:
     view = sys.argv[1] if len(sys.argv) > 1 else 'all'
+    if view == '--side-facts':
+        print(json.dumps(side_facts(sys.argv[3:], sys.argv[2] == 'version')))
+        return
     if view == '--facts':
         print(json.dumps(facts(sys.argv[2:])))
         return

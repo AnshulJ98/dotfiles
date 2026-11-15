@@ -1,5 +1,6 @@
 """tab_bar.py: kitty's powerline tabs plus the workspace number and time at the right end."""
 import importlib.util
+from collections import namedtuple
 from pathlib import Path
 import sys
 import time
@@ -35,6 +36,11 @@ def powerline(draw_data, screen, tab, before, max_tab_length, index, is_last, ex
 
 class Tab(types.SimpleNamespace):
     pass
+
+
+class Draw(namedtuple('Draw', 'active_fg active_bg inactive_fg inactive_bg default_bg')):
+    def tab_fg(self, tab):
+        return self.active_fg if tab.is_active else self.inactive_fg
 
 
 def load():
@@ -84,6 +90,51 @@ class TabBarTests(unittest.TestCase):
         self.assertEqual(screen.line(), ' one  two'.ljust(29) + ' 2 · 14:31 ')
         self.assertEqual((screen.cursor.fg, screen.cursor.bg), (7, 0))
         snapshot.assert_called_once_with('boss')
+
+    def test_host_inverts_only_tabs_and_local_passes_data_untouched(self):
+        data = Draw(0xabcdef, 1, 0x123456, 2, 3)
+        self.data = data
+        for host in ('box', ''):
+            screen = Screen(40)
+            with patch.object(self.bar.zkitty, 'instance_host', return_value=host), \
+                    patch.object(self.bar.zkitty, 'snapshot', return_value=panes()), \
+                    patch.object(self.bar, 'draw_tab_with_powerline', wraps=powerline) as draw:
+                self.draw(screen, False)
+            for call in draw.call_args_list:
+                passed = call.args[0]
+                if host:
+                    self.assertEqual(passed, data._replace(active_fg=0, active_bg=data.active_fg,
+                                                          inactive_fg=0, inactive_bg=data.inactive_fg))
+                else:
+                    self.assertIs(passed, data)
+            self.assertEqual((screen.cursor.fg, screen.cursor.bg), (data.inactive_fg, data.default_bg))
+            self.assertEqual(self.data, data)
+
+    def test_powerline_sees_host_cursor_colours_and_local_cursor_is_untouched(self):
+        data = Draw(0xabcdef, 1, 0x123456, 2, 3)
+        for host in ('box', ''):
+            for active in (True, False):
+                with self.subTest(host=host, active=active):
+                    screen = Screen(40)
+                    screen.cursor.fg, screen.cursor.bg = 41, 42
+                    tab = Tab(title='one', is_active=active, active_session_name='a')
+                    # tab_fg can include per-tab overrides, not just the theme's fg.
+                    colour = 0x987654 if active else 0x654321
+                    seen = []
+                    def draw(*args):
+                        seen.append((screen.cursor.fg, screen.cursor.bg))
+                        return powerline(*args)
+                    with patch.object(self.bar.zkitty, 'instance_host', return_value=host), \
+                            patch.object(Draw, 'tab_fg', return_value=colour) as tab_fg, \
+                            patch.object(self.bar, 'as_rgb', side_effect=lambda c: (c << 8) | 2), \
+                            patch.object(self.bar, 'draw_tab_with_powerline', side_effect=draw):
+                        self.bar.draw_tab(data, screen, tab, 0, 30, 1, False,
+                                          types.SimpleNamespace(for_layout=False))
+                    self.assertEqual(seen, [(2, (colour << 8) | 2)] if host else [(41, 42)])
+                    if host:
+                        tab_fg.assert_called_once_with(tab)
+                    else:
+                        tab_fg.assert_not_called()
 
     def test_clock_is_12_hour_without_seconds(self):
         for hour, expected in [(18, '6:38 PM'), (9, '9:38 AM'), (0, '12:38 AM'), (12, '12:38 PM')]:
