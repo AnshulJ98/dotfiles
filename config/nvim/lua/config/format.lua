@@ -29,7 +29,9 @@ require('conform').setup {
     toml = { 'taplo' },
   },
   formatters = {
-    shfmt = { prepend_args = { '-i', '2' } },
+    -- All of the arguments: conform's own add -i <shiftwidth> from the buffer, which differs
+    -- per file and would differ again in bin/nvfmt, where no indent is detected.
+    shfmt = { args = { '-i', '2', '-filename', '$FILENAME' } },
   },
 }
 

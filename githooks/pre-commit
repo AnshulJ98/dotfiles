@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 if command -v auto-guard >/dev/null 2>&1; then auto-guard pre-commit "$@" || exit 1; fi # dotfiles-hook
+# Format and lint the staged files as <leader>f would. Lint findings (exit 1) are printed
+# and do not stop the commit; a formatter failure (exit 2) does.
+config/nvim/bin/nvfmt --staged || [ $? -eq 1 ] || exit 1
 # Golden test: generated AGENTS/CLAUDE outputs must match their fragments.
 exec config/pi/build-agents.sh --check
