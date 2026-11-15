@@ -164,10 +164,18 @@ def _label(boss) -> None:
             continue
         # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
         # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
+        host = zkitty.instance_host()
+        if host:
+            script = ('"$1" "$2" "$3" "$4" "$5" "$6" >/dev/null 2>&1 || '
+                      'kitten @ set-user-vars --match "id:$7" zlabel=retry')
+            args = (os.path.join(FOLDER, 'bin/zhost'), host, 'zmx', 'set')
+        else:
+            script = ('"$1" set "$2" "$3" >/dev/null 2>&1 || '
+                      'kitten @ set-user-vars --match "id:$4" zlabel=retry')
+            args = (zmx,)
         boss.call_remote_control(None, (
             'launch', '--type=background', '--allow-remote-control', 'sh', '-c',
-            '"$1" set "$2" "$3" >/dev/null 2>&1 || kitten @ set-user-vars --match "id:$4" zlabel=retry',
-            'sh', zmx, holder, 'space=' + zcore.label(name), str(w.id)))
+            script, 'sh', *args, holder, 'space=' + zcore.label(name), str(w.id)))
         _labelled[holder] = name
 
 
