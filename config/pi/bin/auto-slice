@@ -150,7 +150,7 @@ new)
     S="$(tree_of "slice/$name")"
   fi
   : >"$STATE/$name.new"
-  printf 'slice: %s\nPlan slice/%s against that worktree as it is now, write the spec to a file outside the repo, then: auto-slice dispatch %s <spec-file>\n' "$S" "$name" "$name"
+  printf "slice: %s\nWrite slice/%s's spec against that worktree as it is now, to a file outside the repo, then: auto-slice dispatch %s <spec-file>\n" "$S" "$name" "$name"
   ;;
 dispatch)
   name="${1:-}"
@@ -161,7 +161,7 @@ dispatch)
   S="$(tree_of "slice/$name")"
   [ -n "$S" ] || die 2 "no worktree for slice/$name; first: auto-slice new $name"
   [ -r "$spec" ] || die 2 "spec not readable: $spec"
-  [ "$spec" -nt "$STATE/$name.new" ] || die 1 "$spec is older than slice/$name's worktree. A slice is planned against the code as it is after the last merge: read it there, then write the spec"
+  [ "$spec" -nt "$STATE/$name.new" ] || die 1 "$spec is older than slice/$name's worktree. A slice's spec is written against the code as it is after the last merge: read it there, then write the spec"
   failed="$(grep -vc '^PASS ' "$STATE/$name.runs" 2>/dev/null || true)"
   [ "${failed:-0}" -lt 2 ] || die 1 "slice/$name has had its dispatch and its rework and passed neither (a stop condition). Add 'stopped: $name failed after rework' to AUTO.md and report"
   tests="$(awk '/^---[[:space:]]*$/ { n++; next } n == 1 && /^tests:/ { sub(/^tests:[[:space:]]*/, ""); t = $0 } END { print t }' "$spec")"

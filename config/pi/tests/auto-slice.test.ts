@@ -165,6 +165,7 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 	assert.equal(made.status, 0, made.stderr);
 	const tree = `${l.repo}.slice-parse`;
 	assert.match(made.stdout, new RegExp(`^slice: ${tree}\n`));
+	assert.match(made.stdout, /Write slice\/parse's spec against that worktree as it is now, to a file outside the repo, then:/);
 	assert.deepEqual(autoMd(l).match(/^session: .*$/gm), ["session: s2"], "the session that last ran a command owns the run");
 
 	const stale = l.spec("parse");
@@ -172,6 +173,7 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 	const old = l.slice(["dispatch", "parse", stale]);
 	assert.equal(old.status, 1);
 	assert.match(old.stderr, /is older than slice\/parse's worktree/);
+	assert.match(old.stderr, /A slice's spec is written against the code as it is after the last merge: read it there, then write the spec/);
 	assert.equal(l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "refuse" }).status, 75);
 	assert.equal(existsSync(join(l.state, "parse.runs")), false, "a refusal before the worker started is not a dispatch");
 
