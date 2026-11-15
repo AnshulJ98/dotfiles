@@ -76,6 +76,38 @@ class SideTests(unittest.TestCase):
             self.assertNotIn('zmx', ''.join(draw()))
         self.assertIn(' spaces', draw('')[0])
 
+    def test_short_only_abbreviates_the_home_directory_not_sibling_prefixes(self):
+        rows = self.load_rows()
+        self.assertEqual(rows.short('/home/alice', '/home/alice'), '~')
+        self.assertEqual(rows.short('/home/alice/repo', '/home/alice'), '~/repo')
+        self.assertEqual(rows.short('/home/alice-other/repo', '/home/alice'), '/home/alice-other/repo')
+
+    def test_host_version_is_requested_until_a_reply_contains_it(self):
+        git = self.side.HostGit()
+        self.assertEqual(git.kind, '')
+        self.assertFalse(git.failed)
+        git.initialized = True
+        with patch.object(self.side.subprocess, 'Popen', side_effect=OSError) as popen:
+            for now in (0, 4):
+                git.request(['/host/repo'], '/host/repo', now)
+                git.start(now)
+                self.assertEqual(popen.call_args.args[0][5], 'version')
+                self.assertFalse(git.version_asked)
+                self.assertTrue(git.collect([], now + 1))
+        from unittest.mock import Mock
+        pipe = Mock()
+        pipe.read.return_value = b''
+        proc = Mock(stdout=pipe)
+        proc.poll.return_value = 0
+        git.kind = 'host'
+        for version in (None, '2.0.0'):
+            data = dict(home='/host', refs={}, counts={})
+            if version:
+                data['version'] = version
+            git.proc, git.output, git.started = proc, json.dumps(data).encode(), 8
+            self.assertTrue(git.collect([], 9))
+            self.assertEqual(git.version_asked, bool(version))
+
     def test_host_fetch_is_async_remote_only_and_recovers(self):
         git = self.side.HostGit()
         class Pipe:

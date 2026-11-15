@@ -161,6 +161,7 @@ class ScriptTests(unittest.TestCase):
             path.chmod(0o700)
         script = self.root / "zshell"
         script.write_text(script.read_text().replace("/usr/bin/python3", str(self.root / "python3")))
+        (self.root / "calls").touch()
         master, slave = pty.openpty()
         proc = None
         output = bytearray()
@@ -173,6 +174,8 @@ class ScriptTests(unittest.TestCase):
             deadline = time.monotonic() + 10
             query = b'\x1b]1337;SetUserVar=zq=MQ==\x07'
             queried = False
+            replies = iter(reply if isinstance(reply, list) else [reply])
+            query_count = 0
             while True:
                 remaining = deadline - time.monotonic()
                 self.assertGreater(remaining, 0, bytes(output))
@@ -187,16 +190,18 @@ class ScriptTests(unittest.TestCase):
                 if not chunk:
                     break
                 output.extend(chunk)
-                if not queried and query in output:
+                if output.count(query) > query_count:
                     queried = True
-                    if reply is not None:
+                    query_count = output.count(query)
+                    answer = next(replies, None)
+                    if answer is not None:
                         # Bash prints read's prompt before disabling echo. Wait for
                         # read -s to be ready so an early reply isn't echoed or flushed.
                         while termios.tcgetattr(master)[3] & termios.ECHO:
                             self.assertIsNone(proc.poll(), bytes(output))
                             self.assertLess(time.monotonic(), deadline, bytes(output))
                             time.sleep(.001)
-                        os.write(master, reply)
+                        os.write(master, answer)
                 if wait_for is not None and wait_for in output:
                     # The prompt must block, without spinning ssh or falling back.
                     calls = self.calls("ssh")
@@ -209,8 +214,9 @@ class ScriptTests(unittest.TestCase):
             self.assertTrue(queried, bytes(output))
             self.assertIsNone(wait_for, bytes(output))
             code = proc.wait(timeout=2)
-            if reply is not None:
-                self.assertNotIn(reply.rstrip(b'\n'), output)
+            for answer in reply if isinstance(reply, list) else [reply]:
+                if answer is not None:
+                    self.assertNotIn(answer.rstrip(b'\n'), output)
             return code, bytes(output)
         finally:
             if proc is not None:
@@ -220,6 +226,53 @@ class ScriptTests(unittest.TestCase):
             if slave is not None:
                 os.close(slave)
             os.close(master)
+
+    def test_host_watcher_retries_then_waits_and_asks_again_without_local_shell(self):
+        output = self.pane_start([None, None, None, b': zq n - box -\n'],
+                                 wait_for=b'watcher did not answer; enter retries', ZWS_HOST="box")
+        self.assertEqual(output.count(b'SetUserVar=zq='), 4)
+        self.assertEqual(output.count(b'watcher did not answer'), 1)
+        self.assertEqual(len(self.calls("ssh")), 2)
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_host_watcher_retries_a_missed_read_without_waiting_for_key(self):
+        output = self.pane_start([None, b': zq n - box -\n'], ZWS_HOST="box")
+        self.assertEqual(output.count(b'SetUserVar=zq='), 2)
+        self.assertNotIn(b'watcher did not answer', output)
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_host_refused_answer_waits_then_exits_without_local_shell(self):
+        code, output = self.pane_run(b': zq n - box%40bad -\n',
+                                     wait_for=b'refusing ssh host', ZWS_HOST="box")
+        self.assertNotEqual(code, 0)
+        self.assertNotIn(b'starting plain shell', output)
+        self.assertEqual(self.calls("plain-shell"), [])
+        self.assertEqual(self.calls("ssh"), [])
+
+    def test_host_missing_mac_zmx_still_runs_ssh(self):
+        (self.root / "zmx").chmod(0o600)
+        self.pane_start(b': zq n - box -\n', ZWS_HOST="box")
+        self.assertEqual(len(self.calls("ssh")), 2)
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_host_answer_without_host_never_attaches_locally(self):
+        self.pane_start([b': zq n -\n', b': zq n - box -\n'], ZWS_HOST="box")
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_zrun_host_shell_mapping_and_full_host_validation(self):
+        self.run_script("zrun", "", "/bin/zsh", "-il", ZWS_HOST="box-1.example")
+        self.assertEqual(shlex.split(self.calls("ssh")[-1][-1])[-2:], ["zsh", "-il"])
+        before = self.calls("ssh")
+        for host in ("a@box", "a/b", "a b", "-box"):
+            with self.subTest(host=host):
+                self.assertEqual(self.run_script("zrun", "", "zsh", ZWS_HOST=host).returncode, 2)
+        self.assertEqual(self.calls("ssh"), before)
+
+    def test_zhost_finds_homebrew_timeout_without_it_in_inherited_path(self):
+        result = self.run_script("zhost", "box", "true", PATH="/usr/bin:/bin")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("timeout")[0][:2], ["2", "ssh"])
 
     def test_pane_query_fast_path_starts_only_discovery_and_attach(self):
         output = self.pane_start(b': zq saved%20name -\n')
@@ -1033,7 +1086,7 @@ elif args[:1] == ["attach"]:
         self.assertEqual(self.calls("hunk"), [["diff"]])
         self.run_script("zrun", str(folder), "/bin/zsh", "-il", ZWS_HOST="winpc")
         shell_args = self.calls("ssh")[-1]
-        self.assertEqual(shlex.split(shell_args[-1])[-2:], ["/bin/zsh", "-il"])
+        self.assertEqual(shlex.split(shell_args[-1])[-2:], ["zsh", "-il"])
         self.assertEqual(shell_args[-2], "winpc")
         result = self.run_script("zrun", str(folder), "zmx", file, ZWS_HOST="winpc")
         self.assertEqual(result.returncode, 0, result.stderr)
