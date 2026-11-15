@@ -532,7 +532,7 @@ class ScriptTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 directory = self.root / ".local/state/kitty/hosts/box"
                 args = ["--listen-on", "unix:" + str(self.root / "socket-box"),
-                        "--session", str(directory / "main.kitty-session")]
+                        "--session", str(directory / "main.kitty-session"), "--title", "box"]
                 if sys.platform == "darwin":
                     self.assertEqual(self.calls("open"), [["-n", "-a", "kitty", "--env", "ZWS_HOST=box",
                                                           "--env", "ZWS_DIR=" + str(directory), "--args", *args]])

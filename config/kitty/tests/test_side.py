@@ -46,6 +46,144 @@ class SideTests(unittest.TestCase):
     def setUp(self):
         self.side = load()
 
+    def test_host_header_down_address_and_versions(self):
+        git = self.side.HostGit()
+        info = {'a': ('Repo', '', ''), 'b': ('Bee', '', '')}
+        def draw(host='box'):
+            with patch.dict(os.environ, ZWS_HOST=host):
+                return self.side.rows(view(), info, '', 60, 24, git)[0]
+        git.address = '192.168.2.35'
+        self.assertIn(' box 192.168.2.35', draw()[0])
+        git.down = True
+        self.assertIn('\x1b[0;2;31m box 192.168.2.35 down', draw()[0])
+        git.down = False
+        for address in ('box', ''):
+            git.address = address
+            self.assertEqual(re.sub(r'\x1b\[[0-9;]*m', '', draw()[0]).strip(), 'box')
+        git.here, git.there = '1.0.1', '2.0.0'
+        self.assertIn('\x1b[0;2m zmx 2.0.0, here 1.0.1', draw()[1])
+        for version in ('1.0.1', ''):
+            git.there = version
+            self.assertNotIn('zmx', ''.join(draw()))
+        self.assertIn(' spaces', draw('')[0])
+
+    def test_host_fetch_is_async_remote_only_and_recovers(self):
+        git = self.side.HostGit()
+        class Pipe:
+            def fileno(self): return 42
+            def read(self): return b''
+            def close(self): pass
+        class Process:
+            stdout = Pipe()
+            code = None
+            def poll(self): return self.code
+            def kill(self): self.code = -9
+        proc = Process()
+        data = dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo']},
+                    counts={'/host/repo': '↑2 ↓1'}, version='2.0.0')
+        with patch.dict(os.environ, ZWS_HOST='box'), \
+                patch.object(self.side, 'repo', side_effect=AssertionError('local .git')), \
+                patch.object(self.side.subprocess, 'run', side_effect=AssertionError('blocking')), \
+                patch.object(self.side.subprocess, 'Popen', return_value=proc) as popen, \
+                patch.object(self.side.os, 'set_blocking'), patch.object(self.side, 'write') as write:
+            _, tops = self.side.render(view('/host/repo/sub'), git, '')
+            popen.assert_not_called()
+            git.request(tops.values(), tops['a'], 0)
+            # Metadata is also collected without a blocking run, once per sidebar.
+            for expected, output in ((['ssh', '-G', 'box'], b'hostname 192.168.2.35\n'),
+                                     (['zmx', 'version'], b'zmx\t\t1.0.1\n')):
+                proc.code = None
+                git.start(0)
+                self.assertEqual(popen.call_args.args[0], expected)
+                git.output, proc.code = output, 0
+                self.assertTrue(git.collect([], 1))
+            git.start(1)
+            args = popen.call_args.args[0]
+            self.assertEqual(args[:5], [str(SCRIPT.parent / 'zhost'), 'box', 'python3', '-', '--side-facts'])
+            self.assertIn('/host/repo/sub', args)
+            self.assertEqual(popen.call_args.kwargs['stdin'].name, str(SCRIPT.parent / 'zpick-rows'))
+            git.output, proc.code = json.dumps(data).encode(), 0
+            self.assertTrue(git.collect([], 2))
+            self.side.render(view('/host/repo/sub'), git, '')
+            self.assertIn('repo', write.call_args.args[0])
+            self.assertIn('topic', write.call_args.args[0])
+            self.assertIn('↑2', write.call_args.args[0])
+            self.assertFalse(git.down)
+            for code, payload in ((255, b''), (124, b''), (0, b'bad'), (None, b''), (0, json.dumps(data).encode())):
+                git.request(tops.values(), tops['a'], 10)
+                git.start(10)
+                self.assertEqual(popen.call_args.args[0][5], 'cached')
+                git.output, proc.code = payload, code
+                self.assertTrue(git.collect([], 14))
+                self.assertEqual(git.down, payload != json.dumps(data).encode())
+                self.side.render(view('/host/repo/sub'), git, '')
+                self.assertEqual(' down' in write.call_args.args[0], git.down)
+                git.next_refresh = 0
+            self.assertEqual(git.address, '192.168.2.35')
+            self.assertEqual((git.here, git.there), ('1.0.1', '2.0.0'))
+
+    def test_host_without_facts_uses_space_names_or_renames_not_mac_folders(self):
+        obj = view(os.path.expanduser('~'))
+        obj['spaces'][1].update(cwd=os.path.expanduser('~'), shown='')
+        obj['spaces'].append(dict(name='c', cwd='/mac/project', shown='Renamed', state='', tabs=1))
+        git = self.side.HostGit()
+        for down in (False, True):
+            git.down = down
+            with self.subTest(down=down), patch.dict(os.environ, ZWS_HOST='box'), \
+                    patch.object(self.side, 'repo', side_effect=AssertionError('local .git')), \
+                    patch.object(self.side, 'write') as write:
+                self.side.render(obj, git, '')
+                plain = re.sub(r'\x1b\[[0-9;]*m', '', write.call_args.args[0])
+                self.assertIn(' 1 ◐ a ', plain)
+                self.assertIn(' 2 · b ', plain)
+                self.assertIn(' 3 · Renamed ', plain)
+                self.assertNotIn(os.path.basename(os.path.expanduser('~')), plain)
+                self.assertNotIn('project', plain)
+
+    def test_host_failure_keeps_last_good_names_and_branches(self):
+        git = self.side.HostGit()
+        obj = view('/host/repo/sub')
+        obj['spaces'][1].update(cwd='/host', shown='')
+        data = dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo'],
+                                       '/host': ['', '']}, counts={'/host/repo': '↑2'})
+        class Pipe:
+            def read(self): return b''
+            def close(self): pass
+        class Process:
+            stdout = Pipe()
+            def __init__(self, code): self.code = code
+            def poll(self): return self.code
+        with patch.dict(os.environ, ZWS_HOST='box'), patch.object(self.side, 'write') as write:
+            for code, payload in ((0, json.dumps(data).encode()), (255, b'')):
+                git.kind, git.started, git.proc, git.output = 'host', 0, Process(code), payload
+                self.assertTrue(git.collect([], 1))
+                self.assertEqual(git.down, code != 0)
+                self.side.render(obj, git, '')
+                plain = re.sub(r'\x1b\[[0-9;]*m', '', write.call_args.args[0])
+                self.assertIn(' 1 ◐ repo ', plain)
+                self.assertIn('topic ↑2', plain)
+                self.assertIn(' 2 · home ', plain)
+                self.assertEqual(' down' in plain, code != 0)
+
+    def test_host_side_facts_counts_version_and_stdin(self):
+        rows = self.load_rows()
+        with patch.object(rows, 'git_ref', return_value=('topic', '/repo')), \
+                patch.object(rows, 'run', side_effect=['1\t2', 'zmx\t\t1.0.1\n']) as run:
+            data = rows.side_facts(['/repo/sub'], True)
+        self.assertEqual(data['refs']['/repo/sub'], ('topic', '/repo'))
+        self.assertEqual(data['counts']['/repo'], '↑2 ↓1')
+        self.assertEqual(data['version'], '1.0.1')
+        self.assertEqual(run.call_args_list[0].args,
+                         ('git', '-C', '/repo', 'rev-list', '--left-right', '--count', '@{u}...HEAD'))
+        with patch.object(rows, 'run') as run:
+            self.assertEqual(rows.side_facts([], False)['version'], '')
+            run.assert_not_called()
+        result = subprocess.run([sys.executable, '-', '--side-facts', 'cached', '/no/such/path'],
+                                input=(SCRIPT.parent / 'zpick-rows').read_text(),
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['refs']['/no/such/path'], ['', ''])
+
     def test_left_clicks_emit_only_intents_and_menu_still_uses_zws(self):
         with patch.object(self.side.subprocess, 'run', side_effect=AssertionError('process')), \
              patch.object(self.side.subprocess, 'Popen', side_effect=AssertionError('process')), \
@@ -530,6 +668,82 @@ class SideTests(unittest.TestCase):
         self.assertEqual(git.queue, [])
         git.request(['/a'], '/other', 37.1)
         self.assertEqual(git.queue, ['/a'])
+
+    def test_host_pty_draws_while_fetch_waits_and_reports_spawn_failure(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                fake = """import json, os, pathlib, sys, time
+root = pathlib.Path(os.environ['FAKE_ROOT'])
+name = pathlib.Path(sys.argv[0]).name
+with (root / 'calls').open('a') as log: log.write(name + '\\n')
+if name == 'ssh':
+    assert sys.argv[1:] == ['-G', 'box']
+    print('hostname 192.168.2.35')
+elif name == 'zmx':
+    assert sys.argv[1:] == ['version']
+    print('zmx\\t\\t1.0.1')
+else:
+    assert sys.argv[1:6] == ['box', 'python3', '-', '--side-facts', 'version']
+    assert 'def side_facts' in sys.stdin.read()
+    while not (root / 'release').exists(): time.sleep(.01)
+    print(json.dumps(dict(home='/host', refs={'/host/repo/sub': ['topic', '/host/repo']},
+                         counts={'/host/repo': '↑2 ↓1'}, version='2.0.0')))
+"""
+                for name in ('ssh', 'zmx', *(() if missing else ('zhost',))):
+                    path = root / name
+                    path.write_text('#!' + sys.executable + '\n' + fake)
+                    path.chmod(0o700)
+                (root / 'zpick-rows').write_text((SCRIPT.parent / 'zpick-rows').read_text())
+                script = root / 'zside'
+                script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(root)))
+                master, slave = pty.openpty()
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 60, 0, 0))
+                proc = subprocess.Popen([sys.executable, str(script)], stdin=slave, stdout=slave,
+                                        stderr=subprocess.PIPE, env=dict(os.environ, FAKE_ROOT=str(root),
+                                        ZWS_HOST='box', PATH=str(root) + ':' + os.environ['PATH']))
+                os.close(slave)
+                output = bytearray()
+                def until(predicate):
+                    deadline = time.monotonic() + 5
+                    while not predicate():
+                        self.assertLess(time.monotonic(), deadline, bytes(output))
+                        ready, _, _ = select.select([master], [], [], .02)
+                        if ready:
+                            output.extend(os.read(master, 65536))
+                try:
+                    until(lambda: b'zside=cmVhZHk=' in output)
+                    self.assertFalse((root / 'calls').exists())
+                    os.write(master, frame(view('/host/repo/sub')))
+                    until(lambda: b' box' in output and b'\x1b[?2026l' in output)
+                    if missing:
+                        # No input tick is needed to report a failure to start zhost.
+                        until(lambda: b' down' in output)
+                    else:
+                        until(lambda: (root / 'calls').exists() and 'zhost' in (root / 'calls').read_text())
+                        self.assertNotIn(b'topic', output)
+                        output.clear()
+                        os.write(master, b'\x1b_zt\x1b\\')
+                        until(lambda: b'\x1b[?2026l' in output)
+                        self.assertIsNone(proc.poll())
+                        (root / 'release').touch()
+                        until(lambda: b'topic' in output and '↑2 ↓1' in re.sub(
+                            r'\x1b\[[0-9;]*m', '', output.decode(errors='replace')))
+                        self.assertIn(b'zmx 2.0.0, here 1.0.1', output)
+                    self.assertIn(b'box 192.168.2.35', output)
+                    calls = (root / 'calls').read_text().splitlines()
+                    self.assertEqual(calls, ['ssh', 'zmx'] + ([] if missing else ['zhost']))
+                    os.close(master)
+                    master = None
+                    self.assertEqual(proc.wait(timeout=5), 0)
+                    self.assertEqual(proc.stderr.read(), b'')
+                finally:
+                    if master is not None:
+                        os.close(master)
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.wait(timeout=5)
+                    proc.stderr.close()
 
     @unittest.skipUnless(Path('/usr/bin/python3').exists(), '/usr/bin/python3 is missing')
     def test_pty_ready_draws_before_git_and_exits_on_close(self):
