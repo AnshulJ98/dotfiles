@@ -5,7 +5,8 @@
 #    every title change.
 #  - lists the open workspaces in .open there and reopens them when kitty starts on a workspace
 #    (bin/kmain after a quit, a crash or a reboot).
-#  - answers bin/zshell's zq query once per pane with its holder and pi_session.
+#  - answers bin/zshell's zq query once per pane with its holder and pi_session, and for a
+#    workspace bound to an ssh host (host= var) that host and the remote folder.
 #  - accepts ready/zdo only from role=sidebar windows launched with bin/zside.
 #  - gives every workspace tab a sidebar dock (bin/zside) and pushes each its own view.
 #    'set-user-vars zside=toggle' (cmd+alt+b) hides or shows them all.
@@ -47,7 +48,7 @@ _sent: dict[int, bytes] = {}
 
 INTERNALS = (
     ('kitty.boss:Boss', 'all_windows all_tabs all_tab_managers active_window active_tab call_remote_control'),
-    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child'),
+    ('kitty.window:Window', 'created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at'),
     ('kitty.child:Child', 'argv'),
     ('kitty.tabs:Tab', 'tab_manager_ref id __iter__ active_window'),
     ('kitty.fast_data_types:Screen', 'last_reported_cwd columns cursor draw'),

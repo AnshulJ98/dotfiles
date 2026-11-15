@@ -48,15 +48,38 @@ def cwd(window) -> str:
     return zcore.cwd_of(window.screen.last_reported_cwd, '') or window.cwd_of_child or ''
 
 
+def hosted(boss, session) -> list:
+    """The panes of a workspace bound to an ssh host (zws new --host)."""
+    return [w for w in (boss.all_windows if session else ())
+            if w.created_in_session_name == session and w.user_vars.get('host')]
+
+
 def attach(boss, window) -> None:
     saved = window.user_vars.get('holder', '')
-    name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
-                                uuid.uuid4().hex[:12])
-    window.write_to_child(zcore.answer(name, window.user_vars.get('pi_session', '')))
+    # kitty gives a split no session, so the pane's own tab also supplies host peers.
+    tab = next((list(t) for t in getattr(boss, 'all_tabs', ()) if any(w is window for w in t)), [])
+    peers = []
+    for w in hosted(boss, getattr(window, 'created_in_session_name', None)) + [
+            w for w in tab if w.user_vars.get('host')]:
+        if w is not window and not any(w is p for p in peers):
+            peers.append(w)
+    # The pane focused before this one: the new pane opens in its remote folder.
+    active = max(peers, key=lambda w: w.last_focused_at, default=None)
+    host = window.user_vars.get('host', '') or (active.user_vars['host'] if active else '')
+    directory = ''
+    if host and not saved:
+        directory = cwd(active) if active else window.user_vars.get('host_dir', '')
+        name = zcore.holder(directory or '~', '~', uuid.uuid4().hex[:12])
+    else:
+        name = saved or zcore.holder(window.cwd_of_child or '', os.path.expanduser('~'),
+                                    uuid.uuid4().hex[:12])
+    window.write_to_child(zcore.answer(name, window.user_vars.get('pi_session', ''), host, directory))
     match = f'--match=id:{window.id}'
     boss.call_remote_control(None, ('set-user-vars', match, 'zq'))
     if not saved:
         boss.call_remote_control(None, ('set-user-vars', match, 'holder=' + name))
+    if host and window.user_vars.get('host') != host:
+        boss.call_remote_control(None, ('set-user-vars', match, 'host=' + host))
 
 
 def snapshot(boss) -> list[dict]:
@@ -85,7 +108,9 @@ def run(boss, words) -> list[tuple]:
     active = boss.active_window
     current = (active.created_in_session_name or '') if active else ''
     if words in (['tab'], ['tab', 'here']):
-        directory = cwd(active) if active and words == ['tab', 'here'] else ''
+        # A host workspace's folders are remote; attach() hands them to the new pane.
+        directory = (cwd(active) if active and words == ['tab', 'here']
+                     and not hosted(boss, current) else '')
         boss.call_remote_control(active, (
             'launch', '--type=tab', *(('--cwd', directory) if directory else ()),
             *(('--add-to-session', current) if current else ())))
