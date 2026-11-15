@@ -20,10 +20,14 @@
 #       AUTO.md and log the slice in it.
 #   auto-slice review ["focus"]
 #       scout --review <base> from the run worktree, after the last slice.
+#   auto-slice finish
+#       When the run is shipped or abandoned: deletes AUTO.md, the run's state
+#       and every spec file that was dispatched, and the AUTO.md exclude line
+#       unless another run still has its AUTO.md. Branches and worktrees stay.
 #
 # The run is the worktree of this repo whose root holds AUTO.md; AUTO_RUN=<path>
 # picks one when there are several. State is in <git-common-dir>/pi-auto/<effort>/
-# (base, tests.log, and per slice .new .tests .spec .runs .tree .merged .log).
+# (base, tests.log, specs.from, and per slice .new .tests .spec .runs .tree .merged .log).
 # Every command after start writes "session: $PI_SESSION_ID" into AUTO.md when
 # pi's bash tool set that variable (a bg_run job has none and leaves the line
 # as it is); extensions/auto-run.ts sends that session back to the slices.
@@ -176,6 +180,9 @@ dispatch)
   [ -s "$STATE/$name.runs" ] || [ -z "$(git -C "$S" status --porcelain)" ] ||
     die 1 "slice/$name's worktree has changes before its first dispatch ($(git -C "$S" status --porcelain | head -n 5 | tr '\n' ' ')). A worker starts from a clean worktree: undo a hand edit there, and have git ignore what the worktree hook leaves"
   cp "$spec" "$STATE/$name.spec" || die 1 "could not keep the dispatched spec for slice/$name"
+  # Where the spec came from, so finish deletes it with the run
+  spec_from="$(cd "$(dirname "$spec")" && pwd -P)/$(basename "$spec")"
+  grep -qxF "$spec_from" "$STATE/specs.from" 2>/dev/null || echo "$spec_from" >>"$STATE/specs.from"
   before="$(cksum <"$RUN/AUTO.md")"
   tick "the worker on slice/$name is still running"
   (cd "$S" && PI_WORKER_BASE="$slice_base" "$SCOUT" --rw "$@" --spec - <"$spec") 2>&1 | tee "$STATE/$name.log"
@@ -252,6 +259,24 @@ review)
   rc=$?
   untick
   exit "$rc"
+  ;;
+finish)
+  find_run
+  if [ -f "$STATE/specs.from" ]; then
+    while IFS= read -r spec_from; do
+      rm -f "$spec_from"
+      rmdir "$(dirname "$spec_from")" 2>/dev/null # only when the specs were all it held
+    done <"$STATE/specs.from"
+  fi
+  rm -f "$RUN/AUTO.md"
+  rm -rf "$STATE"
+  # Another run's AUTO.md still needs the exclude line
+  others="$(git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r w; do [ -f "$w/AUTO.md" ] && echo "$w"; done)"
+  if [ -z "$others" ] && [ -f "$COMMON/info/exclude" ]; then
+    kept="$(grep -vx 'AUTO.md' "$COMMON/info/exclude")"
+    printf '%s' "${kept:+$kept$'\n'}" >"$COMMON/info/exclude"
+  fi
+  echo "auto-slice: $BRANCH is finished: AUTO.md, the run's state and its slice specs are deleted. Branches and worktrees are kept"
   ;;
 *)
   usage >&2

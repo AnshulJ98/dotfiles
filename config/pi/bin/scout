@@ -279,11 +279,12 @@ if [ -n "$REVIEW_BASE" ]; then
     BRIEF_FILE="$REVIEW_TOP/AUTO.md"
     BRIEF=("@$BRIEF_FILE")
     REVIEW_TARGET="$REVIEW_TARGET, against the spec in the attached AUTO.md"
-    # bin/auto-slice owns pi-auto/<effort> and writes the dispatched .spec files.
+    # bin/auto-slice owns pi-auto/<effort> and writes the dispatched .spec files, and a .merged
+    # marker per merged slice: a slice that never merged has no part in the diff under review.
     REVIEW_BRANCH="$(git branch --show-current)"
     case "$REVIEW_BRANCH" in auto/*)
       for spec in "$(git rev-parse --path-format=absolute --git-common-dir)/pi-auto/${REVIEW_BRANCH#auto/}"/*.spec; do
-        [ -f "$spec" ] || continue
+        [ -f "$spec" ] && [ -f "${spec%.spec}.merged" ] || continue
         BRIEF+=("@$spec")
         REVIEW_SLICE_SPECS=1
       done
@@ -556,7 +557,20 @@ conclude() {
     # The sensors' own verdict line can land in the digest too (a non -p pi, or
     # the model quoting it); the one from the report is the only one kept.
     { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
-  elif [ "$rc" -ne 0 ]; then
+  # A read scout has no verdict; its session says how the run ended (pi's docs/session-format.md:
+  # stopReason on the last assistant message). Any other failure is not a reason to switch models.
+  elif node -e '
+    const fs = require("node:fs");
+    const dir = process.argv[1];
+    let last;
+    for (const name of fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []) {
+      if (!name.endsWith(".jsonl")) continue;
+      for (const line of fs.readFileSync(dir + "/" + name, "utf8").split("\n")) {
+        try { const m = JSON.parse(line).message; if (m?.role === "assistant") last = m; } catch {}
+      }
+    }
+    process.exit(last?.stopReason === "error" ? 0 : 1);
+  ' "$SESSIONS"; then
     ended_error=1
   fi
   if [ "$ended_error" = 1 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 143 ] &&

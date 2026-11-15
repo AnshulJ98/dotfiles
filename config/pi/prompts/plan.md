@@ -197,15 +197,17 @@ leave the slice branch and its worktree unmerged, add the line
 `stopped: <condition>` to `AUTO.md`, report per Long Runs, and wait.
 Without that line the harness sends you back to the unticked slices
 when you end a turn. "auto" removes the line and resumes at the first
-unticked slice. "auto abandon" deletes `AUTO.md` and its exclude line,
-keeps the branches and worktrees, and reports.
+unticked slice. "auto abandon" runs `auto-slice finish`, which deletes
+`AUTO.md`, its exclude line, the run's state and every dispatched spec
+file and keeps the branches and worktrees; then report.
 
 After the last slice comes the run's one review, before any merge into
 the base: `auto-slice review`, in the foreground. It
 runs `scout --review <base-sha>` in the run worktree, which reviews
 `git diff <base-sha>...HEAD` and `git log --first-parent
 <base-sha>..HEAD` against the spec in `AUTO.md` as `review.md` does,
-with each slice's dispatched spec attached too (kept by `auto-slice dispatch`)
+with each merged slice's dispatched spec attached too (kept by `auto-slice
+dispatch` until `auto-slice finish`)
 so each slice is checked against its own target and `mechanism:`,
 checks by reading that each bug fix's new test fails without the fix,
 and records the tip it reviewed. The merge hook refuses to merge
@@ -215,6 +217,7 @@ and scout refuses a fourth round. Report per Long Runs with the
 review's verdict and findings and the cost per slice, ending with `git
 merge --no-ff auto/<effort>` (run in this checkout, on the base
 branch). On fix or rework, add `stopped: review` to `AUTO.md` and
-wait. On ship, delete `AUTO.md` and its exclude line, then stop. Run
+wait. On ship, run `auto-slice finish` (it deletes `AUTO.md`, its
+exclude line, the run's state and every dispatched spec file), then stop. Run
 that merge only if I granted it; after it succeeds, `wt remove -y
 auto/<effort>` and `git branch -d auto/<effort>`.

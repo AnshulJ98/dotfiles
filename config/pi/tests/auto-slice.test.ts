@@ -251,6 +251,30 @@ test("stops: a second failure, a third dispatch, a PASS with Blocked on me, test
 	assert.match(hung.stderr, /'sleep 5' still running after 1s \(a stop condition\)/);
 });
 
+test("finish: AUTO.md, the run's state and the dispatched spec files are deleted; the exclude line goes with the last run", () => {
+	const l = started();
+	assert.equal(l.slice(["new", "parse"]).status, 0);
+	const specFile = l.spec("parse");
+	assert.equal(l.slice(["dispatch", "parse", specFile], { FAKE_SCOUT: "pass" }).status, 0);
+	const other = `${l.repo}.auto-f`;
+	l.git(l.repo, "worktree", "add", "-q", "-b", "auto/f", other);
+	writeFileSync(join(other, "AUTO.md"), AUTO);
+	const exclude = (): string => readFileSync(join(l.repo, ".git", "info", "exclude"), "utf8");
+
+	const first = l.slice(["finish"], { AUTO_RUN: l.run });
+	assert.equal(first.status, 0, first.stderr);
+	assert.equal(existsSync(join(l.run, "AUTO.md")), false);
+	assert.equal(existsSync(l.state), false);
+	assert.equal(existsSync(specFile), false);
+	assert.match(exclude(), /^AUTO\.md$/m, "another run still has its AUTO.md");
+	assert.ok(l.git(l.repo, "branch", "--list", "slice/parse", "auto/e").includes("slice/parse"), "branches are kept");
+
+	const last = l.slice(["finish"]);
+	assert.equal(last.status, 0, last.stderr);
+	assert.equal(existsSync(join(other, "AUTO.md")), false);
+	assert.doesNotMatch(exclude(), /^AUTO\.md$/m);
+});
+
 test("review: after the last slice, scout --review <base> from the run worktree", () => {
 	const l = started();
 	const early = l.slice(["review"]);
