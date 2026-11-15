@@ -1,0 +1,13 @@
+(version 1)
+(allow default)
+; Long-session runs (run.ts): HOME is a throwaway dir from lib/isolate.sh, so pi state lands in /tmp.
+; Nothing under the real home (param REAL_HOME, passed by run.ts) is writable except pi's credential, lock and
+; cache files, reached through isolate.sh's symlinks.
+(deny file-write* (subpath (param "REAL_HOME")))
+(allow file-write*
+  (literal (string-append (param "REAL_HOME") "/.pi/agent/auth.json"))
+  (regex #"/\.pi/agent/[^/]+\.lock(/|$)")
+  (subpath (string-append (param "REAL_HOME") "/.pi/agent/web-search-cache"))
+  (subpath (string-append (param "REAL_HOME") "/.npm"))
+  (subpath (string-append (param "REAL_HOME") "/.cache"))
+  (subpath (string-append (param "REAL_HOME") "/Library/Caches")))

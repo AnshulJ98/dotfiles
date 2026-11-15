@@ -1,0 +1,4 @@
+{"step":"resume","status":"ok","secs":912,"turns":65,"cost":9.365758800000005,"ctx":127079,"compactions":4}
+{"step":"4","status":"ok","secs":304,"turns":15,"cost":10.564493200000005,"ctx":81339,"compactions":5}
+{"step":"5","status":"ok","secs":25,"turns":1,"cost":10.608287800000005,"ctx":82400,"compactions":5}
+{"step":"recall","status":"ok","secs":34,"turns":1,"cost":10.673742600000004,"ctx":84750,"compactions":5}

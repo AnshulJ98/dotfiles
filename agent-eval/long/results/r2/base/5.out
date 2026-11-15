@@ -1,0 +1,39 @@
+Everything approved is done except G1 (you dropped it) and E2 (measured and rejected). Nothing is committed. Three things need your call.
+
+**Changed**
+- **Prose (fragments):**
+  - Ousterhout design rules and the strategic vs tactical split.
+  - Rung 5 is now "fewest concepts".
+  - A "Done When" section.
+  - Red-first for bug fixes only; expected values never come from the implementation.
+  - Duplicate rules in Replies removed.
+  - "Read it yourself" rule; scouts only read.
+- **Workflow:**
+  - `/plan` has a planning mode and a slice mode, built around the outcome card. "go" ends with `slice-check`.
+  - `/diagnose` ends in an outcome card.
+  - `/review` adds a break-it pass and runs Stryker or mutmut when the repo has one.
+  - `spec-contract.md` is deleted.
+- **Harness:**
+  - Auto runs are retired: `auto-guard`, husky and the guard hooks are gone.
+  - `scout --rw` workers are retired, about 2,500 lines.
+  - `compact-cap` shows a `/handoff` notice at 120k and compacts only between runs.
+  - `prime-reminder` is now one-shot.
+  - `slice-check` is new, with 27 tests.
+- **Docs:** `DESIGN.md` describes only the current setup; the history moved to the new `LOG.md`.
+- **`verify.sh`:** new `[prose]` checks.
+- **Measured (I1):** review recall stayed at 13/13 and the premise checks still held; cost fell from about $0.08 to about $0.06 per probe.
+
+**Checks:** `build-agents.sh --check` passes. `verify.sh` gives 60 passed, 5 failed. Four of those are symlink checks that fail on this test machine. The fifth is the node test run, whose 9 failures are the same herdr tests that failed before my changes.
+
+**Left**
+1. Optional items not done: C7 (`/where`), D5 (fewer coined labels), I2 (a `slice` eval role).
+2. The memory length check only prints a note. Making it fail needs `memory.md` trimmed first: its median bullet is 331 chars.
+3. Delete the stale `~/.local/bin/auto-guard` and `~/.config/husky/init.sh` links on your real machine.
+4. Commit, when you say so.
+5. The "X findings" list was lost in compaction.
+
+**Would revert**
+- **Manual `/compact` no longer resumes the task.** I'd put it back, about 30 lines. Retiring the cap's own resume is right, but a manual compaction mid-task now just stops the work, and I can't confirm F4 covered that.
+- **Possibly the ladder line "design each interface twice".** For small interfaces it's ceremony. "Two sketches only when the decision shapes an interface", as `/plan` already says, would be enough.
+
+Nothing else. The retirements of auto runs and `--rw` hold up, and the I1 numbers show no drop in recall.

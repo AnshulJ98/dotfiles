@@ -1,0 +1,163 @@
+You check whether an answer states specific known facts. You have no tools; use only the text below.
+
+Below are an answer to a question about a codebase and a numbered list of facts that a correct answer states. For each fact, decide whether the answer states it: the same claim, in any words, anywhere in the answer. It does not count when the answer only cites the place where the fact could be read, says something vaguer that does not commit to the fact, or contradicts the fact anywhere. Do not use your own knowledge of the codebase: a fact the answer does not state is "no" even if it is true.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the facts, exactly one entry per fact and nothing else (no prose, no code fence). For example, with three facts: ["yes","no","no"].
+
+Answer:
+
+<answer>
+[Session Goal]
+- do a very thorough, deep & comprehensive evaluation of this pi config, the prose, the philosophy, the core
+  instructions everything. feel free to use internet seraches community forums (#1)
+- also, lately i've been thinking instead of strict red green tdd, it can be a wrong model for agent, agent can more
+  align with ousterhout on that (#1)
+
+[Files And Changes]
+- Read: config/pi/bin/scout, config/pi/agents-md/persona-core.md, config/pi/agents-md/persona-pi.md,
+  config/pi/agents-md/standards.md, config/pi/agents-md/ops.md, config/pi/agents-md/ladder.md,
+  config/pi/agents-md/claude-delta.md, config/pi/prompts/plan.md, config/pi/prompts/spec-contract.md,
+  config/pi/prompts/handoff.md (+4 more)
+
+---
+
+[user]
+do a very thorough, deep & comprehensive evaluation of this pi config, the prose, the philosophy, the core instructions
+everything. feel free to use internet seraches community forums also, lately i've been thinking instead of strict red
+green tdd, it can be a wrong model for agent, agent can more align with ousterhout on that and finally, instead of spec,
+or anyother thing driving, i've thinking that outcome driven development might be what goes best with agents. and one
+last thing is agentic loops & subagents, did not have much success with either so far. scout's ok. i like my sessions
+short, small bounded slices for implementation, or a bigger one for architecture & planning (#1)
+
+[assistant]
+* codemode (#2, #4, #6, #8, #10, #12) x6
+Now reading the prose itself (fragments, DESIGN, prompts, scout/worker prompts). (#14)
+* codemode (#14, #16, #18, #20, #22, #24, #26, #28, #30, #32, #34, #36, #38, #40, #42, #44, #46, #48, #50, #52, #54)
+  x21
+The config's judgment is better than most I've seen, but most of its machinery serves the two modes you say don't work
+for you: unattended loops and subagents that write code. Your preferred style (short sessions, small bounded slices, a
+separate planning session) needs about a third of what's here. The rest costs prompt attention, maintenance, and blast
+radius. The config that's actually running is `/Users/anshulj/Dev/dotfiles` (`~/.pi/agent/AGENTS.md` links there), and I
+evaluated that one. The checkout in this cwd is older: it has no Recommendations section, no auto run, and no `--web`.
+The live repo has uncommitted edits to `persona-core.md`, `persona-pi.md`, `plan.md`, `spec-contract.md` and `where.md`,
+so the running config is not in git. I read Reddit and HN through search snippets only; I opened no thread in full. ##
+What holds up (keep it) - **Measuring instead of guessing.** `DESIGN.md` § "What measurement actually showed" is the
+most valuable thing in the repo: - Deleting AGENTS.md raised output tokens 29%. - Rewording barely moved review recall
+(p=0.378). - A rule stated twice in prose still failed 30% of the time; enforcing it in code made it 0/8. - The field
+has reached the same conclusion. The ETH study (arXiv 2602.11988) found context files gave small or no gains. Reddit
+threads put it as "rules past ~line 100 become suggestions; hooks fire every time". - **Judgment section**
+(`persona-core.md` top). Leading with a wrong premise, calling weak work weak, and declining tangents are high-value
+rules that are hard to enforce any other way. Keep them. - **Replies section.** It is concrete and has an example.
+"Never cut a claim, a condition, a warning or a step to save words" fixes the over-terse failure that the old "under 100
+words" rule caused. - **The scout.** It is read-only, capped at 8 tool calls and ~300...(truncated) (#56)
+
+[user]
+alright, now, time to take a step back, all the possible improvements you've produced so far let's list & select the
+enhancements. the goal here is to be able to get the highest most accurate code quality most efficiently, a blend of
+code philosophy (what we currently have is a great starting point), proper solution ladder, smart brevity, clear terse
+communication, depth over ceremony, and decomplecting. while making sure we're working with best practices for agents in
+the harness not execution yet. go full send, present findings & items with ids. I'll then do a final sign off before
+selective execution (#57)
+
+[assistant]
+* codemode (#58, #60) x2
+I recommend 31 of the 44 items below (27 Yes, plus 4 Maybe items in the core set). Each Yes either makes code quality
+checkable instead of ritual, simplifies the design rules, or removes machinery built for workflows you've stopped using.
+Nothing has been changed yet; I need your sign-off by ID. Each item reads **ID · pick · effort**: Yes / Maybe / No, and
+S (<30 min), M (1–2 h), L (half a day or more). Then what changes, and why in one line. Proposed wording is included
+where the exact words matter, so you sign off on text rather than intentions. ## A. Code philosophy: Ousterhout and
+decomplecting **A1 · Yes · S. Split strategic and tactical work by session type.** - **Change:** add two lines to the
+top of `ladder.md`. - **Why:** your scope rules ("least code", "no unrequested refactors") are tactical by Ousterhout's
+definition. That is right for a slice session and wrong for a planning session. Today nothing says which applies when. >
+In a planning session, invest in design: sketch each new or changed interface twice and keep the one that hides more. In
+a slice session the design is settled; the scope rules hold. **A2 · Yes · S. Add four rules to the Design section in
+`standards.md`.** Each is a concrete check, not a slogan. Your deep-module and leak tests are already there; these fill
+the gaps. > - Pull complexity down: the module absorbs it so callers don't. A caller that must check, retry or convert
+after every call means the module is too shallow. > - A flag or mode parameter that switches behaviour is two functions
+braided together; split it. > - A function or class that only forwards to another adds a name and hides nothing; delete
+it or give it work. > - Define errors out of existence where the semantics allow: deleting what is absent succeeds, an
+empty result is `[]`, not `null`. **A3 · Yes · S. Fix ladder rung...(truncated) (#62)
+
+[user]
+short pause before the next step, reply with just: ready (#64)
+
+[assistant]
+ready (#65)
+
+---
+
+-
+
+[user]
+item G1 on your list can be dropped. all the other recommendations agree. AutoApprove. implement them in this repo.
+don't commit or push. no workers (scout --rw), do it in this session; read-only scouts are fine. when done run
+./config/pi/verify.sh and ./config/pi/build-agents.sh --check and report results (#66)
+
+[assistant]
+* codemode (#67, #69, #71, #73, #75, #77, #79, #81, #83, #85, #87, #89, #91, #93, #95, #97, #99, #101) x18
+[tool_error] codemode (#102)
+Script failed
+[assistant]
+* codemode (#103, #105, #107, #109, #111) x5
+
+---
+
+The conversation before this point has been compacted into the summary above. Details not captured here — exact code,
+error messages, file paths — are only recoverable via `recall`. Use `recall` to search the session history. Do not redo
+work already completed.
+
+----
+Use `recall` with an id to retrieve original context, or `#N:path` drill-down to explore file content from referenced entries.
+When entries conflict, the most recent entry reflects the latest known state.
+----
+</answer>
+
+Known facts:
+
+1. Testing: strict red-green TDD may be the wrong model for agents; lean toward Ousterhout instead
+2. Outcome-driven development instead of spec (or anything else) driving the work
+3. Agentic loops and subagents have not worked well (scout is ok); prefers short sessions: small bounded slices for implementation, or a bigger one for architecture/planning
+4. A1: split strategic vs tactical work by session type (planning vs slice) in ladder.md
+5. A2: four Ousterhout design rules in standards.md (pull complexity down, split flag/mode params, no pass-through functions, define errors out of existence)
+6. A3: ladder rung 5 'least code' becomes 'simplest code: fewest concepts, not fewest lines'
+7. A4: separate what from how/when (no scheduling, retries or caching inside business logic)
+8. A5: design it twice in /plan (two sketches for a new or changed interface)
+9. A6: (No) interface comments written before the code / comments-first
+10. B1: red-first only for bugs; new behaviour tested through the interface after it is settled (replace 'TDD enforced')
+11. B2: expected values come from the requirement, never from running the code under test
+12. B3: break-it check in /review: break the covered code once and confirm each new test fails
+13. B4: slice-check script (tests green, test/assertion count not lower, no skip/only, diff within declared files), optional pre-commit
+14. B5: (Maybe) opt-in mutation testing (Stryker/mutmut) on changed files in /review
+15. B6: (No) TDD-guard hook blocking edits until a failing test exists
+16. C1: outcome card (outcome, done-when, interface, mechanism, out) as the one unit of work, replacing the Goal block and spec-contract
+17. C2: done-when rule at the top of persona-core: state the check before acting; done means ran it and showed output
+18. C3: rewrite /plan for two modes (planning and slice), removing the auto section, dispatch and rework
+19. C4: delete spec-contract.md
+20. C5: slice-session start rule in /plan 'go': run done-when checks red, work, green, slice-check, report
+21. C6: shorten /handoff by default; keep the 12-section form as /handoff full
+22. C7: (Maybe) cut /where to three rungs (target, slice, this)
+23. D1: cut the Recommendations block in persona-core to two lines
+24. D2: fix the CLAUDE.md contradiction between 'teach concepts/explain why' and 'explain only when asked'
+25. D3: remove duplicate rules in Replies
+26. D4: scout exception: read it yourself when the content itself is the subject
+27. D5: (Maybe) fewer coined labels (rungs, sensors, effort, beyond)
+28. E1: take worker/auto protocol out of persona-pi.md (and ops.md, slice/auto branch prefixes)
+29. E2: (Maybe) move the review checklist from ops.md to review.md, gated by an eval
+30. E3: prompt order: judgment, done-when and scope first, ladder last
+31. E4: (No) shrinking AGENTS.md for tokens
+32. F1: retire auto mode (auto-run.ts, auto-slice, auto-guard, hooks, orch eval role)
+33. F2: retire --rw workers once B4 has landed
+34. F3: keep scout --review as an on-demand second reviewer for a slice
+35. F4: at the compaction cap start a new session instead of compacting (handoff and start fresh; optionally lower the cap to ~120k)
+36. F5: align the Claude Code delta: drop the concurrent-subagents rule; read-only subagents, one writer
+37. F6: (Maybe) drop health-footer.ts
+38. F7: (No) Ralph loops, parallel writers, spec kits
+39. G1: clean up memory.md (too big; move or delete the dotfiles and pi scopes)
+40. G2: ~200-character bullet cap in /memory plus a verify.sh line-cap check
+41. G3: (Maybe) idle cache rebuilds / longer cache TTL
+42. H1: split DESIGN.md into current decisions and a dated LOG.md
+43. H2: commit the uncommitted fragment/prompt edits first so the baseline is in git; fix stale claude-delta.md:23
+44. H3: prose checks in verify.sh (agents named exist, memory line cap, no mention of removed features)
+45. I1: before/after agent-eval gate for the whole change set (review, plan, scout roles, cold-start probe)
+46. I2: (Maybe) a slice eval role to replace orch
+47. G1 (the memory.md clean-up) is the item that was dropped

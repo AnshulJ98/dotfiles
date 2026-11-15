@@ -1,0 +1,33 @@
+Nothing has been implemented. `git status` in this repo is clean, and every tool call after your go-ahead only read files. So there was no hypercritical review, and there's nothing to revert.
+
+**1. How you work (from your first message)**
+- Testing: strict red-green TDD may be the wrong model for agents. You'd rather follow Ousterhout.
+- What drives development: outcome-driven, not spec-driven.
+- Subagents and session shape: agentic loops and subagents haven't worked for you, but the scout is fine. You like short sessions: small bounded slices for implementation, or a bigger session for architecture and planning.
+
+**2. Item IDs (44 in total)**
+- **A:** A1 strategic vs tactical by session type · A2 four Ousterhout design rules · A3 ladder rung 5 says "simplest", not "least" · A4 separate what from how and when · A5 design it twice in `/plan` · A6 (No) comments written first
+- **B:** B1 red-first only for bugs · B2 expected values never come from the implementation · B3 break-it check in `/review` · B4 `slice-check` script · B5 (Maybe) mutation testing on request · B6 (No) TDD-guard hook
+- **C:** C1 outcome card · C2 done-when rule at the top of the prompt · C3 two-mode `/plan` · C4 delete `spec-contract.md` · C5 slice "go" start rule · C6 short `/handoff` · C7 (Maybe) cut `/where`
+- **D:** D1 two-line Recommendations · D2 fix the CLAUDE.md "teach concepts" contradiction · D3 remove duplicate rules in Replies · D4 read it yourself when the content is the subject · D5 (Maybe) fewer coined labels
+- **E:** E1 take worker and auto protocol out of `persona-pi.md` · E2 (Maybe) move the review checklist to `review.md` · E3 prompt order · E4 (No) shrink AGENTS.md for tokens
+- **F:** F1 retire auto mode · F2 retire `--rw` workers · F3 `scout --review` as a second reviewer · F4 at the cap, start a new session instead of compacting · F5 align the Claude Code delta · F6 (Maybe) drop `health-footer.ts` · F7 (No) Ralph loops and parallel writers
+- **G:** G1 memory cleanup · G2 bullet cap and a line-cap check · G3 (Maybe) longer cache TTL
+- **H:** H1 split `DESIGN.md` · H2 commit the live edits first · H3 prose checks in `verify.sh`
+- **I:** I1 before/after eval gate · I2 (Maybe) a `slice` eval role
+
+**3. Dropped:** G1.
+
+**4. Implemented and reviewed:** neither. Here is what the reads found, which changes the plan:
+- This checkout is the older config. It has no Recommendations block, no `health-footer.ts` (so F6 doesn't apply), no `scout --review`, and no `where.md`.
+- It does have the auto-guard hooks, the `--rw` workers and the auto section in `plan.md`, so F1 and F2 still apply.
+- G3 can now be done: pi 1.5.2 documents `PI_CACHE_RETENTION=long` (`docs/environment-variables.md:89`).
+- I1 can't run as written. `agent-eval` probes the home `~/.pi/agent/AGENTS.md`, which doesn't link to this repo, and its scoring is done by hand. E2 waits on I1, so E2 waits too.
+
+**5. X findings:** I have no list with X IDs. A recall search for "X1" and "X2" found only your question, so there is nothing to approve.
+
+**6. Latest check results**
+- `verify.sh`, run once as a baseline before any edits: **63 passed, 6 failed**. Five failures are symlinks: `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template`, the worktrunk `config.toml`, and husky `init.sh`. The sixth is `node tests pass`. The tsc check was skipped because tsc isn't installed.
+- `build-agents.sh --check`: one earlier result printed "OK: AGENTS/CLAUDE files match fragments". **Unsure** whether that ran against this repo or the live `~/Dev/dotfiles`. It hasn't been run since.
+
+**Left:** every approved item. The next step is to start with the prose fragments: A1–A5, B1–B3, C2, D1–D4, E1, E3 and F5.

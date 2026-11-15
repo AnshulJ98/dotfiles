@@ -1,0 +1,427 @@
+You check whether an answer states specific known facts. You have no tools; use only the text below.
+
+Below are an answer to a question about a codebase and a numbered list of facts that a correct answer states. For each fact, decide whether the answer states it: the same claim, in any words, anywhere in the answer. It does not count when the answer only cites the place where the fact could be read, says something vaguer that does not commit to the fact, or contradicts the fact anywhere. Do not use your own knowledge of the codebase: a fact the answer does not state is "no" even if it is true.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the facts, exactly one entry per fact and nothing else (no prose, no code fence). For example, with three facts: ["yes","no","no"].
+
+Answer:
+
+<answer>
+## Goal
+1. Deep evaluation of the user's pi coding-agent config (prose, philosophy, core instructions, harness), using web and community research. Done.
+2. Produce a selectable, ID'd list of enhancements aimed at the highest-quality code at the lowest cost. The target blend is: Ousterhout-style code philosophy, a solution ladder, smart brevity, terse communication, depth over ceremony, decomplecting, and agent best practices in the harness. Done.
+3. Execute every approved item except G1 in the repo at `/private/tmp/agent-eval-long/r2/base/repo`. The user signed off with "AutoApprove" minus G1. In progress.
+
+## Constraints & Preferences
+- **Execution rules for this task:**
+  - Don't commit or push.
+  - No workers (no `scout --rw`). Do the work in this session. Read-only scouts are fine.
+  - When done, run `./config/pi/verify.sh` and `./config/pi/build-agents.sh --check` and report the results.
+- **User's working style:**
+  - Prefers short sessions: small bounded slices for implementation, one larger session for architecture and planning.
+  - Has had no success with agentic loops or with subagents that write code. The read-only scout is OK.
+  - Leans away from strict red-green TDD toward Ousterhout, and toward outcome-driven development over spec-driven.
+- **The config's own rules:**
+  - Measure prose changes rather than assert them.
+  - Prefer a check in code to more prose.
+  - Shrinking AGENTS.md is not a token lever: removing it raised output tokens 29%.
+- If the user asks for a pause or a minimal reply (for example "ready"), answer exactly as asked and take no action.
+- After a compaction, resume the in-progress task. Do not use ask_user to resume.
+
+## Progress
+### Done
+- [x] **Evaluation and proposal**
+  - Delivered the evaluation and 44 ID'd items.
+  - Sign-off received: everything approved except G1.
+- [x] **Live config**
+  - Located at `/Users/anshulj/Dev/dotfiles/config/pi`; `~/.pi/agent/*` symlinks to it.
+  - It has uncommitted edits to `persona-core.md`, `persona-pi.md`, `plan.md`, `spec-contract.md` and `where.md`.
+- [x] **Working repo surveyed**
+  - Path: `/private/tmp/agent-eval-long/r2/base/repo`.
+  - HEAD is `822eee5`, with a clean status.
+  - Details are under Critical Context.
+- [x] **Baseline node tests**
+  - Command: `node --test config/pi/tests/*.test.ts`, output saved to `/tmp/base-tests.txt`.
+  - Two pre-existing failures, both in `scout-bin.test.ts`:
+    - test 141 fails with an ENOENT on `herdr.log`;
+    - test 142 fails with `pane.sh` mode `-1 !== 384`.
+  - Test 140 also shows an ENOENT on `herdr.log`.
+- [x] **Pre-edit snapshot:** saved the generated files to `/tmp/before/{AGENTS.md,CLAUDE.md,AGENTS.work.md}`.
+- [x] **I1 "before" arm finished**
+  - Ran as job bg1 (exit 0, 21s); all probes returned rc=0 with empty `.err` files.
+  - Output is in `/tmp/i1/before/`, with the summary in `summary.txt`.
+  - Model was `claude-opus-5-5` for every probe:
+
+    | Probe | Words | Cost |
+    |---|---|---|
+    | impl-1 | 80 | $0.0803 |
+    | premise-1 | 447 | $0.0862 |
+    | premise-2 | 385 | $0.0815 |
+    | review-1 | 468 | $0.0810 |
+    | review-2 | 384 | $0.0778 |
+    | review-3 | 464 | $0.0818 |
+- [x] **Files read so far:**
+  - `config/pi/prompts/{plan,review,handoff,memory}.md`;
+  - `config/pi/bin/scout` (header and usage: `--brief`, `--spec -`, `--fork`, `--ctx`, `--rw`, `--model`, `--thinking`, `--timeout`);
+  - the header doc of `config/pi/extensions/worker-sensors.ts`.
+- [x] **Mapped `worker-sensors.ts` exports to lift for B4 `slice-check`:**
+  - `parseSpec` (line 109), `isAllowed` (151), `repoRelative` (162);
+  - `forbiddenBash` (220), `testWeakening` (250), `addedLines` (262);
+  - `depsChanged` (290), `classifyFailure` (310), `nextStep` (317);
+  - types `WorkerSpec`, `CheckFailure`, `Step`.
+
+### In Progress
+- [ ] Implementing the approved items. No implementation edits have been made to repo files yet.
+
+### Blocked
+- None.
+
+## Key Decisions
+All items are approved except G1, which is dropped. The Maybe items in the core set (B5, E2, F6, G3) are included per AutoApprove. Items marked No are not to be done.
+
+**A. Code philosophy**
+- **A1**: Two lines at the top of `ladder.md`: the planning session is strategic (design it twice); the slice session is tactical.
+- **A2**: Four rules added to the Design section of `standards.md`:
+  - pull complexity down;
+  - split flag/mode params;
+  - delete pass-through functions;
+  - define errors out of existence.
+- **A3**: Ladder rung 5 becomes "Write the simplest code that works: fewest concepts, not fewest lines."
+- **A4**: Keep what is decided apart from when/how it runs (no scheduling, retries or caching in business logic).
+- **A5**: `plan.md:48` changes to always two sketches for interface changes.
+- **A6 (No)**: comments-first.
+
+**B. Testing**
+- **B1**: Red-first only for bugs. Fix `spec-contract.md:49` and `claude-delta.md:23` ("TDD enforced").
+- **B2**: Expected values never come from the implementation.
+- **B3**: Break-it check in `/review` pass 2.
+- **B4**: `slice-check <base>` script plus optional pre-commit. Logic is lifted from `worker-sensors.ts` and `lib/bash-changes.ts`. It checks:
+  - tests rerun green;
+  - test/assert count is not lower;
+  - no new skip/only;
+  - diff stays within the declared files.
+- **B5**: Opt-in mutation testing (Stryker / mutmut).
+- **B6 (No)**: TDD-guard hook.
+
+**C. Outcome-driven workflow**
+- **C1**: Outcome card replaces the `/plan` Goal block and `spec-contract.md`. Fields:
+  - `outcome:`
+  - `done-when:` (1–5 runnable checks, the first red today)
+  - `interface:`
+  - `mechanism:`
+  - `out:`
+- **C2**: Done-when rule at the top of `persona-core.md`: "Before acting, state the check that shows it's done. Done means you ran it and showed the output."
+- **C3**: Rewrite `/plan` into planning and slice modes. Remove the auto section (~860 words), dispatch and rework.
+- **C4**: Delete `spec-contract.md`.
+- **C5**: `/plan` "go" flow: checks red → work → green → `slice-check` → report.
+- **C6**: Short `/handoff` by default; `/handoff full` keeps the 12 sections.
+- **C7**: `/where` cut to three rungs (target, slice, this). It was not in the core set; status unclear, so treat it as optional.
+
+**D. Communication and prose**
+- **D1**: Cut the Recommendations block (`persona-core.md:15`) to two lines.
+- **D2**: Fix the claude-delta "Teach concepts" vs "explain why only when asked" contradiction.
+- **D3**: Remove duplicate rules in Replies (about 15% fewer words).
+- **D4**: Scout exception when the content itself is the subject.
+- **D5**: Fewer coined labels. Optional.
+
+**E. Always-loaded prompt**
+- **E1**: Remove `persona-pi.md:39-66`, `ops.md:43` and the `slice/`/`auto/` branch rules.
+- **E2**: Move the review checklist from `ops.md:13-35` to `review.md`, gated by eval.
+- **E3**: Prompt order: Judgment, done-when, Scope first; ladder last.
+- **E4 (No)**: Shrinking AGENTS.md for tokens.
+
+**F. Harness**
+- **F1**: Retire auto mode. Removes:
+  - `auto-run.ts`, `bin/auto-slice` and their tests;
+  - `config/git/bin/auto-guard`, the `templateDir` setting and `git-hooks-install`;
+  - the husky / `githooks` auto-guard calls;
+  - the auto parts of `pi-health`;
+  - the `orch` eval role;
+  - the DESIGN rows.
+- **F2**: Retire `--rw` workers after B4. This affects `worker-sensors.ts`, the `--rw`/`--spec` handling in `bin/scout`, `worker.prompt.md`, and the tests `worker-resume`, `worker-sensors` and the relevant parts of `scout-bin`.
+- **F3**: Keep `scout --review <base>` on demand.
+- **F4**: At the cap, `compact-cap` notifies "`/handoff` and start fresh". Drop the auto-resume part of `prime-reminder.ts`. Optionally lower the cap from 210k to about 120k.
+- **F5**: Claude delta: remove the 4-concurrent rule; read-only subagents, one writer.
+- **F6**: Drop `health-footer.ts`.
+- **F7 (No)**: Ralph loops, parallel writers, spec kits.
+
+**G. Memory**
+- **G1**: Dropped by the user.
+- **G2**: ~200-char bullet cap in `/memory`, plus a `verify.sh` line-cap check.
+- **G3**: Cache TTL. Unverified whether pi exposes it.
+
+**H. Hygiene**
+- **H1**: Split `DESIGN.md` into decisions plus `LOG.md`.
+- **H2**: Fix `claude-delta.md:23`. The commit part is moot: no commits allowed and the repo is clean.
+- **H3**: Prose checks in `verify.sh`:
+  - agents named in `claude-delta.md` exist;
+  - the memory line cap holds;
+  - no mention of `AUTO.md` or `--rw`.
+
+**I. Measurement**
+- **I1**: Before/after agent-eval gate. Same model both times. Pass = no recall drop.
+- **I2**: A `slice` eval role to replace `orch`. Optional.
+
+## Next Steps
+1. Prose edits:
+   - A1–A5, B1–B3 and C2 in the `agents-md/` fragments and prompts;
+   - D1–D4, E1, E2 and E3;
+   - F5 in `claude-delta.md`.
+2. Workflow:
+   - C1 and C3–C6 in `plan.md`, `handoff.md` and `review.md`, and delete `spec-contract.md`;
+   - then B4: create `slice-check` from the `worker-sensors.ts` helpers;
+   - then F1 and F2 retirements, updating `verify.sh`, `install.sh`, `githooks/`, `config/husky/init.sh`, `home/.gitconfig`, the tests, the skills that mention auto/`--rw`, and `agent-eval` (`orch` role).
+3. F3, F4 (`prime-reminder.ts`, `compact-cap`), F6, G2 and G3.
+4. H1 (create `LOG.md`), H3 (`verify.sh` checks), then `config/pi/build-agents.sh` to regenerate the generated files.
+5. Run the I1 after arm: `bash /tmp/i1/run-arm.sh after config/pi/AGENTS.md`, then compare against `/tmp/i1/before/summary.txt`.
+6. Run `node --test config/pi/tests/*.test.ts`, `./config/pi/verify.sh` and `./config/pi/build-agents.sh --check`. Report the results, noting the 2 `scout-bin` herdr failures as pre-existing.
+
+## Critical Context
+**Working repo**
+- Path: `/private/tmp/agent-eval-long/r2/base/repo`. Edit here, not in the live dotfiles.
+- Pi config is in `config/pi/`:
+  - fragments in `agents-md/`;
+  - prompts in `prompts/`;
+  - `bin/scout`;
+  - extensions in `extensions/`;
+  - tests in `tests/`;
+  - shared code in `lib/`.
+- Generated files:
+  - `AGENTS.md`, `CLAUDE.md` and `AGENTS.work.md` are built by `build-agents.sh`;
+  - the `githooks/pre-commit` hook runs `build-agents.sh --check`.
+- **Git hooks**
+  - `githooks/{pre-commit,pre-merge-commit,pre-push}` call `auto-guard`.
+  - `config/git/` contains:
+    - `bin/{auto-guard,git-hooks-install,worktree-setup}`;
+    - `template/hooks/*`;
+    - `tests/{hooks,worktree}.test.ts`.
+  - `home/.gitconfig` sets `templateDir`.
+  - `install.sh` links these at about lines 97–104 and sets `core.hooksPath` at line 163.
+- **Files referencing auto/`--rw`**
+  - Skills: `agents/skills/{d2-diagrams,map}/SKILL.md`, `claude/skills/{migrate,parallel}/SKILL.md`.
+  - `config/husky/init.sh`.
+  - `config/pi/agents-md/{claude-delta,ops,persona-pi}.md`.
+  - `config/pi/DESIGN.md`.
+  - Extensions: `config/pi/extensions/{prime-reminder,stream-watchdog,worker-sensors}.ts`.
+  - Prompts: `config/pi/prompts/{plan,review,spec-contract}.md`.
+  - `bin/scout` and the tests `scout-bin`, `scout-ext`, `worker-resume`, `worker-sensors`.
+  - `docs/operating-proposal-2026-09-26.md`, `docs/pi-adjustments-plan.md`, `install.sh`.
+- **worker-sensors.ts design notes**
+  - Git is guarded by the `bin/guard/git` wrapper on PATH.
+  - Settle checks rerun the tests and diff against the load snapshot.
+  - There is an ast-grep ratchet via `sgconfig.yml` and `.ast-grep-baseline.json`.
+  - `max-lines` defaults to 400.
+- **Other repo contents**
+  - `agent-eval/`: `run.sh`, `parse_probes.py`, `prompts/{impl,premise,review}.txt`, `fixtures/review-target.ts`.
+  - `claude/agents/scout.md`.
+  - `verify.sh` is 220 lines.
+- **I1 harness**
+  - Script: `/tmp/i1/run-arm.sh <arm> <agents-file>`.
+  - Runs `pi -p --no-session --mode json -xt ask_user -nc --append-system-prompt <file>`.
+  - Probes: 3 review, 2 premise and 1 impl, with a 600s timeout each.
+  - Output goes to `/tmp/i1/<arm>/`.
+- **Measurements**
+  - Machinery sizes:
+    - `auto-run.ts` is 242 lines, `auto-slice` 259, `worker-sensors.ts` 808;
+    - auto/worker/health files plus their tests total about 2,505 lines;
+    - `plan.md` is 1,892 words (~857 auto);
+    - `where.md` is 816 words;
+    - 11 of 38 eval tasks are `orch`.
+  - `memory.md` is 146 KB, 349 bullets, with a median bullet of 331 chars.
+  - Worker verdicts: 354 PASS, 90 CANNOT-RUN, 5 FAIL.
+- **Default model:** `claude-opus-5-5`, with medium thinking and codemode `"only"`.
+
+<read-files>
+/Users/anshulj/Dev/dotfiles/config/pi/DESIGN.md
+/tmp/p1.txt
+/tmp/p2.txt
+/tmp/p3.txt
+config/pi/prompts/handoff.md
+config/pi/prompts/memory.md
+config/pi/prompts/plan.md
+config/pi/prompts/review.md
+config/pi/bin/scout
+config/pi/extensions/worker-sensors.ts
+/tmp/i1/before/summary.txt
+</read-files>
+
+<modified-files>
+/tmp/i1/run-arm.sh
+</modified-files>
+
+---
+
+**Turn Context (split turn):**
+
+## Original Request
+
+The only user message in this span is a post-compaction instruction. The task itself sat in an earlier summary that does not appear here, so the concrete goal is **lost in compaction**.
+
+That instruction asked the assistant to rebuild the task before acting:
+- **target:** the outcome the user asked for. The user's latest message beats the summary.
+- **left:** what is still open. Any "done" from the summary must be checked against the files or git.
+- **next:** the one action to take now.
+- **waiting:** anything that needs the user's decision.
+- If a goal, check or decision was lost, say "lost in compaction" rather than guess.
+- Before the first tool call, write two lines, `left:` and `next:`.
+- Standing rules still apply: lead with the answer, keep every change inside the request, take the first option in Before Writing Code that holds, and delegate per the dispatch rule.
+
+The assistant did **not** write the `left:`/`next:` lines. It went straight to read-only inspection. No files were edited.
+
+## Progress So Far
+
+The work so far is read-only inventory of the dotfiles repo, centred on `config/pi` and the git hooks.
+
+**`config/pi` layout**
+- Top level holds `agents-md/`, `AGENTS.md`, `AGENTS.work.md`, `CLAUDE.md`, `DESIGN.md` (6362 words), `build-agents.sh`, `verify.sh`, `settings.json`, `bin/`, `extensions/`, `lib/`, `prompts/`, `tests/`, `themes/` and `web-search.json`.
+- **agents-md fragments**, with word counts:
+
+  | Fragment | Words |
+  |---|---|
+  | `persona-core` | 553 |
+  | `persona-pi` | 444 |
+  | `standards` | 623 |
+  | `ops` | 317 |
+  | `ladder` | 81 |
+  | `claude-delta` | 411 |
+  | `env.work` | 184 |
+
+- **prompts**, with word counts:
+
+  | Prompt | Words |
+  |---|---|
+  | `challenge` | 294 |
+  | `diagnose` | 378 |
+  | `grill` | 1291 |
+  | `handoff` | 263 |
+  | `memory` | 234 |
+  | `plan` | 1447 |
+  | `review` | 569 |
+  | `spec-contract` | 511 |
+
+- **`build-agents.sh`** assembles `AGENTS.md` (home) and `AGENTS.work.md` (work) from the fragments. The outputs are committed; edit fragments, never outputs. `--check` exits 1 when the outputs have drifted.
+- **`bin/`** holds `guard/`, `scout`, `scout.prompt.md`, `session-audit` and `worker.prompt.md`.
+  - `bin/guard/git` uses `PI_SCOUT_MODE=read` to also refuse commit and add.
+- **extensions:**
+  - `ask-user-args`, `background`, `bedrock-reasoning`, `compact-cap`, `context-bar`, `docs`, `heads-up`, `kitty-links`, `mlx-local`
+  - `polish-chrome`, `prime-reminder`, `scout-pane`, `scout`, `split-diff`, `stream-watchdog`, `worker-sensors`
+- **`lib/`** holds `compact-cap-state.ts` and `watchdog.ts`.
+- **tests:**
+  - `ask-user-args`, `background`, `bedrock-reasoning`, `context-bar`, `docs`, `git-guard`, `kitty-links`
+  - `scout-bin`, `scout-ext`, `session-audit`, `split-diff`, `watchdog`, `worker-resume`, `worker-sensors`
+  - `pi-package.ts` is a helper.
+  - Run them with `node --test 'config/pi/tests/*.test.ts'`.
+
+**`prompts/plan.md`**
+- A settled spec gets a short plan: "go" does it, "dispatch" sends it to the worker, "auto" runs a slice list unattended.
+- Anything else gets a Now/Target/Between/Next view.
+- A multi-deliverable spec becomes a slice loop with branches named `slice/<name>`.
+
+**`extensions/prime-reminder.ts`**
+- Its REMINDER is the post-compaction text the user's message echoes. It adds: "If the repo root has an AUTO.md, re-read it before anything else."
+- It also has a RESUME message for aborted runs.
+- It imports `capFiring` from `lib/compact-cap-state.ts`.
+
+**Git hooks**
+- `config/git/bin` holds `auto-guard`, `git-hooks-install` and `worktree-setup`.
+- `config/git/template/hooks` holds:
+  - `post-checkout` and `post-merge`, which call `worktree-setup`.
+  - `pre-commit`, `pre-merge-commit` and `pre-push`, which call `auto-guard`.
+  - Each stub has a `# dotfiles-hook` marker.
+- The repo's own `githooks/` has the same guard lines. Its `pre-commit` also runs `config/pi/build-agents.sh --check`.
+- `config/husky/init.sh` runs the guard for husky repos.
+- `install.sh` (lines 97–102, 163) links the template and the bins. It sets `core.hooksPath githooks` for the dotfiles repo.
+- `home/.gitconfig` sets `init.templateDir = ~/.config/git/template`.
+- `git-hooks-install [--dry-run] <repo>...` installs the stubs into existing repos and skips repos with `core.hooksPath` set.
+- Tests live in `config/git/tests/hooks.test.ts` and `worktree.test.ts`.
+  - The refusal message matches `auto-guard: AUTO.md is present (an auto run is in progress); <hook> refused`.
+
+**Other findings**
+- `claude/agents` contains only `scout.md`.
+- The pi package found was 1.5.2 under `/tmp/agent-eval-long/...`. pi-ai supports `PI_CACHE_RETENTION=long` (`cache-warming.js:27`).
+- `worker-resume.test.ts` checks that a `--rw` worker loads `stream-watchdog` and `worker-sensors`, stalls, is aborted, resumes exactly once, and ends PASS.
+- `worker-sensors.test.ts` covers `addedLines`, `isAllowed`, `repoRelative` and test-weakening detection.
+
+## Context Needed to Continue
+
+- The actual task and its open items cannot be recovered from these messages. On resuming, state "lost in compaction" for the goal and ask the user, or check `git status` and look for an `AUTO.md` at the repo root.
+- `git status --short` was run but its output was truncated, so the working-tree state is unknown.
+- `bash` output often came back `undefined` or empty. The pattern that worked was to redirect output to a `/tmp` file and then read it with `tools.read`.
+
+<read-files>
+/Users/anshulj/Dev/dotfiles/config/pi/DESIGN.md
+/tmp/frag.txt
+/tmp/inv.txt
+/tmp/inv2.txt
+/tmp/inv3.txt
+/tmp/p1.txt
+/tmp/p2.txt
+/tmp/p3.txt
+/tmp/prompts.txt
+config/git/tests/hooks.test.ts
+config/pi/bin/scout
+config/pi/extensions/compact-cap.ts
+config/pi/extensions/prime-reminder.ts
+config/pi/extensions/worker-sensors.ts
+config/pi/prompts/handoff.md
+config/pi/prompts/memory.md
+config/pi/prompts/plan.md
+config/pi/prompts/review.md
+config/pi/tests/scout-bin.test.ts
+config/pi/tests/worker-sensors.test.ts
+</read-files>
+
+<modified-files>
+/tmp/i1/run-arm.sh
+</modified-files>
+</answer>
+
+Known facts:
+
+1. Testing: strict red-green TDD may be the wrong model for agents; lean toward Ousterhout instead
+2. Outcome-driven development instead of spec (or anything else) driving the work
+3. Agentic loops and subagents have not worked well (scout is ok); prefers short sessions: small bounded slices for implementation, or a bigger one for architecture/planning
+4. A1: split strategic vs tactical work by session type (planning vs slice) in ladder.md
+5. A2: four Ousterhout design rules in standards.md (pull complexity down, split flag/mode params, no pass-through functions, define errors out of existence)
+6. A3: ladder rung 5 'least code' becomes 'simplest code: fewest concepts, not fewest lines'
+7. A4: separate what from how/when (no scheduling, retries or caching inside business logic)
+8. A5: design it twice in /plan (two sketches for a new or changed interface)
+9. A6: (No) interface comments written before the code / comments-first
+10. B1: red-first only for bugs; new behaviour tested through the interface after it is settled (replace 'TDD enforced')
+11. B2: expected values come from the requirement, never from running the code under test
+12. B3: break-it check in /review: break the covered code once and confirm each new test fails
+13. B4: slice-check script (tests green, test/assertion count not lower, no skip/only, diff within declared files), optional pre-commit
+14. B5: (Maybe) opt-in mutation testing (Stryker/mutmut) on changed files in /review
+15. B6: (No) TDD-guard hook blocking edits until a failing test exists
+16. C1: outcome card (outcome, done-when, interface, mechanism, out) as the one unit of work, replacing the Goal block and spec-contract
+17. C2: done-when rule at the top of persona-core: state the check before acting; done means ran it and showed output
+18. C3: rewrite /plan for two modes (planning and slice), removing the auto section, dispatch and rework
+19. C4: delete spec-contract.md
+20. C5: slice-session start rule in /plan 'go': run done-when checks red, work, green, slice-check, report
+21. C6: shorten /handoff by default; keep the 12-section form as /handoff full
+22. C7: (Maybe) cut /where to three rungs (target, slice, this)
+23. D1: cut the Recommendations block in persona-core to two lines
+24. D2: fix the CLAUDE.md contradiction between 'teach concepts/explain why' and 'explain only when asked'
+25. D3: remove duplicate rules in Replies
+26. D4: scout exception: read it yourself when the content itself is the subject
+27. D5: (Maybe) fewer coined labels (rungs, sensors, effort, beyond)
+28. E1: take worker/auto protocol out of persona-pi.md (and ops.md, slice/auto branch prefixes)
+29. E2: (Maybe) move the review checklist from ops.md to review.md, gated by an eval
+30. E3: prompt order: judgment, done-when and scope first, ladder last
+31. E4: (No) shrinking AGENTS.md for tokens
+32. F1: retire auto mode (auto-run.ts, auto-slice, auto-guard, hooks, orch eval role)
+33. F2: retire --rw workers once B4 has landed
+34. F3: keep scout --review as an on-demand second reviewer for a slice
+35. F4: at the compaction cap start a new session instead of compacting (handoff and start fresh; optionally lower the cap to ~120k)
+36. F5: align the Claude Code delta: drop the concurrent-subagents rule; read-only subagents, one writer
+37. F6: (Maybe) drop health-footer.ts
+38. F7: (No) Ralph loops, parallel writers, spec kits
+39. G1: clean up memory.md (too big; move or delete the dotfiles and pi scopes)
+40. G2: ~200-character bullet cap in /memory plus a verify.sh line-cap check
+41. G3: (Maybe) idle cache rebuilds / longer cache TTL
+42. H1: split DESIGN.md into current decisions and a dated LOG.md
+43. H2: commit the uncommitted fragment/prompt edits first so the baseline is in git; fix stale claude-delta.md:23
+44. H3: prose checks in verify.sh (agents named exist, memory line cap, no mention of removed features)
+45. I1: before/after agent-eval gate for the whole change set (review, plan, scout roles, cold-start probe)
+46. I2: (Maybe) a slice eval role to replace orch
+47. G1 (the memory.md clean-up) is the item that was dropped

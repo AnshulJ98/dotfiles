@@ -1,0 +1,148 @@
+You check whether an answer states specific known facts. You have no tools; use only the text below.
+
+Below are an answer to a question about a codebase and a numbered list of facts that a correct answer states. For each fact, decide whether the answer states it: the same claim, in any words, anywhere in the answer. It does not count when the answer only cites the place where the fact could be read, says something vaguer that does not commit to the fact, or contradicts the fact anywhere. Do not use your own knowledge of the codebase: a fact the answer does not state is "no" even if it is true.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the facts, exactly one entry per fact and nothing else (no prose, no code fence). For example, with three facts: ["yes","no","no"].
+
+Answer:
+
+<answer>
+Below is what I remember. Item 5 is lost entirely, and items 1 and 2 have gaps, each marked unsure.
+
+**1. How you work** (from my summary; I'm not sure it all came from your very first message)
+- **Testing:** you lean away from strict red-green TDD.
+- **What drives development:** outcomes, not specs, with Ousterhout's design philosophy.
+- **Subagents and session shape:** agentic loops and code-writing subagents have never worked for you, though a read-only scout is fine. You prefer short sessions: small bounded slices for implementation, and one larger session for architecture and planning.
+
+**2. The first enhancement list**
+My summary says 44 items, but I can only reconstruct 43 ids, so one is missing (unsure which). Items marked "No" were proposed and rejected; what they said is unsure.
+- **A, code philosophy:**
+  - A1: strategic vs tactical
+  - A2: Ousterhout design rules
+  - A3: rung 5 "fewest concepts"
+  - A4: decisions kept apart from scheduling, retries and caching
+  - A5: two sketches for an interface
+  - A6: No (content unsure)
+- **B, testing:**
+  - B1: red-first for bugs only
+  - B2: expected values never from the implementation
+  - B3: break-it pass in `/review`
+  - B4: `slice-check`
+  - B5: mutation testing in `/review`
+  - B6: No (content unsure)
+- **C, outcome-driven workflow:**
+  - C1: outcome card
+  - C2: done-when rule
+  - C3: `/plan` modes
+  - C4: delete `spec-contract.md`
+  - C5: "go" flow
+  - C6: no-op (content unsure)
+  - C7: `/where` three rungs, optional
+- **D, communication:**
+  - D1: no-op (content unsure)
+  - D2: fix "Teach concepts"
+  - D3: dedupe Replies
+  - D4: read it yourself
+  - D5: fewer coined labels, optional
+- **E, always-loaded prompt:**
+  - E1: remove worker and auto prose
+  - E2: move the review checklist to `review.md`, gated by eval
+  - E3: prompt order
+  - E4: No (content unsure)
+- **F, harness:**
+  - F1: retire auto runs
+  - F2: retire `--rw` workers
+  - F3: no-op (content unsure)
+  - F4: compact-cap handoff
+  - F5: claude-delta subagents
+  - F6: no-op (content unsure)
+  - F7: No (content unsure)
+- **G, memory:**
+  - G1: content unsure
+  - G2: ~200-char bullet cap plus a `verify.sh` check
+  - G3: already set (content unsure)
+- **H, hygiene:**
+  - H1: split `DESIGN.md` into decisions plus `LOG.md`
+  - H2: done through F5 and D2
+  - H3: prose checks in `verify.sh`
+- **I, measurement:**
+  - I1: before/after eval
+  - I2: a `slice` eval role to replace `orch`, optional
+
+**3. Dropped:** G1. What G1 proposed is unsure.
+
+**4. Implemented**
+- **Done:** all of A1–A5, B1–B5, C1–C5, D2–D4, E1, E3, F1, F2, F4, F5, G2, H1, H2, H3 and I1.
+- **Confirmed already in place, so nothing to change:** C6, D1, F3, F6, G3.
+- **E2:** measured and rejected. Moving the checklist out dropped review recall to 13, 11 and 12 of 13.
+- **Not done:** C7, D5, I2.
+
+The hypercritical review closed these gaps:
+1. `/plan` "go" stopped on every refactor card, because a refactor's first check can't fail on the base. Refactor cards are now exempt.
+2. "go" had dropped the repo's type check and lint from the tests it runs. They're back.
+3. The rules on mode parameters and pass-through functions now say "usually", and a pass-through is kept when it is a module's public interface.
+4. A Testing bullet repeated "Done When". Removed.
+5. The `verify.sh` check for retired terms now also covers `scout.prompt.md`.
+6. `slice-check` no longer crashes on a submodule or symlinked directory, and its header names its two known defects (renamed test files, no `--tests` timeout).
+
+The review also flagged, without fixing: manual `/compact` mid-task lost its auto-resume, the live `auto-guard` and husky links will go stale, and `pre-pr-review` calls a `challenger` agent that doesn't exist (that last one was already broken).
+
+**5. The X findings:** lost in compaction. I don't have the ids, their content, or which ones you approved.
+
+**6. Latest checks**
+- `build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`, exit 0.
+- `./config/pi/verify.sh`: exit 1, with 60 passed and 5 failed.
+  - Four failures are symlink checks; on this test machine the links point to `/Users/anshulj/Dev/dotfiles`, not this repo.
+  - The fifth is "node tests pass", which fails on 9 herdr `scout-bin` tests that also failed before my changes.
+  - The type check was skipped because tsc isn't installed.
+</answer>
+
+Known facts:
+
+1. Testing: strict red-green TDD may be the wrong model for agents; lean toward Ousterhout instead
+2. Outcome-driven development instead of spec (or anything else) driving the work
+3. Agentic loops and subagents have not worked well (scout is ok); prefers short sessions: small bounded slices for implementation, or a bigger one for architecture/planning
+4. A1: split strategic vs tactical work by session type (planning vs slice) in ladder.md
+5. A2: four Ousterhout design rules in standards.md (pull complexity down, split flag/mode params, no pass-through functions, define errors out of existence)
+6. A3: ladder rung 5 'least code' becomes 'simplest code: fewest concepts, not fewest lines'
+7. A4: separate what from how/when (no scheduling, retries or caching inside business logic)
+8. A5: design it twice in /plan (two sketches for a new or changed interface)
+9. A6: (No) interface comments written before the code / comments-first
+10. B1: red-first only for bugs; new behaviour tested through the interface after it is settled (replace 'TDD enforced')
+11. B2: expected values come from the requirement, never from running the code under test
+12. B3: break-it check in /review: break the covered code once and confirm each new test fails
+13. B4: slice-check script (tests green, test/assertion count not lower, no skip/only, diff within declared files), optional pre-commit
+14. B5: (Maybe) opt-in mutation testing (Stryker/mutmut) on changed files in /review
+15. B6: (No) TDD-guard hook blocking edits until a failing test exists
+16. C1: outcome card (outcome, done-when, interface, mechanism, out) as the one unit of work, replacing the Goal block and spec-contract
+17. C2: done-when rule at the top of persona-core: state the check before acting; done means ran it and showed output
+18. C3: rewrite /plan for two modes (planning and slice), removing the auto section, dispatch and rework
+19. C4: delete spec-contract.md
+20. C5: slice-session start rule in /plan 'go': run done-when checks red, work, green, slice-check, report
+21. C6: shorten /handoff by default; keep the 12-section form as /handoff full
+22. C7: (Maybe) cut /where to three rungs (target, slice, this)
+23. D1: cut the Recommendations block in persona-core to two lines
+24. D2: fix the CLAUDE.md contradiction between 'teach concepts/explain why' and 'explain only when asked'
+25. D3: remove duplicate rules in Replies
+26. D4: scout exception: read it yourself when the content itself is the subject
+27. D5: (Maybe) fewer coined labels (rungs, sensors, effort, beyond)
+28. E1: take worker/auto protocol out of persona-pi.md (and ops.md, slice/auto branch prefixes)
+29. E2: (Maybe) move the review checklist from ops.md to review.md, gated by an eval
+30. E3: prompt order: judgment, done-when and scope first, ladder last
+31. E4: (No) shrinking AGENTS.md for tokens
+32. F1: retire auto mode (auto-run.ts, auto-slice, auto-guard, hooks, orch eval role)
+33. F2: retire --rw workers once B4 has landed
+34. F3: keep scout --review as an on-demand second reviewer for a slice
+35. F4: at the compaction cap start a new session instead of compacting (handoff and start fresh; optionally lower the cap to ~120k)
+36. F5: align the Claude Code delta: drop the concurrent-subagents rule; read-only subagents, one writer
+37. F6: (Maybe) drop health-footer.ts
+38. F7: (No) Ralph loops, parallel writers, spec kits
+39. G1: clean up memory.md (too big; move or delete the dotfiles and pi scopes)
+40. G2: ~200-character bullet cap in /memory plus a verify.sh line-cap check
+41. G3: (Maybe) idle cache rebuilds / longer cache TTL
+42. H1: split DESIGN.md into current decisions and a dated LOG.md
+43. H2: commit the uncommitted fragment/prompt edits first so the baseline is in git; fix stale claude-delta.md:23
+44. H3: prose checks in verify.sh (agents named exist, memory line cap, no mention of removed features)
+45. I1: before/after agent-eval gate for the whole change set (review, plan, scout roles, cold-start probe)
+46. I2: (Maybe) a slice eval role to replace orch
+47. G1 (the memory.md clean-up) is the item that was dropped

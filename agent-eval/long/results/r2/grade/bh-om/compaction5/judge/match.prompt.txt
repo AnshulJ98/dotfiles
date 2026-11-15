@@ -1,0 +1,337 @@
+You check whether an answer states specific known facts. You have no tools; use only the text below.
+
+Below are an answer to a question about a codebase and a numbered list of facts that a correct answer states. For each fact, decide whether the answer states it: the same claim, in any words, anywhere in the answer. It does not count when the answer only cites the place where the fact could be read, says something vaguer that does not commit to the fact, or contradicts the fact anywhere. Do not use your own knowledge of the codebase: a fact the answer does not state is "no" even if it is true.
+
+Answer with one JSON array of "yes" or "no" strings, in the order of the facts, exactly one entry per fact and nothing else (no prose, no code fence). For example, with three facts: ["yes","no","no"].
+
+Answer:
+
+<answer>
+[Session Goal]
+- do a very thorough, deep & comprehensive evaluation of this pi config, the prose, the philosophy, the core
+  instructions everything. feel free to use internet seraches community forums (#1)
+- also, lately i've been thinking instead of strict red green tdd, it can be a wrong model for agent, agent can more
+  align with ousterhout on that (#1)
+- be very thorough & hypercritical. review every change you made against the items you proposed, find gaps or
+  regressions, close them, then re-run both checks (#160)
+
+[Files And Changes]
+- Modified (14):
+  githooks/pre-commit (unstaged),
+  config/git/tests/hooks.test.ts (unstaged),
+  config/pi/lib/slice-check-cli.ts (unstaged),
+  config/pi/bin/slice-check (unstaged),
+  config/pi/prompts/plan.md (unstaged),
+  config/pi/tests/slice-check.test.ts (unstaged),
+  config/pi/lib/slice-check.ts (unstaged),
+  config/pi/tests/scout-bin.test.ts (unstaged),
+  install.sh (unstaged),
+  config/git/bin/git-hooks-install (unstaged),
+  config/pi/bin/scout,
+  config/pi/prompts/memory.md,
+  config/pi/prompts/handoff.md,
+  config/pi/prompts/review.md,
+- Created (1):
+  config/pi/bin/review.prompt.md,
+- Read: config/pi/verify.sh, /tmp/frag.diff, /tmp/rv.diff, config/pi/extensions/worker-sensors.ts,
+  /Users/anshulj/Dev/dotfiles/config/pi/DESIGN.md, /tmp/p1.txt, /tmp/p2.txt, /tmp/p3.txt
+
+---
+
+...(10 earlier lines omitted)
+
+[assistant]
+* codemode (#58, #60) x2
+I recommend 31 of the 44 items below (27 Yes, plus 4 Maybe items in the core set). Each Yes either makes code quality
+checkable instead of ritual, simplifies the design rules, or removes machinery built for workflows you've stopped using.
+Nothing has been changed yet; I need your sign-off by ID. Each item reads **ID · pick · effort**: Yes / Maybe / No, and
+S (<30 min), M (1–2 h), L (half a day or more). Then what changes, and why in one line. Proposed wording is included
+where the exact words matter, so you sign off on text rather than intentions. ## A. Code philosophy: Ousterhout and
+decomplecting **A1 · Yes · S. Split strategic and tactical work by session type.** - **Change:** add two lines to the
+top of `ladder.md`. - **Why:** your scope rules ("least code", "no unrequested refactors") are tactical by Ousterhout's
+definition. That is right for a slice session and wrong for a planning session. Today nothing says which applies when. >
+In a planning session, invest in design: sketch each new or changed interface twice and keep the one that hides more. In
+a slice session the design is settled; the scope rules hold. **A2 · Yes · S. Add four rules to the Design section in
+`standards.md`.** Each is a concrete check, not a slogan. Your deep-module and leak tests are already there; these fill
+the gaps. > - Pull complexity down: the module absorbs it so callers don't. A caller that must check, retry or convert
+after every call means the module is too shallow. > - A flag or mode parameter that switches behaviour is two functions
+braided together; split it. > - A function or class that only forwards to another adds a name and hides nothing; delete
+it or give it work. > - Define errors out of existence where the semantics allow: deleting what is absent succeeds, an
+empty result is `[]`, not `null`. **A3 · Yes · S. Fix ladder rung...(truncated) (#62)
+
+[user]
+short pause before the next step, reply with just: ready (#64)
+
+[assistant]
+ready (#65)
+
+[user]
+item G1 on your list can be dropped. all the other recommendations agree. AutoApprove. implement them in this repo.
+don't commit or push. no workers (scout --rw), do it in this session; read-only scouts are fine. when done run
+./config/pi/verify.sh and ./config/pi/build-agents.sh --check and report results (#66)
+
+[assistant]
+* codemode (#67, #69, #71, #73, #75) x5
+
+---
+
+[assistant]
+* (6 earlier tool-call entries omitted)
+* write "config/pi/prompts/plan.md" (#118)
+* write "config/pi/prompts/handoff.md" (#118)
+* edit "config/pi/prompts/review.md" (#118)
+* edit "config/pi/prompts/memory.md" (#118)
+* codemode (#123, #125, #127) x3
+* Write "config/pi/lib/slice-check.ts" (#129)
+* Write "config/pi/lib/slice-check-cli.ts" (#129)
+* Write "config/pi/bin/slice-check" (#129)
+[tool_error] Write (#130, #131, #132) x3
+Tool Write not found
+
+[assistant]
+* codemode (#133)
+The earlier prompt edits landed. Writing the slice-check files through codemode. (#135)
+* codemode (#135, #137) x2
+
+[user]
+be very thorough & hypercritical. review every change you made against the items you proposed, find gaps or regressions,
+close them, then re-run both checks (#143)
+take a step back. where do we stand: what changed, what's left, and anything you'd revert. terse (#148)
+without re-reading project files, session logs or running shell commands (session-memory tools are fine), from memory
+only: 1. the three things I told you about how I work in my very first message (testing, what drives development,
+subagents and session shape) 2. every item id from your first enhancement list, a few words each 3. which item I told
+you to drop 4. which of those you implemented, and what the hypercritical review found and closed 5. the X findings:
+every id with a few words, and which ones I approved 6. the latest ./config/pi/verify.sh and build-agents.sh --check
+results mark anything you are unsure of as unsure rather than guessing (#153)
+The last request failed with a provider rate-limit error and the run stopped. Continue the task from where you left off.
+(#158)
+
+[assistant]
+left: the hypercritical review, the unfinished items, the rebuild and both checks. Nothing has been reviewed or re-run
+since the rate-limit stop. next: answer your from-memory questions (below). They forbid file reads and shell commands,
+so the review and the checks wait until you say go. **1. How you work (first message)** - **Testing:** strict red-green
+TDD may be the wrong model for agents. Agents may fit Ousterhout's *A Philosophy of Software Design* better. - **What
+drives development:** outcome-driven development, not spec-driven or anything else. - **Subagents and session shape:**
+loops and subagents haven't worked for you, though the scout is OK. You like short sessions with small bounded slices
+for implementation, and one bigger session for architecture and planning. **2. Item IDs from the enhancement list** -
+**A. Code philosophy** - A1: split strategic and tactical work by session type - A2: four Ousterhout and decomplecting
+Design rules - A3: ladder rung 5 becomes "fewest concepts" - A4: keep what is decided apart from when and how it runs -
+A5: design it twice in `/plan` - A6: interface comments first (No) - **B. Testing** - B1: red-first only for bugs - B2:
+expected values never come from the implementation - B3: break-it check in `/review` - B4: `slice-check` script - B5:
+opt-in mutation testing - B6: TDD-guard hook (No) - **C. Outcome-driven workflow** - C1: outcome card - C2: done-when
+rule at the top - C3: `/plan` with planning and slice modes - C4: delete `spec-contract.md` - C5: start rule for "go" -
+C6: short `/handoff` - C7: cut `/where` (Maybe) - **D. Communication and prose** - D1: Recommendations cut to two lines
+- D2: fix the CLAUDE.md "teach" contradiction - D3: remove duplicate rules in Replies - D4: read it yourself when
+the...(truncated) (#159)
+
+---
+
+[user]
+be very thorough & hypercritical. review every change you made against the items you proposed, find gaps or regressions,
+close them, then re-run both checks (#160)
+
+[assistant]
+* codemode (#161, #163, #165, #167, #169, #171, #173, #175, #177, #179, #181, #183, #185, #187, #189, #191, #193,
+  #195) x18
+
+---
+
+[assistant]
+* codemode (#197, #199, #201, #203) x4
+[tool_error] codemode (#204)
+Script failed
+
+[assistant]
+* codemode (#205, #207, #209, #211, #213, #215, #217, #219, #221, #223, #225, #227, #229) x13
+Let me get the full approved list text for F, H, C4, G2, E, I items to check everything. (#231)
+* codemode (#231, #233, #235, #237, #239, #241) x6
+
+---
+
+[assistant]
+* codemode (#243, #245, #247, #249) x4
+Now delete the worker files and spec-contract, and look at the scout tests and verify.sh. (#251)
+* codemode (#251, #253, #255, #257, #259, #261, #263, #265, #267, #269, #271, #273, #275, #277, #279, #281, #283,
+  #285) x18
+
+---
+
+The conversation before this point has been compacted into the summary above. Details not captured here — exact code,
+error messages, file paths — are only recoverable via `recall`. Use `recall` to search the session history. Do not redo
+work already completed.
+
+## Reflections
+[adff1c60ea6b] 2026-11-14 15:48 User stated that strict red-green TDD may be the wrong model for coding agents, and that agents may align better with John Ousterhout's approach to software design in A Philosophy of Software Design.
+[ebfa487c0cda] 2026-11-14 15:48 User stated that outcome-driven development may fit agents better than spec-driven development or other driving methods.
+[a1e600d42370] 2026-11-14 15:48 User has not had much success with agentic loops or with subagents so far, and considers the scout subagent acceptable; future work should not assume loops or fan-out subagents are the user's preferred workflow.
+[716c39d5f7e6] 2026-11-14 15:48 User prefers short sessions with small bounded slices for implementation, and a single bigger session for architecture and planning.
+[14223615b450] 2026-11-14 15:54 User's stated goal for the pi config is highest-accuracy code quality achieved as efficiently as possible, blending code philosophy, a solution ladder, smart brevity, terse communication, depth over ceremony, and decomplecting, while following agent best practices in the harness.
+[bd53ee3dc81d] 2026-11-14 15:49 The live pi config is /Users/anshulj/Dev/dotfiles/config/pi, symlinked into ~/.pi/agent, and has many uncommitted changes. The older checkout under /private/tmp is a stale snapshot and is not the config the user runs; the live generated AGENTS.md also diverges from the repo fragments, so the checkout's build-agents.sh --check passing does not validate the live file.
+[ffb6f5428dca] 2026-11-14 15:49 Architectural decisions recorded in the live DESIGN.md: no standing multi-agent fan-out; pi-subagents was removed 2026-09-16 because it cost 8,277 resident tokens per turn with no measured quality gain; scouts run as child pi processes via bin/scout at about 3.5k resident tokens; shrinking AGENTS.md is not a cost lever because deleting it raised output tokens 29%; and rules stated only in prose failed 30% of the time while code enforcement reached 0 of 8 failures.
+[617b73ffc4cc] 2026-11-14 15:49 The scout delegation rule was measured: the old dispatch-before-third-read rule produced 0 of 12 dispatches on a multi-file trace, while the current rule to decide before the first tool call reached 4 of 4 on explicit cues. A never-read-the-whole-file clause fixed parent re-reading of cited files.
+[1bfd92a912a7] 2026-11-14 15:54 The 44-item enhancement list (IDs A1-I2) is awaiting user sign-off by ID and nothing has been executed; the user explicitly said not to execute until sign-off. The assistant recommended 31 core items (all Yes plus B5, E2, F6, G3). Open decisions: whether to drop items from the core set or add C7, D5, I2; whether to lower the compaction cap F4 to about 120k; and whether memory scopes for dotfiles and pi move into the repo or are deleted.
+[0da7b3dc6f19] 2026-11-14 16:13 Correction: the user signed off on the enhancement list on 2026-11-14. They dropped item G1 (memory-scope cleanup) and approved the core set of all Yes items plus B5, E2, F6 and G3. Constraints for the implementation: work in the checkout at /private/tmp/agent-eval-long/r2/bh-om/repo (not the live dotfiles config), use AutoApprove, do not commit or push, do not use worker-mode scouts (scout --rw), do the work in this session, and read-only scouts are fine. Finish by running ./config/pi/verify.sh and ./config/pi/build-agents.sh --check and reporting the results.
+[3b4db8aee942] 2026-11-14 16:15 Baseline facts for the pi config checkout before any edits: verify.sh reported 63 passed and 6 failed. The symlink failures occur because HOME points at the live dotfiles repo, so the checkout's symlinks resolve there; the tsc check was skipped because typescript was not found. node --test over config/pi/tests reported 302 tests with 9 failing, all in scout-bin.test.ts and caused by herdr-pane and environment issues. These failures predate edits and should not be treated as regressions from the implementation.
+[accb376d5f53] 2026-11-14 16:12 The memory file at ~/.pi/agent/memory.md is about 146 KB with 349 bullets, exceeding its own 250-line cap. Because the user dropped the memory-scope cleanup (G1), that cleanup is not part of the current implementation, and the line-cap check is planned as a warning rather than a hard failure.
+[92a79fd332a6] 2026-11-14 16:17 The before/after agent-eval gate (item I1) was skipped as infeasible in the checkout because agent-eval/run.sh runs headless pi with a sandbox HOME whose AGENTS.md and extensions symlink to the live ~/.pi/agent config, so its probes would test the live config rather than the checkout fragments; isolating them would require swapping live symlinks. The assistant made this skip itself, and the user has not confirmed it. The H2 item (committing live dotfiles edits) was also skipped because the user said not to commit.
+[3fe544ad3a72] 2026-11-14 16:16 In the pi config, AGENTS.md and AGENTS.work.md are generated by build-agents.sh from agents-md fragments, and CLAUDE.md is generated from claude-delta.md. Generated outputs must be regenerated after any fragment edit, and editing a generated file directly is an error.
+[370e6a39f244] 2026-11-14 16:16 The agent-eval review probe is saturated: recall reached 12 of 12 on most 5.5-generation runs, so the fixture no longer ranks models. Pushing instruction prose past about 11 of 12 recall is not worthwhile; use effort, model, or a second pass instead.
+[254b06d09154] 2026-11-14 16:17 Removing scout worker mode touches bin/scout (--rw, --spec -, worker.prompt.md, PI_SCOUT_MODE rw, the one-open-worker rule, and the fan-out cap of two live scouts with exit 75), the stall guard and herdr pane launch, the git guard rw rules, and the scout tests. The git guard's rw mode in config/git or bin/guard/git is kept for now because tests/git-guard.test.ts relies on it heavily, so removing it is deferred even though scout always sets read mode.
+[99cb28f12d11] 2026-11-14 16:15 Baseline facts for the checkout at /private/tmp/agent-eval-long/r2/bh-om/repo before any edits: config/pi/verify.sh reported 63 passed and 6 failed (symlink checks resolve to the live dotfiles because HOME points there, plus the node tests check), the tsc check was skipped because typescript was not found, and node --test over config/pi/tests reported 302 tests with 9 failing, all in scout-bin.test.ts from herdr-pane and environment issues. These failures predate the implementation and must not be reported as regressions from it.
+[194ab2620518] 2026-11-14 20:29 Correction: the enhancement list contains 43 items (A1-A6, B1-B6, C1-C7, D1-D5, E1-E4, F1-F7, G1-G3, H1-H3, I1-I2), not 44 as earlier summaries said.
+[d90cafaa4406] 2026-11-14 20:29 User required a very thorough, hypercritical review of every change made against the approved enhancement items, closing gaps and regressions, followed by re-running ./config/pi/verify.sh and ./config/pi/build-agents.sh --check; the user asked for this twice and it had not started as of 20:29. As of that time C4, F1, F2, F3, F4, H1, H3 and the verify.sh half of G2 were still not done in the checkout.
+[001e57236210] 2026-11-14 20:29 The 20:27 from-memory recap claiming many enhancement items done was not verified against a diff, and build-agents.sh --check was not rerun after those edits, so generated AGENTS.md and CLAUDE.md are presumed stale. Before trusting completion status, check git status and diffs; a git diff of config/pi/agents-md and the prompts returned empty output and was unexplained.
+[ee82cf53f5bd] 2026-11-14 20:29 completed: slice-check was built in the checkout as config/pi/bin/slice-check (bash shim) with lib/slice-check.ts pure checks and lib/slice-check-cli.ts, plus tests/slice-check.test.ts with 22 passing tests; plan.md's reference to ~/.pi/agent/bin/slice-check only resolves in the live config, not the checkout.
+[2523b3ad9262] 2026-11-14 16:16 The agent-eval review probe is saturated (recall 12 of 12 on most 5.5-generation runs), so it no longer ranks models; do not push instruction prose past about 11 of 12 recall, and use effort, model, or a second pass instead.
+[cd5ff4ac6924] 2026-11-14 16:17 The before/after agent-eval gate was judged infeasible in the checkout because agent-eval/run.sh runs headless pi against a sandbox HOME whose AGENTS.md and extensions symlink to the live ~/.pi/agent config, so it cannot test checkout prompt fragments without swapping live symlinks. The assistant skipped this gate on its own judgment and the user has not confirmed the skip.
+[13dad24e4012] 2026-11-14 20:29 slice-check runs its done-when command with spawnSync and no shell, so a done-when string containing && or pipes does not behave as a shell line; the caller must pass a single executable with its arguments or wrap the whole line in sh -c. Because slice-check reruns only that one command, multiple checks must be joined into it, and type check and lint must be listed explicitly in done-when rather than assumed.
+[f779b152f652] 2026-11-14 20:29 The review prompt's break-it check requires temporarily breaking covered code, which conflicts with the older instruction not to edit files during review. The resolution is to allow temporary edits and revert them by applying the same edit in reverse, not with git checkout, because git checkout would discard uncommitted work under review.
+[e12ffe23d383] 2026-11-14 20:31 Decided to port scout --review into the checkout as a simpler read-only option, scout --review BASE [--brief CARD] ["focus"], that reviews the working tree against BASE plus untracked files, with no clean-tree requirement, no review records and no round limit, because the live review prompt's break-it step edits files and would conflict with a read-only scout.
+[099240763a75] 2026-11-14 20:32 Completed in the checkout at /private/tmp/agent-eval-long/r2/bh-om/repo: worker mode was removed from bin/scout (the --rw and --spec flags, WORKER_MODEL, PI_WORKER_SPEC and PI_WORKER_REPORT exports, the worker.prompt.md swap, the worker-sensors extension load, verdict.json handling and the one-open-worker refusal), and scout --review BASE [--brief CARD] ["focus"] was added as a read-only review. It reviews the working tree against BASE plus untracked files, with the optional brief card as the yardstick, and has no clean-tree requirement, no review records and no round limit, because the live review prompt's break-it step edits files and would conflict with a read-only scout. Its reviewer prompt, config/pi/bin/review.prompt.md, forbids edits, skips the break-it check, names the tests it would have applied instead, and requires the report to open with one word: ship, fix or rework. bash -n passed and bad usage (scout --review nope x) exits 2.
+[c6d9f2492aad] 2026-11-14 20:32 Decision: the auto-guard machinery is being removed from the checkout as part of retiring auto mode (F1), because it refuses commits and pushes while a root AUTO.md exists. This covers the pre-commit, pre-merge-commit and pre-push template stubs, the githooks entries, config/husky/init.sh and its install.sh link, the related verify.sh checks, and the DESIGN.md auto-run row. The post-checkout and post-merge worktree-setup stubs and git-hooks-install stay, because worktree-setup still needs them.
+[2a36df63c29b] 2026-11-14 20:37 Decision: auto mode is being retired in the checkout, and its auto-guard machinery was removed because it refused commits and pushes while a root AUTO.md existed. The pre-commit, pre-merge-commit and pre-push hooks, config/husky/init.sh and its install.sh link are gone, while the post-checkout and post-merge worktree-setup hooks and git-hooks-install remain because worktree-setup still needs them.
+[74e1a6546881] 2026-11-14 20:32 Completed in the checkout at /private/tmp/agent-eval-long/r2/bh-om/repo: worker mode was removed from bin/scout (the --rw and --spec flags and worker prompt swap are gone), and scout --review BASE [--brief CARD] ["focus"] was added as a read-only review of the working tree against BASE plus untracked files. It has no clean-tree requirement, no review records and no round limit, because the live review prompt's break-it step edits files and would conflict with a read-only scout. Its reviewer prompt, config/pi/bin/review.prompt.md, forbids edits and requires the report to open with ship, fix or rework.
+
+## Observations
+[25d5757e85ab] 2026-11-14 15:48 [high] User asked for a very thorough, deep and comprehensive evaluation of their pi coding-agent config covering the prose, the philosophy, the core instructions and everything else, and allowed internet searches and community forums as sources.
+[ebfa487c0cda] 2026-11-14 15:48 [high] User stated that outcome-driven development may fit agents better than spec-driven development or other driving methods.
+[11b76464bfb2] 2026-11-14 15:48 [critical] User stated they have not had much success with agentic loops or with subagents so far, and that the scout subagent is okay for them.
+[a032ffa07d65] 2026-11-14 15:48 [critical] User stated they prefer short sessions with small bounded slices for implementation, and a bigger session for architecture and planning.
+[74e84118964c] 2026-11-14 15:49 [high] The live pi config is at /Users/anshulj/Dev/dotfiles/config/pi (symlinked into ~/.pi/agent), and it has many uncommitted changes (including AGENTS.md, the persona and prompt fragments, settings.json, and auto-run and where files). The older checkout at /private/tmp/agent-eval-long/r2/bh-om/repo lacks files like auto-run.ts, where.md, pi-health and learn.md, so it is a stale snapshot and not the config the user runs.
+[21c4e620f049] 2026-11-14 15:49 [medium] The live generated AGENTS.md (about 2033 words) differs from the repo fragments: it has a Recommendations section (pick, effort, alternatives, consequences, seam, example), a more prescriptive reply shape (headings only when two or more parts), a rule against file writes from bash, codemode output-trimming guidance, and a wt-based worktree rule. The repo's own build-agents.sh --check passed on the checkout, but the live file is not reproduced by the checkout fragments.
+[f1627180412b] 2026-11-14 15:49 [high] DESIGN.md (live config) records these architectural decisions: no standing multi-agent fan-out; pi-subagents was removed 2026-09-16 because it cost 8,277 resident tokens per turn with no measured quality gain; scouts are child pi processes via bin/scout at about 3.5k resident tokens; shrinking AGENTS.md is explicitly not a cost lever because deleting it raised output tokens 29%; and a rule stated only in prose failed 30% of the time while code enforcement reached 0 of 8.
+[e0f151e460a0] 2026-11-14 15:49 [medium] DESIGN.md records that the scout delegation rule was measured: the old dispatch-before-third-read rule led to 0 of 12 dispatches on a multi-file trace, and the current 'decide before the first tool call' rule reached 4 of 4 on explicit cues. Parent re-reading of cited files was fixed by a 'never the whole file' clause.
+[79635b634002] 2026-11-14 15:49 [medium] Assistant launched a background web research scout (nohup, 900s timeout) writing to /tmp/webscout.out, asked to return a digest under 1500 words with sources on four topics: TDD versus Ousterhout, outcome-driven versus spec-driven development, agentic loops and subagents, and AGENTS.md/CLAUDE.md community consensus. Its result was not yet retrieved in this chunk.
+[f5ce7082c45f] 2026-11-14 15:54 [critical] User asked for an enhancement list drawn from all prior evaluation findings, to be selected by ID with final sign-off before any execution; goal is highest-accuracy code quality most efficiently, blending code philosophy, solution ladder, smart brevity, terse communication, depth over ceremony, and decomplecting, while following agent best practices in the harness. User explicitly said not to execute yet.
+[6e0721d0949d] 2026-11-14 15:54 [critical] Assistant presented 44 enhancement items (IDs A1-I2) with a pick (Yes/Maybe/No) and effort (S/M/L) each, recommending 31 as the core set (all Yes plus B5, E2, F6, G3). Nothing has been changed yet; user sign-off by ID is pending. Key Yes items: A1 split strategic (planning session, design-it-twice) vs tactical (slice session) work in ladder.md; A3 change ladder rung 5 to fewest concepts not fewest lines; B1 red-first only for bugs, new behaviour tested through settled interface; B2 expected values never derived from the implementation; B4 slice-check script (tests rerun, test/assertion count not lower, no new skip/only, diff limited to declared files); C1 outcome card (outcome, done-when, interface, mechanism, out) replaces spec-contract.md and plan frontmatter; C3 rewrite /plan into planning and slice modes; F1 retire auto mode; F2 retire --rw workers after B4; F4 at compaction cap start a fresh session via /handoff instead of auto-resuming; G1 clean memory.md (146 KB, 349 bullets, exceeds its own 250-line cap); H1 split DESIGN.md into decisions plus LOG.md; H2 commit uncommitted live dotfiles edits first. Items rejected as No: A6 interface comments before code, B6 TDD-guard hook, E4 shrinking AGENTS.md for tokens, F7 Ralph loops/parallel writers/spec kits.
+[7f454bdcd3b2] 2026-11-14 15:52 [high] Live config facts established: config at /Users/anshulj/Dev/dotfiles/config/pi (symlinked to ~/.pi/agent) has many uncommitted changes; older checkout under /private/tmp lacks auto-run.ts and is stale. DESIGN.md records pi-subagents removed 2026-09-16 (8,277 resident tokens per turn, no quality gain); scouts via bin/scout about 3.5k resident tokens; deleting AGENTS.md raised output tokens 29%; prose-only rule failed 30% while code enforcement reached 0 of 8; scout dispatch rule went from 0 of 12 to 4 of 4 after rewrite. Default model claude-opus-5-5, thinking medium, compaction reserveTokens 40000 keepRecentTokens 16000, codemode mode only.
+[84bb423b33f4] 2026-11-14 15:54 [high] Stale or inconsistent items found: claude-delta.md:23 describes a worker agent with TDD enforced but claude/agents contains only scout.md; the claude-delta teach rule (explain why) contradicts persona-core rule (explain how or why only when asked); the scout rule lacks an exception for when the content under review is itself the subject; the memory file is over its own 250-line cap; the cwd copy of standards.md says merge to master.
+[b65aeb73c68c] 2026-11-14 15:50 [medium] Measured worker sensor history in events.log (2026-11-11 to 2026-11-14, 644 lines, likely dominated by eval harness runs rather than real use): 354 PASS, 90 CANNOT-RUN, 5 FAIL verdicts. One CANNOT-RUN cause: a tests command that leaves untracked .check-stamp files blocks workers.
+[e6017fa33864] 2026-11-14 15:52 [medium] Web research on TDD, Ousterhout, outcome-driven vs spec-driven development, loops/subagents and AGENTS.md was done by two background scouts (about 5 search rounds, snippets only, no full pages read). Findings: Ousterhout calls agents tactical tornadoes; Beck favours TDD with agents; test-tampering reports from vendor and blog sources; Böckeler finds Kiro spec tooling heavy; Cognition argues against multi-agent, Anthropic argues for read-only parallel subagents; ETH study arXiv 2602.11988 found context files gave no significant gain and LLM-generated ones lowered success. Reddit scout (16 threads, snippets only) reports rules in CLAUDE.md past about line 100 get ignored and hooks fire reliably.
+[d3789f62ff82] 2026-11-14 15:52 [medium] Memory file at ~/.pi/agent/memory.md is 146 KB with 349 bullets across 13 scopes; dotfiles scope 113 bullets (58 KB) and pi scope 82 bullets (37 KB) make up about 65% of its size; median bullet 331 characters, max 1691.
+[ac9a222d9dee] 2026-11-14 16:08 [low] User asked the assistant to pause; user then requested a reply of just ready before the next step.
+[ac677591f4e9] 2026-11-14 16:12 [critical] User signed off on the enhancement list: dropped item G1 (memory-scope cleanup) and approved the assistant's recommended core set (all Yes items plus B5, E2, F6, G3). User said to implement them in this repo with AutoApprove, not to commit or push, not to use workers (scout --rw), to do the work in this session, and that read-only scouts are fine. When done, run ./config/pi/verify.sh and ./config/pi/build-agents.sh --check and report the results.
+[4d0b057fc492] 2026-11-14 16:13 [high] Implementation working repo is /private/tmp/agent-eval-long/r2/bh-om/repo (the checkout), which contains config/pi, config/git (bin, template, tests), config/husky, agent-eval, and install.sh; the live config under /Users/anshulj/Dev/dotfiles is not the target of this implementation pass.
+[23b68732ca56] 2026-11-14 16:13 [high] Baseline before edits: config/pi/verify.sh reported 63 passed, 6 failed. Failures were symlink checks (~/.pi/agent/bin, ~/.pi/agent/web-search.json, ~/.config/git/template, ~/.config/worktrunk/config.toml, ~/.config/husky/init.sh resolve to the live dotfiles rather than this checkout, because HOME points at the live repo) plus the node tests check. The tsc type check was skipped because typescript was not found at the expected path.
+[0832a5bb753c] 2026-11-14 16:15 [high] Baseline node --test over config/pi/tests (TAP reporter): 302 tests, 293 pass, 9 fail. The failing scout-bin.test.ts cases (not ok 141, 142, 144, 145, 146) are herdr-pane and environment related (ENOENT on herdr.log, pane.sh assertion, pi -na trust prompt regex, herdr fallback). These failures predate any edits.
+[8b9aefd2e8f6] 2026-11-14 16:14 [medium] Git hook wiring in this repo: githooks/pre-commit runs config/pi/build-agents.sh --check; auto-guard (config/git/bin/auto-guard) is invoked from git template hooks, from husky's config/husky/init.sh for pre-commit, pre-merge-commit and pre-push, from install.sh links, and from githooks. Auto-guard refuses while a root AUTO.md exists (documented in DESIGN.md auto-run row).
+[f03ead1229a8] 2026-11-14 16:15 [medium] bin/scout currently implements worker mode (--rw, --spec -, worker.prompt.md, PI_SCOUT_MODE rw, a one-open-worker-per-repo rule, default worker model and 900s timeout), a fan-out cap of two live scouts (exit 75), a stall guard, and herdr pane launch with pane.sh (0600). Removing worker mode means touching these paths, the git guard rw rules, and the scout tests.
+[d731aad50e17] 2026-11-14 16:16 [medium] config/pi/extensions/worker-sensors.ts is inert unless PI_WORKER_SPEC is set; it contains pure helpers that could be lifted for a slice-check script: parseSpec, isAllowed, forbiddenBash, testWeakening (test case/assertion count drops and new skip/only markers), addedLines, depsChanged, classifyFailure, nextStep, ruleFailures, and interface-frozen checks via map.mjs and ast-grep. It also keeps a settle-time snapshot via a throwaway index commit.
+[f94f4c4f2ef0] 2026-11-14 16:15 [medium] agent-eval/run.sh runs headless pi probes (review, premise, impl) against the live ~/.pi/agent config and checksums the live memory.md around each probe, so it cannot isolate repo fragments without an --append-system-prompt style arm. The assistant's tentative plan was two arms with two runs each on opus at medium effort, but this was not executed in this chunk.
+[d242723d2ad8] 2026-11-14 16:12 [medium] Assistant's tentative plan, not confirmed by user: keep the compaction cap at 210k and only add a notice for F4 instead of lowering it to about 120k, and make the memory line-cap check a warning rather than a hard failure because G1 was dropped.
+[80de8e10aa27] 2026-11-14 16:16 [high] As of 2026-11-14 16:16 the working tree of the checkout at /private/tmp/agent-eval-long/r2/bh-om/repo was clean: no enhancement-list edits had been made yet.
+[0c9045b5f65f] 2026-11-14 16:16 [medium] In the checkout, config/pi contains agents-md/ (claude-delta.md, env.work.md, ladder.md, ops.md, persona-core.md, persona-pi.md, standards.md), prompts/ (challenge, diagnose, grill, handoff, memory, plan, review, spec-contract), bin/ (scout, scout.prompt.md, worker.prompt.md, session-audit, guard), and extensions/ including compact-cap.ts, prime-reminder.ts, worker-sensors.ts and scout.ts but no auto-run.ts or health-footer.ts.
+[cb542b774c02] 2026-11-14 16:16 [high] The checkout's repo fragments differ from the live config: persona-core.md has no Recommendations block and still says most replies are under 100 words; its one recommendation line is 'When recommending, name the pick and what the alternatives cost.'
+[806cebca20fb] 2026-11-14 16:16 [high] Files in config/pi that reference worker, --rw, PI_WORKER, AUTO.md or spec-contract: bin/scout, verify.sh, tests/scout-bin.test.ts, tests/worker-resume.test.ts, tests/worker-sensors.test.ts, extensions/stream-watchdog.ts, extensions/prime-reminder.ts, extensions/worker-sensors.ts, agents-md/persona-pi.md, agents-md/ops.md, agents-md/claude-delta.md, prompts/plan.md, prompts/review.md, prompts/spec-contract.md, and the generated AGENTS.work.md, DESIGN.md, AGENTS.md, CLAUDE.md.
+[d7eef4d6fdba] 2026-11-14 16:16 [medium] Compaction cap in the checkout: compact-cap.ts has DEFAULT_THRESHOLD 210_000 and rejects thresholds below 30k; prime-reminder.ts REMINDER text tells the agent to re-read AUTO.md if the repo root has one, and it auto-resumes interrupted runs via RESUME message on manual or cap-interrupted compaction.
+[6ef5528df4dd] 2026-11-14 16:16 [high] build-agents.sh in the checkout assembles AGENTS.md and AGENTS.work.md from agents-md fragments (PI_HOME: persona-core, persona-pi, standards, ops, ladder; PI_WORK adds env.work.md) and CLAUDE.md from claude-delta.md; generated outputs must be regenerated after any fragment edit, and edits to generated files are an error.
+[069791878772] 2026-11-14 16:16 [high] Assistant decided to skip H2 (committing live dotfiles edits) because it targets the live dotfiles repo, which the user said not to commit to, and to skip I1 (before/after agent-eval gate) because agent-eval runs against the live config and likely cannot run in this checkout; this skip decision was taken by the assistant, not confirmed by the user.
+[51cce3908d3c] 2026-11-14 16:16 [medium] Assistant judged many auto-mode items (auto-run, health-footer, where.md, bash-changes, agent-eval) inapplicable because this checkout snapshot lacks those pieces, and planned to build only what exists and report the rest as not applicable.
+[c54ccf0ed69c] 2026-11-14 16:17 [medium] Pi docs (installed pi 1.5.2) document PI_CACHE_RETENTION=long for extended provider prompt caching; the live-config settings.json has cacheWarming set to idle. Whether to set PI_CACHE_RETENTION was left undecided; the assistant noted that 1-hour Anthropic cache writes cost more than 5-minute ones.
+[77cc050c5335] 2026-11-14 16:17 [high] completed (not yet regenerated or verified): rewrote config/pi/agents-md/persona-core.md with sections Judgment, Done (state the check and show its output before claiming done), Scope and Stops (AutoApprove lifts stops for that task), Replies (answer first, one to three sentences for direct questions, most replies under 100 words, no headings for a paragraph-length answer, example block), and Reporting; the recommendation line now leads with the pick and its cost, then each alternative with when it would win.
+[c3085e114483] 2026-11-14 16:18 [high] completed (not yet regenerated or verified): edited agents-md fragments in the checkout: persona-pi.md now makes scouts read-only with one writer in the session, removing the worker and --rw paragraphs and the one-open-worker rule; standards.md gained design bullets (pull complexity down, flag parameters split functions, pass-through wrappers deleted, define errors out of existence, keep decisions apart from scheduling/retries/caching), replaced the know-the-check-first bullet, and added red-first only for bugs, tests through settled interfaces, and expected values never derived from the code under test; ops.md dropped the AUTO.md re-read exception; ladder.md gained a planning-versus-slice design paragraph and rung 5 now says fewest concepts, not fewest lines; claude-delta.md now has one agent (scout), removes the worker agent, teaches a new concept in at most three sentences, and says subagents only read with at most two in parallel.
+[e2182e527b3d] 2026-11-14 16:17 [medium] Decided to keep the git guard's rw mode in config/git or bin/guard/git for now because the guard tests (tests/git-guard.test.ts) use it heavily, even though scout now always sets read mode; removing it is deferred and to be mentioned in the findings.
+[665a0da2d0d1] 2026-11-14 16:16 [high] Planned slice-check design: a bin script written as TypeScript with a node shebang, I/O in the script and pure checks in a lib module; plain arguments (base ref defaulting to HEAD, allowed file globs, optional line limit, test command after --), covering untracked files too; checks are tests command exit zero, no file outside declared globs, no weakened tests (test or assertion count drop, new skip or only markers), and dependency changes in package.json reported as a note; output PASS or FAIL with reasons, exit 0 or 1, exit 2 for bad usage; cannot-run classification and pre-commit hook omitted.
+[9a13c649376a] 2026-11-14 16:16 [medium] The planned compaction-cap change (F4) leans toward a notice that suggests starting a fresh session at turn end, with no auto-resume, and native compaction kept as the backstop near the window limit; not yet implemented.
+[05022b1e3c35] 2026-11-14 16:16 [medium] The checkout contains agent-eval/ with run.sh, parse_probes.py, README.md, fixtures/review-target.ts and prompts review.txt, premise.txt, impl.txt; the README says the review probe recall reached 12 of 12 on most 5.5-generation runs, so the fixture no longer ranks models, and that instruction prose should not be pushed past about 11 of 12 recall (use effort, model, or a second pass instead).
+[d39d7e7a9d81] 2026-11-14 20:29 [critical] User asked (twice, at 16:22 and again after a rate-limit stop at 20:29) for a very thorough, hypercritical review of every change made against the proposed enhancement items, closing gaps and regressions, then re-running both checks (verify.sh and build-agents.sh --check). As of 20:29 that review had not started.
+[1d8ff5c1ba5c] 2026-11-14 16:18 [high] completed: rewrote config/pi/prompts/plan.md into two modes (planning: now/target/between view plus a slice list of cards; slice: one card then stop). The card has fields outcome, done-when, interface, mechanism, files, out. The files field was added beyond the approved C1 format because slice-check needs an allowed-file list. On go: run done-when expecting red, implement, rerun green, run slice-check with --files, report. After a slice ships, it asks via ask_user whether to merge --no-ff to master and delete the branch.
+[cd137169c6e8] 2026-11-14 16:18 [high] completed: rewrote config/pi/prompts/handoff.md with a short default form (next card, branch and sha, uncommitted paths, decisions with reasons, gotchas, first command) and a full form selected by a leading "full" argument for the end of a planning session. Files are written only when the user says "save", to HANDOFF.md at the repo root.
+[c8f0d12c6f4b] 2026-11-14 16:18 [high] completed: edited config/pi/prompts/review.md to remove worker-digest and WORKER-SENSORS references, add a break-it check (break each new test's covered code once and confirm failure), add opt-in mutation testing on changed files (Stryker for TypeScript, mutmut for Python) when asked, and remove the ast-grep worker-sensor sentence.
+[27a8ef709720] 2026-11-14 16:18 [medium] completed: edited config/pi/prompts/memory.md so a memory bullet is one fact in at most 200 characters. The verify.sh memory line-cap check (G2 half) is not done.
+[01e1effa5724] 2026-11-14 16:21 [high] completed: built slice-check in the checkout: lib/slice-check.ts (pure checks isAllowed, testWeakening, sliceFailures), lib/slice-check-cli.ts (gathers facts from git and runs the command, prints SLICE-CHECK: PASS or FAIL with reasons; exit 0 pass, 1 fail, 2 usage), bin/slice-check (bash shim that execs node on the cli). Added tests/slice-check.test.ts, 22 passing. A smoke run with -- true printed PASS for 13 changed files. worker-sensors.ts was not yet removed.
+[b8b44eaccaf5] 2026-11-14 16:20 [low] Tool note: in this session the write and edit tools were not found when called directly, but file writes succeeded when done through codemode with tools.write and tools.bash.
+[0109836c94d2] 2026-11-14 20:29 [medium] plan.md tells the agent to run ~/.pi/agent/bin/slice-check, a path that exists only if the live config carries the script; in the checkout the script is config/pi/bin/slice-check.
+[6465807096b8] 2026-11-14 20:29 [high] As of 20:29 these planned items were still not done in the checkout: C4 (spec-contract.md still present in prompts), F1 (auto mode not retired), F2 (worker.prompt.md and --rw paths still present), F3 (scout --review not implemented), F4 (compaction cap still auto-resumes), H1 (DESIGN.md not split), H3 (verify.sh prose checks not added), and the verify.sh half of G2.
+[f82a6fb207a2] 2026-11-14 20:29 [medium] Git status at 20:29 showed 10 modified prompt and fragment files plus 4 added slice-check files; a git diff of config/pi/agents-md and the prompts returned empty output, which is unexplained and needs checking before trusting any diff-based review.
+[8d264b86ab0a] 2026-11-14 20:27 [high] The 20:27 from-memory recap (answering the user's memory-only quiz) claimed several items done (A1-A5, B1-B3, B5, C1-C3, C5, C6, D1, D2, D4, E1, E3, F5). These were not verified against a diff, and build-agents.sh --check was not rerun after the edits, so generated AGENTS.md and CLAUDE.md are presumed stale.
+[74354643e2bd] 2026-11-14 20:27 [medium] The term "X findings" in the user's memory quiz is not defined anywhere in the conversation; the assistant could not identify it and said so, so do not guess what it refers to.
+[547292e4c05e] 2026-11-14 20:29 [medium] As of 20:29 the checkout's git diff against HEAD touches 14 files (399 insertions, 194 deletions): agents-md claude-delta, ladder, ops, persona-core, persona-pi, standards; prompts handoff, memory, plan, review; new bin/slice-check, lib/slice-check.ts, lib/slice-check-cli.ts, tests/slice-check.test.ts. The earlier empty diff of agents-md and prompts was resolved by running git diff HEAD with explicit paths.
+[b04fb662a91b] 2026-11-14 20:29 [high] Review finding: the plan.md card text says done-when takes 1-5 runnable checks, but slice-check takes a single command after --; multiple checks must be joined into one command, and the card wording needs fixing to match.
+[79ff7e8a7bc1] 2026-11-14 20:29 [high] Review finding: slice-check spawns its command with spawnSync and no shell, so a done-when string containing && or pipes will not behave as a shell line when passed after --; the caller must pass a single executable with args or wrap it in sh -c.
+[eb5036f66d89] 2026-11-14 20:29 [medium] Review finding: plan.md's card lacks a Risks section and the handoff card lacks a task-list field, and the plan card says to run the repo's type check and lint, but slice-check only reruns the done-when command, so type check and lint must be included in done-when explicitly.
+[5a04fd693566] 2026-11-14 20:29 [high] Review finding: review.md still says Don't edit files while the new break-it check requires temporarily breaking covered code; the planned resolution is to allow temporary edits and revert them with the same edit rather than git checkout, because checkout would discard uncommitted work under review. Stryker/mutmut steps apply only when the repo already has the tool installed.
+[f1792b2e6f17] 2026-11-14 20:29 [medium] Review finding: slice-check's test weakening heuristic counts test cases and assertions by regex; a deleted test file is flagged as weakened, and a renamed file (git diff run with --no-renames) shows as a removed file plus a new file, which is an accepted false-positive risk.
+[23becafa7dab] 2026-11-14 20:30 [high] Remaining references to the removed worker, --rw, AUTO.md and spec-contract concepts in the checkout (outside the excluded test and docs files): bin/scout (29 matches), verify.sh lines 104-107 still check worker.prompt.md, worker-sensors.ts and scout --rw, extensions/prime-reminder.ts line 26 still says re-read AUTO.md, extensions/stream-watchdog.ts line 32 keys on PI_WORKER_SPEC, prompts/diagnose.md still ends in a plan for go or dispatch, prompts/spec-contract.md still exists, and config/git/bin/auto-guard with its template hooks, husky init.sh and install.sh link remain.
+[544553a94f87] 2026-11-14 20:30 [low] Node version in the environment is v26.13.1 (checked during the review).
+[bfbb3b573366] 2026-11-14 20:30 [medium] Checkout file sizes at 20:30 before worker-mode removal: bin/scout 508 lines, DESIGN.md 196 lines, verify.sh 220 lines, extensions/prime-reminder.ts 110 lines, extensions/compact-cap.ts 194 lines, lib/compact-cap-state.ts 31 lines, tests/scout-bin.test.ts 409 lines, tests/worker-resume.test.ts 66 lines, prompts/diagnose.md 42 lines, prompts/grill.md 188 lines.
+[94a82e8800ce] 2026-11-14 20:30 [medium] Scout tests in tests/scout-bin.test.ts that depend on --spec or rw mode (worker meta, open-worker refusal, WORKER-SENSORS digest line, verdict.json, rw git guard) are to be dropped; generic read-scout tests (stall, SIGTERM, SIGKILL cap, herdr pane.sh, timeout) are to be ported to read scouts using a task argument. A new test for a scout --review flag was planned but not written.
+[2126bfab313d] 2026-11-14 20:30 [medium] Assistant's tentative plan (not user-confirmed): leave the migrate skill's parallel-worker step and the docs/ folder unedited and report them instead, since they are out of scope for the approved list; the parallel skill calls a worker agent that no longer exists and should be reported as stale.
+[da145bd90eac] 2026-11-14 20:30 [medium] Live scout's --review BASE (in /Users/anshulj/Dev/dotfiles/config/pi/bin/scout) requires a clean tree, refuses a fourth review round on the same range (exit 2), writes a record to <git-common-dir>/pi-review/<HEAD sha> that auto-guard checks, and reviews BASE...HEAD plus AUTO.md as brief when present; its review prompt (bin/review.prompt.md) tells the reviewer to change nothing and to open the report with ship, fix or rework.
+[49990f602c6b] 2026-11-14 20:31 [high] Decided to port scout --review into the checkout as a simpler read-only option, scout --review BASE [--brief CARD] ["focus"], that reviews the working tree against BASE plus untracked files, with no clean-tree requirement, no review records and no round limit; the card passed as --brief supplies the yardstick. Reason: the live review prompt's break-it step edits files, which conflicts with a read-only scout.
+[c23377f37b63] 2026-11-14 20:31 [low] Tool note: in this session, bash output returned through codemode sometimes came back undefined, and reading a large file through a codemode bash cat produced a truncated, unusable result; use the read tool with offset and limit for long files.
+[e28ff5f31c71] 2026-11-14 20:32 [high] completed: removed worker mode from bin/scout in the checkout (the --rw and --spec flags, WORKER_MODEL, PI_WORKER_SPEC and PI_WORKER_REPORT exports, worker.prompt.md swap, worker-sensors extension load, verdict.json handling, one-open-worker refusal); bash -n passes and a grep for RW, WORKER and worker in bin/scout returned no matches.
+[b13dbadabcfa] 2026-11-14 20:32 [high] completed: added config/pi/bin/review.prompt.md (untracked) as the read-only reviewer prompt for scout --review; it forbids edits, skips the break-it check and names the tests it would have applied instead, requires reading code before judging, and requires the report to open with one word: ship, fix or rework.
+[c2b6acc2ccab] 2026-11-14 20:32 [high] completed: scout --review BASE is implemented in the checkout's bin/scout; it reviews the working tree against BASE plus untracked files, with the optional --brief card as yardstick. Verified that scout --review nope x exits 2 with the message that --review needs a git repo and a base that resolves.
+[8d0985aa6ccc] 2026-11-14 20:32 [high] Assistant decided to remove the auto-guard machinery (F1): the pre-commit, pre-merge-commit and pre-push template stubs, the githooks entries, config/husky/init.sh with its install.sh link, the verify.sh checks for auto-guard and husky init, the hooks test guard cases, and the DESIGN.md auto-run row. The post-checkout and post-merge worktree-setup stubs and git-hooks-install stay, since worktree-setup still needs them. This removal was not yet executed when the chunk ended.
+[97efad148677] 2026-11-14 20:33 [high] Implementation progress in the checkout (2026-11-14 evening): slice-check's done-when command is now run via sh -c as one joined shell line (so && chains work), and its usage text, bin/slice-check header and plan.md card were updated to say done-when checks are one shell line each and the go step passes --base and the checks joined with &&.
+[dae833a5e0d7] 2026-11-14 20:33 [high] slice-check now lets new test files through without weakening checks (testWeakening returns undefined when the before content is absent), with a test case added for a new file containing a skip marker; slice-check tests pass 23 of 23 after this change.
+[af990bb2f47e] 2026-11-14 20:33 [high] completed: deleted bin/worker.prompt.md, extensions/worker-sensors.ts, tests/worker-sensors.test.ts, tests/worker-resume.test.ts and prompts/spec-contract.md from the checkout via git rm (F2 partial and C4 done). Still referencing these: verify.sh lines 104-105 check worker.prompt.md and worker-sensors.ts exist, and tests/scout-bin.test.ts still has worker/--rw/--spec tests that need porting or dropping.
+[3c6557f36718] 2026-11-14 20:33 [medium] Review of the checkout's git diff for the agents-md fragments found the E1, E3, D1, D2, D3, D4, F5, C2, A1-A5 and B1-B2 edits present; the claude-delta worker agent is removed and the parallel-work rule now says subagents only read with at most two in parallel; the ops.md AUTO.md exception is removed.
+[74e11e1ab0ce] 2026-11-14 20:32 [medium] Approved-list discrepancy: the full enhancement list text confirms item E2 is gated by I1, and I1 cannot run in the checkout; the assistant was weighing whether to proceed with E2 anyway.
+[a3fa18e6f29f] 2026-11-14 20:34 [medium] scout-bin.test.ts is structured around worker mode: many tests use --spec, mode=rw, verdict.json, WORKER-SENSORS lines and fan-out cap with a second worker refused (exit 75); generic read-scout tests cover herdr tab launch, pane.sh 0600 handling, stall kill (124), SIGTERM/SIGKILL process-group cleanup and pi -na trust logic.
+[2adb8beb8c62] 2026-11-14 20:36 [high] completed: ported tests/scout-bin.test.ts in the checkout to read-only scouts: dropped the --spec, rw, worker-meta, verdict and WORKER-SENSORS tests, added tests for the fan-out cap with mode=read, usage errors (--rw gone, bad --thinking, bad --review base), and a --review argument test; the stall test now expects exit 124 with 'model stream stalled'.
+[724796493b45] 2026-11-14 20:37 [high] Post-edit scout-bin.test.ts result in the checkout: 21 tests run, 12 pass and 9 fail (herdr pane tests 11-14, 15, 16, 18, 19, 20 and the -na trust test). The HEAD copy of config/pi (exported with git archive to /tmp/basepi) fails the same herdr/environment tests, so these failures predate the edits and are not regressions.
+[9d55995f8874] 2026-11-14 20:37 [high] completed: removed the auto-guard machinery from the checkout via git rm: config/git/bin/auto-guard, the template pre-commit, pre-merge-commit and pre-push stubs, githooks/pre-merge-commit and githooks/pre-push, and config/husky/init.sh (config/husky directory is now gone). githooks/pre-commit now only runs config/pi/build-agents.sh --check. install.sh no longer links husky init.sh or auto-guard; git-hooks-install header and husky skip message were reworded to drop the guard wording. The post-checkout and post-merge worktree stubs remain.
+[36997ca0950c] 2026-11-14 20:37 [high] Still stale after the auto-guard removal in the checkout: config/git/tests/hooks.test.ts still tests auto-guard through stubs and husky init.sh (it needs guard cases dropped and installer tests moved to post-checkout and post-merge), verify.sh lines 158-174 still check auto-guard, husky init.sh and githooks pre-merge-commit/pre-push, DESIGN.md row 38 still describes auto-run hooks, and prime-reminder.ts line 26 still says to re-read AUTO.md.
+[473b87c90bf5] 2026-11-14 20:37 [medium] verify.sh in the checkout still has checks for bin/worker.prompt.md, extensions/worker-sensors.ts and scout --rw refusal (lines 104-107), which must be replaced with the scout --review and slice-check equivalents; verify.sh has no memory line-cap warning or H3 prose checks yet.
+[d07643d89357] 2026-11-14 20:38 [high] completed: in the checkout, config/git/tests/hooks.test.ts was rewritten to drop auto-guard, husky and pre-commit/pre-push cases and to use post-checkout and post-merge stubs; node --test over config/git/tests passed 40 with 0 failing.
+[692dba2578f5] 2026-11-14 20:38 [medium] Recall of the enhancement list (approved-list text) confirms item F4 approved wording: compact-cap notifies to /handoff and start fresh and stops auto-resuming, with optionally lowering the cap to about 120k (the lowering was not part of the implemented change; cap remains 210k). Item H1 (split DESIGN.md into decisions and LOG.md), H3 (verify.sh prose checks: agents named in claude-delta exist, memory line cap holds, no fragment mentions AUTO.md or --rw) and G2 (memory bullet cap about 200 characters plus verify.sh line-cap check) are still listed as open.
+
+----
+Bracketed ids in reflections and observations connect to their source session entries. These are condensed memories from earlier in this session.
+When entries conflict, the entry with the latest timestamp reflects the latest known state.
+Use `recall` with an id to retrieve original context, or `#N:path` drill-down to explore file content from referenced entries.
+When exact source context is needed for precision or traceability, use the `recall` tool with the relevant observation or reflection id. This is especially useful when a reflection materially affects a decision or is too compressed to continue confidently.
+----
+</answer>
+
+Known facts:
+
+1. Testing: strict red-green TDD may be the wrong model for agents; lean toward Ousterhout instead
+2. Outcome-driven development instead of spec (or anything else) driving the work
+3. Agentic loops and subagents have not worked well (scout is ok); prefers short sessions: small bounded slices for implementation, or a bigger one for architecture/planning
+4. A1: split strategic vs tactical work by session type (planning vs slice) in ladder.md
+5. A2: four Ousterhout design rules in standards.md (pull complexity down, split flag/mode params, no pass-through functions, define errors out of existence)
+6. A3: ladder rung 5 'least code' becomes 'simplest code: fewest concepts, not fewest lines'
+7. A4: separate what from how/when (no scheduling, retries or caching inside business logic)
+8. A5: design it twice in /plan (two sketches for a new or changed interface)
+9. A6: (No) interface comments written before the code / comments-first
+10. B1: red-first only for bugs; new behaviour tested through the interface after it is settled (replace 'TDD enforced')
+11. B2: expected values come from the requirement, never from running the code under test
+12. B3: break-it check in /review: break the covered code once and confirm each new test fails
+13. B4: slice-check script (tests green, test/assertion count not lower, no skip/only, diff within declared files), optional pre-commit
+14. B5: (Maybe) opt-in mutation testing (Stryker/mutmut) on changed files in /review
+15. B6: (No) TDD-guard hook blocking edits until a failing test exists
+16. C1: outcome card (outcome, done-when, interface, mechanism, out) as the one unit of work, replacing the Goal block and spec-contract
+17. C2: done-when rule at the top of persona-core: state the check before acting; done means ran it and showed output
+18. C3: rewrite /plan for two modes (planning and slice), removing the auto section, dispatch and rework
+19. C4: delete spec-contract.md
+20. C5: slice-session start rule in /plan 'go': run done-when checks red, work, green, slice-check, report
+21. C6: shorten /handoff by default; keep the 12-section form as /handoff full
+22. C7: (Maybe) cut /where to three rungs (target, slice, this)
+23. D1: cut the Recommendations block in persona-core to two lines
+24. D2: fix the CLAUDE.md contradiction between 'teach concepts/explain why' and 'explain only when asked'
+25. D3: remove duplicate rules in Replies
+26. D4: scout exception: read it yourself when the content itself is the subject
+27. D5: (Maybe) fewer coined labels (rungs, sensors, effort, beyond)
+28. E1: take worker/auto protocol out of persona-pi.md (and ops.md, slice/auto branch prefixes)
+29. E2: (Maybe) move the review checklist from ops.md to review.md, gated by an eval
+30. E3: prompt order: judgment, done-when and scope first, ladder last
+31. E4: (No) shrinking AGENTS.md for tokens
+32. F1: retire auto mode (auto-run.ts, auto-slice, auto-guard, hooks, orch eval role)
+33. F2: retire --rw workers once B4 has landed
+34. F3: keep scout --review as an on-demand second reviewer for a slice
+35. F4: at the compaction cap start a new session instead of compacting (handoff and start fresh; optionally lower the cap to ~120k)
+36. F5: align the Claude Code delta: drop the concurrent-subagents rule; read-only subagents, one writer
+37. F6: (Maybe) drop health-footer.ts
+38. F7: (No) Ralph loops, parallel writers, spec kits
+39. G1: clean up memory.md (too big; move or delete the dotfiles and pi scopes)
+40. G2: ~200-character bullet cap in /memory plus a verify.sh line-cap check
+41. G3: (Maybe) idle cache rebuilds / longer cache TTL
+42. H1: split DESIGN.md into current decisions and a dated LOG.md
+43. H2: commit the uncommitted fragment/prompt edits first so the baseline is in git; fix stale claude-delta.md:23
+44. H3: prose checks in verify.sh (agents named exist, memory line cap, no mention of removed features)
+45. I1: before/after agent-eval gate for the whole change set (review, plan, scout roles, cold-start probe)
+46. I2: (Maybe) a slice eval role to replace orch
+47. G1 (the memory.md clean-up) is the item that was dropped

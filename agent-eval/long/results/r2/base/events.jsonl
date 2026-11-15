@@ -1,0 +1,60 @@
+{"t":1794690517642,"type":"notify","level":"info","message":"compact-cap: threshold 130,000 tokens for this session"}
+{"t":1794690517642,"type":"setup_command","message":"/compact-cap 130000","status":"ok","data":{"disposition":"handled"}}
+{"t":1794690728233,"type":"notify","level":"warning","message":"bash log: cannot write /tmp/agent-eval-long/r2/base/home/.pi/agent/logs/bash.log; no more lines this session."}
+{"t":1794690932654,"type":"compaction_start","reason":"manual"}
+{"t":1794690964439,"type":"compaction_end","reason":"manual","ok":true,"aborted":false,"tokensBefore":132577,"after":31016,"summaryChars":9205}
+{"t":1794690966726,"type":"compaction_start","reason":"manual"}
+{"t":1794691011280,"type":"compaction_end","reason":"manual","ok":true,"aborted":false,"tokensBefore":148716,"after":26029,"summaryChars":13959}
+{"t":1794691224814,"type":"notify","level":"info","message":"bash changed: config/pi/prompts/spec-contract.md (deleted)"}
+{"t":1794691255706,"type":"compaction_start","reason":"manual"}
+{"t":1794691318294,"type":"compaction_end","reason":"manual","ok":false,"aborted":false,"error":"Compaction failed: Turn prefix summarization failed: 429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEPBRVzda1gi7Gycio\"}"}
+{"t":1794691318295,"type":"notify","level":"warning","message":"compact-cap: compaction failed (Turn prefix summarization failed: 429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEPBRVzda1gi7Gycio\"}) — resuming the interrupted task uncompacted, retrying the cap in 5 min"}
+{"t":1794691320023,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEWUy19ocKJttUd9Sm\"}"}
+{"t":1794691320026,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEWUy19ocKJttUd9Sm\"}"}
+{"t":1794691322233,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEfwUqxpGHj4Zwonfj\"}"}
+{"t":1794691322234,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEfwUqxpGHj4Zwonfj\"}"}
+{"t":1794691326511,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEz6PAmUq39UpEDTBq\"}"}
+{"t":1794691326515,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XEz6PAmUq39UpEDTBq\"}"}
+{"t":1794691334772,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XFbTPDEJmhTxpjJMYz\"}"}
+{"t":1794691334776,"type":"auto_retry_end"}
+{"t":1794691395569,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XL5NXYk4sQvouzUsrL\"}"}
+{"t":1794691395571,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XL5NXYk4sQvouzUsrL\"}"}
+{"t":1794691397805,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XLExUjRoP1RzCgcaTZ\"}"}
+{"t":1794691397807,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XLExUjRoP1RzCgcaTZ\"}"}
+{"t":1794691402039,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XLZBMafv4nsai9Y1pL\"}"}
+{"t":1794691402042,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XLZBMafv4nsai9Y1pL\"}"}
+{"t":1794691410271,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XMANvwEWbXoGbKma8K\"}"}
+{"t":1794691410274,"type":"auto_retry_end"}
+{"t":1794691470587,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XRcHWx4eNG8jopzFb4\"}"}
+{"t":1794691470590,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XRcHWx4eNG8jopzFb4\"}"}
+{"t":1794691472786,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XRmfa8jWcUPncpDKkj\"}"}
+{"t":1794691472788,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XRmfa8jWcUPncpDKkj\"}"}
+{"t":1794691477020,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XS5h3N5yN7rAQ53fTw\"}"}
+{"t":1794691477021,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XS5h3N5yN7rAQ53fTw\"}"}
+{"t":1794691485291,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XSgzaBTRmuwHixsSro\"}"}
+{"t":1794691485295,"type":"auto_retry_end"}
+{"t":1794691545651,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XX9C2hWutnspuEjJcx\"}"}
+{"t":1794691545654,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XX9C2hWutnspuEjJcx\"}"}
+{"t":1794691547847,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XXJaq1Kokp1GbN3k5D\"}"}
+{"t":1794691547847,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XXJaq1Kokp1GbN3k5D\"}"}
+{"t":1794691552104,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XXceGnEwjCyoPPYp74\"}"}
+{"t":1794691552106,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XXceGnEwjCyoPPYp74\"}"}
+{"t":1794691560322,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch3XYDxnfi6W11H8PgMtE\"}"}
+{"t":1794691560325,"type":"auto_retry_end"}
+{"t":1794691622466,"type":"process_exit","code":0,"sig":null}
+{"t":1794702972482,"type":"notify","level":"info","message":"compact-cap: threshold 130,000 tokens for this session"}
+{"t":1794702972482,"type":"setup_command","message":"/compact-cap 130000","status":"ok","data":{"disposition":"handled"}}
+{"t":1794702998393,"type":"compaction_start","reason":"manual"}
+{"t":1794703063464,"type":"compaction_end","reason":"manual","ok":true,"aborted":false,"tokensBefore":134510,"after":27196,"summaryChars":18742}
+{"t":1794703069230,"type":"notify","level":"warning","message":"bash log: cannot write /tmp/agent-eval-long/r2/base/home/.pi/agent/logs/bash.log; no more lines this session."}
+{"t":1794703115496,"type":"notify","level":"info","message":"bash changed: config/git/bin/auto-guard (deleted), config/git/template/hooks/pre-commit (deleted), config/git/template/hooks/pre-merge-commit (deleted), config/git/template/hooks/pre-push (deleted), config/husky/init.sh (deleted), githooks/pre-merge-commit (deleted), githooks/pre-push (deleted)"}
+{"t":1794703271140,"type":"notify","level":"info","message":"bash changed: config/pi/bin/worker.prompt.md (deleted), config/pi/extensions/worker-sensors.ts (deleted), config/pi/tests/worker-resume.test.ts (deleted), config/pi/tests/worker-sensors.test.ts (deleted)"}
+{"t":1794703397317,"type":"compaction_start","reason":"manual"}
+{"t":1794703475194,"type":"compaction_end","reason":"manual","ok":true,"aborted":false,"tokensBefore":131670,"after":33635,"summaryChars":22141}
+{"t":1794703627421,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+46 −36), config/pi/AGENTS.work.md (+46 −36), config/pi/CLAUDE.md (+48 −36)"}
+{"t":1794703730274,"type":"notify","level":"info","message":"bash changed: claude/skills/parallel/SKILL.md (deleted)"}
+{"t":1794703736915,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+47 −36), config/pi/AGENTS.work.md (+47 −36), config/pi/CLAUDE.md (+49 −36)"}
+{"t":1794703938369,"type":"compaction_start","reason":"manual"}
+{"t":1794704019203,"type":"compaction_end","reason":"manual","ok":true,"aborted":false,"tokensBefore":133019,"after":31940,"summaryChars":23123}
+{"t":1794704093786,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+48 −38), config/pi/AGENTS.work.md (+48 −38), config/pi/CLAUDE.md (+50 −38)"}
+{"t":1794704431593,"type":"process_exit","code":0,"sig":null}

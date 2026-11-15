@@ -1,0 +1,89 @@
+I can answer 1–4 and 6 from memory. For 5, I can't find any "X findings" list in this session, so I'm marking it unsure rather than guessing.
+
+**1. How you work (first message)**
+- **Testing:** strict red-green TDD may be the wrong model for agents; Ousterhout's *A Philosophy of Software Design* may fit them better.
+- **What drives development:** outcomes, not specs or anything else.
+- **Subagents and session shape:** loops and subagents haven't worked for you, but the scout is fine. You want short sessions with small, bounded slices for implementation, and one bigger session for architecture and planning.
+
+**2. Enhancement list (43 items)**
+- **A. Code philosophy**
+  - A1: strategic work in planning sessions, tactical work in slice sessions
+  - A2: four Ousterhout design rules
+  - A3: ladder rung 5 becomes "fewest concepts"
+  - A4: keep what is decided apart from when and how it runs
+  - A5: design it twice in `/plan`
+  - A6: write interface comments first (No)
+- **B. Testing**
+  - B1: red-first only for bugs
+  - B2: expected values never come from the implementation
+  - B3: break-it check in `/review`
+  - B4: `slice-check` script plus an optional pre-commit hook
+  - B5: opt-in mutation testing (Maybe)
+  - B6: TDD-guard hook (No)
+- **C. Outcome-driven workflow**
+  - C1: outcome card
+  - C2: done-when rule at the top of the prompt
+  - C3: `/plan` with planning and slice modes
+  - C4: delete `spec-contract.md`
+  - C5: start rule for "go"
+  - C6: short `/handoff`
+  - C7: cut `/where` (Maybe)
+- **D. Communication and prose**
+  - D1: Recommendations block cut to two lines
+  - D2: fix the CLAUDE.md "teach" contradiction
+  - D3: remove duplicate rules in Replies
+  - D4: read it yourself when the content is the subject
+  - D5: fewer coined labels (Maybe)
+- **E. What is always loaded**
+  - E1: take worker and auto protocol out of the always-loaded prompt
+  - E2: move the review checklist to `review.md`, gated on I1 (Maybe)
+  - E3: prompt order
+  - E4: shrink AGENTS.md for tokens (No)
+- **F. Harness**
+  - F1: retire auto mode
+  - F2: retire `--rw` workers
+  - F3: keep `scout --review`
+  - F4: at the compaction cap, hand off and start a fresh session
+  - F5: align the Claude Code delta
+  - F6: drop `health-footer` (Maybe)
+  - F7: Ralph loops, parallel writers, spec kits (No)
+- **G. Context and memory**
+  - G1: memory cleanup
+  - G2: 200-character bullet cap plus a line-cap check in `verify.sh`
+  - G3: idle cache rebuilds (Maybe)
+- **H. Hygiene and docs**
+  - H1: split `DESIGN.md` into decisions and `LOG.md`
+  - H2: commit the live dotfiles edits first
+  - H3: prose checks in `verify.sh`
+- **I. Measurement**
+  - I1: before/after eval gate
+  - I2: a `slice` eval role (Maybe)
+
+**3. Dropped:** G1.
+
+**4. Implemented, and what the review closed**
+- **Implemented:** A1–A5, B1–B4 (without the pre-commit hook), B5, C1–C6, D1–D4, E1, E3, F1–F5, G2 and H1, H3.
+- **Not done:**
+  - I1 and E2: the eval runs against the live config, not this checkout. This was my call.
+  - H2: it would mean committing, which you ruled out.
+  - F6: `health-footer.ts` isn't in this checkout.
+  - G3: checked but not changed; that one is your decision.
+- **The review found and closed:**
+  - F4 was never done: compact-cap still compacted mid-run and prime-reminder still auto-resumed and mentioned `AUTO.md`. Now compact-cap only shows the "/handoff and start fresh" notice, and there is a new test.
+  - A worker check was left in `stream-watchdog.ts`.
+  - `diagnose.md` still ended in the old worker spec block.
+  - `review.md` said "don't edit files" but the break-it check needs an edit.
+  - Nothing in the prompt told the agent about `scout --review`.
+  - The card didn't require type check and lint in done-when, and "go" expected every check to start red.
+  - H1, H3 and the `verify.sh` half of G2 were not done.
+  - Two bugs in my own new `verify.sh` checks (`tr` was misused).
+  - Small wording fixes in the standards and claude-delta fragments.
+
+**5. X findings:** unsure. I can't find an "X" list anywhere in this session's memory, and I don't know which ones you approved.
+
+**6. Latest results**
+- `build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`.
+- `verify.sh`: 65 passed, 5 failed, all from before my changes.
+  - 4 are symlinks that point at the live dotfiles.
+  - 1 is the node tests: 217 run, 9 herdr failures that fail the same way on HEAD.
+  - The type check was skipped because tsc isn't installed.

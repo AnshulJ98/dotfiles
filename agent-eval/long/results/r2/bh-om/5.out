@@ -1,0 +1,42 @@
+Every approved item except I1, E2, H2 and F6 is in the checkout, and both checks pass apart from failures that were there before I started. Nothing is committed: 42 files, +797/−2299, on top of `822eee5`.
+
+**Changed**
+- **Prompt fragments (A1–A5, B1, B2, C2, D1–D4, E1, E3, F5):**
+  - Ousterhout design rules and "fewest concepts, not fewest lines".
+  - Red-first only for bugs; expected values never come from the code under test.
+  - A Done section near the top of `persona-core.md`.
+  - The worker, auto-mode and `AUTO.md` text is gone.
+  - The CLAUDE.md "teach" rule no longer contradicts the "explain only when asked" rule.
+- **Prompts (B3, B5, C1, C3–C6):**
+  - `/plan` has a planning mode and a slice mode, built around the card.
+  - `/handoff` is short by default, with a `full` form.
+  - `/review` has the break-it check and opt-in mutation testing.
+  - `/diagnose` ends in a `/plan` card.
+  - `/memory` caps a bullet at 200 characters.
+  - `spec-contract.md` is deleted.
+- **slice-check (B4):** new script with 23 tests. It reruns the done-when line and fails on files outside the card, dropped tests or assertions, and new skip or only markers.
+- **Workers and auto mode retired (F1, F2):**
+  - `--rw`, `worker.prompt.md` and `worker-sensors.ts` are gone.
+  - `auto-guard`, the pre-commit, pre-merge-commit and pre-push template hooks, and husky `init.sh` are gone.
+  - The tests that used them were dropped or ported.
+- **`scout --review <base>` (F3):** a read-only second reviewer of the working tree.
+- **Sessions (F4):** compact-cap now only tells you to `/handoff` and start fresh, and nothing auto-resumes.
+- **Docs (H1):** `DESIGN.md` holds one line per decision; the old document is now `LOG.md`.
+- **verify.sh (H3, G2):**
+  - New `[prose]` section: every agent `claude-delta.md` names exists, and no fragment or prompt mentions a retired feature.
+  - It checks that `scout --review` and `slice-check` exist and run.
+  - The memory line cap warns rather than fails.
+- **Results:**
+  - `build-agents.sh --check` passes.
+  - `verify.sh` gives 65 passed, 5 failed. Four failures are symlinks that point at the live dotfiles. The fifth is 9 herdr tests that fail the same way on HEAD.
+  - The type check didn't run because tsc isn't installed.
+
+**Left**
+1. I1, the before/after eval, isn't run. agent-eval tests the live `~/.pi/agent`, not this checkout. E2 depends on it, so it isn't done either. Skipping it was my call; you haven't confirmed it.
+2. H2 isn't done: it means committing in the live dotfiles, which you ruled out.
+3. G3 is your decision. Idle cache warming already covers 30 minutes. Longer needs `PI_CACHE_RETENTION=long`, which makes cache writes cost more.
+4. The optional pre-commit hook for slice-check (B4) isn't built.
+5. None of this is in your live config yet. `/plan` calls `~/.pi/agent/bin/slice-check`, which only works once it is.
+6. F6 doesn't apply: `health-footer.ts` isn't in this checkout.
+
+**Would revert:** nothing. The one possible candidate is the `files` field I added to the card beyond the approved C1 format. slice-check needs it to check scope, so I'd keep it.

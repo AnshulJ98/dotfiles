@@ -1,0 +1,43 @@
+There was never an X list, and nothing else is in doubt. Sources: item 1 comes from re-reading your first message with `recall`; items 2–6 come from this session's context.
+
+**1. How you work (your first message)**
+- **Testing:** strict red-green TDD may be the wrong model for agents; you lean towards Ousterhout.
+- **What drives development:** outcomes, not specs or anything else.
+- **Subagents and session shape:** agentic loops and subagents haven't worked for you, but the scout is fine. You keep sessions short: small bounded slices for implementation, or a bigger session for architecture and planning.
+
+**2. Item IDs (44)**
+- **A:** A1 strategic vs tactical by session type · A2 four Ousterhout design rules · A3 ladder rung 5 says "simplest" · A4 keep what apart from how and when · A5 design it twice in `/plan` · A6 (No) comments written first
+- **B:** B1 red-first only for bugs · B2 expected values never come from the code under test · B3 break-it check in `/review` · B4 `slice-check` script · B5 (Maybe) mutation testing on request · B6 (No) TDD-guard hook
+- **C:** C1 outcome card · C2 done-when rule at the top of the prompt · C3 two-mode `/plan` · C4 delete `spec-contract.md` · C5 slice "go" start rule · C6 short `/handoff` · C7 (Maybe) cut `/where`
+- **D:** D1 two-line Recommendations · D2 fix the "teach concepts" contradiction · D3 remove duplicate Replies rules · D4 read it yourself when the content is the subject · D5 (Maybe) fewer coined labels
+- **E:** E1 take worker and auto protocol out of `persona-pi.md` · E2 (Maybe) move the review checklist to `review.md` · E3 prompt order · E4 (No) shrink AGENTS.md for tokens
+- **F:** F1 retire auto mode · F2 retire `--rw` workers · F3 `scout --review` as a second reviewer · F4 at the cap, start fresh instead of compacting · F5 align the Claude Code delta · F6 (Maybe) drop `health-footer.ts` · F7 (No) Ralph loops and parallel writers
+- **G:** G1 memory cleanup · G2 bullet cap plus a line-cap check · G3 (Maybe) longer cache TTL
+- **H:** H1 split `DESIGN.md` · H2 commit the live edits first · H3 prose checks in `verify.sh`
+- **I:** I1 before/after eval gate · I2 (Maybe) a `slice` eval role
+
+**3. Dropped:** G1.
+
+**4. Implemented, and what the review found**
+- **Implemented:** A1–A5, B1–B5, C1–C6, D1–D4, E1–E3, F1, F2, F4, F5, G2, H1, H3.
+  - F3 is done as a plain read-only `scout` when you ask for a second opinion. There is no `--review` flag.
+  - G3 needed no change: `home/.zshrc:65` already sets `PI_CACHE_RETENTION=long`.
+- **Not done:**
+  - F6: there is no `health-footer.ts` in this checkout.
+  - H2: it needs a commit, and you said don't commit.
+  - I1: it can't run against this repo.
+  - E2 shipped without its I1 gate. That is the one candidate to revert.
+- **Found and closed by the review:**
+  - H1, H3 and G2 had been missed. All three are now done.
+  - `slice-check` split quoted commands at commas. I wrote a failing test first, then the fix. It also now accepts unindented `- item` lines, and the `/plan` card writes `done-when` as a block list.
+  - Leftover worker wording sat in a test comment, a `verify.sh` comment and the `bin/scout` header. The `ops.md` pointer wasn't wrapped. All fixed.
+  - Break-it pass on `slice-check`: each of 5 deliberate breaks failed at least one test. After restoring, 9/9 pass.
+
+**5. X findings:** there is no list with X IDs. Recall finds X only in your questions and my earlier reply saying the same, so nothing was approved.
+
+**6. Latest checks**
+- `build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`.
+- `verify.sh`: **57 passed, 5 failed**, exit 1. None of the failures come from this change set:
+  - Four are symlinks on this eval home: `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template` and the worktrunk `config.toml`.
+  - The fifth is `node tests pass`, at 148/157. All 9 failures are herdr pane tests in `scout-bin.test.ts`, and they also fail on a copy of `HEAD`.
+  - tsc was skipped because it isn't installed.

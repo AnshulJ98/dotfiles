@@ -1,0 +1,24 @@
+{
+  "steps": [
+    "resume:ok",
+    "4:ok",
+    "5:ok",
+    "recall:ok"
+  ],
+  "session": {
+    "turns": 137,
+    "mainCost": 7.6579846000000025,
+    "compactionCost": 1.502976,
+    "compactions": 5,
+    "turnsAfterFirstCompaction": 121,
+    "avgContextAfterFirstCompaction": 75695
+  },
+  "workers": {
+    "calls": 0,
+    "cost": 0,
+    "malformed": 0
+  },
+  "verify": "61 passed, 4 failed",
+  "agentsCheck": "ok",
+  "diffStat": "32 files changed, 795 insertions(+), 992 deletions(-)"
+}

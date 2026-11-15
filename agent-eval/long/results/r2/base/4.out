@@ -1,0 +1,45 @@
+The review found five gaps, and all five are closed. `build-agents.sh --check` passes. `verify.sh` exits 1 with 60 passed and 5 failed, and none of the 5 failures come from my changes.
+
+**Blocked on me**
+1. **Manual `/compact` mid-task no longer auto-resumes.** F4 removed this from `prime-reminder.ts` along with the cap's mid-run firing. I can't check whether F4 as approved covered manual compactions, because the item's wording was lost in compaction. Restoring just the manual-compact resume is about 30 lines.
+2. **Stale links on your real machine.** Once you install this, `~/.local/bin/auto-guard` and `~/.config/husky/init.sh` will point at deleted files. They're harmless, because the hooks check `command -v auto-guard` first. Delete them by hand.
+3. **The "X findings" list was lost in compaction.**
+
+**Changed in this pass**
+- **`/plan` refactor cards** (`config/pi/prompts/plan.md`): a refactor keeps behaviour, so no check can fail today, and step 1 of "go" would have stopped on every refactor. Refactor cards are now exempt from "the first check must fail".
+- **`/plan` type check and lint** (`config/pi/prompts/plan.md`): the old `tests` line included the repo's type check and lint, and "go" had dropped them. `--tests` for `slice-check` now includes them again.
+- **`standards.md`:** the mode-parameter rule and the pass-through rule now say "usually". A pass-through is kept when it is a module's public interface.
+- **`standards.md`:** removed the Testing bullet "know which check will prove it works", which repeated "Done When". `persona-core` is in all three generated files, so nothing is lost.
+- **`verify.sh`:** the retired-terms check now also covers `bin/scout.prompt.md`.
+- **`lib/slice-check.ts`:**
+  - It no longer crashes on a submodule or a symlinked directory: it uses `statSync().isFile()` where it used `existsSync`.
+  - The header now lists two known defects: a renamed test file reads as dropped cases, and `--tests` has no timeout.
+- **Rebuilt** `AGENTS.md`, `CLAUDE.md` and `AGENTS.work.md`.
+
+**Checks**
+| Check | Result |
+|---|---|
+| `build-agents.sh --check` | `OK: AGENTS/CLAUDE files match fragments` |
+| `verify.sh` | 60 passed, 5 failed |
+| `config/pi/tests` | 209 pass, 9 fail |
+| `config/git/tests` | 40/40 pass |
+| `slice-check` tests | 27/27 pass |
+
+- **4 of the `verify.sh` failures** are symlink checks. This test machine's home links point to `/Users/anshulj/Dev/dotfiles`, not to this repo copy.
+- **The 5th `verify.sh` failure** is "node tests pass". It fails because of the 9 failing tests below.
+- **The 9 test failures** are the same herdr tests that failed in `/tmp/base-tests.txt`. One of them is the worktree test I renamed.
+- **No type check ran**, because tsc isn't installed here.
+
+**Found**
+- **Earlier changes reviewed, no new defects:**
+  - extensions and `lib/`
+  - git hooks and `install.sh`
+  - `verify.sh`
+  - the fragments
+  - the `migrate` and `map` skills
+- **Remaining worker and auto mentions are history:** `docs/*-plan.md`, `docs/operating-proposal-*` and `LOG.md`. I left them.
+- **The cap now fires only between runs**, as F4 intended. A single long run can go past 210k before it compacts.
+- **`claude/skills/pre-pr-review` calls a `challenger` agent that doesn't exist.** This was already broken before my changes; I didn't fix it.
+- **E2 is still rejected** on the I1 numbers: recall fell to 13, 11 and 12 of 13. The review checklist stays in `ops.md`.
+
+Nothing is committed or staged.

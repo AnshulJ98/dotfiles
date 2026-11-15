@@ -1,0 +1,5 @@
+{"step":"warmup","status":"ok","secs":50,"turns":1,"cost":2.0336539999999994,"ctx":107998,"compactions":0}
+{"step":"3","status":"ok","secs":576,"turns":37,"cost":4.0345114,"ctx":75150,"compactions":1}
+{"step":"4","status":"ok","secs":30,"turns":4,"cost":4.0345114,"ctx":75378,"compactions":1}
+{"step":"5","status":"ok","secs":31,"turns":4,"cost":4.0345114,"ctx":75403,"compactions":1}
+{"step":"recall","status":"ok","secs":30,"turns":4,"cost":4.0345114,"ctx":75568,"compactions":1}

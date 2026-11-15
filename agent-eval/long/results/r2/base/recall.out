@@ -1,0 +1,88 @@
+Below is what I remember. Item 5 is lost entirely, and items 1 and 2 have gaps, each marked unsure.
+
+**1. How you work** (from my summary; I'm not sure it all came from your very first message)
+- **Testing:** you lean away from strict red-green TDD.
+- **What drives development:** outcomes, not specs, with Ousterhout's design philosophy.
+- **Subagents and session shape:** agentic loops and code-writing subagents have never worked for you, though a read-only scout is fine. You prefer short sessions: small bounded slices for implementation, and one larger session for architecture and planning.
+
+**2. The first enhancement list**
+My summary says 44 items, but I can only reconstruct 43 ids, so one is missing (unsure which). Items marked "No" were proposed and rejected; what they said is unsure.
+- **A, code philosophy:**
+  - A1: strategic vs tactical
+  - A2: Ousterhout design rules
+  - A3: rung 5 "fewest concepts"
+  - A4: decisions kept apart from scheduling, retries and caching
+  - A5: two sketches for an interface
+  - A6: No (content unsure)
+- **B, testing:**
+  - B1: red-first for bugs only
+  - B2: expected values never from the implementation
+  - B3: break-it pass in `/review`
+  - B4: `slice-check`
+  - B5: mutation testing in `/review`
+  - B6: No (content unsure)
+- **C, outcome-driven workflow:**
+  - C1: outcome card
+  - C2: done-when rule
+  - C3: `/plan` modes
+  - C4: delete `spec-contract.md`
+  - C5: "go" flow
+  - C6: no-op (content unsure)
+  - C7: `/where` three rungs, optional
+- **D, communication:**
+  - D1: no-op (content unsure)
+  - D2: fix "Teach concepts"
+  - D3: dedupe Replies
+  - D4: read it yourself
+  - D5: fewer coined labels, optional
+- **E, always-loaded prompt:**
+  - E1: remove worker and auto prose
+  - E2: move the review checklist to `review.md`, gated by eval
+  - E3: prompt order
+  - E4: No (content unsure)
+- **F, harness:**
+  - F1: retire auto runs
+  - F2: retire `--rw` workers
+  - F3: no-op (content unsure)
+  - F4: compact-cap handoff
+  - F5: claude-delta subagents
+  - F6: no-op (content unsure)
+  - F7: No (content unsure)
+- **G, memory:**
+  - G1: content unsure
+  - G2: ~200-char bullet cap plus a `verify.sh` check
+  - G3: already set (content unsure)
+- **H, hygiene:**
+  - H1: split `DESIGN.md` into decisions plus `LOG.md`
+  - H2: done through F5 and D2
+  - H3: prose checks in `verify.sh`
+- **I, measurement:**
+  - I1: before/after eval
+  - I2: a `slice` eval role to replace `orch`, optional
+
+**3. Dropped:** G1. What G1 proposed is unsure.
+
+**4. Implemented**
+- **Done:** all of A1–A5, B1–B5, C1–C5, D2–D4, E1, E3, F1, F2, F4, F5, G2, H1, H2, H3 and I1.
+- **Confirmed already in place, so nothing to change:** C6, D1, F3, F6, G3.
+- **E2:** measured and rejected. Moving the checklist out dropped review recall to 13, 11 and 12 of 13.
+- **Not done:** C7, D5, I2.
+
+The hypercritical review closed these gaps:
+1. `/plan` "go" stopped on every refactor card, because a refactor's first check can't fail on the base. Refactor cards are now exempt.
+2. "go" had dropped the repo's type check and lint from the tests it runs. They're back.
+3. The rules on mode parameters and pass-through functions now say "usually", and a pass-through is kept when it is a module's public interface.
+4. A Testing bullet repeated "Done When". Removed.
+5. The `verify.sh` check for retired terms now also covers `scout.prompt.md`.
+6. `slice-check` no longer crashes on a submodule or symlinked directory, and its header names its two known defects (renamed test files, no `--tests` timeout).
+
+The review also flagged, without fixing: manual `/compact` mid-task lost its auto-resume, the live `auto-guard` and husky links will go stale, and `pre-pr-review` calls a `challenger` agent that doesn't exist (that last one was already broken).
+
+**5. The X findings:** lost in compaction. I don't have the ids, their content, or which ones you approved.
+
+**6. Latest checks**
+- `build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`, exit 0.
+- `./config/pi/verify.sh`: exit 1, with 60 passed and 5 failed.
+  - Four failures are symlink checks; on this test machine the links point to `/Users/anshulj/Dev/dotfiles`, not this repo.
+  - The fifth is "node tests pass", which fails on 9 herdr `scout-bin` tests that also failed before my changes.
+  - The type check was skipped because tsc isn't installed.

@@ -1,0 +1,23 @@
+{
+  "arm": "base",
+  "run": "r2",
+  "drop": "G1",
+  "compactAt": 130000,
+  "steps": [
+    "resume",
+    "4",
+    "5",
+    "recall"
+  ],
+  "resume": true,
+  "compactions0": 2,
+  "setup": [
+    "/compact-cap 130000"
+  ],
+  "flags": [],
+  "seed": "2026-11-14T20:57:27.910Z",
+  "model": "anthropic/claude-opus-5-5",
+  "thinking": "medium",
+  "warmMs": 180000,
+  "thinkMs": 45000
+}

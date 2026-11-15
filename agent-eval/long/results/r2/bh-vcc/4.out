@@ -1,0 +1,53 @@
+The review found five gaps and closed them. The checks are now: `build-agents.sh --check` passes, and `verify.sh` reports **57 passed, 5 failed**. None of the failures come from this change set. Nothing is committed.
+
+## Gaps closed in this pass
+
+1. **H1 wasn't done.** `config/pi/DESIGN.md` is now one line per decision (5,920 → 2,620 words). The full rows, the scout narrative, the Opus migration notes and the measurement notes moved to the new `config/pi/LOG.md`.
+2. **H3 wasn't done.** `verify.sh` has a new `[prose]` section with three checks:
+   - every agent named in `claude-delta.md` exists in `claude/agents/`;
+   - no fragment or prompt mentions `AUTO.md`, `--rw`, `worker-sensors` or "auto run";
+   - `memory.md` is at most 250 lines.
+   
+   I tested the removed-feature check by adding `AUTO.md` to `ops.md`: it failed as it should, and I restored the file.
+3. **G2 wasn't done.** `prompts/memory.md` now limits a bullet to one line of at most 200 characters, with the evidence kept in the repo.
+4. **`slice-check` broke commands that contain a comma.** A card with `done-when: ["jq '.a, .b' x"]` was split into two commands. I added a failing test first, then fixed the list splitter to respect quotes and to accept unindented `- item` lines. The `/plan` card now writes `done-when` as a block list.
+   - I broke each core check in `lib/slice-check.ts` once on purpose (the file scope, dropped tests, new skips, failed commands, quote splitting). Each break failed at least one test, and the restored file passes 9/9.
+5. **Leftover worker mentions:**
+   - a comment in `tests/scout-ext.test.ts`;
+   - the `[tests]` header comment in `verify.sh`;
+   - an over-long `--model` comment in `bin/scout`;
+   - the review-checklist pointer in `ops.md`, which wasn't wrapped.
+   
+   All fixed. Generated files rebuilt.
+
+## Where each item stands
+
+- **Done:**
+  - **A:** A1–A5
+  - **B:** B1–B5
+  - **C:** C1–C6
+  - **D:** D1–D4
+  - **E:** E1–E3
+  - **F:** F1, F2, F3 (as a plain read-only `scout` asked for a second opinion; there is no `--review` flag), F4, F5
+  - **G:** G2, G3 (`home/.zshrc:65` already exports `PI_CACHE_RETENTION=long`, so nothing changed)
+  - **H:** H1, H3
+- **Not done:**
+  - **G1:** you dropped it.
+  - **F6:** there is no `health-footer.ts` in this checkout.
+  - **H2:** it needs a commit.
+  - **I1:** it can't run against this repo.
+- **E2 shipped without its gate.** It was supposed to wait for the I1 before/after review run. The risk is that a casual "review this" without `/review` now relies on the 12 categories inlined in `ops.md` instead of the full checklist.
+- **Nothing to revert.**
+
+## Check results
+
+- `./config/pi/build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`.
+- `./config/pi/verify.sh`: four of the five failures are symlinks on this eval home that don't point at this repo: `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template` and the worktrunk `config.toml`.
+- The fifth is `node tests pass`: 148 of 157 pass. All 9 failures are the herdr pane tests in `scout-bin.test.ts`. A copy of `HEAD` fails the same 9, plus one worker test that has since been deleted.
+- tsc was skipped because it isn't installed here.
+
+## Found
+
+- `slice-check` will flag `tests/slice-check.test.ts` itself for "new skip/only/todo markers", because its fixtures contain `test.skip(` and `test.only(`. That's a known false positive of the text heuristic.
+- After you pull this into the live dotfiles, these links will point at deleted files: `~/.config/husky/init.sh`, plus `~/.local/bin/auto-guard` if it exists there. Existing repos' hook lines call `auto-guard` behind `command -v`, so they stop running quietly. Remove the links by hand.
+- `DESIGN.md` Activation still says `install.sh` links `agents/`, which was already wrong before this change.

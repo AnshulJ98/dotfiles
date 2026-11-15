@@ -1,0 +1,48 @@
+All approved items are done except G1 and E2. E2 was measured and rejected, and three optional items were left undone. `build-agents.sh --check` passes. `verify.sh` exits 1 with 5 failures: 4 symlink checks that fail because of how this test machine is set up, and the 9 herdr `scout-bin` tests that also failed in the baseline. Nothing is committed or staged.
+
+**Blocked on me**
+1. The "X findings" list was lost in compaction, so I can't say which of them were approved or done.
+2. Optional items I left undone: C7 (`/where` three rungs), D5 (fewer coined labels) and I2 (a `slice` eval role).
+3. The memory cap check prints a `note` and doesn't fail. Your real `memory.md` has a median bullet of 331 chars, so a failing check would turn `verify.sh` red on day one. If you want it to fail, trim `memory.md` first.
+
+**Changed**
+- **F1, auto runs retired:** deleted `auto-guard`, the `pre-*` template stubs, `config/husky/` and `githooks/pre-{merge-commit,push}`. `githooks/pre-commit` now only runs `build-agents.sh --check`. Also updated `install.sh`, `git-hooks-install` and `hooks.test.ts`; git tests pass 40/40.
+- **F2, `--rw` workers retired:**
+  - `bin/scout` lost `--rw`, `--spec` and the verdict code; both flags now exit 2.
+  - Deleted `worker.prompt.md`, `worker-sensors.ts`, `worker-sensors.test.ts` and `worker-resume.test.ts`.
+  - Updated `scout-bin.test.ts`, `stream-watchdog.ts`, the `bin/guard/git` header and the `map` skill.
+  - In the Claude skills, `migrate` now edits in the main agent, and `claude/skills/parallel` is deleted because its whole purpose was parallel writers.
+- **F4, compaction:** `compact-cap.ts` shows a `/handoff` notice at 120k and compacts at about 210k only between runs. `prime-reminder.ts` is a one-shot reminder with no auto-resume.
+- **B4 tests:** new `tests/slice-check.test.ts`, 27 tests (table tests plus an end-to-end temp git repo), all passing. The review also fixed a crash on submodules and symlinked directories in `lib/slice-check.ts`.
+- **H1:** new `config/pi/LOG.md` holds the retired auto-hooks row, the Worker mode section, the Opus 4.8 migration and this rework. `DESIGN.md` now describes only the current state.
+- **H3, new `[prose]` section in `verify.sh`:**
+  - every agent in `claude/agents` matches the ones `claude-delta.md` names;
+  - no `AUTO.md`, `--rw`, `--spec`, `spec-contract`, `files-allowed` or `WORKER-SENSORS` in `agents-md/` or `prompts/`;
+  - memory bullets over 220 chars are reported;
+  - `bin/slice-check` is executable.
+- **Hypercritical review fixes:**
+  - "Done When" now starts "Before changing anything", so plain questions don't need a check.
+  - I removed stale worker text from `verify.sh` and `DESIGN.md`.
+  - E3/C2 decision: "Done When" stays second, right after Judgment.
+- **I1 before/after** (opus-5-5):
+
+  | Measure | Before | After |
+  |---|---|---|
+  | Review recall | 13/13 ×3 | 13/13 ×3, severity groups kept |
+  | Premise gate | held 2/2 | held 2/2 |
+  | impl | — | ran `node --test`, 11 cases passing |
+  | Cost per probe | ~$0.08 | ~$0.06 |
+
+  Cost depends on prompt-cache state, so treat it as a rough comparison.
+- **E2 rejected by I1:** with the review checklist moved out of AGENTS.md, recall fell to 13, 11 and 12 of 13. All three runs lost the severity grouping and added code nobody asked for. `ops.md` keeps the checklist.
+
+**Found**
+- **The 4 `verify.sh` symlink failures** come from this test machine. Its home links point to `/Users/anshulj/Dev/dotfiles`, not this repo copy (checked with `readlink -f`). I didn't run `verify.sh` before my edits, so there is no baseline run to compare.
+- **`node tests pass` fails:** 209 pass, 9 fail. The 9 are the same herdr `scout-bin` tests that failed in `/tmp/base-tests.txt`.
+- **tsc was skipped** because it isn't installed here, so nothing was type-checked.
+- **My first `after` run was invalid.** The bg job started before the file it needed was copied, so those runs had no AGENTS.md. I reran it; the numbers above come from the rerun.
+- **Pre-existing, not fixed:** `claude/skills/pre-pr-review` dispatches a `challenger` agent that doesn't exist.
+- **Revert candidates:**
+  - "A boolean or mode parameter … is two functions" in `standards.md` is stated as an absolute rule; softening it to "usually" would be safer.
+  - "Done When" partly repeats the Testing bullet "know which check will prove it works".
+- **`slice-check` limits:** a renamed test file reads as a deleted one and fails the check (a false positive). `--tests` has no timeout.

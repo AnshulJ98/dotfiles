@@ -1,0 +1,41 @@
+Both checks ran after the review. `build-agents.sh --check` passes. `verify.sh` reports **65 passed, 5 failed**, compared with 63 passed and 6 failed before any edits. The 5 failures were already there before my changes; none is new. Nothing is committed.
+
+## Gaps and regressions the review found, now fixed
+1. **F4 had not been done.** `compact-cap.ts` still compacted mid-run, and `prime-reminder.ts` still resumed the task automatically and mentioned `AUTO.md`.
+   - compact-cap now only shows one "/handoff and start a fresh session" notice when context passes 210k. It never compacts and never interrupts a running task.
+   - prime-reminder now only reminds the agent of the rules after a compaction.
+   - The shared state file is cut down to the cap threshold.
+   - New test: `tests/compact-cap.test.ts` (2 tests).
+2. **F2 was incomplete.** `stream-watchdog.ts` still checked `PI_WORKER_SPEC`. That check is removed.
+3. **C4/C1 were incomplete.** `prompts/diagnose.md` still ended in the old `files-allowed/tests` block with "go/dispatch/rework". It now ends in a `/plan` card.
+4. **B3 contradicted itself.** `review.md` said "Don't edit files" but also asked for the break-it check. Edits are now allowed only for that check. They are undone with the reverse edit, never `git checkout`, followed by a `git diff` check.
+5. **F3 was unreachable.** `scout --review` existed, but no fragment told the agent about it. Added one line to `persona-pi.md`.
+6. **The card and slice-check disagreed.** The card now requires type check and lint in done-when. "go" now expects only the first check to be red, not all of them.
+7. **H1 had not been done.** The old `DESIGN.md` is now `LOG.md`, with "Retired 2026-11-14" notes on the compaction, auto-resume, auto-run hooks and worker sections. The new `DESIGN.md` has 18 one-line decisions and the current file layout.
+8. **H3 and the G2 check had not been done.** `verify.sh` lost its worker, `--rw`, auto-guard and husky checks. It gained:
+   - `[scout]` checks for `review.prompt.md`, `--review` with a base that doesn't resolve, and `slice-check`.
+   - A `githooks/pre-commit` check.
+   - A `[prose]` section: every agent named in `claude-delta.md` exists; no fragment or prompt mentions a retired feature; every `/command` a fragment names has a prompt; the memory caps warn but don't fail.
+9. **Two bugs in my own new checks.** `tr` failed on its arguments, and it also turned `fake-agent` into `fakeagent`. Both now use `sed`, tested by feeding it a hyphenated agent name.
+10. **Small fixes:**
+    - Standards: "red-first for bugs" now points back to the existing bug-fix rule instead of reading as a second, conflicting rule.
+    - Reflowed `claude-delta.md`.
+
+## Check results
+- `build-agents.sh --check`: `OK: AGENTS/CLAUDE files match fragments`.
+- `verify.sh`:
+  - 4 failures are symlink checks. `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template` and the worktrunk config point at the live dotfiles, not this checkout.
+  - 1 failure is the node tests: 217 tests, 9 failing, all herdr-pane tests in `scout-bin.test.ts`. The HEAD copy fails the same way.
+  - The type check was skipped because tsc isn't installed, so the TS changes are not type-checked.
+- Other tests: `config/git/tests` 40/40, map skill 20/20, `compact-cap` 2/2, `watchdog` and `context-bar` 40/40.
+
+## Still open
+1. **I1 (before/after eval) and E2:** not run. E2 depends on I1, and agent-eval tests the live `~/.pi/agent` config, not this checkout. This skip was my decision; you haven't confirmed it.
+2. **H2:** skipped, because it would mean committing in the live dotfiles.
+3. **F6:** doesn't apply, because `health-footer.ts` isn't in this checkout.
+4. **G3:** no change made. `cacheWarming: "idle"` already keeps the cache warm for up to 30 minutes between runs. Going longer needs `PI_CACHE_RETENTION=long`, which makes Anthropic cache writes more expensive. That cost trade-off is your call.
+5. **B4's optional pre-commit hook:** not built.
+6. **`/plan` "go" calls `~/.pi/agent/bin/slice-check`:** that path only resolves once the live config has the script.
+7. **What I'd revert:** nothing.
+
+All of this is uncommitted: 42 files, +797/−2299.

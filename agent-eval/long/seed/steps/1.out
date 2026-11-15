@@ -1,0 +1,139 @@
+The config's judgment is better than most I've seen, but most of its machinery serves the two modes you say don't work for you: unattended loops and subagents that write code. Your preferred style (short sessions, small bounded slices, a separate planning session) needs about a third of what's here. The rest costs prompt attention, maintenance, and blast radius.
+
+The config that's actually running is `/Users/anshulj/Dev/dotfiles` (`~/.pi/agent/AGENTS.md` links there), and I evaluated that one. The checkout in this cwd is older: it has no Recommendations section, no auto run, and no `--web`. The live repo has uncommitted edits to `persona-core.md`, `persona-pi.md`, `plan.md`, `spec-contract.md` and `where.md`, so the running config is not in git. I read Reddit and HN through search snippets only; I opened no thread in full.
+
+## What holds up (keep it)
+
+- **Measuring instead of guessing.** `DESIGN.md` § "What measurement actually showed" is the most valuable thing in the repo:
+  - Deleting AGENTS.md raised output tokens 29%.
+  - Rewording barely moved review recall (p=0.378).
+  - A rule stated twice in prose still failed 30% of the time; enforcing it in code made it 0/8.
+  - The field has reached the same conclusion. The ETH study (arXiv 2602.11988) found context files gave small or no gains. Reddit threads put it as "rules past ~line 100 become suggestions; hooks fire every time".
+- **Judgment section** (`persona-core.md` top). Leading with a wrong premise, calling weak work weak, and declining tangents are high-value rules that are hard to enforce any other way. Keep them.
+- **Replies section.** It is concrete and has an example. "Never cut a claim, a condition, a warning or a step to save words" fixes the over-terse failure that the old "under 100 words" rule caused.
+- **The scout.** It is read-only, capped at 8 tool calls and ~300 words, and adds nothing to the resident prompt. This is the subagent shape that works across the field: Anthropic's research system and LangChain's write-up both say reads parallelise and writes don't. Your data agrees (dispatch went from 0/12 to 4/4 after the rule was rewritten).
+- **The `mechanism:` line in `/plan`** (`plan.md:36`): "so the result can be checked against the route taken and not only against the tests". It is the most important line for where you want to go (see outcome-driven development below).
+- **Placement rule** (`standards.md`, "each job in the tool that owns it") and **bash-changes by effect, not command shape**. Both are sound engineering.
+
+## Problems, by severity
+
+**High**
+
+1. **Auto-run and worker machinery is most of the complexity, built for a mode you don't use.**
+   - `auto-run.ts`, `auto-slice`, `worker-sensors.ts`, `auto-guard`, `pi-health` and `health-footer.ts`, with their tests, come to about 2,500 lines.
+   - About 860 of `plan.md`'s ~1,900 words are the auto section.
+   - 11 of the 38 agent-eval tasks are the `orch` role.
+   - 44 of 98 commits since Oct 1 touching `config/pi` or `agent-eval` concern auto, worker, slice, sensor, orch, scout or review. That is a keyword match, so it's approximate.
+   - `DESIGN.md`'s own Auto-run row explains why it exists: the prose was ignored ("17 hand edits after the first compaction", "3 of 7 slices by hand, merged before any review"). Every patch since then has added enforcement around a workflow the model and you both keep stepping out of.
+2. **Auto-run reaches every repo on the machine.** `init.templateDir = ~/.config/git/template` puts `auto-guard` into every new repo, and `git-hooks-install` puts it into existing ones. A bug there breaks commits everywhere, for a feature you don't use.
+3. **Mode-specific protocol sits in the always-loaded prompt.** Every session pays attention to these:
+   - `persona-pi.md:39-66`: the `--rw` spec format, `WORKER-SENSORS`, one open worker per repo, "Inside an auto run… only file you edit is AUTO.md", and a 12-line worker example.
+   - `ops.md:13-35`: the 12-category review checklist.
+   - `ops.md:43`: the AUTO.md clause.
+   - `standards.md`: the worktree and `slice/`/`auto/` branch rules.
+
+   `plan.md` already repeats all of the worker content, and you measured that salience is what matters. This content dilutes the rules that apply in every session.
+4. **The Recommendations block** (`persona-core.md:15`) requires six parts in order for every recommendation. Your own `decisions` finding was "structure prompts work; the effect is compliance, not judgment… the pick never changed". This block is the same kind of template. It also pulls against "Answer only the question asked". Cut it to two lines: the pick with its cost, and each alternative with when it would win.
+
+**Medium**
+
+5. **Stale claims.**
+   - `claude-delta.md:23` describes a `worker` agent with "TDD enforced". `claude/agents/` contains only `scout.md`.
+   - The cwd copy of `standards.md` says "Merge to master".
+   - `verify.sh` checks paths but not prose.
+6. **Memory has grown into a junk drawer.** `memory.md` is 146 KB, 349 bullets, median 331 characters, longest 1.7k. `dotfiles` (58 KB) and `pi` (37 KB) are 65% of it. "Grep it" only works if the agent guesses the right word, and paragraph-length bullets return a lot of text on a hit. `claude-delta.md` already says durable repo knowledge belongs in the repo. Move those two scopes into `DESIGN.md` or delete them.
+7. **`DESIGN.md` is a lab notebook dressed as a design doc.** It is 8k words, and single table cells run 500+ words of dated history. Neither you nor an agent can find the current decision quickly. Split it: decisions at one or two lines each, and a dated `LOG.md` for evidence.
+8. **The compaction setup suits long runs and works against short sessions.**
+   - `compact-cap` at 210k plus auto-resume keeps a long session going.
+   - `NEXT.md` shows session length is the cost lever: idle cache rebuilds cost $166, compaction $102.
+   - Compaction is also where the auto-run prose got lost.
+
+   For your style, reaching the cap should mean "`/handoff`, start a fresh session", not compact-and-continue.
+
+**Low**
+
+9. **The config coins labels while telling the model not to:** ladder, rungs, `higher`/`beyond`/`slice`/`this`, sensors, effort. `/where` has 816 words of format rules for a status card. In a short session, target plus `this` covers it.
+10. **The scout rule has no exception for when reading is the job.** "First tool call is scout" for any unread directory is tuned for questions you answer by tracing code. When the content itself is under review (prose, config), delegating means judging a summary. Add one clause.
+
+## TDD vs Ousterhout
+
+You've mostly already left strict red-green. The standards say "know which check will prove it works" and "a bug fix ships with a test that fails without the fix". Only two places still require test-first: `spec-contract.md:49` ("the first is a test that fails before the change") and the stale `claude-delta.md:23`.
+
+I agree with where you're heading, with one exception:
+
+- **Red-first is worth keeping for bugs.** There, the point is not design but proving the test can detect the bug. A test that passes both before and after the fix proves nothing. Keep that rule as is.
+- **For new behaviour, test-first works against agents.** Reddit threads report agents writing mock-heavy tests that validate nothing, asserting a bug as the expected value, and rewriting old tests to match new behaviour. An agent writing tests first also fixes the interface before anyone has designed it. That is Ousterhout's "tactical programming" critique, and he calls current agents "tactical tornadoes" (Pragmatic Engineer, 2025-04).
+- **Ousterhout's order fits agents better:**
+  - Design the interface first: deep module, design it twice.
+  - Implement in chunks.
+  - Test through the interface.
+  - Check test quality with something objective (mutation testing, a guarded test count), not with the red-first ritual.
+- **Your ladder has a real conflict with Ousterhout.** "Write the least code that works" (`ladder.md:14`) and "no unrequested refactors" are tactical by his definition. The two session types resolve it:
+  - **Planning session (strategic):** design it twice, name the interface, put 10-20% into design. `plan.md:48` says "Approach: only when two designs are plausible"; for interface changes, make it "always two".
+  - **Slice session (tactical by design):** the scope rules hold, because the design is already decided.
+- **Concrete edit.** Add an `interface:` line next to `mechanism:` in `/plan`, listing the signatures callers will see. Change `spec-contract.md:49` to "a bug's first check fails before the fix; new behaviour is tested through the `interface:` line". Your existing `interface-frozen` check then enforces the interface mechanically. That makes Ousterhout's approach checkable in code, not just prose.
+
+## Outcome-driven development
+
+This is the right direction, with one guard. Spec-driven development fails in the field because the spec is a prose artefact upstream of the code, and it drifts:
+- Böckeler/Fowler on Kiro: "a sledgehammer to crack a nut".
+- Scott Logic: "code is law".
+- Marmelab: "waterfall strikes back".
+
+Codex `/goal` is the closest existing form of what you describe: it states the outcome plus a list of checkable done-when commands, and calls that a "completion contract".
+
+The guard: an outcome on its own invites Goodhart. The agent reaches the checks by whatever route is cheapest, which is the same thing as test gaming. Your `mechanism:` line is already the counterweight. The unit I'd standardise is an **outcome card**: four fields, about 10 lines, one per slice.
+
+```
+outcome:   <what is true for a user/caller when done>
+done-when: <1-5 runnable checks, the first one red today>
+interface: <signatures callers see; "unchanged" is valid>
+mechanism: <the route: which function/seam>   out: <non-goals>
+```
+
+This replaces the six-section `spec-contract.md` and the `files-allowed`/`max-lines` frontmatter, both of which exist to constrain an unattended worker. With you in the loop, `git diff --stat` does that job. `/where` then just reports cards and their checks. `standards.md:44` ("know which check will prove it") becomes the top working rule, extended beyond code: "state done-when before acting; done means you showed it passing".
+
+## Loops and subagents
+
+Your experience matches the evidence:
+- Cognition ("Don't build multi-agents"): actions carry implicit decisions, and a handoff drops them.
+- Anthropic: parallel readers help.
+- Ralph practitioners: the gain comes from a fresh context each cycle, not from autonomy. Huntley says it gets you about 90% of the way and needs a senior steering it.
+
+Your setup is already the good version of the loop: a planning session writes the slice cards, and each slice is a fresh short session started from its card, ending with `/handoff`. You are the orchestrator, and every slice gets reviewed because you are in it. A `--rw` worker is the same thing minus your ability to watch and steer, and its review cost is about the cost of doing the slice.
+
+The worker-sensors idea worth keeping is the anti-gaming check: tests rerun, test and assertion count not reduced, no new skip/only markers, the diff limited to the declared files. Gaming happens in your main sessions too. By your own Placement rule, that belongs in a script (`slice-check <base>`) or a pre-commit hook, not a worker-only extension.
+
+## Proposed changes, highest value for effort first
+
+1. **Retire auto mode.**
+   - **What goes:** `auto-run.ts`, `auto-slice`, `auto-guard` (plus the `templateDir` and `git-hooks-install` lines), the auto section of `plan.md`, the AUTO.md clauses in `persona-pi.md`, `ops.md` and `standards.md`, the `orch` eval role, and the auto parts of `pi-health`.
+   - **Effort:** about 1,000 lines deleted and two fragments edited. Test with `verify.sh` and `build-agents.sh --check`.
+   - **Consequences:** unattended overnight runs go away. `git log` keeps everything if you change your mind.
+   - **Alternative:** keep it but remove it from the prompt and the global hooks. It costs less to undo, but the maintenance stays.
+2. **Move the worker and review protocol out of AGENTS.md.**
+   - `--rw` content goes to `plan.md` only (it is already there). The review checklist goes to `review.md`.
+   - **Effort:** two fragments, about 40 lines out.
+   - **Risk:** a casual "review this" without `/review` loses the checklist. Your Sept data showed AGENTS.md mattered for 3 review categories. Rerun `agent-eval`'s `review` role before and after to check.
+3. **Outcome card plus `interface:`** in `/plan`, and replace `spec-contract.md`. One prompt rewritten, one deleted. This is the TDD and outcome change together.
+4. **`slice-check` script plus pre-commit** carrying the anti-gaming checks from `worker-sensors.ts` (the logic is already pure in `lib/bash-changes.ts`). About 100 lines; test with table tests on the pure diff and count logic. Then decide whether `--rw` stays at all.
+5. **The cap means "start fresh".** Change `compact-cap` to tell you to `/handoff` instead of auto-resuming, or lower it to around 120k. One extension.
+6. **Shrink the Recommendations block to two lines.** Fix `claude-delta.md:23`. Move the `dotfiles` and `pi` scopes out of `memory.md`. Split `DESIGN.md` into decisions and a log.
+
+## Decisions for you
+
+1. Retire auto mode outright, or keep it but take it out of the prompt and the global hooks?
+2. Keep `--rw` workers at all once `slice-check` exists?
+3. Should the outcome card replace `spec-contract.md`, or sit alongside it for work you paste into other tools?
+
+Main sources:
+- Ousterhout vs Martin: github.com/johnousterhout/aposd-vs-clean-code
+- Ousterhout on AI: newsletter.pragmaticengineer.com/p/the-philosophy-of-software-design
+- Beck on TDD with agents: newsletter.pragmaticengineer.com/p/tdd-ai-agents-and-coding-with-kent
+- Böckeler on spec-driven tools: martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html
+- Codex goals: developers.openai.com/cookbook/examples/codex/using_goals_in_codex
+- Cognition: cognition.com/blog/dont-build-multi-agents
+- Anthropic: anthropic.com/research/multi-agent-research-system
+- ETH study on context files: arxiv.org/abs/2602.11988
+- Mutation testing for AI tests: blog.senko.net/improving-ai-generated-tests-using-mutation-testing
+- Reddit: r/ClaudeCode 1q9vkvh (tests written after the implementation are tautological), r/ClaudeAI 1rz2oo3 (rules past line 100 get ignored), r/ClaudeCode 1r00136 (one task per fresh context).
