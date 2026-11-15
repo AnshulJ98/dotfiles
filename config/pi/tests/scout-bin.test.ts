@@ -12,7 +12,7 @@ const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scou
 const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) → check: true\n";
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
-// args (prints the arguments scout passed),
+// args (prints the arguments scout passed), digest (prints FAKE_DIGEST),
 // blocked (a worker digest with a step left under Blocked on me),
 // verdict (prints a sensors verdict line of its own, as a non -p pi would), error (a failed run, as scout-pane.ts reports it: rc 1 in SCOUT_PANE_RC, reason in the digest)
 const FAKE_PI = `#!/usr/bin/env bash
@@ -27,6 +27,7 @@ ok) head -c "\${FAKE_BYTES:-20}" /dev/zero | tr '\\0' x; echo ;;
 hang) exec sleep 60 ;;
 sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 args) echo "$args" ;;
+digest) printf '%s' "$FAKE_DIGEST" ;;
 missing) printf '%s\\n' "\${FAKE_DIGEST:-TOOLS-MISSING: web_search, fetch_content}" "Web research could not be done."; exit "\${FAKE_RC:-0}" ;;
 env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
@@ -118,6 +119,7 @@ test("a spec whose body is not a plan (no numbered step, or no check: line) is r
 		const run = await runScout(["--spec", "-"], env, `---\nfiles-allowed: [a.txt]\ntests: true\n---\n${body}\n`);
 		assert.equal(run.code, 2, body);
 		assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
+		assert.match(run.stderr, /it needs numbered steps or acceptance checks, each with a check: line/, body);
 	}
 	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
 	const events = readFileSync(join(scoutRoot, "..", "..", "logs", "events.log"), "utf8").trimEnd().split("\n");
@@ -311,6 +313,22 @@ test("scout names its run folder and cost on stderr, and a worker's Blocked on m
 	assert.doesNotMatch(blocked.stdout, /^scout: dir=/m, "stdout stays the digest");
 	const clear = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
 	assert.match(clear.stderr, /blocked-on-me=no$/m);
+});
+
+test("a worker's Route does not hide or create a Blocked on me entry", async () => {
+	for (const inline of [true, false]) {
+		for (const [body, expected] of [["nothing", "no"], ["needs src/b.ts, outside files-allowed", "yes"]]) {
+			const { env } = sandbox();
+			const digest = inline
+				? `- **Blocked on me**: ${body}\n- **Route**: prompt text only; no departure\n- **Changed**: a.txt\n`
+				: `**Blocked on me**\n${body}\n**Route**\nprompt text only; no departure\n**Changed**\na.txt\n`;
+			const contract = SPEC.replace("1. Do it (a.txt)", "1. Target is observable");
+			const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "digest", FAKE_DIGEST: digest }, contract);
+			assert.equal(run.code, 0, run.stderr);
+			assert.ok(run.stdout.endsWith(digest), "the digest keeps the Route");
+			assert.match(run.stderr, new RegExp(`blocked-on-me=${expected}$`, "m"));
+		}
+	}
 });
 
 test("a package.json without a type above scout does not refuse the spec", () => {
