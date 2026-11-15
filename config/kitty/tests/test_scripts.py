@@ -740,6 +740,169 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
 
+    def worktree_overlay(self, kind, folder, host="box", branch="topic ' quoted"):
+        result = self.run_script("zws", "worktree", kind, folder, ZWS_HOST=host)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = self.calls("kitten")[-1]
+        self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd",
+                                   str(self.root) if host else folder])
+        command = call[5:]
+        return command, dict(input=branch + "\n", env=dict(self.env, ZWS_HOST=host),
+                             capture_output=True, text=True, timeout=3)
+
+    def test_scripts_are_executable(self):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun"):
+            with self.subTest(name=name):
+                self.assertEqual((BIN / name).stat().st_mode & 0o111, 0o111)
+
+    def test_host_worktree_new_executes_real_zrun(self):
+        script = self.root / "zws"
+        script.write_text(script.read_text().replace('$(dirname "$self")/zrun', str(BIN / "zrun")))
+        folder = "/host/folder ' quoted"
+        branch = "topic ' quoted"
+        command, options = self.worktree_overlay("new", folder, branch=branch)
+        self.assertEqual(command[-3], str(BIN / "zrun"))
+        result = subprocess.run(command, **options)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Permission denied", result.stderr)
+        args, = self.calls("ssh")
+        self.assertEqual(args[-2], "box")
+        words = shlex.split(args[-1])
+        self.assertIn(folder, words)
+        start = words.index("exec") + 1
+        self.assertEqual(words[start:start + 7],
+                         ["wt", "switch", "-c", branch, "--no-cd", "-x", "sh"])
+
+    def test_host_worktree_overlays_use_zrun_and_report_without_host_scripts(self):
+        folder = self.root / "host folder ' quoted"
+        folder.mkdir()
+        branch = "topic ' quoted"
+        for kind in ("new", "open"):
+            with self.subTest(kind=kind):
+                command, options = self.worktree_overlay(kind, str(folder), branch=branch)
+                result = subprocess.run(command, **options)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                args = self.calls("ssh")[-1]
+                self.assertEqual(args[:-1], ["-t", "-q", "-o", "ControlPath=/tmp/zcm-%C",
+                    "-o", "ControlMaster=no", "-o", "ConnectTimeout=5", "-o",
+                    "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", "box"])
+                remote = args[-1]
+                words = shlex.split(remote)
+                self.assertIn(str(folder), words)
+                wt = words[words.index("exec") + 1:]
+                prefix = ["wt", "switch"] + (["-c", branch] if kind == "new" else [])
+                self.assertEqual(wt[:len(prefix) + 5], prefix + ["--no-cd", "-x", "sh", "--", "-c"])
+                self.assertEqual(len(wt), len(prefix) + 6)
+                self.assertNotIn(str(self.root / "zws"), remote)
+                # wt -x runs this program in the selected worktree, on an old host checkout.
+                selected = self.root / "worktree space ' quote"
+                selected.mkdir(exist_ok=True)
+                fake_wt = self.root / "wt"
+                fake_wt.write_text("#!" + sys.executable + "\n" +
+                    "import os, pathlib, subprocess, sys\n" +
+                    f"pathlib.Path({str(self.root / 'wt-cwd')!r}).write_text(os.getcwd())\n" +
+                    "args = sys.argv[1:]\n" +
+                    f"sys.exit(subprocess.run([args[args.index('-x') + 1], " +
+                    f"*args[args.index('--') + 1:]], cwd={str(selected)!r}).returncode)\n")
+                fake_wt.chmod(0o700)
+                report = subprocess.run(["sh", "-c", remote], env=self.env,
+                                        capture_output=True, timeout=3)
+                import base64
+                self.assertEqual(report.returncode, 0, report.stderr)
+                self.assertEqual((self.root / "wt-cwd").read_text(), str(folder.resolve()))
+                self.assertEqual(report.stdout, b"\x1b]1337;SetUserVar=zworktree=" +
+                                 base64.b64encode(str(selected.resolve()).encode()) + b"\x07")
+                # Feed kitty's decoded OSC value into the watcher, then execute its background
+                # launch with the redirected zws. First report creates; the next goes there.
+                from test_workspaces import Boss, Window, load
+                from unittest.mock import patch
+                with patch.dict(os.environ, self.env, ZWS_HOST="box"):
+                    boss = Boss([], None, "")
+                    module = load(self.env["ZWS_DIR"], boss)
+                    with patch.object(module.zkitty, "ZWS", str(self.root / "zws")):
+                        module.on_set_user_var(boss, Window("dev", 1), {
+                            "key": "zworktree",
+                            "value": base64.b64decode(report.stdout.split(b"=", 2)[2][:-1]).decode()})
+                    launch = boss.calls[-1]
+                    self.assertEqual(launch[:3], ("launch", "--type=background", "--allow-remote-control"))
+                    opened = subprocess.run(launch[3:], env=os.environ, capture_output=True, timeout=3)
+                    self.assertEqual(opened.returncode, 0, opened.stderr)
+                destination = Path(self.calls("kitten")[-1][-1])
+                self.assertEqual(self.calls("kitten")[-1][:3], ["@", "action", "goto_session"])
+                self.assertEqual(list(Path(self.env["ZWS_DIR"]).glob("*.kitty-session")), [destination])
+                lines = destination.read_text().splitlines()
+                self.assertEqual(lines[0], "cd " + str(self.root))
+                self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "host=box",
+                                 "--var", "host_dir=" + str(selected.resolve())])
+        self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_host_worktree_failures_pause_and_unreachable_uses_zrun_message(self):
+        for code, message in (("1", "wt failed; press a key"), ("255", "box unreachable")):
+            with self.subTest(code=code):
+                command, options = self.worktree_overlay("open", "/host/repo")
+                (self.root / "ssh-codes").write_text(code)
+                master, slave = pty.openpty()
+                proc = subprocess.Popen(command, env=options["env"], stdin=slave,
+                                        stdout=slave, stderr=slave, start_new_session=True)
+                os.close(slave)
+                output = bytearray()
+                try:
+                    deadline = time.monotonic() + 5
+                    while message.encode() not in output:
+                        self.assertLess(time.monotonic(), deadline, bytes(output))
+                        ready, _, _ = select.select([master], [], [], .05)
+                        if ready:
+                            output.extend(os.read(master, 65536))
+                    calls = self.calls("ssh")
+                    time.sleep(.1)
+                    self.assertIsNone(proc.poll(), bytes(output))
+                    self.assertEqual(self.calls("ssh"), calls)
+                    self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
+                    os.write(master, b"x")
+                    proc.wait(timeout=3)
+                    self.assertEqual(len(calls), 1 if code == "1" else 2)
+                finally:
+                    if proc.poll() is None:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait(timeout=3)
+                    os.close(master)
+
+    def test_mac_worktree_overlay_command_is_unchanged(self):
+        pause = '|| { echo; read -n1 -rsp "wt failed; press a key"; }'
+        for kind in ("new", "open"):
+            command, _ = self.worktree_overlay(kind, "/mac/folder ' quoted", host="")
+            script = ('read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; '
+                      'wt switch -c "$b"' if kind == "new" else 'wt switch')
+            self.assertEqual(command, ["bash", "-c", "export PATH=" + str(self.root) +
+                ':$PATH; ' + script + ' --no-cd -x "$0" -- here ' + pause,
+                str((self.root / "zws").resolve())])
+
+    def test_host_here_reuses_host_dir_or_creates_locally_cd_workspace(self):
+        folder = "/remote/worktree space ' quoted"
+        for var in ("--var " + shlex.quote("host_dir=" + folder),
+                    shlex.quote("--var=host_dir=" + folder)):
+            directory = Path(self.env["ZWS_DIR"])
+            directory.mkdir(exist_ok=True)
+            existing = directory / "existing.kitty-session"
+            existing.write_text("cd " + str(self.root) + "\nlaunch --var host=box " + var + "\n")
+            result = self.run_script("zws", "here", folder, ZWS_HOST="box")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(self.calls("kitten")[-1], ["@", "action", "goto_session", str(existing)])
+            self.assertEqual(list(directory.glob("*.kitty-session")), [existing])
+        result = self.run_script("zws", "here", "/remote/Other Folder", ZWS_HOST="box")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        created = Path(self.calls("kitten")[-1][-1])
+        self.assertEqual(created.name, "other-folder.kitty-session")
+        self.assertEqual(created.read_text().splitlines()[0], "cd " + str(self.root))
+        self.assertEqual(shlex.split(created.read_text().splitlines()[1]),
+                         ["launch", "--var", "host=box", "--var", "host_dir=/remote/Other Folder"])
+        before = self.calls("kitten")
+        for invalid in ("relative", "/bad\nlaunch", "/bad\x1b", "/bad\x7f", "/bad\u2028"):
+            self.assertNotEqual(self.run_script("zws", "here", invalid, ZWS_HOST="box").returncode, 0)
+        self.assertEqual(self.calls("kitten"), before)
+        self.assertEqual(self.calls("ssh"), [])
+
     def test_zrun_local_and_remote_quoting_cwd_and_failures(self):
         folder = self.root / "folder ' quoted"
         folder.mkdir()

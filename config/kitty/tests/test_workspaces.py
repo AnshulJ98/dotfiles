@@ -398,6 +398,32 @@ class SavingTests(unittest.TestCase):
 
 
 class IntentWatcherTests(unittest.TestCase):
+    def test_worktree_report_is_cleared_and_forwarded_only_on_host(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            window = Window("dev", 1)
+            window.id = 7
+            folder = "/remote/worktree space ' quoted"
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(module, "add_timer") as timer:
+                module.on_set_user_var(boss, window, {"key": "zworktree", "value": folder})
+                self.assertEqual(boss.calls, [
+                    ("set-user-vars", "--match=id:7", "zworktree"),
+                    ("launch", "--type=background", "--allow-remote-control",
+                     module.zkitty.ZWS, "here", folder)])
+                timer.assert_not_called()
+                for invalid in ("", "relative", "L3JlbW90ZQ==", "/bad\nlaunch", "/bad\x00",
+                                "/bad\x1b", "/bad\x7f", "/bad\u0085", "/bad\u2028"):
+                    boss.calls.clear()
+                    module.on_set_user_var(boss, window, {"key": "zworktree", "value": invalid})
+                    self.assertFalse(any(c[0] in ("launch", "action") for c in boss.calls))
+                    timer.assert_not_called()
+            with patch.dict(os.environ, ZWS_HOST=""):
+                boss.calls.clear()
+                module.on_set_user_var(boss, window, {"key": "zworktree", "value": folder})
+                self.assertFalse(any(c[0] in ("launch", "action") for c in boss.calls))
+
     def test_pane_query_answers_and_empty_callback_is_ignored(self):
         from types import SimpleNamespace as NS
         from unittest.mock import patch
