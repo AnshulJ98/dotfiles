@@ -138,6 +138,17 @@ class IntentTests(unittest.TestCase):
                     '--dock-skip-focus', '--keep-focus', '--add-to-session', 'alpha', '--var',
                     'role=sidebar', '--var', 'ws_name=Renamed', zkitty.SIDEBAR))])
 
+    def test_tab_in_host_workspace_passes_no_remote_cwd(self):
+        active = self.boss.active_window
+        active.user_vars['host'] = 'box'
+        for words in (['tab', 'here'], ['tab']):
+            with self.subTest(words=words):
+                self.boss.calls.clear()
+                self.assertEqual(zkitty.run(self.boss, words), [('tab', 'alpha')])
+                self.assertEqual(self.boss.calls[0],
+                                 (active, ('launch', '--type=tab', '--add-to-session', 'alpha')))
+                self.assertNotIn('--cwd', self.boss.calls[0][1])
+
     def test_tab_without_cwd_sidebar_off_and_outside_workspace(self):
         self.assertEqual(zkitty.run(self.boss, ['tab']), [('tab', 'alpha')])
         self.assertEqual(self.boss.calls[0],
@@ -241,6 +252,68 @@ class KittyTests(unittest.TestCase):
             zkitty.attach(boss, window)
         self.assertEqual(writes[-1], b': zq --U -\n')
         self.assertEqual(boss.calls[-1], (None, ('set-user-vars', '--match=id:8', 'holder=--U')))
+
+    def host_pane(self, wid, session, user_vars, focused, reported=None, events=None):
+        return NS(id=wid, created_in_session_name=session, user_vars=user_vars, last_focused_at=focused,
+                  screen=NS(last_reported_cwd=reported), cwd_of_child='/local',
+                  write_to_child=lambda data: events.append(('write', data)))
+
+    def test_attach_new_pane_in_host_workspace_gets_host_and_remote_folder(self):
+        events = []
+        window = self.host_pane(9, 'ws', {}, 50.0, events=events)
+        recent = self.host_pane(3, 'ws', {'host': 'box', 'holder': 'a'}, 40.0,
+                                b'kitty-shell-cwd://box/home/a/my proj')
+        older = self.host_pane(4, 'ws', {'host': 'box', 'holder': 'b'}, 10.0, b'kitty-shell-cwd://box/old')
+        sidebar = self.host_pane(5, 'ws', {'role': 'sidebar'}, 45.0)
+        other = self.host_pane(6, 'other', {'host': 'elsewhere'}, 49.0, b'kitty-shell-cwd://e/x')
+        boss = NS(all_windows=[older, recent, sidebar, other, window],
+                  call_remote_control=lambda w, args: events.append((w, args)))
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='0123456789abcdef')):
+            zkitty.attach(boss, window)
+        self.assertEqual(events, [
+            ('write', b': zq my-proj-0123456789ab - box %2Fhome%2Fa%2Fmy%20proj\n'),
+            (None, ('set-user-vars', '--match=id:9', 'zq')),
+            (None, ('set-user-vars', '--match=id:9', 'holder=my-proj-0123456789ab')),
+            (None, ('set-user-vars', '--match=id:9', 'host=box'))])
+
+    def test_attach_split_in_host_tab_gets_host_and_remote_folder(self):
+        # kitty gives a split (launch --location=vsplit) no created_in_session_name.
+        events = []
+        split = self.host_pane(9, '', {}, 50.0, events=events)
+        peer = self.host_pane(3, 'ws', {'host': 'box', 'holder': 'a'}, 40.0, b'kitty-shell-cwd://box/srv/app')
+        elsewhere = self.host_pane(6, '', {'host': 'far'}, 49.0, b'kitty-shell-cwd://far/x')
+        boss = NS(all_windows=[peer, split, elsewhere], all_tabs=[[peer, split], [elsewhere]],
+                  call_remote_control=lambda w, args: events.append((w, args)))
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+            zkitty.attach(boss, split)
+        self.assertEqual(events[0], ('write', b': zq app-U - box %2Fsrv%2Fapp\n'))
+        self.assertEqual(events[-1], (None, ('set-user-vars', '--match=id:9', 'host=box')))
+
+    def test_attach_first_and_restored_host_panes(self):
+        events = []
+        first = self.host_pane(9, 'ws', {'host': 'box'}, 0.0, events=events)
+        boss = NS(all_windows=[first], call_remote_control=lambda w, args: events.append((w, args)))
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+            zkitty.attach(boss, first)
+        self.assertEqual(events, [('write', b': zq home-U - box -\n'),
+                                  (None, ('set-user-vars', '--match=id:9', 'zq')),
+                                  (None, ('set-user-vars', '--match=id:9', 'holder=home-U'))])
+        events.clear()
+        restored = self.host_pane(8, 'ws', {'host': 'box', 'holder': 'saved'}, 0.0, events=events)
+        boss.all_windows = [first, restored]
+        zkitty.attach(boss, restored)
+        self.assertEqual(events, [('write', b': zq saved - box -\n'),
+                                  (None, ('set-user-vars', '--match=id:8', 'zq'))])
+
+    def test_attach_first_host_pane_uses_its_remote_folder(self):
+        events = []
+        first = self.host_pane(9, 'ws', {'host': 'box', 'host_dir': '/srv/app'}, 0.0, events=events)
+        boss = NS(all_windows=[first], call_remote_control=lambda w, args: events.append((w, args)))
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+            zkitty.attach(boss, first)
+        self.assertEqual(events, [('write', b': zq app-U - box %2Fsrv%2Fapp\n'),
+                                  (None, ('set-user-vars', '--match=id:9', 'zq')),
+                                  (None, ('set-user-vars', '--match=id:9', 'holder=app-U'))])
 
     def test_snapshot_all_fields_and_lazy_cwd(self):
         w, dock = Pane(), Sidebar()
