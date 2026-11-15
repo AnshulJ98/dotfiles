@@ -36,6 +36,11 @@ if cmd == "zmx":
     if args == ["ls"]: print("name=old-1\tpid=123\tclients=0")
     if args == ["ls", "--short"]: print(os.environ.get("SESSIONS", "old-1"))
     sys.exit(0)
+if cmd == "ssh" and (root / "ssh-codes").exists():
+    codes = (root / "ssh-codes").read_text().splitlines()
+    code = codes.pop(0)
+    (root / "ssh-codes").write_text("\n".join(codes))
+    sys.exit(int(code))
 if cmd == "ps":
     print(os.environ.get("PS_OUT", ""), end="")
 if cmd == "lsof":
@@ -103,6 +108,11 @@ class ScriptTests(unittest.TestCase):
             source = source.replace("/bin/zsh", str(self.root / "plain-shell"))
             source = source.replace('"/tmp/kitty-" + host', repr(str(self.root / "socket-")) + " + host")
             source = source.replace("/tmp/kitty-main", str(self.root / "socket"))
+            if name == "zshell":
+                source = source.replace("/tmp/zcm-", str(self.root / "zcm-"))
+                source = source.replace("SECONDS + 10", "SECONDS + 2")
+                source = source.replace("SECONDS + 120", "SECONDS + 5")
+                source = source.replace("sleep 2", "sleep 0.1")
             if name == "zws":
                 for probe in ("zmx", "lsof"):
                     source = source.replace('["' + probe + '",', '["' + str(self.root / probe) + '",')
@@ -118,9 +128,15 @@ class ScriptTests(unittest.TestCase):
         return [args for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())
                 if cmd == command]
 
-    def pane_start(self, reply, **env):
+    def pane_start(self, reply, wait_for=None, **env):
+        code, output = self.pane_run(reply, wait_for=wait_for, **env)
+        self.assertEqual(code, 0, output)
+        return output
+
+    def pane_run(self, reply, wait_for=None, **env):
         # Only these logging fakes are reachable from the pane's PATH.
-        for cmd in ("sed", "basename", "tr", "base64", "grep", "find", "head", "python3"):
+        for cmd in ("sed", "basename", "tr", "base64", "grep", "find", "head", "python3",
+                    "sleep", "mkdir", "rmdir"):
             real = sys.executable if cmd == "python3" else shutil.which(cmd)
             self.assertIsNotNone(real, cmd)
             path = self.root / cmd
@@ -168,11 +184,21 @@ class ScriptTests(unittest.TestCase):
                             self.assertLess(time.monotonic(), deadline, bytes(output))
                             time.sleep(.001)
                         os.write(master, reply)
+                if wait_for is not None and wait_for in output:
+                    # The prompt must block, without spinning ssh or falling back.
+                    calls = self.calls("ssh")
+                    time.sleep(.15)
+                    self.assertIsNone(proc.poll(), bytes(output))
+                    self.assertEqual(self.calls("ssh"), calls)
+                    self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
+                    os.write(master, b"x")
+                    wait_for = None
             self.assertTrue(queried, bytes(output))
-            self.assertEqual(proc.wait(timeout=2), 0, bytes(output))
+            self.assertIsNone(wait_for, bytes(output))
+            code = proc.wait(timeout=2)
             if reply is not None:
                 self.assertNotIn(reply.rstrip(b'\n'), output)
-            return bytes(output)
+            return code, bytes(output)
         finally:
             if proc is not None:
                 if proc.poll() is None:
@@ -194,13 +220,17 @@ class ScriptTests(unittest.TestCase):
         host = self.root / "host"
         folder = host / "my dir"
         folder.mkdir(parents=True)
+        (self.root / "ssh-codes").write_text("255\n255\n0\n0")
         self.pane_start(f': zq box%20name - box {quote(str(folder), safe="")}\n'.encode())
-        args, = self.calls("ssh")
-        # -q: past sshd's 10 sessions a connection, ssh opens its own and would print two notices.
-        # The keepalive ends a dead link in 45 s; ssh -O check cannot see one.
-        self.assertEqual(args[:-1], ["-tt", "-q", "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/zcm-%C",
-                                     "-o", "ControlPersist=600", "-o", "ServerAliveInterval=15",
-                                     "-o", "ServerAliveCountMax=3", "box"])
+        check, locked_check, opened, args = self.calls("ssh")
+        opts = ["-o", "ControlPath=" + str(self.root / "zcm-%C"), "-o", "ControlPersist=600",
+                "-o", "ConnectTimeout=5", "-o", "ServerAliveInterval=15",
+                "-o", "ServerAliveCountMax=2"]
+        self.assertEqual(check, ["-q", *opts, "-O", "check", "box"])
+        self.assertEqual(locked_check, check)
+        self.assertEqual(opened, ["-q", *opts, "-o", "ControlMaster=auto", "-Nf", "box"])
+        self.assertEqual(args[:-1], ["-tt", "-q", *opts, "-o", "ControlMaster=no", "box"])
+        self.assertFalse((self.root / "zcm-lock-box").exists())
         remote = args[-1]
         self.assertIn(" attach box\\ name", remote)
         self.assertEqual(self.calls("zmx"), [])
@@ -223,9 +253,90 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(ran[1:], [linux if os.path.isdir(linux) else str(integration),
                                    "1", "enabled", "attach", "box name"])
 
+    def host_pane(self, codes, wait_for=None):
+        (self.root / "ssh-codes").write_text("\n".join(map(str, codes)))
+        output = self.pane_start(b': zq n - box -\n', wait_for=wait_for)
+        self.assertEqual((self.root / "ssh-codes").read_text(), "")
+        self.assertEqual(self.calls("plain-shell"), [])
+        self.assertEqual(self.calls("zmx"), [])
+        return output
+
+    def test_pane_host_live_connection_only_checks_and_attaches(self):
+        self.host_pane([0, 0])
+        check, attach = self.calls("ssh")
+        self.assertIn("check", check)
+        self.assertIn("ControlMaster=no", attach)
+        self.assertEqual(self.calls("mkdir"), [])
+
+    def test_pane_host_rechecks_connection_under_lock(self):
+        self.host_pane([255, 0, 0])
+        first, second, attach = self.calls("ssh")
+        self.assertEqual(first, second)
+        self.assertIn("check", second)
+        self.assertIn("ControlMaster=no", attach)
+        self.assertFalse((self.root / "zcm-lock-box").exists())
+
+    def test_pane_host_takes_over_leftover_lock(self):
+        lock = self.root / "zcm-lock-box"
+        lock.mkdir()
+        self.host_pane([255, 255, 0, 0])
+        self.assertFalse(lock.exists())
+        self.assertTrue(self.calls("sleep"))
+        self.assertIn("-Nf", self.calls("ssh")[-2])
+
+    def test_pane_host_255_reattaches_without_clearing_screen(self):
+        output = self.host_pane([0, 255, 0, 0])
+        self.assertEqual(output.count(b"[box: no link, retrying]"), 1)
+        self.assertNotIn(b"\x1b[", output)
+        self.assertEqual(len(self.calls("ssh")), 4)
+        self.assertEqual(self.calls("sleep"), [["0.1"]])
+
+    def test_pane_host_failed_opens_share_one_outage_line(self):
+        output = self.host_pane([255, 255, 255, 255, 255, 255, 0, 0])
+        self.assertEqual(output.count(b"no link, retrying"), 1)
+        self.assertEqual(self.calls("sleep"), [["0.1"], ["0.1"]])
+        self.assertFalse((self.root / "zcm-lock-box").exists())
+
+    def test_pane_host_successful_open_resets_outage(self):
+        output = self.host_pane([0, 255, 0, 255, 0, 0])
+        self.assertEqual(output.count(b"no link, retrying"), 2)
+        self.assertEqual(self.calls("sleep"), [["0.1"], ["0.1"]])
+
+    def test_pane_host_down_waits_for_key_then_retries(self):
+        # One failed open crosses the shortened outage deadline.
+        script = self.root / "zshell"
+        script.write_text(script.read_text().replace("SECONDS + 5", "SECONDS + 0"))
+        output = self.host_pane([255, 255, 255, 0, 0],
+                                wait_for=b"[box unreachable, enter retries]")
+        self.assertEqual(output.count(b"no link, retrying"), 1)
+        self.assertEqual(output.count(b"unreachable, enter retries"), 1)
+
+    def test_pane_host_session_exit_one_does_not_retry(self):
+        (self.root / "ssh-codes").write_text("0\n1")
+        code, output = self.pane_run(b': zq n - box -\n')
+        self.assertEqual(code, 1, output)
+        self.assertNotIn(b"retry", output)
+        self.assertEqual(len(self.calls("ssh")), 2)
+        self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_pane_host_missing_zmx_waits_for_key_then_attaches(self):
+        output = self.host_pane([0, 97, 0, 0],
+                                wait_for=b"[box has no zmx (PATH, ~/.local/bin); enter retries]")
+        self.assertNotIn(b"no link", output)
+        self.assertEqual(len(self.calls("ssh")), 4)
+
+    def test_pane_host_remote_missing_zmx_exits_97(self):
+        self.host_pane([0, 0])
+        remote = self.calls("ssh")[-1][-1]
+        result = subprocess.run(["/bin/sh", "-c", remote],
+                                env={"HOME": str(self.root / "empty"), "PATH": ""},
+                                capture_output=True, timeout=2)
+        self.assertEqual(result.returncode, 97, result.stderr)
+
     def test_pane_host_answer_without_folder_and_option_like_host(self):
         self.pane_start(b': zq n - box -\n')
-        args, = self.calls("ssh")
+        check, args = self.calls("ssh")
+        self.assertIn("check", check)
         self.assertNotIn("cd ", args[-1])
         (self.root / "calls").unlink()
         output = self.pane_start(b': zq n - -oProxyCommand%3Dtouch%20x -\n')
