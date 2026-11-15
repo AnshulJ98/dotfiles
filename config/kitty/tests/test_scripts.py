@@ -266,6 +266,123 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(ran[1:], [linux if os.path.isdir(linux) else str(integration),
                                    "1", "enabled", "attach", "box name"])
 
+    def resume_host(self, session, *, present=False, retry=False):
+        host = self.root / "host"
+        host.mkdir()
+        (host / "bin").mkdir()
+        (host / ".zshrc").write_text('export PATH="$HOME/bin:$FAKE_ROOT"\n')
+        pi = host / "bin/pi"
+        pi.write_text("#!" + sys.executable + "\n" +
+                      "import json, os, pathlib, sys\n" +
+                      "with (pathlib.Path(os.environ['FAKE_ROOT']) / 'pi-runs').open('a') as f:\n" +
+                      "    f.write(json.dumps([os.getcwd(), sys.argv[1:]]) + '\\n')\n")
+        pi.chmod(0o700)
+        # Only the real interactive zsh's rc adds pi to PATH; the final shell exits.
+        shell = self.root / "zsh"
+        shell.write_text("#!" + sys.executable + "\n" +
+                         "import json, os, sys\n" +
+                         "with open(os.environ['FAKE_ROOT'] + '/shell-runs', 'a') as f:\n" +
+                         "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n" +
+                         "if any('c' in a for a in sys.argv[1:2]):\n" +
+                         "    os.execv('/bin/zsh', ['zsh'] + sys.argv[1:])\n")
+        shell.chmod(0o700)
+        if present:
+            (self.root / "host-session").touch()
+        ssh = self.root / "ssh"
+        ssh.write_text("#!" + sys.executable + "\n" + r"""
+import json, os, pathlib, subprocess, sys
+root = pathlib.Path(os.environ["FAKE_ROOT"])
+args = sys.argv[1:]
+with (root / "calls").open("a") as f:
+    f.write(json.dumps(["ssh", args]) + "\n")
+if "-O" in args: sys.exit(0)
+env = dict(os.environ, HOME=str(root / "host"))
+code = subprocess.run(["/bin/sh", "-c", args[-1]], env=env).returncode
+drop = root / "drop"
+if drop.exists():
+    drop.unlink()
+    sys.exit(255)
+sys.exit(code)
+""")
+        ssh.chmod(0o700)
+        zmx = self.root / "zmx"
+        zmx.write_text("#!" + sys.executable + "\n" + r"""
+import json, os, pathlib, subprocess, sys
+root = pathlib.Path(os.environ["FAKE_ROOT"])
+args = sys.argv[1:]
+with (root / "calls").open("a") as f:
+    f.write(json.dumps(["zmx", args]) + "\n")
+state = root / "host-session"
+if args == ["ls", "--short"]:
+    if state.exists(): print("a*b")
+elif args[:1] == ["attach"]:
+    state.touch()
+    if len(args) > 2: sys.exit(subprocess.run(args[2:]).returncode)
+""")
+        zmx.chmod(0o700)
+        if retry:
+            (self.root / "drop").touch()
+        reply = f': zq a%2Ab {quote(str(session), safe="")} box -\n'.encode()
+        return self.pane_start(reply)
+
+    def test_host_lost_session_resumes_in_quoted_cwd_then_login_shell(self):
+        folder = self.root / "own folder ' quoted"
+        folder.mkdir()
+        session = self.root / "pi session ' quoted.jsonl"
+        session.write_text(json.dumps({"type": "session", "cwd": str(folder)}) + "\nnot json\n")
+        self.resume_host(session)
+        attaches = [a for a in self.calls("zmx") if a[0] == "attach"]
+        self.assertEqual(attaches[0][:4], ["attach", "a*b", "zsh", "-ilc"])
+        self.assertEqual(json.loads((self.root / "pi-runs").read_text()),
+                         [str(folder.resolve()), ["--session", str(session)]])
+        shells = list(map(json.loads, (self.root / "shell-runs").read_text().splitlines()))
+        self.assertEqual(shells[-1], ["-il"])
+
+    def test_host_resume_uses_home_when_session_folder_is_gone(self):
+        session = self.root / "pi.jsonl"
+        session.write_text('{"cwd": "/no/such/folder"}\n')
+        self.resume_host(session)
+        self.assertEqual(json.loads((self.root / "pi-runs").read_text()),
+                         [str((self.root / "host").resolve()), ["--session", str(session)]])
+
+    def test_host_present_session_attaches_plainly(self):
+        session = self.root / "pi.jsonl"
+        session.write_text('{"cwd": "/tmp"}\n')
+        self.resume_host(session, present=True)
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
+        self.assertFalse((self.root / "pi-runs").exists())
+
+    def test_host_absent_pi_file_attaches_plainly(self):
+        self.resume_host(self.root / "missing.jsonl")
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
+        self.assertFalse((self.root / "pi-runs").exists())
+
+    def test_host_control_characters_in_pi_path_are_ignored(self):
+        session = self.root / "pi\n'\t\x1b.jsonl"
+        session.write_text('{"cwd": "/tmp"}\n')
+        self.resume_host(session)
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
+        self.assertFalse((self.root / "pi-runs").exists())
+
+    def test_host_nul_in_pi_path_is_not_truncated_into_a_valid_file(self):
+        session = self.root / "pi.jsonl"
+        session.write_text('{"cwd": "/tmp"}\n')
+        self.resume_host(str(session) + "\x00suffix")
+        self.assertEqual(self.calls("zmx")[-1], ["attach", "a*b"])
+        self.assertFalse((self.root / "pi-runs").exists())
+
+    def test_host_retry_checks_again_and_never_resumes_a_second_pi(self):
+        session = self.root / "pi.jsonl"
+        session.write_text('{"cwd": "/tmp"}\n')
+        output = self.resume_host(session, retry=True)
+        self.assertIn(b"no link, retrying", output)
+        attaches = [a for a in self.calls("zmx") if a[0] == "attach"]
+        self.assertGreater(len(attaches[0]), 2)
+        self.assertEqual(attaches[1], ["attach", "a*b"])
+        self.assertEqual(len((self.root / "pi-runs").read_text().splitlines()), 1)
+        remotes = [a[-1] for a in self.calls("ssh") if "-tt" in a]
+        self.assertEqual(remotes[0], remotes[1])
+
     def host_pane(self, codes, wait_for=None):
         (self.root / "ssh-codes").write_text("\n".join(map(str, codes)))
         output = self.pane_start(b': zq n - box -\n', wait_for=wait_for)
