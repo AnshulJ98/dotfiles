@@ -22,8 +22,8 @@ sys.dont_write_bytecode = True
 SCRIPT = Path(__file__).resolve().parents[1] / 'bin/zside'
 
 
-def load():
-    loader = importlib.machinery.SourceFileLoader('zside_test', str(SCRIPT))
+def load(script=SCRIPT):
+    loader = importlib.machinery.SourceFileLoader('zside_test', str(script))
     module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
     with patch.dict(os.environ):
         loader.exec_module(module)
@@ -40,6 +40,198 @@ def view(cwd=''):
 
 def frame(obj):
     return b'\x1b_zv' + json.dumps(obj).encode() + b'\x1b\\'
+
+
+class PortTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.script = self.root / 'scripts/zside'
+        self.script.parent.mkdir()
+        self.script.write_text(SCRIPT.read_text().replace('/opt/homebrew/bin', str(self.root)))
+        self.side = load(self.script)
+        env = patch.dict(os.environ, ZWS_HOST='box', ZWS_DIR=str(self.root),
+                         PATH=str(self.root) + ':/usr/bin:/bin')
+        env.start()
+        self.addCleanup(env.stop)
+        self.record = dict(forwards={
+            '3000': dict(local=3000, target='127.0.0.1', active=True, automatic=True, program=None),
+            '5432': dict(local=5433, target='127.0.0.1', active=True, automatic=False, program='postgres'),
+            '8080': dict(local=8080, target='127.0.0.1', active=False, automatic=True, program='server')
+        }, stopped=[9000], waiting=[9001, 9002])
+        self.save()
+
+    def save(self):
+        (self.root / 'ports.json').write_text(json.dumps(self.record))
+
+    def draw(self, menu=''):
+        return self.side.rows(view(), {'a': ('Repo', 'topic', ''), 'b': ('Bee', '', '')},
+                              menu, 60, 30)
+
+    def test_host_rows_marks_waiting_inactive_and_space_positions(self):
+        body, clicks = self.draw()
+        plain = [re.sub(r'\x1b\[[0-9;]*m', '', row).strip() for row in body]
+        self.assertIn('ports', plain)
+        self.assertIn('3000 auto', plain)
+        self.assertIn('5433→5432 hand postgres', plain)
+        self.assertIn('8080 auto server', plain)
+        self.assertIn('2 more not forwarded', plain)
+        self.assertIn('\x1b[0;2m 8080 auto server', body[plain.index('8080 auto server')])
+        self.assertIn('\x1b[0;2m 2 more not forwarded', body[plain.index('2 more not forwarded')])
+        self.assertNotIn('9000', ''.join(body))
+        self.assertEqual(clicks[plain.index('5433→5432 hand postgres')], ('port', '5432', 5433))
+        with patch.dict(os.environ, ZWS_HOST=''):
+            mac_body, mac_clicks = self.draw()
+        self.assertNotIn(' ports', ''.join(mac_body))
+        end = plain.index('ports') - 1
+        self.assertEqual(body[2:end], mac_body[2:end])
+        self.assertEqual(clicks[:end], mac_clicks[:end])
+
+    def test_missing_invalid_records_and_empty_record(self):
+        path = self.root / 'ports.json'
+        path.unlink()
+        self.assertNotIn(' ports', ''.join(self.draw()[0]))
+        for bad in ('{', '[]', '{}', '{"forwards": [], "waiting": []}',
+                    json.dumps(dict(self.record, waiting=None)),
+                    json.dumps(dict(self.record, forwards={'bad': {}})),
+                    json.dumps(dict(self.record, forwards={'22': dict(active=True, automatic=True)})),
+                    json.dumps(dict(self.record, forwards={'22': dict(local='bad')}))):
+            with self.subTest(bad=bad):
+                path.write_text(bad)
+                self.assertNotIn(' ports', ''.join(self.draw()[0]))
+        path.write_bytes(b'\xff')
+        self.assertNotIn(' ports', ''.join(self.draw()[0]))
+        self.record = dict(forwards={}, stopped=[], waiting=[])
+        self.save()
+        self.assertIn(('port-forward', ''), self.draw()[1])
+
+    def test_pty_refreshes_record_and_dispatches_sgr_clicks(self):
+        script = self.script
+        fake = ("import json, os, pathlib, sys\n"
+                "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
+                "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n")
+        for name in ('ssh', 'zmx', 'zhost', 'open', 'zports', 'zws'):
+            path = (script.parent if name in ('zhost', 'zports', 'zws') else self.root) / name
+            path.write_text('#!' + sys.executable + '\n' + fake)
+            path.chmod(0o700)
+        (script.parent / 'zpick-rows').write_text('')
+        master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 60, 0, 0))
+        proc = subprocess.Popen(['/usr/bin/python3', str(script)], stdin=slave, stdout=slave,
+                                stderr=subprocess.PIPE,
+                                env=dict(os.environ, PATH=str(self.root) + ':' + os.environ['PATH']))
+        os.close(slave)
+        output = bytearray()
+        def until(needle):
+            deadline = time.monotonic() + 4
+            while needle not in output:
+                self.assertLess(time.monotonic(), deadline, bytes(output))
+                if select.select([master], [], [], .02)[0]:
+                    output.extend(os.read(master, 65536))
+        def click(button, action, menu=''):
+            clicks = self.side.rows(view(), {'a': ('a', '', ''), 'b': ('Bee', '', '')},
+                                    menu, 60, 30)[1]
+            row = clicks.index(action) + 1
+            os.write(master, f'\x1b[<{button};2;{row}M'.encode())
+        try:
+            until(b'zside=cmVhZHk=')
+            os.write(master, frame(view()))
+            until(b'box down')
+            self.assertIn('5433→5432'.encode(), output)
+            click(0, ('port', '5432', 5433))
+            click(2, ('port', '5432', 5433))
+            until(b'Open in browser')
+            output.clear()
+            click(0, ('port-stop', '5432'), ('port', '5432'))
+            until(b'\x1b[?2026l')
+            output.clear()
+            click(0, ('port-forward', ''))
+            until(b'\x1b[?2026l')
+            # Drain the click redraws before changing the record: only the timer can wake it now.
+            deadline = time.monotonic() + .3
+            while time.monotonic() < deadline:
+                if select.select([master], [], [], .02)[0]:
+                    output.extend(os.read(master, 65536))
+            self.record['forwards']['5432']['local'] = 5434
+            self.save()
+            output.clear()
+            until('5434→5432'.encode())
+            calls = [json.loads(row) for row in (self.root / 'calls').read_text().splitlines()]
+            self.assertIn(['open', ['http://localhost:5433']], calls)
+            self.assertIn(['zports', ['stop', '5432']], calls)
+            self.assertIn(['zws', ['forward-port']], calls)
+            self.assertEqual([c for c in calls if c[0] == 'ssh'], [['ssh', ['-G', 'box']]])
+            self.assertIsNone(proc.poll())
+        finally:
+            os.close(master)
+            if proc.poll() is None:
+                proc.terminate()
+            proc.wait(timeout=3)
+            self.assertEqual(proc.stderr.read(), b'')
+            proc.stderr.close()
+
+    def test_render_rereads_record_without_remote_work(self):
+        git = self.side.HostGit()
+        with patch.object(self.side, 'write') as write, \
+                patch.object(self.side.subprocess, 'run', side_effect=AssertionError('process')):
+            self.side.render(view(), git, '')
+            self.assertIn('5433→5432', write.call_args.args[0])
+            self.record['forwards']['5432']['local'] = 5434
+            self.save()
+            self.side.render(view(), git, '')
+            self.assertIn('5434→5432', write.call_args.args[0])
+            self.assertNotIn('5433→5432', write.call_args.args[0])
+
+    def test_stop_failures_are_dim_persist_and_clear_on_success(self):
+        for failure in (subprocess.CompletedProcess([], 1, '', 'zports: no running engine\n'),
+                        OSError('cannot execute'), subprocess.TimeoutExpired('zports', 3)):
+            with self.subTest(failure=failure):
+                kwargs = {'side_effect': failure} if isinstance(failure, Exception) else {'return_value': failure}
+                with patch.object(self.side.subprocess, 'run', **kwargs) as run:
+                    self.side.act(('port-stop', '5432'))
+                self.assertEqual(run.call_args.args[0],
+                                 (str(self.script.parent / 'zports'), 'stop', '5432'))
+                body, clicks = self.draw()
+                error = body[next(i for i, row in enumerate(body) if ' ports' in row) + 1]
+                self.assertIn('\x1b[0;2m', error)
+                self.assertIn(str(failure) if isinstance(failure, Exception) else failure.stderr.strip(), error)
+                self.assertIn(('port', '5432', 5433), clicks)
+                self.assertEqual(self.draw()[0], body)
+                with patch.object(self.side.subprocess, 'run',
+                                  return_value=subprocess.CompletedProcess([], 0, '', '')):
+                    self.side.act(('port-stop', '5432'))
+                self.assertNotEqual(self.draw()[0], body)
+                self.assertEqual(self.side.PORT_ERROR, '')
+
+    def test_click_menu_open_and_stop_use_local_cli(self):
+        fake = ("import json, os, pathlib, sys\n"
+                "with open(os.path.join(os.environ['ZWS_DIR'], 'calls'), 'a') as f:\n"
+                "    f.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:]]) + '\\n')\n")
+        for name in ('open', 'zports'):
+            path = (self.script.parent if name == 'zports' else self.root) / name
+            path.write_text('#!' + sys.executable + '\n' + fake)
+            path.chmod(0o700)
+        action = next(c for c in self.draw()[1] if c and c[:2] == ('port', '5432'))
+        menu = self.side.context_menu(action, '')
+        body, clicks = self.draw(menu)
+        self.assertIn('Open in browser', ''.join(body))
+        self.assertIn('Stop forwarding', ''.join(body))
+        self.assertEqual(self.side.context_menu(action, menu), '')
+        self.assertEqual(self.side.context_menu(('space', 'a'), menu), 'a')
+        with patch.dict(os.environ, PATH=str(self.root) + ':' + os.environ['PATH']):
+            self.side.act(action)
+            self.side.act(next(c for c in clicks if c and c[0] == 'port-open'))
+            self.side.act(next(c for c in clicks if c and c[0] == 'port-stop'))
+        self.assertEqual([json.loads(row) for row in (self.root / 'calls').read_text().splitlines()],
+                         [['open', ['http://localhost:5433']], ['open', ['http://localhost:5433']],
+                          ['zports', ['stop', '5432']]])
+        with patch.object(self.side, 'run') as run:
+            self.side.act(('port-forward', ''))
+            run.assert_called_once_with(self.side.ZWS, 'forward-port')
+            run.reset_mock()
+            self.side.act(('port', '3000', None))
+            run.assert_not_called()
 
 
 class SideTests(unittest.TestCase):

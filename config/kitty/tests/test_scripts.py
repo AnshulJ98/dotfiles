@@ -932,6 +932,78 @@ elif args[:1] == ["attach"]:
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
 
+    def test_forward_port_overlay_valid_empty_and_errors_wait_for_key(self):
+        siblings = self.root / "scripts with spaces"
+        siblings.mkdir()
+        script = siblings / "zws"
+        script.write_text((self.root / "zws").read_text())
+        script.chmod(0o700)
+        fake = siblings / "zports"
+        self.assertIsNone(shutil.which("zports", path=self.env["PATH"]))
+        fake.write_text("#!" + sys.executable + "\n" +
+                        "import json, os, sys\n" +
+                        "with open(os.path.join(os.environ['FAKE_ROOT'], 'port-calls'), 'a') as f:\n" +
+                        "    f.write(json.dumps(sys.argv[1:]) + '\\n')\n" +
+                        "if os.environ.get('PORT_FAIL'):\n" +
+                        "    sys.exit('zports: no running engine')\n")
+        fake.chmod(0o700)
+        for answer, failure, error in (("3000", False, None), ("", False, None),
+                                        ("abc", False, b"Port must be a number"),
+                                        ("0", False, b"Port must be a number"),
+                                        ("65536", False, b"Port must be a number"),
+                                        ("5432", True, b"zports: no running engine"),
+                                        ("3001", "real", b"zports:")):
+            with self.subTest(answer=answer, failure=failure):
+                if failure == "real":
+                    fake.write_text((BIN / "zports").read_text())
+                result = self.run_script(str(script), "forward-port", ZWS_HOST="box")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                call = self.calls("kitten")[-1]
+                self.assertEqual(call[:5], ["@", "launch", "--type=overlay", "--cwd", str(self.root)])
+                self.assertEqual(call[-1], str(script.resolve()))
+                master, slave = pty.openpty()
+                proc = subprocess.Popen(call[5:], stdin=slave, stdout=slave, stderr=slave,
+                                        env=dict(self.env, ZWS_HOST="box", PORT_FAIL="1" if failure else ""))
+                os.close(slave)
+                output = bytearray()
+                def until(needle):
+                    deadline = time.monotonic() + 4
+                    while needle not in output:
+                        self.assertLess(time.monotonic(), deadline, bytes(output))
+                        if select.select([master], [], [], .02)[0]:
+                            output.extend(os.read(master, 65536))
+                try:
+                    until(b"Forward port:")
+                    deadline = time.monotonic() + 2
+                    while termios.tcgetattr(master)[3] & termios.ICANON:
+                        self.assertLess(time.monotonic(), deadline, bytes(output))
+                        self.assertIsNone(proc.poll(), bytes(output))
+                        time.sleep(.001)
+                    os.write(master, answer.encode() + b"\n")
+                    if error:
+                        until(b"press a key")
+                        self.assertIn(error, output)
+                        time.sleep(.1)
+                        self.assertIsNone(proc.poll(), bytes(output))
+                        os.write(master, b"x")
+                    deadline = time.monotonic() + 3
+                    while proc.poll() is None:
+                        self.assertLess(time.monotonic(), deadline, bytes(output))
+                        if select.select([master], [], [], .02)[0]:
+                            try:
+                                output.extend(os.read(master, 65536))
+                            except OSError:
+                                break
+                    self.assertEqual(proc.wait(timeout=3), 0)
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.wait(timeout=3)
+                    os.close(master)
+        self.assertEqual([json.loads(row) for row in (self.root / "port-calls").read_text().splitlines()],
+                         [["forward", "3000"], ["forward", "5432"]])
+        self.assertEqual(self.calls("ssh"), [])
+
     def worktree_overlay(self, kind, folder, host="box", branch="topic ' quoted"):
         result = self.run_script("zws", "worktree", kind, folder, ZWS_HOST=host)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -943,7 +1015,7 @@ elif args[:1] == ["attach"]:
                              capture_output=True, text=True, timeout=3)
 
     def test_scripts_are_executable(self):
-        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun"):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost", "zrun", "zports"):
             with self.subTest(name=name):
                 self.assertEqual((BIN / name).stat().st_mode & 0o111, 0o111)
 
