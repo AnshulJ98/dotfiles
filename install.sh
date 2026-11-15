@@ -47,6 +47,15 @@ if [ -f "$DOT/Brewfile" ]; then
 fi
 fi
 
+# 1.5 Office skills (agents/skills/{pptx,docx,xlsx,pdf}) --------------------
+# LibreOffice, pandoc and the npm packages come from the Brewfile / linux-tools.sh.
+if command -v uv >/dev/null 2>&1; then
+  uv tool list 2>/dev/null | grep -q '^markitdown ' || uv tool install -q 'markitdown[all]'
+fi
+python3 -m pip install --user --break-system-packages -q \
+  python-pptx python-docx openpyxl pypdf pdfplumber reportlab defusedxml lxml Pillow pandas \
+  && ok "office skill python libs" || warn "office skill python libs failed"
+
 # 2. Symlink helper ----------------------------------------------------------
 link() {
   local src="$1" dst="$2"
@@ -94,6 +103,13 @@ link "$DOT/config/kitty"           "$HOME/.config/kitty"
 link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
 [ "$OS" = Darwin ] && link "$DOT/config/borders" "$HOME/.config/borders"
 link "$DOT/config/yazi"            "$HOME/.config/yazi"
+link "$DOT/config/fontconfig"      "$HOME/.config/fontconfig"
+# WSL: Office downloads Aptos per Windows user, outside /mnt/c/Windows/Fonts.
+for cf in /mnt/c/Users/*/AppData/Local/Microsoft/FontCache/4/CloudFonts; do
+  [ -d "$cf" ] || continue
+  mkdir -p "$HOME/.local/share/fonts" && ln -sfn "$cf" "$HOME/.local/share/fonts/ms-cloud" && ok "linked: Office cloud fonts"
+  break
+done
 # Hunk reuses the yazi syntax theme and the lazygit palette.
 link "$DOT/config/hunk"            "$HOME/.config/hunk"
 # One directory per theme. `theme <name>` repoints config/themes/current, and kitty, git,
@@ -186,6 +202,20 @@ link "$DOT/claude/skills"              "$HOME/.claude/skills"
 # 6. ~/.agents/* -------------------------------------------------------------
 mkdir -p "$HOME/.agents"
 link "$DOT/agents/skills" "$HOME/.agents/skills"
+# Anthropic's office skills carry a no-redistribution licence, so this public repo
+# fetches them from Anthropic's own repo instead of committing them (.gitignore).
+# Re-running install.sh pulls their updates.
+AS="$HOME/.local/share/anthropic-skills"
+ANTHROPIC_SKILLS=(pptx docx xlsx pdf skill-creator)
+if [ -d "$AS/.git" ]; then
+  git -C "$AS" pull -q --ff-only && ok "anthropic-skills $(git -C "$AS" log -1 --format=%h)" || warn "anthropic-skills pull failed"
+else
+  git clone -q --depth 1 --filter=blob:none --sparse https://github.com/anthropics/skills "$AS" || warn "anthropic-skills clone failed"
+fi
+if [ -d "$AS/.git" ]; then
+  git -C "$AS" sparse-checkout set "${ANTHROPIC_SKILLS[@]/#/skills/}"
+  for s in "${ANTHROPIC_SKILLS[@]}"; do link "$AS/skills/$s" "$DOT/agents/skills/$s"; done
+fi
 
 # 6.5 ~/.pi/agent (pi coding agent) -------------------------------------------
 git -C "$DOT" config core.hooksPath githooks

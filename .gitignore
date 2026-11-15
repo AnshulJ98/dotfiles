@@ -61,5 +61,13 @@ agent-eval/long/results/*/grade/**/judge/home/
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/
 
+# Anthropic's skills: proprietary licence, so install.sh fetches them from
+# github.com/anthropics/skills and links them here instead of committing them
+agents/skills/pptx
+agents/skills/docx
+agents/skills/xlsx
+agents/skills/pdf
+agents/skills/skill-creator
+
 # Python bytecode (kitty compiles its watcher next to it)
 __pycache__/

@@ -179,8 +179,8 @@ the user corrects you.
 
 Never open a `.pdf` with the read tool. Amazon Bedrock rejects
 `application/pdf`, and a single read poisons every later message in the
-session. Use `pdftotext <file> -` for text, or load `/skill:pdf-images`
-for tables, images, and OCR.
+session. Use `pdftotext <file> -` for text, or load `/skill:pdf` for
+tables, images, OCR, creation, and forms.
 
 
 # Code
