@@ -122,6 +122,143 @@ class SideTests(unittest.TestCase):
         lines = [l.split('\t') for l in out.call_args[0][0].split('\n')]
         return [(l[0], l[1], re.sub(r'\x1b\[[0-9;]*m', '', l[5])) for l in lines]
 
+    def load_rows(self):
+        loader = importlib.machinery.SourceFileLoader('host_rows', str(SCRIPT.parent / 'zpick-rows'))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        return module
+
+    def test_facts_live_folder_program_refs_and_stdin_cli(self):
+        rows = self.load_rows()
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            (repo / ".git").mkdir(parents=True)
+            (repo / ".git/HEAD").write_text("ref: refs/heads/topic\n")
+            def run(*cmd):
+                return {"zmx": "name=s\tpid=12\tclients=0\tcwd=file://box/old",
+                        "lsof": f"p12\nn{repo}\n",
+                        "ps": "12 13 /bin/zsh\n13 13 /bin/vim\n"}.get(cmd[0], "")
+            with patch.object(rows, 'run', run):
+                data = rows.facts([directory])
+                self.assertEqual(data['sessions']['s']['cwd'], str(repo))
+                self.assertEqual(data['sessions']['s']['proc'], 'vim')
+                self.assertEqual(data['refs'][str(repo)], ('topic', str(repo)))
+                self.assertEqual(data['refs'][directory], ('', ''))
+                with patch.object(sys, 'argv', ['zpick-rows', '--facts', directory]),                         patch('builtins.print') as out:
+                    rows.main()
+                self.assertEqual(json.loads(out.call_args.args[0])['sessions']['s']['proc'], 'vim')
+        # The exact file must also work on stdin; the facts path cannot rely on __file__.
+        result = subprocess.run([sys.executable, '-', '--facts', '/no/such/path'],
+                                input=(SCRIPT.parent / 'zpick-rows').read_text(),
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('/no/such/path', json.loads(result.stdout)['refs'])
+
+    def test_host_rows_use_only_host_facts_and_survive_fetch_failure(self):
+        rows = self.load_rows()
+        pane = dict(id=1, title='shell', cwd='/mac/home', is_active=True, session_name='dev',
+                    user_vars={'holder': 's'}, foreground_processes=[{'cmdline': ['ssh']}])
+        kitty = [dict(is_active=True, tabs=[dict(id=7, title='tab', is_active=True, windows=[pane])])]
+        data = dict(home='/remote', now=1000, refs={'/remote/repo/sub': ['topic', '/remote/repo'],
+                                                 '/closed': ['closed-ref', '/closed']},
+                    sessions={'s': dict(name='s', cwd='/remote/repo/sub', proc='vim', created='940'),
+                              'loose': dict(name='loose', cwd='/remote', proc='zsh', created='940', clients='0')})
+        calls = []
+        def run(*cmd):
+            calls.append(cmd)
+            self.assertEqual(cmd[0], 'kitten')
+            return json.dumps(kitty)
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST='box'),                 patch.object(rows, 'DIR', directory), patch.object(rows, 'run', run):
+            Path(directory, 'closed.kitty-session').write_text(
+                'cd /mac/home\nlaunch --var=host_dir=/closed --var=holder=old\n')
+            for answer in (data, None):
+                with patch.object(rows, 'fetch_facts', return_value=answer) as fetch,                         patch.object(rows, 'git_ref', side_effect=AssertionError('local git')),                         patch.object(sys, 'argv', ['zpick-rows', 'all']), patch('builtins.print') as out:
+                    rows.main()
+                self.assertIn('/closed', fetch.call_args.args[1])
+                lines = [l.split('\t') for l in out.call_args.args[0].splitlines()]
+                self.assertIn(('pane', '1'), [(l[0], l[1]) for l in lines])
+                if answer:
+                    self.assertIn('repo', lines[0][5]); self.assertIn('topic', lines[0][5])
+                    self.assertIn('vim', lines[1][5]); self.assertIn('1m', lines[1][5])
+                    det, = [l for l in lines if l[0] == 'det']
+                    self.assertEqual(det[1], 'loose'); self.assertIn('~', det[5])
+                    self.assertIn('closed-ref', lines[-1][5])
+                else:
+                    self.assertEqual(lines[0][0], 'hdr'); self.assertIn('box unreachable', lines[0][5])
+                    self.assertFalse(any(l[0] == 'det' for l in lines))
+                    self.assertIn('dev', lines[1][5]); self.assertNotIn('home', lines[1][5])
+            with patch.object(rows, 'fetch_facts') as fetch, patch.object(rows, 'run', return_value=''),                     patch.object(sys, 'argv', ['zpick-rows', 'zmx']), patch('builtins.print'):
+                rows.main()
+            fetch.assert_not_called()
+
+    def test_host_home_unknown_workspace_and_detached_outage_keep_kitty_tree(self):
+        rows = self.load_rows()
+        def pane(i):
+            return dict(id=i, title='pane', cwd='/mac/home', is_active=True, session_name='saved',
+                        user_vars={'holder': str(i)})
+        kitty = [dict(is_active=True, tabs=[dict(id=7, title='pair', is_active=True,
+                                                windows=[pane(1), pane(2)])])]
+        home = dict(home='/remote', now=1000, refs={},
+                    sessions={'1': dict(name='1', cwd='/remote', proc='zsh')})
+        for view, data, shown in (('all', home, 'home'), ('all', dict(home, sessions={}), 'saved'),
+                                  ('detached', None, 'saved')):
+            with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST='box'), \
+                    patch.object(rows, 'DIR', directory), \
+                    patch.object(rows, 'run', side_effect=lambda *cmd: json.dumps(kitty)), \
+                    patch.object(rows, 'fetch_facts', return_value=data), \
+                    patch.object(sys, 'argv', ['zpick-rows', view]), patch('builtins.print') as out:
+                rows.main()
+            lines = [l.split('\t') for l in out.call_args.args[0].splitlines()]
+            ws, = [l for l in lines if l[0] == 'ws']
+            self.assertIn(shown, ws[5])
+            self.assertIn(('tab', '7'), [(l[0], l[1]) for l in lines])
+            self.assertEqual([l[1] for l in lines if l[0] == 'pane'], ['1', '2'])
+
+    def test_first_non_sidebar_folder_and_quoted_host_folder_refs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / 'repo'
+            (repo / '.git').mkdir(parents=True)
+            (repo / '.git/HEAD').write_text('ref: refs/heads/main\n')
+            def pane(i, cwd, role):
+                return dict(id=i, title='pane', cwd=cwd, is_active=True, session_name='ws',
+                            user_vars={'role': role})
+            kitty = [dict(is_active=True, tabs=[dict(id=1, title='tab', is_active=True,
+                     windows=[pane(1, '/sidebar', 'sidebar'), pane(2, str(repo), '')])])]
+            got = self.picker_rows('all', '', kitty)
+            self.assertIn('repo', got[0][2]); self.assertIn('main', got[0][2])
+            rows = self.load_rows()
+            Path(directory, 'closed.kitty-session').write_text(
+                'cd /mac\nlaunch --var=host_dir="/remote/a b" --var=host_dir=/second\n')
+            data = dict(home='/remote', now=1000, sessions={}, refs={'/remote/a b': ['branch', '']})
+            with patch.dict(os.environ, ZWS_HOST='box'), patch.object(rows, 'DIR', directory), \
+                    patch.object(rows, 'run', return_value='[]'), \
+                    patch.object(rows, 'fetch_facts', return_value=data) as fetch, \
+                    patch.object(sys, 'argv', ['zpick-rows', 'detached']), patch('builtins.print') as out:
+                rows.main()
+            self.assertEqual(fetch.call_args.args[1], ['/remote/a b'])
+            self.assertIn('branch', out.call_args.args[0])
+
+    def test_fetch_pipes_this_file_with_second_deadline_and_handles_errors(self):
+        rows = self.load_rows()
+        data = dict(home='/h', now=1, sessions={}, refs={})
+        for result in (subprocess.CompletedProcess([], 0, json.dumps(data)),
+                       subprocess.CompletedProcess([], 1, ''),
+                       subprocess.CompletedProcess([], 0, 'bad'),
+                       subprocess.CompletedProcess([], 0, '[]'),
+                       subprocess.TimeoutExpired('zhost', 3)):
+            with patch.object(rows.subprocess, 'run') as run:
+                if isinstance(result, Exception):
+                    run.side_effect = result
+                else:
+                    run.return_value = result
+                self.assertEqual(rows.fetch_facts('box', ['/a b', "it's"]),
+                                 data if getattr(result, 'stdout', '') == json.dumps(data) else None)
+                args, = run.call_args.args
+                self.assertEqual(args, [str(SCRIPT.parent / 'zhost'), 'box', 'python3', '-',
+                                        '--facts', '/a b', "it's"])
+                self.assertEqual(run.call_args.kwargs['timeout'], 3)
+                self.assertEqual(run.call_args.kwargs['input'], (SCRIPT.parent / 'zpick-rows').read_text())
+
     def test_picker_rows_keep_the_session_zmx_marks_as_current(self):
         # Inside a session, zmx ls points at it with an arrow; zmx-pick must still list it.
         ls = ('  name=logs\tpid=11\tclients=0\tcreated=1\tcwd=file://box/srv\n'

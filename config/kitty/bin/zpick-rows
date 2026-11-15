@@ -12,6 +12,7 @@ hand columns are set flush against the preview.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -42,8 +43,8 @@ def age(seconds: float) -> str:
     return f'{s // 60}m' if s < 3600 else (f'{s // 3600}h' if s < 86400 else f'{s // 86400}d')
 
 
-def short(path: str) -> str:
-    return '~' + path[len(HOME):] if path.startswith(HOME) else path
+def short(path: str, home: str) -> str:
+    return '~' + path[len(home):] if home and path.startswith(home) else path
 
 
 def fit(text: str, width: int) -> str:
@@ -143,6 +144,51 @@ def git_ref(cwd: str) -> tuple[str, str]:
     return '', ''
 
 
+def host_folder(text: str) -> str:
+    for line in text.splitlines():
+        try:
+            args = shlex.split(line)
+        except ValueError:
+            continue
+        for arg in args:
+            arg = arg.removeprefix('--var=')
+            if arg.startswith('host_dir='):
+                return arg[len('host_dir='):]
+    return ''
+
+
+def facts(paths: list[str]) -> dict:
+    """All machine-dependent facts; also runs verbatim on the host via python3 -."""
+    zs = zmx_sessions()
+    cwds = live_cwds([z['pid'] for z in zs.values() if z.get('pid', '').isdigit()])
+    fg = foreground()
+    for z in zs.values():
+        z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
+        z['proc'] = fg.get(int(z.get('pid', 0) or 0), '')
+    folders = set(paths) | {z['cwd'] for z in zs.values()}
+    return dict(home=HOME, now=time.time(), sessions=zs,
+                refs={p: git_ref(p) for p in folders})
+
+
+def fetch_facts(host: str, paths: list[str]):
+    try:
+        with open(__file__) as source:
+            result = subprocess.run(
+                [os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zhost'),
+                 host, 'python3', '-', '--facts', *paths],
+                input=source.read(), capture_output=True, text=True, timeout=3)
+        if result.returncode:
+            return None
+        data = json.loads(result.stdout)
+        if (isinstance(data, dict) and isinstance(data.get('home'), str)
+                and isinstance(data.get('now'), (int, float))
+                and isinstance(data.get('sessions'), dict) and isinstance(data.get('refs'), dict)):
+            return data
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
+
+
 def row(kind: str, target: str, holder: str, cwd: str, clients: str, display: str) -> str:
     return '\t'.join((kind, target, holder, cwd, clients, display))
 
@@ -163,29 +209,13 @@ def flush(left: str, rights: list[str], label: str = '', keep: str = '') -> str:
 
 def main() -> None:
     view = sys.argv[1] if len(sys.argv) > 1 else 'all'
+    if view == '--facts':
+        print(json.dumps(facts(sys.argv[2:])))
+        return
     origin = sys.argv[2] if len(sys.argv) > 2 else ''
-    now = time.time()
-    zs = zmx_sessions()
-    cwds = live_cwds([z['pid'] for z in zs.values() if z.get('pid', '').isdigit()])
-    for z in zs.values():
-        z['cwd'] = cwds.get(z.get('pid', ''), z['cwd'])
-    fg = foreground()
     zmx = view in ('zmx', 'zmx-detached')  # zmx-pick: no kitty
+    host = os.environ.get('ZWS_HOST', '') if not zmx else ''
     kitty = [] if zmx else json.loads(run('kitten', '@', 'ls') or '[]')
-
-    def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
-        z = zs.get(holder)
-        if z:
-            proc = fg.get(int(z.get('pid', 0) or 0), '')
-            when = age(now - int(z.get('created', now)))
-        else:
-            fps = w.get('foreground_processes') or [{}]
-            proc = os.path.basename((fps[0].get('cmdline') or [''])[0]).lstrip('-')
-            when = age(now - w.get('created_at', now * 1e9) / 1e9)
-        st = (w.get('program_status') or [{}])[0].get('state', '') if w else ''
-        status = st or ('shell' if proc in SHELLS else 'running')
-        return proc, status, when
-
     held, open_ws = set(), []
     workspaces: dict[str, list[dict]] = {}
     named: dict[str, str] = {}  # names given with rename; on panes and sidebars
@@ -203,6 +233,42 @@ def main() -> None:
                 held.add(w['user_vars'].get('holder', ''))
                 if str(w['id']) == origin or (not origin and o['is_active'] and t['is_active'] and w['is_active']):
                     current = ws
+    where, by_file = spaces()
+    saved = {}
+    for f in by_file:
+        path = os.path.join(DIR, f)
+        with open(path, errors='replace') as source:
+            text = source.read()
+        folder = by_file[f][2]
+        if host:
+            folder = host_folder(text)
+        saved[f] = (text, folder, os.path.getmtime(path))
+    paths = [s[1] for f, s in saved.items() if zmx or f[:-len('.kitty-session')] not in workspaces]
+    if not host:
+        paths += [tabs[0]['windows'][0].get('cwd', '') for tabs in workspaces.values()]
+    data = fetch_facts(host, paths) if host else facts(paths)
+    down = data is None
+    data = data or dict(home='', now=0, sessions={}, refs={})
+    home, now, zs, refs = (data[k] for k in ('home', 'now', 'sessions', 'refs'))
+    if host:
+        for o in kitty:
+            for t in o['tabs']:
+                for w in t['windows']:
+                    w['cwd'] = zs.get(w['user_vars'].get('holder', ''), {}).get('cwd', '')
+
+    def proc_status(w: dict, holder: str) -> tuple[str, str, str]:
+        z = zs.get(holder)
+        if z:
+            proc = z.get('proc', '')
+            when = age(now - int(z.get('created', now)))
+        else:
+            fps = (w.get('foreground_processes') if not host else []) or [{}]
+            proc = os.path.basename((fps[0].get('cmdline') or [''])[0]).lstrip('-')
+            when = age(now - w.get('created_at', now * 1e9) / 1e9)
+        st = (w.get('program_status') or [{}])[0].get('state', '') if w else ''
+        status = st or ('shell' if proc in SHELLS else 'running')
+        return proc, status, when
+
     det = [z for name, z in zs.items() if name not in held]
     hw = max([len(h) for h in held] + [len(z['name']) for z in det] + [0])  # the session column
 
@@ -211,16 +277,16 @@ def main() -> None:
         return [f'{fit(proc, 8)} {state} {DIM}{when:>3}  {holder:>{hw}}{OFF}',
                 f'{fit(proc, 8)} {state} {DIM}{when:>3}{OFF}', state]
 
-    rows = []
-    if view == 'all':
+    rows = [row('hdr', '', '', '', '', f'{host} unreachable')] if down else []
+    if view == 'all' or down:
         for ws, tabs in workspaces.items():
             open_ws.append(ws)
             panes = [w for t in tabs for w in t['windows']]
             first = panes[0]  # names the workspace, as in the sidebar
             holder = first['user_vars'].get('holder', '')
             cwd = zs.get(holder, {}).get('cwd') or first.get('cwd', '')
-            ref, top = git_ref(cwd)
-            shown = named[ws] or ('home' if cwd == HOME else os.path.basename(top or cwd)) or ws
+            ref, top = refs.get(cwd, ('', ''))
+            shown = named[ws] or ('home' if cwd and cwd == home else os.path.basename(top or cwd)) or ws
             mark = f'{ACCENT}◆{OFF}' if ws == current else f'{DIM}◇{OFF}'
             rows.append(row('ws', ws, holder, first.get('cwd', ''), '', flush(
                 f'{mark} {BOLD}{shown if ws else "(no workspace)"}{OFF} {DIM}{len(tabs)} tab{"s" if len(tabs) > 1 else ""}{OFF}',
@@ -250,19 +316,18 @@ def main() -> None:
         # No kitty to ask: a session sits in the space whose saved session file holds it, named as
         # cmd+alt+g names it; one no file holds is grouped by where it is, the git checkout (branch
         # alongside) or the plain folder.
-        where, by_file = spaces()
         groups: dict[str, tuple[str, str, list[tuple[dict, str]]]] = {}
         for z in det:
             was = space_label(z)  # a closed pane is in no file; its label still names the space
             space = where.get(z['name']) or by_file.get(was + '.kitty-session')
             if not space and was:
-                groups.setdefault('label ' + was, (was, '', []))[2].append((z, short(z['cwd'])))
+                groups.setdefault('label ' + was, (was, '', []))[2].append((z, short(z['cwd'], home)))
                 continue
             cwd = (zs.get(space[1], {}).get('cwd') or space[2]) if space else z['cwd']
-            ref, top = git_ref(cwd)
+            ref, top = refs.get(cwd, ('', ''))
             folder = (top or cwd).rstrip('/') or '/'
-            shown = 'home' if folder == HOME.rstrip('/') else os.path.basename(folder) or folder
-            at = short(z['cwd']) if space else os.path.relpath(z['cwd'], folder) if z['cwd'].rstrip('/') != folder else ''
+            shown = 'home' if folder == home.rstrip('/') else os.path.basename(folder) or folder
+            at = short(z['cwd'], home) if space else os.path.relpath(z['cwd'], folder) if z['cwd'].rstrip('/') != folder else ''
             groups.setdefault(space[0] if space else folder, (shown, ref, []))[2].append((z, at))
         for shown, ref, members in groups.values():
             n = len(members)
@@ -284,20 +349,16 @@ def main() -> None:
             branch = '└─' if i == len(det) - 1 else '├─'
             rows.append(row('det', z['name'], z['name'], z['cwd'], z.get('clients', '0'), flush(
                 f'  {branch} ', pane_cols(*proc_status({}, z['name']), z['name']),
-                short(z['cwd']) + (' · other kitty' if other else ''))))
-    try:
-        files = sorted(f for f in os.listdir(DIR) if f.endswith('.kitty-session'))
-    except OSError:
-        files = []
-    closed = [] if zmx else [f for f in files if f[:-len('.kitty-session')] not in open_ws]
+                short(z['cwd'], home) + (' · other kitty' if other else ''))))
+    closed = [] if zmx else [f for f in sorted(saved) if f[:-len('.kitty-session')] not in open_ws]
     if closed:
         rows.append(row('hdr', '', '', '', '', f'{DIM}closed workspaces{OFF}'))
         for i, f in enumerate(closed):
             path = os.path.join(DIR, f)
-            text = open(path, errors='replace').read()
+            text, folder, modified = saved[f]
             tabs = max(1, text.count('\nnew_tab') + text.startswith('new_tab'))
-            ref = git_ref(next((ln[3:].strip() for ln in text.splitlines() if ln.startswith('cd ')), ''))[0]
-            count = f'{tabs} tab{"s" if tabs > 1 else ""}  {age(now - os.path.getmtime(path)):>3}'
+            ref = refs.get(folder, ('', ''))[0]
+            count = f'{tabs} tab{"s" if tabs > 1 else ""}  {age(now - modified):>3}'
             branch = '└─' if i == len(closed) - 1 else '├─'
             rows.append(row('closed', path, '', '', '', flush(
                 f'  {branch} ',
