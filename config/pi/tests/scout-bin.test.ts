@@ -139,6 +139,73 @@ test("a child loads background.ts for its bash tool and gets no bg_run; only a w
 	}
 });
 
+test("only -nc children get the generated code standards in their system prompt", async () => {
+	const { env } = sandbox();
+	webFiles(env, false);
+	for (const [args, stdin, attached] of [
+		[["look"], "", true],
+		[["--spec", "-"], SPEC, true],
+		[["--web", "research"], "", true],
+		[["--ctx", "look"], "", false],
+		[["--ctx", "--spec", "-"], SPEC, false],
+		[["--ctx", "--web", "research"], "", false],
+	] as const) {
+		const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
+		assert.equal(run.code, 0, run.stderr);
+		assert.match(run.stdout, /--system-prompt /);
+		assert.equal((run.stdout.match(/# Before Writing Code/g) ?? []).length, attached ? 1 : 0);
+		assert.equal(run.stdout.includes("## Design"), attached);
+		assert.equal(/ -nc /.test(run.stdout), attached);
+	}
+	const review = spawnSync(SCOUT, ["--review", "HEAD~1"], {
+		cwd: reviewRepo(), env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
+	});
+	assert.equal(review.status, 0, review.stderr);
+	assert.match(review.stdout, /--system-prompt /);
+	assert.doesNotMatch(review.stdout, /Before Writing Code|## Design| -nc /);
+});
+
+test("missing child standards refuse the run and name the generator without starting pi", () => {
+	const { env } = sandbox();
+	const bin = join(mkdtempSync(join(tmpdir(), "scout-no-standards-")), "bin");
+	cpSync(resolve(SCOUT, ".."), bin, {
+		recursive: true, filter: (source) => !source.endsWith("/standards.prompt.md"),
+	});
+	const run = spawnSync(join(bin, "scout"), ["look"], {
+		env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
+	});
+	assert.equal(run.status, 2, run.stderr);
+	assert.match(run.stderr, /standards\.prompt\.md/);
+	assert.match(run.stderr, /config\/pi\/build-agents\.sh/);
+	assert.equal(run.stdout, "");
+	const ctx = spawnSync(join(bin, "scout"), ["--ctx", "look"], {
+		env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
+	});
+	assert.equal(ctx.status, 0, ctx.stderr);
+});
+
+test("build-agents --check detects drift in the generated child standards", () => {
+	const root = mkdtempSync(join(tmpdir(), "child-standards-drift-"));
+	const source = resolve(import.meta.dirname, "..");
+	mkdirSync(join(root, "bin"));
+	for (const file of ["build-agents.sh", "agents-md", "AGENTS.md", "AGENTS.work.md", "CLAUDE.md", "bin/standards.prompt.md"]) {
+		cpSync(join(source, file), join(root, file), { recursive: true });
+	}
+	const check = () => spawnSync(join(root, "build-agents.sh"), ["--check"], { encoding: "utf8" });
+	const clean = check();
+	assert.equal(clean.status, 0, clean.stderr);
+	const generated = spawnSync(join(root, "build-agents.sh"), [], { encoding: "utf8" });
+	assert.equal(generated.status, 0, generated.stderr);
+	assert.match(generated.stdout, /bin\/standards\.prompt\.md/);
+	for (const file of ["AGENTS.md", "AGENTS.work.md", "CLAUDE.md", "bin/standards.prompt.md"]) {
+		assert.deepEqual(readFileSync(join(root, file)), readFileSync(join(source, file)), file);
+	}
+	writeFileSync(join(root, "bin/standards.prompt.md"), "drift\n");
+	const drift = check();
+	assert.equal(drift.status, 1, drift.stderr);
+	assert.match(drift.stderr, /DRIFT: generated files do not match fragments/);
+});
+
 function webFiles(env: NodeJS.ProcessEnv, skill: boolean): { extension: string; reddit: string } {
 	const root = String(env.PI_CODING_AGENT_DIR);
 	const extension = join(root, "npm/node_modules/pi-web-access/dist/index.js");
