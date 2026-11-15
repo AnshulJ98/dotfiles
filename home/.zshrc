@@ -6,9 +6,6 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-# === Starship Prompt ===
-#eval "$(starship init zsh)"
-
 # === Basic Zsh Options ===
 HISTFILE=~/.zsh_history
 HISTSIZE=50000
