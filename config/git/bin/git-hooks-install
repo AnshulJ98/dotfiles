@@ -31,10 +31,16 @@ dry=0
 repos=()
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) dry=1 ;;
-    -h|--help) sed -n '2,3p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    -*) echo "git-hooks-install: unknown option $arg" >&2; exit 2 ;;
-    *) repos+=("$arg") ;;
+  --dry-run) dry=1 ;;
+  -h | --help)
+    sed -n '2,3p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  -*)
+    echo "git-hooks-install: unknown option $arg" >&2
+    exit 2
+    ;;
+  *) repos+=("$arg") ;;
   esac
 done
 if [ "${#repos[@]}" -eq 0 ]; then
@@ -78,8 +84,12 @@ for repo in "${repos[@]}"; do
         say "$repo" "inserted into $name"
         if [ "$dry" -eq 0 ]; then
           tmp="$(mktemp)"
-          { printf '%s\n' "$first"; printf '%s\n' "$mline"; tail -n +2 "$target"; } > "$tmp"
-          cat "$tmp" > "$target"   # in place: keeps the mode
+          {
+            printf '%s\n' "$first"
+            printf '%s\n' "$mline"
+            tail -n +2 "$target"
+          } >"$tmp"
+          cat "$tmp" >"$target" # in place: keeps the mode
           rm -f "$tmp"
         fi
       else

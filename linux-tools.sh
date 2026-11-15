@@ -5,8 +5,8 @@
 set -euo pipefail
 
 warn() { printf "⚠ %s\n" "$*" >&2; }
-ok()   { printf "✓ %s\n" "$*"; }
-log()  { printf "→ %s\n" "$*"; }
+ok() { printf "✓ %s\n" "$*"; }
+log() { printf "→ %s\n" "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 BIN="$HOME/.local/bin"
@@ -69,7 +69,7 @@ ok "zmx $("$BIN/zmx" version | head -1)"
 FZF_VERSION=0.75.0
 if ! "$BIN/fzf" --version 2>/dev/null | grep -q "^$FZF_VERSION "; then
   log "fzf $FZF_VERSION..."
-  case $(uname -m) in aarch64|arm64) fzf_arch=arm64 ;; *) fzf_arch=amd64 ;; esac
+  case $(uname -m) in aarch64 | arm64) fzf_arch=arm64 ;; *) fzf_arch=amd64 ;; esac
   curl -fsSL "https://github.com/junegunn/fzf/releases/download/v$FZF_VERSION/fzf-$FZF_VERSION-linux_$fzf_arch.tar.gz" | tar -xz -C "$BIN" fzf
 fi
 ok "fzf $("$BIN/fzf" --version)"
@@ -87,7 +87,8 @@ if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   log "nvm..."
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | PROFILE=/dev/null bash
 fi
-set +u; . "$NVM_DIR/nvm.sh"
+set +u
+. "$NVM_DIR/nvm.sh"
 # Follow the current LTS, carrying npm globals across a major bump.
 lts=$(nvm version-remote --lts 2>/dev/null || true)
 if [ -n "$lts" ] && [ "$(nvm version default)" != "$lts" ]; then
@@ -103,23 +104,38 @@ set -u
 ok "node $(node --version) (nvm)"
 
 NPM_PKGS=(tree-sitter-cli hunkdiff @ast-grep/cli markdownlint-cli2 @steipete/summarize
-  pptxgenjs docx react-icons react react-dom sharp)  # second line: office skills
+  pptxgenjs docx react-icons react react-dom sharp) # second line: office skills
 log "npm: ${NPM_PKGS[*]}"
 npm install -g --silent "${NPM_PKGS[@]}"
 ok "npm globals"
 # Link hunk's prebuilt binary: the npm shim needs node, which a non-interactive ssh (kitty's zrun) lacks.
-case "$(uname -m)" in aarch64|arm64) HUNK_ARCH=arm64 ;; *) HUNK_ARCH=x64 ;; esac
+case "$(uname -m)" in aarch64 | arm64) HUNK_ARCH=arm64 ;; *) HUNK_ARCH=x64 ;; esac
 for h in "$(npm root -g)"/hunkdiff/node_modules/hunkdiff-linux-$HUNK_ARCH/bin/hunk "$(npm root -g)"/hunkdiff-linux-$HUNK_ARCH/bin/hunk; do
-  [ -x "$h" ] && { ln -sf "$h" "$BIN/hunk"; break; }
+  [ -x "$h" ] && {
+    ln -sf "$h" "$BIN/hunk"
+    break
+  }
 done
 
-[ -d "$HOME/.pyenv" ] || { log "pyenv..."; curl -fsSL https://pyenv.run | bash >/dev/null; }
+[ -d "$HOME/.pyenv" ] || {
+  log "pyenv..."
+  curl -fsSL https://pyenv.run | bash >/dev/null
+}
 ln -sf "$HOME/.pyenv/bin/pyenv" "$BIN/pyenv"
-have harlequin || { log "harlequin..."; pipx install harlequin; }
+have harlequin || {
+  log "harlequin..."
+  pipx install harlequin
+}
 
-have bun || { log "bun..."; curl -fsSL https://bun.sh/install | bash >/dev/null; }
+have bun || {
+  log "bun..."
+  curl -fsSL https://bun.sh/install | bash >/dev/null
+}
 [ -x "$HOME/.bun/bin/bun" ] && ln -sf "$HOME/.bun/bin/bun" "$BIN/bun"
-have d2 || { log "d2..."; curl -fsSL https://d2lang.com/install.sh | sh -s -- --prefix="$HOME/.local"; }
+have d2 || {
+  log "d2..."
+  curl -fsSL https://d2lang.com/install.sh | sh -s -- --prefix="$HOME/.local"
+}
 if ! have duckdb; then
   log "duckdb..."
   curl -fsSL https://install.duckdb.org | sh

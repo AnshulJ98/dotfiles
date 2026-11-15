@@ -19,13 +19,16 @@ FIXTURE="$WORK/fixture.svg"
 OUT="$WORK/out.png"
 ERR="$WORK/stderr.txt"
 
-fail() { printf "✗ %s\n" "$*" >&2; exit 1; }
+fail() {
+  printf "✗ %s\n" "$*" >&2
+  exit 1
+}
 warn() { printf "⚠ %s\n" "$*" >&2; }
-ok()   { printf "✓ %s\n" "$*"; }
+ok() { printf "✓ %s\n" "$*"; }
 
 # An @font-face family no font server can resolve: exactly what makes the
 # internal MSVG renderer fail, and what d2 emits in every export.
-cat > "$FIXTURE" <<'EOF'
+cat >"$FIXTURE" <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
   <style type="text/css"><![CDATA[ .t { font-family: "nonexistent-embedded-font"; } ]]></style>
@@ -40,13 +43,13 @@ command -v rsvg-convert >/dev/null 2>&1 || fail "rsvg-convert not on PATH (brew 
 # 1. Delegate correctness, independent of the ambient environment. Mirrors the
 #    two stages kitten icat runs: identify, then rasterise.
 if ! MAGICK_CONFIGURE_PATH="$DIR" magick identify -format '%m %wx%h' -- "$FIXTURE" >/dev/null 2>"$ERR"; then
-  fail "svg:decode delegate failed: $(tr '\n' ' ' < "$ERR")
+  fail "svg:decode delegate failed: $(tr '\n' ' ' <"$ERR")
       Read the argument-coupling note in $DIR/delegates.xml."
 fi
-[ -s "$ERR" ] && fail "svg:decode delegate emitted diagnostics: $(tr '\n' ' ' < "$ERR")"
+[ -s "$ERR" ] && fail "svg:decode delegate emitted diagnostics: $(tr '\n' ' ' <"$ERR")"
 
 if ! MAGICK_CONFIGURE_PATH="$DIR" magick -background none -- "$FIXTURE" -auto-orient "$OUT" 2>"$ERR"; then
-  fail "svg rasterisation failed: $(tr '\n' ' ' < "$ERR")"
+  fail "svg rasterisation failed: $(tr '\n' ' ' <"$ERR")"
 fi
 [ -s "$OUT" ] || fail "svg rasterisation produced an empty file"
 ok "svg:decode delegate renders SVG through rsvg-convert"

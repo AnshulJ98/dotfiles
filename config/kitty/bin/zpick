@@ -8,42 +8,52 @@
 # typed name when nothing matches, or with ctrl-n), fails on esc. bin/../../zmx/zmx-pick loops on it.
 set -u
 export PATH=/opt/homebrew/bin:$PATH:$HOME/.local/bin
-self=$(realpath "$0"); here=$(dirname "$self")
+self=$(realpath "$0")
+here=$(dirname "$self")
 DIR=${ZWS_DIR:-$HOME/.local/state/kitty/workspaces}
 
 # The view (all | detached) lives in a file so fzf's reload and label commands can read it.
 export ZPICK_VIEW=${ZPICK_VIEW:-}
 # zmx mode has the same two, over zmx sessions: zmx | zmx-detached.
 view() {
-  local v; v=$(cat "$ZPICK_VIEW" 2>/dev/null) || v=all
+  local v
+  v=$(cat "$ZPICK_VIEW" 2>/dev/null) || v=all
   if [ "${ZPICK_MODE:-}" = zmx ]; then [ "$v" = detached ] && echo zmx-detached || echo zmx; else echo "$v"; fi
 }
-toggle() { local next=all; case $(view) in all|zmx) next=detached ;; esac; echo "$next" > "$ZPICK_VIEW"; }
+toggle() {
+  local next=all
+  case $(view) in all | zmx) next=detached ;; esac
+  echo "$next" >"$ZPICK_VIEW"
+}
 label() {
   case $(view) in all) echo ' Go to ' ;; zmx) echo ' zmx ' ;; zmx-detached) echo ' zmx · detached ' ;;
-    *) echo ' Go to · detached and closed ' ;; esac
+  *) echo ' Go to · detached and closed ' ;; esac
 }
 ghost() {
   case $(view) in all) echo 'search workspaces, tabs and panes' ;; zmx) echo 'search, or type a new name' ;;
-    zmx-detached) echo 'search detached, or type a new name' ;; *) echo 'search detached sessions' ;; esac
+  zmx-detached) echo 'search detached, or type a new name' ;; *) echo 'search detached sessions' ;; esac
 }
 footer() {
-  if [ -s "$ZPICK_VIEW.ask" ]; then echo "attached: $(tr '\n' ' ' < "$ZPICK_VIEW.ask")· ^x again kills"
-  elif [ "${ZPICK_MODE:-}" = zmx ]; then echo 'enter attach · ^n new · ^t view · ^x kill · ^\ back · esc'
+  if [ -s "$ZPICK_VIEW.ask" ]; then
+    echo "attached: $(tr '\n' ' ' <"$ZPICK_VIEW.ask")· ^x again kills"
+  elif [ "${ZPICK_MODE:-}" = zmx ]; then
+    echo 'enter attach · ^n new · ^t view · ^x kill · ^\ back · esc'
   else echo 'enter go · ^s split · ^t view · tab mark · ^x kill · esc'; fi
 }
 # fzf runs this for the list. It also notes the row of the pane the picker came from.
 list() {
-  local rows; rows=$("$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}")
+  local rows
+  rows=$("$here/zpick-rows" "$(view)" "${ZPICK_FROM:-}")
   # the pane the picker came from; in zmx mode the first session, below its header
   awk -F'\t' -v w="${ZPICK_FROM:-}" -v zmx="$([ "${ZPICK_MODE:-}" = zmx ] && echo 1)" \
-    '($1 == "pane" && $2 == w) || (zmx && $1 == "det") { print NR; exit }' <<<"$rows" > "$ZPICK_VIEW.pos"
+    '($1 == "pane" && $2 == w) || (zmx && $1 == "det") { print NR; exit }' <<<"$rows" >"$ZPICK_VIEW.pos"
   echo "$rows"
 }
 # fzf only knows its width once it is up, so the first load (of nothing) asks for the list and
 # the second puts the cursor on the pane the picker came from.
 onload() {
-  if [ -e "$ZPICK_VIEW.pos" ]; then echo "pos($(grep . "$ZPICK_VIEW.pos" || echo 1))+unbind(load)"
+  if [ -e "$ZPICK_VIEW.pos" ]; then
+    echo "pos($(grep . "$ZPICK_VIEW.pos" || echo 1))+unbind(load)"
   else echo "reload($self --list)"; fi
 }
 
@@ -61,7 +71,8 @@ on_machine() {
 # codes, so cursor-forward gaps become spaces and other controls are dropped. Full-screen apps
 # (alternate screen) keep their top rows with blank runs squeezed, shells their last non-blank rows.
 preview() { # name lines
-  local raw vt; raw=$(on_machine timeout 3 zmx history "$1" --vt 2>/dev/null)
+  local raw vt
+  raw=$(on_machine timeout 3 zmx history "$1" --vt 2>/dev/null)
   vt=$(LC_ALL=C perl -pe 's/\e\[(\d*)C/" " x ($1||1)/ge; s/\e\[[0-9;?]*[A-Za-ln-z]|\e[()][0-9A-Za-z]|\e\][^\a\e]*(\a|\e\\)|\r//g' <<<"$raw")
   if [[ $raw == *$'\e[?1049h'* ]]; then
     # squeeze blank runs so a mostly-empty app (pi) still shows its bottom rows
@@ -72,38 +83,70 @@ preview() { # name lines
 }
 preview_row() { # kind target holder lines
   case $1 in
-    closed) grep -o 'cd .*\|holder=[^ ]*' "$2" | sed 's/^holder=/  /' | head -n "$4" ;;
-    hdr) ;;
-    *) if [ -n "$3" ]; then preview "$3" "$4"
-       elif [ "$1" = pane ]; then kitten @ get-text --match "id:$2" --ansi | tail -n "$4"; fi ;;
+  closed) grep -o 'cd .*\|holder=[^ ]*' "$2" | sed 's/^holder=/  /' | head -n "$4" ;;
+  hdr) ;;
+  *) if [ -n "$3" ]; then
+    preview "$3" "$4"
+  elif [ "$1" = pane ]; then kitten @ get-text --match "id:$2" --ansi | tail -n "$4"; fi ;;
   esac
 }
 kill_rows() { # file of selected rows: kills the zmx session behind panes and detached sessions,
   # and forgets closed workspaces (their sessions stay, as detached). A session some terminal is
   # attached to is only named in .ask the first time, for the footer, and killed the second.
-  local asked; asked=$(cat "$ZPICK_VIEW.ask" 2>/dev/null); : > "$ZPICK_VIEW.ask"
-  while IFS=$'\037' read -r kind target holder _ clients _; do  # tabs would swallow empty fields
+  local asked
+  asked=$(cat "$ZPICK_VIEW.ask" 2>/dev/null)
+  : >"$ZPICK_VIEW.ask"
+  while IFS=$'\037' read -r kind target holder _ clients _; do # tabs would swallow empty fields
     case $kind in
-      pane|det)
-        [ -n "$holder" ] || continue
-        [ "$kind" = pane ] && [ "$target" = "${ZPICK_FROM:-}" ] && continue
-        if [ "$clients" != 0 ] && ! grep -qxF "$holder" <<<"$asked"; then echo "$holder" >> "$ZPICK_VIEW.ask"
-        else on_machine zmx kill "$holder" >/dev/null 2>&1; fi ;;
-      closed) case $target in "$DIR"/*.kitty-session) rm -f "$target" ;; esac ;;
+    pane | det)
+      [ -n "$holder" ] || continue
+      [ "$kind" = pane ] && [ "$target" = "${ZPICK_FROM:-}" ] && continue
+      if [ "$clients" != 0 ] && ! grep -qxF "$holder" <<<"$asked"; then
+        echo "$holder" >>"$ZPICK_VIEW.ask"
+      else on_machine zmx kill "$holder" >/dev/null 2>&1; fi
+      ;;
+    closed) case $target in "$DIR"/*.kitty-session) rm -f "$target" ;; esac ;;
     esac
-  done < <(tr '\t' '\037' < "$1")
+  done < <(tr '\t' '\037' <"$1")
 }
 
 case ${1:-} in
-  --list) list; exit ;;
-  --onload) onload; exit ;;
-  --footer) footer; exit ;;
-  --toggle) toggle; exit ;;
-  --label) label; exit ;;
-  --ghost) ghost; exit ;;
-  --preview) preview_row "$2" "$3" "$4" "$5"; exit ;;
-  --kill) kill_rows "$2"; exit ;;
-  --zmx) export ZPICK_MODE=zmx; shift ;;
+--list)
+  list
+  exit
+  ;;
+--onload)
+  onload
+  exit
+  ;;
+--footer)
+  footer
+  exit
+  ;;
+--toggle)
+  toggle
+  exit
+  ;;
+--label)
+  label
+  exit
+  ;;
+--ghost)
+  ghost
+  exit
+  ;;
+--preview)
+  preview_row "$2" "$3" "$4" "$5"
+  exit
+  ;;
+--kill)
+  kill_rows "$2"
+  exit
+  ;;
+--zmx)
+  export ZPICK_MODE=zmx
+  shift
+  ;;
 esac
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/zpick.XXXXXXXX") || exit 1
 export ZPICK_VIEW=$scratch/view
@@ -148,11 +191,11 @@ attach() { # name cwd where: reattach a detached session as a tab, or a split ne
 }
 open_row() { # kind target holder cwd key
   case $1 in
-    ws) [ -n "$2" ] && kitten @ action goto_session "$DIR/$2.kitty-session" ;;
-    tab) kitten @ focus-tab --match "id:$2" ;;
-    pane) kitten @ focus-window --match "id:$2" ;;
-    det) attach "$2" "$4" "$([ "$5" = ctrl-s ] && echo split || echo tab)" ;;
-    closed) kitten @ action goto_session "$2" ;;
+  ws) [ -n "$2" ] && kitten @ action goto_session "$DIR/$2.kitty-session" ;;
+  tab) kitten @ focus-tab --match "id:$2" ;;
+  pane) kitten @ focus-window --match "id:$2" ;;
+  det) attach "$2" "$4" "$([ "$5" = ctrl-s ] && echo split || echo tab)" ;;
+  closed) kitten @ action goto_session "$2" ;;
   esac >/dev/null 2>&1
 }
 
@@ -160,7 +203,7 @@ THEME_ACCENT=4 THEME_SEL=8 # the active theme's accent and selection, where the 
 [ -r "$HOME/.config/themes/current/colors.sh" ] && . "$HOME/.config/themes/current/colors.sh"
 A=$THEME_ACCENT
 keys=(--bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)"
-      --bind 'zero:change-ghost(nothing here · ctrl-t switches view)')
+  --bind 'zero:change-ghost(nothing here · ctrl-t switches view)')
 if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect ctrl-s); fi
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
@@ -180,7 +223,11 @@ out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
 rc=$?
 if [ "${ZPICK_MODE:-}" = zmx ]; then
   [ $rc = 0 ] || [ $rc = 1 ] || exit 1 # 1: no match, the typed name stands
-  { IFS= read -r query; IFS= read -r key; IFS=$'\t' read -r kind target _; } <<<"$out"
+  {
+    IFS= read -r query
+    IFS= read -r key
+    IFS=$'\t' read -r kind target _
+  } <<<"$out"
   [ "$key" != ctrl-n ] && [ "${kind:-}" = det ] && query=$target
   [ -z "$query" ] || printf '%s\n' "$query"
   exit 0

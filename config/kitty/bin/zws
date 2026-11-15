@@ -18,15 +18,20 @@ go() { kitten @ action goto_session "$DIR/$1.kitty-session"; }
 unique() { # cwd [home]
   local open= base name n=2
   [ ! -f "$DIR/.open" ] || open=$(<"$DIR/.open")
-  base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-'); [ "$1" = "${2:-$HOME}" ] && base=home
+  base=$(basename "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-')
+  [ "$1" = "${2:-$HOME}" ] && base=home
   name=$base
-  while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do name=$base-$n; n=$((n + 1)); done
+  while grep -qx "$name" <<<"$open" || [ -e "$DIR/$name.kitty-session" ]; do
+    name=$base-$n
+    n=$((n + 1))
+  done
   echo "$name"
 }
 
 create() { # name cwd [shown-name] [window] [host] [remote-dir]
   local published
-  published=$(/usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" "${6:-}" <<'PY'
+  published=$(
+    /usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" "${6:-}" <<'PY'
 import os, re, shlex, sys, tempfile, unicodedata
 directory, base, cwd, shown, window, host, remote = sys.argv[1:]
 if (base in (".", "..") or not re.fullmatch(r"[a-zA-Z0-9._-]+", base)
@@ -58,15 +63,16 @@ PY
 
 # Run a prompt in an overlay over the active pane. In the script $0 is this file.
 overlay() { # cwd script args...
-  local cwd=$1 script=$2; shift 2
+  local cwd=$1 script=$2
+  shift 2
   kitten @ launch --type=overlay --cwd "$cwd" bash -c "export PATH=/opt/homebrew/bin:\$PATH; $script" "$self" ${1+"$@"} >/dev/null
 }
 # wt's error would vanish with the overlay, so keep it up until a key.
 PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
-  forward-port)
-    overlay "$HOME" '
+forward-port)
+  overlay "$HOME" '
       read -e -p "Forward port: " n && [ -n "$n" ] || exit 0
       if [[ ! $n =~ ^[0-9]{1,5}$ ]] || (( 10#$n < 1 || 10#$n > 65535 )); then
         echo "Port must be a number from 1 to 65535"
@@ -74,32 +80,42 @@ case ${1:-} in
         exit 0
       fi
       echo; read -n1 -rsp "Forward failed; press a key"
-    ' ;;
-  new)
-    shift; mode= host=${ZWS_HOST:-}
-    while :; do
-      case ${1:-} in
-        --ask|--window) mode=$1; shift ;;
-        *) break ;;
-      esac
-    done
-    # A host workspace's folder is remote (the panes' remote home if absent); kitty starts it in ~.
-    # The box's home is unknown here without ssh; a user folder at the top of /home is taken as it.
-    if [ -n "$host" ]; then
-      remote=${1:-} cwd=$HOME home=$HOME
-      case $remote in /home/*/*) ;; /root|/home/?*) home=$remote ;; esac
-      name=$(unique "${remote:-$HOME}" "$home")
-    else remote= cwd=${1:-$HOME}; name=$(unique "$cwd"); fi
-    case $mode in
-      --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n" "$3" "$4"' "$name" "$cwd" ${host:+"$host" "$remote"} ;;
-      --window) create "$name" "$cwd" '' window "$host" "$remote" ;;
-      *) create "$name" "$cwd" '' '' "$host" "$remote" ;;
-    esac ;;
-  create) create "$2" "$3" "${4:-}" '' "${5:-}" "${6:-}" ;;
-  here) # a workspace on $PWD locally, or on the folder reported by host wt
-    if [ -n "${ZWS_HOST:-}" ]; then
-      remote=${2:-$PWD}
-      found=$(/usr/bin/python3 - "$DIR" "$remote" <<'PY'
+    '
+  ;;
+new)
+  shift
+  mode= host=${ZWS_HOST:-}
+  while :; do
+    case ${1:-} in
+    --ask | --window)
+      mode=$1
+      shift
+      ;;
+    *) break ;;
+    esac
+  done
+  # A host workspace's folder is remote (the panes' remote home if absent); kitty starts it in ~.
+  # The box's home is unknown here without ssh; a user folder at the top of /home is taken as it.
+  if [ -n "$host" ]; then
+    remote=${1:-} cwd=$HOME home=$HOME
+    case $remote in /home/*/*) ;; /root | /home/?*) home=$remote ;; esac
+    name=$(unique "${remote:-$HOME}" "$home")
+  else
+    remote= cwd=${1:-$HOME}
+    name=$(unique "$cwd")
+  fi
+  case $mode in
+  --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n" "$3" "$4"' "$name" "$cwd" ${host:+"$host" "$remote"} ;;
+  --window) create "$name" "$cwd" '' window "$host" "$remote" ;;
+  *) create "$name" "$cwd" '' '' "$host" "$remote" ;;
+  esac
+  ;;
+create) create "$2" "$3" "${4:-}" '' "${5:-}" "${6:-}" ;;
+here) # a workspace on $PWD locally, or on the folder reported by host wt
+  if [ -n "${ZWS_HOST:-}" ]; then
+    remote=${2:-$PWD}
+    found=$(
+      /usr/bin/python3 - "$DIR" "$remote" <<'PY'
 import glob, os, shlex, sys, unicodedata
 directory, remote = sys.argv[1:]
 if not remote.startswith("/") or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
@@ -120,35 +136,45 @@ for path in sorted(glob.glob(os.path.join(directory, "*.kitty-session"))):
     except (OSError, ValueError):
         continue
 PY
-      ) || exit
-      if [ -n "$found" ]; then kitten @ action goto_session "$found"
-      else create "$(unique "$remote")" "$HOME" '' '' "$ZWS_HOST" "$remote"; fi
+    ) || exit
+    if [ -n "$found" ]; then
+      kitten @ action goto_session "$found"
+    else create "$(unique "$remote")" "$HOME" '' '' "$ZWS_HOST" "$remote"; fi
+    exit
+  fi
+  for f in "$DIR"/*.kitty-session; do
+    [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && {
+      kitten @ action goto_session "$f"
       exit
-    fi
-    for f in "$DIR"/*.kitty-session; do
-      [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && { kitten @ action goto_session "$f"; exit; }
-    done
-    create "$(unique "$PWD")" "$PWD" ;;
-  rename) # empty answer: back to the folder's name
-    overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2" ;;
-  close) kitten @ action close_session "$2" ;;
-  worktree) # wt makes or picks the worktree and reports it to this instance
-    if [ -n "${ZWS_HOST:-}" ]; then
-      case $2 in
-        new) script='read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; "$1" "$2" wt switch -c "$b"' ;;
-        open) script='"$1" "$2" wt switch' ;;
-        *) exit 2 ;;
-      esac
-      # Only standard host tools: the box may still have an older dotfiles checkout.
-      report='printf "\033]1337;SetUserVar=zworktree=%s\007" "$(printf "%s" "$PWD" | base64 | tr -d "\n")"'
-      # zrun already pauses on a missing program or an unreachable host.
-      pause='|| { case $? in 97|255) ;; *) echo; read -n1 -rsp "wt failed; press a key";; esac; }'
-      overlay "$HOME" "$script"' --no-cd -x sh -- -c "$3" '"$pause" "$(dirname "$self")/zrun" "$3" "$report"
-      exit
-    fi
+    }
+  done
+  create "$(unique "$PWD")" "$PWD"
+  ;;
+rename) # empty answer: back to the folder's name
+  overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2"
+  ;;
+close) kitten @ action close_session "$2" ;;
+worktree) # wt makes or picks the worktree and reports it to this instance
+  if [ -n "${ZWS_HOST:-}" ]; then
     case $2 in
-      new) overlay "$3" 'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; wt switch -c "$b" --no-cd -x "$0" -- here '"$PAUSE" ;;
-      open) overlay "$3" 'wt switch --no-cd -x "$0" -- here '"$PAUSE" ;;
-    esac ;;
-  *) sed -n '2,8p' "$0" >&2; exit 2 ;;
+    new) script='read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; "$1" "$2" wt switch -c "$b"' ;;
+    open) script='"$1" "$2" wt switch' ;;
+    *) exit 2 ;;
+    esac
+    # Only standard host tools: the box may still have an older dotfiles checkout.
+    report='printf "\033]1337;SetUserVar=zworktree=%s\007" "$(printf "%s" "$PWD" | base64 | tr -d "\n")"'
+    # zrun already pauses on a missing program or an unreachable host.
+    pause='|| { case $? in 97|255) ;; *) echo; read -n1 -rsp "wt failed; press a key";; esac; }'
+    overlay "$HOME" "$script"' --no-cd -x sh -- -c "$3" '"$pause" "$(dirname "$self")/zrun" "$3" "$report"
+    exit
+  fi
+  case $2 in
+  new) overlay "$3" 'read -e -p "Branch for the new worktree: " b && [ -n "$b" ] || exit 0; wt switch -c "$b" --no-cd -x "$0" -- here '"$PAUSE" ;;
+  open) overlay "$3" 'wt switch --no-cd -x "$0" -- here '"$PAUSE" ;;
+  esac
+  ;;
+*)
+  sed -n '2,8p' "$0" >&2
+  exit 2
+  ;;
 esac

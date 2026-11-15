@@ -46,18 +46,18 @@ refuse() {
 }
 
 case "$hook" in
-  pre-push)
-    refuse "on any branch"
-    ;;
-  pre-commit|pre-merge-commit)
-    current=$(git symbolic-ref -q --short HEAD) || current=
-    [ -n "$current" ] || exit 0
-    default=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || default=
-    default=${default#origin/}
-    if [ -z "$default" ]; then
-      if git show-ref --verify --quiet refs/heads/master; then default=master; else default=main; fi
-    fi
-    [ "$current" = "$default" ] && refuse "on the default branch $default"
-    ;;
+pre-push)
+  refuse "on any branch"
+  ;;
+pre-commit | pre-merge-commit)
+  current=$(git symbolic-ref -q --short HEAD) || current=
+  [ -n "$current" ] || exit 0
+  default=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || default=
+  default=${default#origin/}
+  if [ -z "$default" ]; then
+    if git show-ref --verify --quiet refs/heads/master; then default=master; else default=main; fi
+  fi
+  [ "$current" = "$default" ] && refuse "on the default branch $default"
+  ;;
 esac
 exit 0

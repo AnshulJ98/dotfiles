@@ -42,7 +42,7 @@ EOF
 
 LOCKFILES=(pnpm-lock.yaml package-lock.json yarn.lock bun.lock bun.lockb)
 SYNC_SPECS=(':(glob)**/.env' ':(glob)**/.env.*' ':(glob)**/.envrc' ':(glob)**/.npmrc'
-            ':(glob)**/*.pem' ':(glob)**/*.crt' ':(glob)**/*.key' ':(exclude,glob)**/node_modules/**')
+  ':(glob)**/*.pem' ':(glob)**/*.crt' ':(glob)**/*.key' ':(exclude,glob)**/node_modules/**')
 
 # Succeeds in a linked worktree: git-dir differs from git-common-dir.
 is_linked() {
@@ -57,17 +57,24 @@ find_main() {
   MAIN="" MAIN_BARE=0
   local line seen=0
   while IFS= read -r line; do
-    if [ -z "$line" ]; then [ "$seen" -eq 1 ] && break; continue; fi
+    if [ -z "$line" ]; then
+      [ "$seen" -eq 1 ] && break
+      continue
+    fi
     case "$line" in
-      "worktree "*) [ "$seen" -eq 0 ] && { MAIN="${line#worktree }"; seen=1; } ;;
-      bare) MAIN_BARE=1 ;;
+    "worktree "*) [ "$seen" -eq 0 ] && {
+      MAIN="${line#worktree }"
+      seen=1
+    } ;;
+    bare) MAIN_BARE=1 ;;
     esac
   done < <(git worktree list --porcelain 2>/dev/null)
   [ -n "$MAIN" ]
 }
 
 try_install() { # dir, command words...
-  local dir="$1"; shift
+  local dir="$1"
+  shift
   if ! (cd "$dir" && "$@"); then
     say "$* failed; run it by hand in $dir"
   fi
@@ -93,10 +100,10 @@ setup() {
     git -C "$top" ls-files --error-unmatch -- "$lf" >/dev/null 2>&1 || continue
     ! cmp -s "$top/$lf" "$MAIN/$lf" || continue
     case "$lf" in
-      pnpm-lock.yaml)    try_install "$top" pnpm install --frozen-lockfile --prefer-offline ;;
-      package-lock.json) try_install "$top" npm ci --prefer-offline ;;
-      yarn.lock)         say "lockfile differs from main; run: yarn install --frozen-lockfile" ;;
-      bun.lock|bun.lockb) say "lockfile differs from main; run: bun install --frozen-lockfile" ;;
+    pnpm-lock.yaml) try_install "$top" pnpm install --frozen-lockfile --prefer-offline ;;
+    package-lock.json) try_install "$top" npm ci --prefer-offline ;;
+    yarn.lock) say "lockfile differs from main; run: yarn install --frozen-lockfile" ;;
+    bun.lock | bun.lockb) say "lockfile differs from main; run: bun install --frozen-lockfile" ;;
     esac
   done
   return 0
@@ -124,7 +131,10 @@ post_merge() {
 sync_env() {
   local -a files wts
   local line path="" bare=0 prunable=0 first=1 f target kind src
-  find_main || { say "no worktrees found"; return 0; }
+  find_main || {
+    say "no worktrees found"
+    return 0
+  }
   if [ "$MAIN_BARE" -eq 1 ]; then
     say "main is a bare repository; nothing to sync from"
     return 0
@@ -142,18 +152,22 @@ sync_env() {
   while IFS= read -r line; do
     if [ -n "$line" ]; then
       case "$line" in
-        "worktree "*) path="${line#worktree }" ;;
-        bare) bare=1 ;;
-        prunable*) prunable=1 ;;
+      "worktree "*) path="${line#worktree }" ;;
+      bare) bare=1 ;;
+      prunable*) prunable=1 ;;
       esac
       continue
     fi
     if [ -n "$path" ]; then
-      if [ "$first" -eq 1 ]; then first=0
+      if [ "$first" -eq 1 ]; then
+        first=0
       elif [ "$bare" -eq 0 ] && [ "$prunable" -eq 0 ] && [ -d "$path" ]; then wts+=("$path"); fi
     fi
     path="" bare=0 prunable=0
-  done < <(git worktree list --porcelain 2>/dev/null; echo)
+  done < <(
+    git worktree list --porcelain 2>/dev/null
+    echo
+  )
 
   for target in "${wts[@]+"${wts[@]}"}"; do
     for f in "${files[@]}"; do
@@ -168,40 +182,40 @@ sync_env() {
       fi
       # A file the worktree's branch tracks is the branch's business, not an env file.
       git -C "$target" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 && continue
-      mkdir -p "$(dirname "$target/$f")" && cp -p "$src" "$target/$f" \
-        && printf '%s: %s %s\n' "$target" "$kind" "$f"
+      mkdir -p "$(dirname "$target/$f")" && cp -p "$src" "$target/$f" &&
+        printf '%s: %s %s\n' "$target" "$kind" "$f"
     done
   done
   return 0
 }
 
 case "${1:-}" in
-  "")
-    [ "$#" -eq 0 ] || usage
-    setup
+"")
+  [ "$#" -eq 0 ] || usage
+  setup
+  ;;
+sync)
+  [ "$#" -eq 1 ] || usage
+  sync_env
+  ;;
+hook)
+  case "${2:-}" in
+  post-checkout)
+    [ "$#" -eq 5 ] || usage
+    case "$3" in "" | *[!0]*) exit 0 ;; esac
+    is_linked || exit 0
+    setup_once
     ;;
-  sync)
-    [ "$#" -eq 1 ] || usage
-    sync_env
+  post-start)
+    [ "$#" -eq 2 ] || usage
+    setup_once
     ;;
-  hook)
-    case "${2:-}" in
-      post-checkout)
-        [ "$#" -eq 5 ] || usage
-        case "$3" in ""|*[!0]*) exit 0 ;; esac
-        is_linked || exit 0
-        setup_once
-        ;;
-      post-start)
-        [ "$#" -eq 2 ] || usage
-        setup_once
-        ;;
-      post-merge)
-        post_merge
-        ;;
-      *) usage ;;
-    esac
+  post-merge)
+    post_merge
     ;;
   *) usage ;;
+  esac
+  ;;
+*) usage ;;
 esac
 exit 0

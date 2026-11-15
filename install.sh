@@ -26,25 +26,25 @@ if [ ! -d "$DOT" ]; then
   exit 1
 fi
 
-log()  { printf "→ %s\n" "$*"; }
+log() { printf "→ %s\n" "$*"; }
 warn() { printf "⚠ %s\n" "$*" >&2; }
-ok()   { printf "✓ %s\n" "$*"; }
+ok() { printf "✓ %s\n" "$*"; }
 
 # 1. Homebrew + Brewfile (Linux: linux-tools.sh) ------------------------------
 if [ "$OS" = Linux ]; then
   bash "$DOT/linux-tools.sh"
 else
-if ! command -v brew >/dev/null 2>&1; then
-  log "Installing Homebrew..."
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
+  if ! command -v brew >/dev/null 2>&1; then
+    log "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  fi
 
-if [ -f "$DOT/Brewfile" ]; then
-  log "Installing from Brewfile..."
-  brew bundle --file="$DOT/Brewfile"
-  ok "Brewfile applied"
-fi
+  if [ -f "$DOT/Brewfile" ]; then
+    log "Installing from Brewfile..."
+    brew bundle --file="$DOT/Brewfile"
+    ok "Brewfile applied"
+  fi
 fi
 
 # 1.5 Office skills (agents/skills/{pptx,docx,xlsx,pdf}) --------------------
@@ -53,8 +53,8 @@ if command -v uv >/dev/null 2>&1; then
   uv tool list 2>/dev/null | grep -q '^markitdown ' || uv tool install -q 'markitdown[all]'
 fi
 python3 -m pip install --user --break-system-packages -q \
-  python-pptx python-docx openpyxl pypdf pdfplumber reportlab defusedxml lxml Pillow pandas \
-  && ok "office skill python libs" || warn "office skill python libs failed"
+  python-pptx python-docx openpyxl pypdf pdfplumber reportlab defusedxml lxml Pillow pandas &&
+  ok "office skill python libs" || warn "office skill python libs failed"
 
 # 2. Symlink helper ----------------------------------------------------------
 link() {
@@ -91,19 +91,19 @@ clone_plugin() {
     git clone --depth=1 "$repo" "$dir"
   fi
 }
-clone_plugin https://github.com/romkatv/powerlevel10k.git            powerlevel10k
+clone_plugin https://github.com/romkatv/powerlevel10k.git powerlevel10k
 clone_plugin https://github.com/zdharma-continuum/fast-syntax-highlighting.git fast-syntax-highlighting
-clone_plugin https://github.com/zsh-users/zsh-autosuggestions.git    zsh-autosuggestions
+clone_plugin https://github.com/zsh-users/zsh-autosuggestions.git zsh-autosuggestions
 
 # 4. ~/.config/* -------------------------------------------------------------
 mkdir -p "$HOME/.config"
-link "$DOT/config/nvim"            "$HOME/.config/nvim"
-link "$DOT/config/kitty"           "$HOME/.config/kitty"
+link "$DOT/config/nvim" "$HOME/.config/nvim"
+link "$DOT/config/kitty" "$HOME/.config/kitty"
 [ "$OS" = Darwin ] && link "$DOT/config/aerospace" "$HOME/.config/aerospace"
-link "$DOT/config/ccstatusline"    "$HOME/.config/ccstatusline"
+link "$DOT/config/ccstatusline" "$HOME/.config/ccstatusline"
 [ "$OS" = Darwin ] && link "$DOT/config/borders" "$HOME/.config/borders"
-link "$DOT/config/yazi"            "$HOME/.config/yazi"
-link "$DOT/config/fontconfig"      "$HOME/.config/fontconfig"
+link "$DOT/config/yazi" "$HOME/.config/yazi"
+link "$DOT/config/fontconfig" "$HOME/.config/fontconfig"
 # WSL: Office downloads Aptos per Windows user, outside /mnt/c/Windows/Fonts.
 for cf in /mnt/c/Users/*/AppData/Local/Microsoft/FontCache/4/CloudFonts; do
   [ -d "$cf" ] || continue
@@ -111,28 +111,28 @@ for cf in /mnt/c/Users/*/AppData/Local/Microsoft/FontCache/4/CloudFonts; do
   break
 done
 # Hunk reuses the yazi syntax theme and the lazygit palette.
-link "$DOT/config/hunk"            "$HOME/.config/hunk"
+link "$DOT/config/hunk" "$HOME/.config/hunk"
 # One directory per theme. `theme <name>` repoints config/themes/current, and kitty, git,
 # lazygit, yazi, hunk, Marta, borders and the kitty pickers read their colours through it.
-link "$DOT/config/themes"          "$HOME/.config/themes"
+link "$DOT/config/themes" "$HOME/.config/themes"
 # Initialise before tools resolve their theme files, without reloading running apps.
 [ -e "$DOT/config/themes/current" ] || ln -sfn midnightvoid "$DOT/config/themes/current"
-link "$DOT/config/themes/theme"    "$HOME/.local/bin/theme"
+link "$DOT/config/themes/theme" "$HOME/.local/bin/theme"
 # zmx session switcher for any terminal: ssh -t host '~/.local/bin/zmx-pick' (iPad, WSL).
-link "$DOT/config/zmx/zmx-pick"    "$HOME/.local/bin/zmx-pick"
-link "$DOT/config/btop/btop.conf"   "$HOME/.config/btop/btop.conf"
+link "$DOT/config/zmx/zmx-pick" "$HOME/.local/bin/zmx-pick"
+link "$DOT/config/btop/btop.conf" "$HOME/.config/btop/btop.conf"
 mkdir -p "$HOME/.config/btop/themes"
 ln -sfn "$HOME/.config/themes/current/btop.theme" "$HOME/.config/btop/themes/current.theme"
-link "$DOT/config/imagemagick"     "$HOME/.config/ImageMagick"
+link "$DOT/config/imagemagick" "$HOME/.config/ImageMagick"
 # Git hooks guarding auto runs: home/.gitconfig's init.templateDir points at the template,
 # husky repos source the init.sh. Existing repos need: git-hooks-install <repo>...
-link "$DOT/config/git/template"    "$HOME/.config/git/template"
-link "$DOT/config/husky/init.sh"   "$HOME/.config/husky/init.sh"
-link "$DOT/config/git/bin/auto-guard"       "$HOME/.local/bin/auto-guard"
+link "$DOT/config/git/template" "$HOME/.config/git/template"
+link "$DOT/config/husky/init.sh" "$HOME/.config/husky/init.sh"
+link "$DOT/config/git/bin/auto-guard" "$HOME/.local/bin/auto-guard"
 link "$DOT/config/git/bin/git-hooks-install" "$HOME/.local/bin/git-hooks-install"
 # worktrunk config; worktree-setup is its post-start hook and the post-checkout stub's target.
-link "$DOT/config/worktrunk/config.toml"     "$HOME/.config/worktrunk/config.toml"
-link "$DOT/config/git/bin/worktree-setup"    "$HOME/.local/bin/worktree-setup"
+link "$DOT/config/worktrunk/config.toml" "$HOME/.config/worktrunk/config.toml"
+link "$DOT/config/git/bin/worktree-setup" "$HOME/.local/bin/worktree-setup"
 # lazygit ignores ~/.config on macOS unless XDG_CONFIG_HOME is set, and its
 # folder also holds state.yml, so link the file.
 if [ "$OS" = Darwin ]; then
@@ -161,43 +161,42 @@ if command -v bat >/dev/null 2>&1; then
   bat cache --build >/dev/null || warn "bat cache build failed — run: bat cache --build"
 fi
 if [ "$OS" = Darwin ]; then
-# Marta's folder also holds plugin state, so link its files, not the folder.
-# conf.marco can't hold comments (Marco rejects // and /* */ and falls back to
-# defaults). Its F11 runs a kitty gadget because environment.terminal only
-# accepts Terminal or iTerm.
-MARTA="$HOME/Library/Application Support/org.yanex.marta"
-link "$DOT/config/marta/conf.marco"      "$MARTA/conf.marco"
-link "$DOT/config/marta/favorites.marco" "$MARTA/favorites.marco"
-for theme in "$DOT"/config/marta/Themes/*; do
-  link "$theme" "$MARTA/Themes/$(basename "$theme")"
-done
-link "/Applications/Marta.app/Contents/Resources/launcher" "$HOME/.local/bin/marta"
-# Vicinae rewrites settings.json from its GUI, so only base.json and themes are
-# symlinked; settings.json is seeded once to import base.json.
-link "$DOT/config/vicinae/base.json" "$HOME/.config/vicinae/base.json"
-for t in "$DOT"/config/themes/*/vicinae.toml; do
-  n=$(basename "$(dirname "$t")")
-  [ "$n" = current ] || link "$t" "$HOME/.local/share/vicinae/themes/$n.toml"
-done
-VICINAE_SETTINGS="$HOME/.config/vicinae/settings.json"
-if [ ! -f "$VICINAE_SETTINGS" ]; then
-  printf '{\n  "imports": ["base.json"]\n}\n' > "$VICINAE_SETTINGS"
-  ok "seeded: $VICINAE_SETTINGS"
-elif ! grep -q '"base.json"' "$VICINAE_SETTINGS"; then
-  warn "$VICINAE_SETTINGS does not import base.json — add \"imports\": [\"base.json\"]"
-fi
-bash "$DOT/config/vicinae/install-raycast-extensions.sh" || warn "Vicinae Raycast extensions partially installed: re-run config/vicinae/install-raycast-extensions.sh"
+  # Marta's folder also holds plugin state, so link its files, not the folder.
+  # conf.marco can't hold comments (Marco rejects // and /* */ and falls back to
+  # defaults). Its F11 runs a kitty gadget because environment.terminal only
+  # accepts Terminal or iTerm.
+  MARTA="$HOME/Library/Application Support/org.yanex.marta"
+  link "$DOT/config/marta/conf.marco" "$MARTA/conf.marco"
+  link "$DOT/config/marta/favorites.marco" "$MARTA/favorites.marco"
+  for theme in "$DOT"/config/marta/Themes/*; do
+    link "$theme" "$MARTA/Themes/$(basename "$theme")"
+  done
+  link "/Applications/Marta.app/Contents/Resources/launcher" "$HOME/.local/bin/marta"
+  # Vicinae rewrites settings.json from its GUI, so only base.json and themes are
+  # symlinked; settings.json is seeded once to import base.json.
+  link "$DOT/config/vicinae/base.json" "$HOME/.config/vicinae/base.json"
+  for t in "$DOT"/config/themes/*/vicinae.toml; do
+    n=$(basename "$(dirname "$t")")
+    [ "$n" = current ] || link "$t" "$HOME/.local/share/vicinae/themes/$n.toml"
+  done
+  VICINAE_SETTINGS="$HOME/.config/vicinae/settings.json"
+  if [ ! -f "$VICINAE_SETTINGS" ]; then
+    printf '{\n  "imports": ["base.json"]\n}\n' >"$VICINAE_SETTINGS"
+    ok "seeded: $VICINAE_SETTINGS"
+  elif ! grep -q '"base.json"' "$VICINAE_SETTINGS"; then
+    warn "$VICINAE_SETTINGS does not import base.json — add \"imports\": [\"base.json\"]"
+  fi
+  bash "$DOT/config/vicinae/install-raycast-extensions.sh" || warn "Vicinae Raycast extensions partially installed: re-run config/vicinae/install-raycast-extensions.sh"
 fi
 bash "$DOT/config/imagemagick/check.sh" || warn "ImageMagick cannot decode SVG — see config/imagemagick/delegates.xml"
 
-
 # 5. ~/.claude/* -------------------------------------------------------------
 mkdir -p "$HOME/.claude"
-link "$DOT/config/pi/CLAUDE.md"        "$HOME/.claude/CLAUDE.md"   # GENERATED — edit agents-md/ fragments
-link "$DOT/claude/settings.json"       "$HOME/.claude/settings.json"
+link "$DOT/config/pi/CLAUDE.md" "$HOME/.claude/CLAUDE.md" # GENERATED — edit agents-md/ fragments
+link "$DOT/claude/settings.json" "$HOME/.claude/settings.json"
 [ -f "$DOT/claude/settings.local.json" ] && link "$DOT/claude/settings.local.json" "$HOME/.claude/settings.local.json"
-link "$DOT/claude/agents"              "$HOME/.claude/agents"
-link "$DOT/claude/skills"              "$HOME/.claude/skills"
+link "$DOT/claude/agents" "$HOME/.claude/agents"
+link "$DOT/claude/skills" "$HOME/.claude/skills"
 
 # 6. ~/.agents/* -------------------------------------------------------------
 mkdir -p "$HOME/.agents"
@@ -227,15 +226,15 @@ else
   link "$DOT/config/pi/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 fi
 link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
-link "$DOT/config/pi/web-search.json" "$HOME/.pi/agent/web-search.json"   # pi-web-access: deferred tools, result cap
-mkdir -p "$HOME/.pi/agent/pi-blackhole"   # pi-blackhole keeps its state beside the config
+link "$DOT/config/pi/web-search.json" "$HOME/.pi/agent/web-search.json" # pi-web-access: deferred tools, result cap
+mkdir -p "$HOME/.pi/agent/pi-blackhole"                                 # pi-blackhole keeps its state beside the config
 link "$DOT/config/pi/pi-blackhole-config.json" "$HOME/.pi/agent/pi-blackhole/pi-blackhole-config.json"
-link "$DOT/config/pi/bin"           "$HOME/.pi/agent/bin"   # scout wrapper, referenced by AGENTS.md
-link "$DOT/config/pi/themes"      "$HOME/.pi/agent/themes"
+link "$DOT/config/pi/bin" "$HOME/.pi/agent/bin" # scout wrapper, referenced by AGENTS.md
+link "$DOT/config/pi/themes" "$HOME/.pi/agent/themes"
 # Ensure pi has its active file even on a re-run with an existing current link.
 active=$(basename "$(readlink "$DOT/config/themes/current")")
 link "$DOT/config/themes/$active/pi.json" "$HOME/.pi/agent/themes/current.json"
-mkdir -p "$HOME/.pi/agent/skills-local"   # settings.json names it; pi does not create it
+mkdir -p "$HOME/.pi/agent/skills-local" # settings.json names it; pi does not create it
 
 # 7. VSCode (macOS-specific paths) -------------------------------------------
 # Insiders' files are the source; stable VS Code shares them.
