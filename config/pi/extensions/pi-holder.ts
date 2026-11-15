@@ -1,4 +1,6 @@
-// Tell kitty about the pi in this pane through user vars (OSC 1337 SetUserVar):
+// Tell kitty about the pi in this pane through user vars (OSC 1337 SetUserVar). zmx and ssh pass
+// them on, so a pi inside a zmx session reports too: it may be showing in a kitty pane on another
+// machine (kitty/bin/zshell's host panes), where KITTY_WINDOW_ID is not set.
 //  - pi_session: kitty's save_as_session writes it as --var, and kitty/bin/zshell resumes that
 //    session when the pane's zmx session is gone (after a reboot).
 //  - pi_model, pi_ctx: the model and context use shown in the sidebar (kitty/bin/zside).
@@ -27,7 +29,7 @@ const notify = (ctx: ExtensionContext, sound: "info" | "question", title: string
 };
 
 export default function (pi: ExtensionAPI): void {
-  if (!process.env.KITTY_WINDOW_ID) return;
+  if (!process.env.KITTY_WINDOW_ID && !process.env.ZMX_SESSION) return;
   pi.on("session_start", async (_event, ctx) => {
     const file = ctx.sessionManager.getSessionFile();
     if (file) setVar("pi_session", file);
