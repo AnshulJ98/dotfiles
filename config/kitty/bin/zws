@@ -2,7 +2,7 @@
 # Workspaces are kitty sessions shown one at a time in the tab bar (tab_bar_filter). Each has a
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
 #   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
-#                                  name, --window opens it in an OS window of its own)
+#     name, --window opens it in an OS window of its own; --host H before CWD runs its panes on ssh host H, CWD there)
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -24,17 +24,19 @@ unique() { # cwd
   echo "$name"
 }
 
-create() { # name cwd [shown-name] [window]
+create() { # name cwd [shown-name] [window] [host] [remote-dir]
   local published
-  published=$(/usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" <<'PY'
+  published=$(/usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" "${6:-}" <<'PY'
 import os, re, shlex, sys, tempfile, unicodedata
-directory, base, cwd, shown, window = sys.argv[1:]
+directory, base, cwd, shown, window, host, remote = sys.argv[1:]
 if (base in (".", "..") or not re.fullmatch(r"[a-zA-Z0-9._-]+", base)
+        or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._@-]*", host))
         or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
-               for value in (base, cwd, shown) for c in value)):
-    sys.exit("zws: invalid workspace name or control character")
+               for value in (base, cwd, shown, remote) for c in value)):
+    sys.exit("zws: invalid workspace name, host or control character")
 body = ("new_os_window\n" if window else "") + "cd " + cwd + "\n"
-body += "launch" + (" --var " + shlex.quote("ws_name=" + shown) if shown else "") + "\n"
+body += "launch" + "".join(" --var " + shlex.quote(var + "=" + value) for var, value in
+                           (("ws_name", shown), ("host", host), ("host_dir", remote)) if value) + "\n"
 fd, temporary = tempfile.mkstemp(prefix=".create-", dir=directory)
 try:
     with os.fdopen(fd, "w") as stream:
@@ -64,15 +66,23 @@ PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
   new)
-    shift; mode=
-    case ${1:-} in --ask|--window) mode=$1; shift ;; esac
-    cwd=${1:-$HOME}; name=$(unique "$cwd")
+    shift; mode= host=
+    while :; do
+      case ${1:-} in
+        --ask|--window) mode=$1; shift ;;
+        --host) [ -n "${2:-}" ] || { echo "zws: --host needs a name" >&2; exit 2; }; host=$2; shift 2 ;;
+        *) break ;;
+      esac
+    done
+    # A host workspace's folder is remote (the panes' remote home if absent); kitty starts it in ~.
+    if [ -n "$host" ]; then remote=${1:-} cwd=$HOME; name=$(unique "${1:-$HOME}")
+    else remote= cwd=${1:-$HOME}; name=$(unique "$cwd"); fi
     case $mode in
-      --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n"' "$name" "$cwd" ;;
-      --window) create "$name" "$cwd" '' window ;;
-      *) create "$name" "$cwd" ;;
+      --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n" "$3" "$4"' "$name" "$cwd" ${host:+"$host" "$remote"} ;;
+      --window) create "$name" "$cwd" '' window "$host" "$remote" ;;
+      *) create "$name" "$cwd" '' '' "$host" "$remote" ;;
     esac ;;
-  create) create "$2" "$3" "${4:-}" ;;
+  create) create "$2" "$3" "${4:-}" '' "${5:-}" "${6:-}" ;;
   here) # a workspace on $PWD (wt runs this in the worktree): the one already there, or a new one
     for f in "$DIR"/*.kitty-session; do
       [ -e "$f" ] && grep -qxF "cd $PWD" "$f" && { kitten @ action goto_session "$f"; exit; }

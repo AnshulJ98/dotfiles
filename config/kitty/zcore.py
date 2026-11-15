@@ -21,9 +21,11 @@ def holder(cwd: str, home: str, unique: str) -> str:
     return base + '-' + unique
 
 
-def answer(name: str, pi_session: str) -> bytes:
-    return (': zq ' + urllib.parse.quote(name, safe='') + ' ' +
-            (urllib.parse.quote(pi_session, safe='') if pi_session else '-') + '\n').encode()
+def answer(name: str, pi_session: str, host: str = '', directory: str = '') -> bytes:
+    """A pane without a host gets the 4-field answer older zshells read."""
+    fields = [pi_session] + ([host, directory] if host else [])
+    return (': zq ' + urllib.parse.quote(name, safe='') +
+            ''.join(' ' + (urllib.parse.quote(f, safe='') if f else '-') for f in fields) + '\n').encode()
 
 
 def worst(states: list[str]) -> str:
