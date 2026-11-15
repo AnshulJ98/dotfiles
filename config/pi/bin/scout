@@ -29,7 +29,9 @@
 #                  the whole parent context; opt in only when the child must
 #                  see the conversation verbatim. Never the default.
 #   --ctx          Keep AGENTS.md/CLAUDE.md discovery in the child (default
-#                  off; the brief is the intended channel).
+#                  off; the brief is the intended channel). Without --ctx,
+#                  scouts and workers get standards.prompt.md (code standards
+#                  only); --ctx and --review get them through AGENTS.md.
 #   --rw           Worker mode: edit/write allowed, worker.prompt.md replaces
 #                  the scout prompt, and extensions/worker-sensors.ts loads
 #                  with PI_WORKER_SPEC set to the brief. Requires --brief
@@ -414,6 +416,13 @@ for ext in stream-watchdog bedrock-reasoning background bash-changes; do
   [ -f "$DIR/../extensions/$ext.ts" ] && EXT+=(-e "$DIR/../extensions/$ext.ts")
 done
 SYSTEM_PROMPT="$(cat "$PROMPT")"
+if [ "${CTX[0]:-}" = -nc ]; then
+  [ -r "$DIR/standards.prompt.md" ] || {
+    echo "scout: standards.prompt.md missing; run config/pi/build-agents.sh" >&2
+    exit 2
+  }
+  SYSTEM_PROMPT+=$'\n\n'"$(cat "$DIR/standards.prompt.md")"
+fi
 if [ "$WEB" = 1 ]; then
   EXT+=(-e "$WEB_EXT")
   TOOLS="$TOOLS,web_search,fetch_content,get_search_content"

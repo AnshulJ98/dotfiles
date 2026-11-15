@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# build-agents.sh — assemble AGENTS.md (home) and AGENTS.work.md (work) from
-# fragments in agents-md/. Outputs are committed; edit fragments, never outputs.
+# build-agents.sh — assemble AGENTS.md (home), AGENTS.work.md (work),
+# CLAUDE.md and bin/standards.prompt.md from fragments in agents-md/.
+# Outputs are committed; edit fragments, never outputs.
 #
 # Usage:
-#   ./build-agents.sh          regenerate both files
+#   ./build-agents.sh          regenerate all four files
 #   ./build-agents.sh --check  exit 1 if committed outputs drift from fragments
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -30,22 +31,27 @@ build() {
 PI_HOME=(persona-core.md persona-pi.md standards.md ops.md ladder.md)
 PI_WORK=(persona-core.md persona-pi.md standards.md ops.md env.work.md ladder.md)
 CLAUDE=(persona-core.md claude-delta.md standards.md ops.md ladder.md)
+# Children (scouts and workers) get the code standards only.
+CHILD=(standards.md ladder.md)
 
 emit() {
   build "$1/AGENTS.md"      "${PI_HOME[@]}"
   build "$1/AGENTS.work.md" "${PI_WORK[@]}"
   build "$1/CLAUDE.md"      "${CLAUDE[@]}"
+  build "$1/bin/standards.prompt.md" "${CHILD[@]}"
 }
 
 case "${1:-}" in
 --check)
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
+  mkdir -p "$tmp/bin"
   emit "$tmp"
   if diff -q "$tmp/AGENTS.md" AGENTS.md >/dev/null \
     && diff -q "$tmp/AGENTS.work.md" AGENTS.work.md >/dev/null \
-    && diff -q "$tmp/CLAUDE.md" CLAUDE.md >/dev/null; then
-    echo "OK: AGENTS/CLAUDE files match fragments"
+    && diff -q "$tmp/CLAUDE.md" CLAUDE.md >/dev/null \
+    && diff -q "$tmp/bin/standards.prompt.md" bin/standards.prompt.md >/dev/null; then
+    echo "OK: AGENTS/CLAUDE/standards files match fragments"
   else
     echo "DRIFT: generated files do not match fragments — run build-agents.sh" >&2
     exit 1
@@ -53,7 +59,7 @@ case "${1:-}" in
   ;;
 "")
   emit .
-  echo "Wrote AGENTS.md ($(wc -l <AGENTS.md | tr -d ' ') lines), AGENTS.work.md ($(wc -l <AGENTS.work.md | tr -d ' ') lines), CLAUDE.md ($(wc -l <CLAUDE.md | tr -d ' ') lines)"
+  echo "Wrote AGENTS.md ($(wc -l <AGENTS.md | tr -d ' ') lines), AGENTS.work.md ($(wc -l <AGENTS.work.md | tr -d ' ') lines), CLAUDE.md ($(wc -l <CLAUDE.md | tr -d ' ') lines), bin/standards.prompt.md ($(wc -l <bin/standards.prompt.md | tr -d ' ') lines)"
   ;;
 *)
   echo "usage: build-agents.sh [--check]" >&2

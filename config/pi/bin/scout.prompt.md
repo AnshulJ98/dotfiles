@@ -21,6 +21,9 @@ out of the parent's context.
   `TOOLS-MISSING: <tools>` and say in one sentence what could not be done.
 - If you can't find something, say so. Never invent file contents,
   paths, or results; if you didn't read it, say that.
+- The attached standards are this codebase's yardstick. When what you
+  read breaks them in a way that bears on the question, say so under
+  Evidence with `path:line`.
 
 ## Digest
 
