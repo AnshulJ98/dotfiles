@@ -58,6 +58,7 @@ if cmd == "kitten":
         assert pathlib.Path(args[-1]).read_text().endswith("\n")
 if cmd == "open" and mode == "no-app": sys.exit(1)
 if cmd in ("open", "kitty"):
+    (root / "started-env").write_text(json.dumps({k: os.environ.get(k) for k in ("ZWS_HOST", "ZWS_DIR")}))
     (root / "ready").write_text(str(time.time() + .3))
 if cmd == "aerospace" and mode.startswith("focus-fail"): sys.exit(1)
 if cmd == "pgrep": sys.exit(0 if mode == "starting" else 1)
@@ -86,7 +87,7 @@ class ScriptTests(unittest.TestCase):
         colors.parent.mkdir(parents=True)
         colors.write_text("THEME_ACCENT=\'#aabbcc\'\nTHEME_SEL=\'#123456\'\n")
         self.env = dict(os.environ, HOME=str(self.root), TMPDIR=str(self.root),
-                        ZWS_DIR=str(self.root / "workspaces"), FAKE_ROOT=str(self.root),
+                        ZWS_DIR=str(self.root / "workspaces"), ZWS_HOST="", FAKE_ROOT=str(self.root),
                         PATH=str(self.root) + ":" + os.environ["PATH"])
         for name in ("KITTY_WINDOW_ID", "KITTY_LISTEN_ON", "KITTY_PID", "ZMX_SESSION"):
             self.env.pop(name, None)
@@ -100,6 +101,7 @@ class ScriptTests(unittest.TestCase):
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
             source = source.replace("/bin/zsh", str(self.root / "plain-shell"))
+            source = source.replace('"/tmp/kitty-" + host', repr(str(self.root / "socket-")) + " + host")
             source = source.replace("/tmp/kitty-main", str(self.root / "socket"))
             if name == "zws":
                 for probe in ("zmx", "lsof"):
@@ -378,7 +380,7 @@ class ScriptTests(unittest.TestCase):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             attempted.append(path)
             raise OSError("cannot delete this report")
-        with patch.dict(os.environ, self.env), patch("subprocess.run") as run:
+        with patch.dict(os.environ, self.env), patch("sys.argv", ["kmain"]), patch("subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, stdout='[]')
             with patch("os.unlink", side_effect=unlink):
                 runpy.run_path(str(self.root / "kmain"))
@@ -405,6 +407,37 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual((self.root / ".local/state/kitty/workspaces/main.kitty-session").read_text(),
                          "cd ~\nlaunch\n")
 
+    def test_main_host_starts_with_instance_paths_and_environment_then_focuses(self):
+        for mode in ("", "no-app"):
+            with self.subTest(mode=mode):
+                (self.root / "calls").unlink(missing_ok=True)
+                (self.root / "ready").unlink(missing_ok=True)
+                result = self.run_script("kmain", "box", MODE=mode)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                directory = self.root / ".local/state/kitty/hosts/box"
+                args = ["--listen-on", "unix:" + str(self.root / "socket-box"),
+                        "--session", str(directory / "main.kitty-session")]
+                if sys.platform == "darwin":
+                    self.assertEqual(self.calls("open"), [["-n", "-a", "kitty", "--env", "ZWS_HOST=box",
+                                                          "--env", "ZWS_DIR=" + str(directory), "--args", *args]])
+                if sys.platform != "darwin" or mode == "no-app":
+                    self.assertEqual(self.calls("kitty"), [args])
+                    self.assertEqual(json.loads((self.root / "started-env").read_text()),
+                                     dict(ZWS_HOST="box", ZWS_DIR=str(directory)))
+                self.assertEqual((directory / "main.kitty-session").read_text(), "cd ~\nlaunch\n")
+                self.assertTrue((self.root / "socket-box.lock").exists())
+                self.assertEqual(self.run_script("kmain", "box").returncode, 0)
+                self.assertEqual(self.calls("aerospace"), [["focus", "--window-id", "42"]])
+                self.assertTrue(all(a[2] == "unix:" + str(self.root / "socket-box") for a in self.calls("kitten")))
+                self.assertEqual(self.calls("ssh"), [])
+
+    def test_main_rejects_invalid_hosts_without_calls(self):
+        for host in ("-oProxyCommand=x", "../box", "a b", "a@box", "", "box\n"):
+            result = self.run_script("kmain", host)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("host", result.stderr)
+        self.assertFalse((self.root / "calls").exists())
+
     def test_main_keeps_process_guard(self):
         result = self.run_script("kmain", MODE="starting")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -419,7 +452,8 @@ class ScriptTests(unittest.TestCase):
                     self.assertEqual(kwargs["timeout"], 1)
                     raise error
                 return subprocess.CompletedProcess(args, 1 if args[0] == "pgrep" else 0)
-            with patch.dict(os.environ, self.env), patch("subprocess.run", side_effect=boundary) as run:
+            with patch.dict(os.environ, self.env), patch("sys.argv", ["kmain"]), \
+                    patch("subprocess.run", side_effect=boundary) as run:
                 with patch("time.monotonic", side_effect=[0, 0, 11]), patch("time.sleep"):
                     runpy.run_path(str(self.root / "kmain"))
             self.assertEqual([c.args[0][0] for c in run.call_args_list],
@@ -454,19 +488,19 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(Path(destination).read_text(), "new_os_window\ncd /cwd space\nlaunch\n")
 
     def test_new_host_writes_host_vars_and_keeps_kitty_on_a_local_folder(self):
-        result = self.run_script("zws", "new", "--host", "box", "/home/a/proj")
+        result = self.run_script("zws", "new", "/home/a/proj", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
         path = Path(self.calls("kitten")[-1][-1])
         self.assertEqual(path.name, "proj.kitty-session")
         lines = path.read_text().splitlines()
         self.assertEqual(lines[0], "cd " + str(self.root))
         self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "host=box", "--var", "host_dir=/home/a/proj"])
-        result = self.run_script("zws", "new", "--window", "--host", "box")
+        result = self.run_script("zws", "new", "--window", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
         path = Path(self.calls("kitten")[-1][-1])
         self.assertEqual(path.name, "home.kitty-session")
         self.assertEqual(path.read_text(), "new_os_window\ncd " + str(self.root) + "\nlaunch --var host=box\n")
-        result = self.run_script("zws", "new", "--ask", "--host", "box", "/srv/app")
+        result = self.run_script("zws", "new", "--ask", "/srv/app", ZWS_HOST="box")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls("kitten")[-1][-4:], ["app", str(self.root), "box", "/srv/app"])
         result = self.run_script("zws", "create", "named", str(self.root), "Shown", "box", "/srv/app")
@@ -477,13 +511,20 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("ssh"), [])
 
-    def test_new_host_rejects_option_like_or_missing_host(self):
-        for args in (("--host", "-oProxyCommand=x"), ("--host", "a b"), ("--host",)):
-            with self.subTest(args=args):
-                result = self.run_script("zws", "new", *args)
+    def test_new_host_rejects_invalid_instance_host(self):
+        for host in ("-oProxyCommand=x", "a b", "a@box"):
+            with self.subTest(host=host):
+                result = self.run_script("zws", "new", ZWS_HOST=host)
                 self.assertNotEqual(result.returncode, 0)
         self.assertFalse(Path(self.env["ZWS_DIR"], "home.kitty-session").exists())
         self.assertFalse((self.root / "calls").exists())
+
+    def test_new_host_flag_is_only_an_unknown_folder_argument(self):
+        result = self.run_script("zws", "new", "--host", "box", "/x")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = Path(self.calls("kitten")[-1][-1]).read_text()
+        self.assertEqual(text, "cd --host\nlaunch\n")
+        self.assertNotIn("host=", text)
 
     def test_create_rejects_traversal_and_controls_without_navigation(self):
         for args in (("../escape", "/cwd"), ("..", "/cwd"), ("bad\nlaunch", "/cwd"),

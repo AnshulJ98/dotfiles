@@ -64,7 +64,7 @@ class IntentTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        env = patch.dict(os.environ, ZWS_DIR=self.directory.name)
+        env = patch.dict(os.environ, ZWS_DIR=self.directory.name, ZWS_HOST="")
         env.start()
         self.addCleanup(env.stop)
         self.boss = Boss()
@@ -138,9 +138,9 @@ class IntentTests(unittest.TestCase):
                     '--dock-skip-focus', '--keep-focus', '--add-to-session', 'alpha', '--var',
                     'role=sidebar', '--var', 'ws_name=Renamed', zkitty.SIDEBAR))])
 
+    @patch.dict(os.environ, ZWS_HOST="box")
     def test_tab_in_host_workspace_passes_no_remote_cwd(self):
         active = self.boss.active_window
-        active.user_vars['host'] = 'box'
         for words in (['tab', 'here'], ['tab']):
             with self.subTest(words=words):
                 self.boss.calls.clear()
@@ -148,6 +148,10 @@ class IntentTests(unittest.TestCase):
                 self.assertEqual(self.boss.calls[0],
                                  (active, ('launch', '--type=tab', '--add-to-session', 'alpha')))
                 self.assertNotIn('--cwd', self.boss.calls[0][1])
+
+    @patch.dict(os.environ, ZWS_HOST="box")
+    def test_new_in_host_instance_passes_remote_folder(self):
+        self.test_new_launches_once_with_live_cwd_and_whole_arguments()
 
     def test_tab_without_cwd_sidebar_off_and_outside_workspace(self):
         self.assertEqual(zkitty.run(self.boss, ['tab']), [('tab', 'alpha')])
@@ -207,6 +211,11 @@ class IntentTests(unittest.TestCase):
 
 
 class KittyTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, ZWS_HOST="")
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_sidebar_requires_role_and_launch_argv(self):
         for role, child, expected in [
             ('sidebar', NS(argv=['/any/where/zside']), True),
@@ -258,10 +267,11 @@ class KittyTests(unittest.TestCase):
                   screen=NS(last_reported_cwd=reported), cwd_of_child='/local',
                   write_to_child=lambda data: events.append(('write', data)))
 
+    @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_new_pane_in_host_workspace_gets_host_and_remote_folder(self):
         events = []
         window = self.host_pane(9, 'ws', {}, 50.0, events=events)
-        recent = self.host_pane(3, 'ws', {'host': 'box', 'holder': 'a'}, 40.0,
+        recent = self.host_pane(3, 'ws', {'holder': 'a'}, 40.0,
                                 b'kitty-shell-cwd://box/home/a/my proj')
         older = self.host_pane(4, 'ws', {'host': 'box', 'holder': 'b'}, 10.0, b'kitty-shell-cwd://box/old')
         sidebar = self.host_pane(5, 'ws', {'role': 'sidebar'}, 45.0)
@@ -276,11 +286,12 @@ class KittyTests(unittest.TestCase):
             (None, ('set-user-vars', '--match=id:9', 'holder=my-proj-0123456789ab')),
             (None, ('set-user-vars', '--match=id:9', 'host=box'))])
 
+    @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_split_in_host_tab_gets_host_and_remote_folder(self):
         # kitty gives a split (launch --location=vsplit) no created_in_session_name.
         events = []
         split = self.host_pane(9, '', {}, 50.0, events=events)
-        peer = self.host_pane(3, 'ws', {'host': 'box', 'holder': 'a'}, 40.0, b'kitty-shell-cwd://box/srv/app')
+        peer = self.host_pane(3, 'ws', {'holder': 'a'}, 40.0, b'kitty-shell-cwd://box/srv/app')
         elsewhere = self.host_pane(6, '', {'host': 'far'}, 49.0, b'kitty-shell-cwd://far/x')
         boss = NS(all_windows=[peer, split, elsewhere], all_tabs=[[peer, split], [elsewhere]],
                   call_remote_control=lambda w, args: events.append((w, args)))
@@ -289,22 +300,26 @@ class KittyTests(unittest.TestCase):
         self.assertEqual(events[0], ('write', b': zq app-U - box %2Fsrv%2Fapp\n'))
         self.assertEqual(events[-1], (None, ('set-user-vars', '--match=id:9', 'host=box')))
 
+    @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_first_and_restored_host_panes(self):
         events = []
-        first = self.host_pane(9, 'ws', {'host': 'box'}, 0.0, events=events)
+        first = self.host_pane(9, 'ws', {}, 0.0, events=events)
         boss = NS(all_windows=[first], call_remote_control=lambda w, args: events.append((w, args)))
         with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
             zkitty.attach(boss, first)
         self.assertEqual(events, [('write', b': zq home-U - box -\n'),
                                   (None, ('set-user-vars', '--match=id:9', 'zq')),
-                                  (None, ('set-user-vars', '--match=id:9', 'holder=home-U'))])
+                                  (None, ('set-user-vars', '--match=id:9', 'holder=home-U')),
+                                  (None, ('set-user-vars', '--match=id:9', 'host=box'))])
         events.clear()
         restored = self.host_pane(8, 'ws', {'host': 'box', 'holder': 'saved'}, 0.0, events=events)
         boss.all_windows = [first, restored]
-        zkitty.attach(boss, restored)
+        with patch.object(zkitty, 'cwd', side_effect=AssertionError('saved pane cwd read')):
+            zkitty.attach(boss, restored)
         self.assertEqual(events, [('write', b': zq saved - box -\n'),
                                   (None, ('set-user-vars', '--match=id:8', 'zq'))])
 
+    @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_first_host_pane_uses_its_remote_folder(self):
         events = []
         first = self.host_pane(9, 'ws', {'host': 'box', 'host_dir': '/srv/app'}, 0.0, events=events)
@@ -314,6 +329,28 @@ class KittyTests(unittest.TestCase):
         self.assertEqual(events, [('write', b': zq app-U - box %2Fsrv%2Fapp\n'),
                                   (None, ('set-user-vars', '--match=id:9', 'zq')),
                                   (None, ('set-user-vars', '--match=id:9', 'holder=app-U'))])
+
+    def test_host_user_var_without_instance_host_is_local(self):
+        events = []
+        window = self.host_pane(9, 'ws', {'host': 'box', 'holder': 'saved'}, 0, events=events)
+        peer = self.host_pane(3, 'ws', {'host': 'box'}, 10, b'kitty-shell-cwd://box/remote')
+        boss = NS(all_windows=[peer, window], all_tabs=[[peer, window]],
+                  call_remote_control=lambda w, args: events.append((w, args)))
+        zkitty.attach(boss, window)
+        self.assertEqual(events, [('write', b': zq saved -\n'),
+                                  (None, ('set-user-vars', '--match=id:9', 'zq'))])
+
+    @patch.dict(os.environ, ZWS_HOST="box")
+    def test_host_folder_falls_back_and_host_is_set_on_initial_pane(self):
+        events = []
+        first = self.host_pane(9, 'ws', {'host_dir': '/srv/app'}, 0, events=events)
+        peer = self.host_pane(3, 'ws', {}, 10)
+        peer.cwd_of_child = ''
+        boss = NS(all_windows=[peer, first], call_remote_control=lambda w, args: events.append((w, args)))
+        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+            zkitty.attach(boss, first)
+        self.assertEqual(events[0], ('write', b': zq app-U - box %2Fsrv%2Fapp\n'))
+        self.assertEqual(events[-1], (None, ('set-user-vars', '--match=id:9', 'host=box')))
 
     def test_snapshot_all_fields_and_lazy_cwd(self):
         w, dock = Pane(), Sidebar()
