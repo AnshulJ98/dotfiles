@@ -18,8 +18,9 @@
 #                  check: line: a worker gets a plan, not a title.
 #   --review BASE  The one review of a run: prompts/review.md over
 #                  BASE...HEAD, read-only, with review.prompt.md, AGENTS.md
-#                  (--ctx) and a root AUTO.md as the brief. Needs a clean
-#                  tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
+#                  (--ctx) and a root AUTO.md as the brief, plus dispatched
+#                  slice specs on auto/<effort> (target and mechanism: yardstick).
+#                  Needs a clean tree. On rc 0 it writes <git-common-dir>/pi-review/<HEAD
 #                  sha>; config/git/bin/auto-guard refuses to merge an auto/*
 #                  branch whose tip has no such record. Thinking high, 900s.
 #                  A second and third review of the same base read only the
@@ -29,7 +30,9 @@
 #                  the whole parent context; opt in only when the child must
 #                  see the conversation verbatim. Never the default.
 #   --ctx          Keep AGENTS.md/CLAUDE.md discovery in the child (default
-#                  off; the brief is the intended channel).
+#                  off; the brief is the intended channel). Without --ctx,
+#                  scouts and workers get standards.prompt.md (code standards
+#                  only); --ctx and --review get them through AGENTS.md.
 #   --rw           Worker mode: edit/write allowed, worker.prompt.md replaces
 #                  the scout prompt, and extensions/worker-sensors.ts loads
 #                  with PI_WORKER_SPEC set to the brief. Requires --brief
@@ -39,9 +42,10 @@
 #                  so scout reads it from PI_WORKER_REPORT instead).
 #   --web          Read scouts only: web research tools via pi-web-access,
 #                  plus the Reddit skill when installed. Not with --rw/--spec/--review.
-#   --model        Default MODEL below (WORKER_MODEL with --rw). On the work
-#                  laptop, edit them by hand. Hardcoded on purpose: a
-#                  per-machine switch is config for one line.
+#   --model        Default MODEL below; --rw uses openai-codex/gpt-6.1-sol.
+#                  Fallbacks: openai-codex/gpt-6.1-terra for scouts,
+#                  anthropic/claude-sonnet-5-5 for workers. On the work laptop,
+#                  edit ids by hand. Hardcoded on purpose: no per-machine switch.
 #   --thinking     low|medium|high|xhigh. Default low; high with --rw.
 #                  max is refused: it drifts out of scope.
 #   --timeout      Default 300; 900 with --rw. Exit 124 on expiry; with --rw
@@ -116,8 +120,11 @@ event() {
   [ -n "${REVIEW_BASE:-}" ] && role=review
   { mkdir -p "$dir" && printf '%s %s %s %s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$role" "$$" "$1" "$2" >>"$dir/events.log"; } 2>/dev/null || true
 }
-MODEL="anthropic/claude-sonnet-5-5"        # work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
-WORKER_MODEL="anthropic/claude-sonnet-5-5" # --rw; tested too: github-copilot/kimi-k3
+# work: amazon-bedrock/us.openai.gpt-5.6-luna (the bare openai.* id fails)
+MODEL="anthropic/claude-sonnet-5-5"            # read scouts
+MODEL_FALLBACK="openai-codex/gpt-6.1-terra"    # when Anthropic quota is out
+WORKER_MODEL="openai-codex/gpt-6.1-sol"        # --rw, thinking high
+WORKER_MODEL_FALLBACK="anthropic/claude-sonnet-5-5" # when Codex quota is out
 MODEL_SET=0
 THINKING=""
 TIMEOUT=""
@@ -267,10 +274,21 @@ if [ -n "$REVIEW_BASE" ]; then
   }
   REVIEW_TARGET="\`git diff $REVIEW_BASE...HEAD\` and \`git log --first-parent $REVIEW_BASE..HEAD\`, every slice of the run at once"
   REVIEW_TOP="$(git rev-parse --show-toplevel)"
+  REVIEW_SLICE_SPECS=0
   if [ -z "${BRIEF_FILE:-}" ] && [ -f "$REVIEW_TOP/AUTO.md" ]; then
     BRIEF_FILE="$REVIEW_TOP/AUTO.md"
     BRIEF=("@$BRIEF_FILE")
     REVIEW_TARGET="$REVIEW_TARGET, against the spec in the attached AUTO.md"
+    # bin/auto-slice owns pi-auto/<effort> and writes the dispatched .spec files.
+    REVIEW_BRANCH="$(git branch --show-current)"
+    case "$REVIEW_BRANCH" in auto/*)
+      for spec in "$(git rev-parse --path-format=absolute --git-common-dir)/pi-auto/${REVIEW_BRANCH#auto/}"/*.spec; do
+        [ -f "$spec" ] || continue
+        BRIEF+=("@$spec")
+        REVIEW_SLICE_SPECS=1
+      done
+      ;;
+    esac
   fi
   if [ "$REVIEW_ROUND" -gt 1 ]; then
     REVIEW_TARGET="\`git diff $REVIEW_PREV..HEAD\`, the fixes made since round $((REVIEW_ROUND - 1)) of the review of \`$REVIEW_BASE..HEAD\`${BRIEF_FILE:+ (its spec is in the attached AUTO.md)}. This is round $REVIEW_ROUND of 3: judge whether this diff resolves the last round's findings and what it breaks; anything outside this diff is out of scope unless the diff caused it"
@@ -278,6 +296,9 @@ if [ -n "$REVIEW_BASE" ]; then
       BRIEF+=("@$REVIEW_DIR/$REVIEW_PREV.findings")
       REVIEW_TARGET="$REVIEW_TARGET. The last round's findings are attached"
     fi
+  fi
+  if [ "$REVIEW_SLICE_SPECS" = 1 ]; then
+    REVIEW_TARGET="$REVIEW_TARGET. Each slice's spec is also attached; its target and \`mechanism:\` line are the yardstick for that slice"
   fi
   REVIEW_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$REVIEW_MD")"
   # Split on the literal $@ instead of ${body/..}: bash 5.2 expands & in a replacement
@@ -375,12 +396,12 @@ if [ "$RW" = 1 ]; then
     echo "scout: $BRIEF_FILE: $SPEC_ERROR" >&2
     exit 2
   }
-  # A spec is a plan, not a title: /plan numbers its steps and gives each a check.
+  # A spec needs numbered steps or acceptance checks, each with a check: line.
   SPEC_BODY="$(awk 'n >= 2; /^---[[:space:]]*$/ { n++ }' "$BRIEF_FILE")"
   if ! grep -Eq '^[[:space:]]*[0-9]+[.)][[:space:]]' <<<"$SPEC_BODY" || ! grep -q 'check:' <<<"$SPEC_BODY"; then
     [ -n "${SPEC_TMP:-}" ] && BRIEF_FILE="spec on stdin"
     event scout.refused "no plan in the spec"
-    echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps, each with a check: line (run /plan on the slice first)" >&2
+    echo "scout: $BRIEF_FILE: no plan in the spec; it needs numbered steps or acceptance checks, each with a check: line" >&2
     exit 2
   fi
   if [ -n "${SPEC_TMP:-}" ]; then
@@ -414,6 +435,13 @@ for ext in stream-watchdog bedrock-reasoning background bash-changes; do
   [ -f "$DIR/../extensions/$ext.ts" ] && EXT+=(-e "$DIR/../extensions/$ext.ts")
 done
 SYSTEM_PROMPT="$(cat "$PROMPT")"
+if [ "${CTX[0]:-}" = -nc ]; then
+  [ -r "$DIR/standards.prompt.md" ] || {
+    echo "scout: standards.prompt.md missing; run config/pi/build-agents.sh" >&2
+    exit 2
+  }
+  SYSTEM_PROMPT+=$'\n\n'"$(cat "$DIR/standards.prompt.md")"
+fi
 if [ "$WEB" = 1 ]; then
   EXT+=(-e "$WEB_EXT")
   TOOLS="$TOOLS,web_search,fetch_content,get_search_content"
@@ -498,7 +526,7 @@ watch_stall() {
 # The verdict, digest and stderr summary for every exit except SIGKILL. With
 # --rw, verdict.json is written here when the sensors did not get to it.
 conclude() {
-  local rc=$1 reason=""
+  local rc=$1 reason="" ended_error=0 fallback="$MODEL_FALLBACK"
   [ -n "${MONITOR:-}" ] && kill "$MONITOR" 2>/dev/null
   [ -s "$ERR" ] && grep -v '^WORKER-SENSORS:' "$ERR" >&2
   if [ -s "$STALLED" ]; then
@@ -520,9 +548,20 @@ conclude() {
     VERDICT="$(node -e '
       const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
       console.log(`WORKER-SENSORS: ${r.verdict}${r.reasons.length ? " " + r.reasons.join("; ") : ""}`);' "$PI_WORKER_REPORT")"
+    fallback="$WORKER_MODEL_FALLBACK"
+    if node -e '
+      const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+      process.exit(r.verdict === "CANNOT-RUN" && r.reasons.includes("run ended: error") ? 0 : 1);
+    ' "$PI_WORKER_REPORT"; then ended_error=1; fi
     # The sensors' own verdict line can land in the digest too (a non -p pi, or
     # the model quoting it); the one from the report is the only one kept.
     { echo "$VERDICT"; echo; grep -v '^WORKER-SENSORS:' "$OUT" || true; } >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+  elif [ "$rc" -ne 0 ]; then
+    ended_error=1
+  fi
+  if [ "$ended_error" = 1 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 143 ] &&
+    [ ! -s "$STALLED" ] && [ "$MODEL" != "$fallback" ]; then
+    echo "scout: the run ended on an error; if ${MODEL%%/*} quota is out, rerun with --model $fallback" >&2
   fi
   if [ -f "$OUT" ]; then cat "$OUT"; fi
   # Where the run's files are, what it cost, and whether a worker left something under Blocked on me: a PASS

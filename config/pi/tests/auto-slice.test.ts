@@ -165,6 +165,7 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 	assert.equal(made.status, 0, made.stderr);
 	const tree = `${l.repo}.slice-parse`;
 	assert.match(made.stdout, new RegExp(`^slice: ${tree}\n`));
+	assert.match(made.stdout, /Write slice\/parse's spec against that worktree as it is now, to a file outside the repo, then:/);
 	assert.deepEqual(autoMd(l).match(/^session: .*$/gm), ["session: s2"], "the session that last ran a command owns the run");
 
 	const stale = l.spec("parse");
@@ -172,18 +173,24 @@ test("a slice from new to merge: the list order, the session stamp, one rework, 
 	const old = l.slice(["dispatch", "parse", stale]);
 	assert.equal(old.status, 1);
 	assert.match(old.stderr, /is older than slice\/parse's worktree/);
+	assert.match(old.stderr, /A slice's spec is written against the code as it is after the last merge: read it there, then write the spec/);
 	assert.equal(l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "refuse" }).status, 75);
 	assert.equal(existsSync(join(l.state, "parse.runs")), false, "a refusal before the worker started is not a dispatch");
 
-	const failed = l.slice(["dispatch", "parse", l.spec("parse"), "--timeout", "540"], { FAKE_SCOUT: "fail" });
+	const dispatched = l.spec("parse");
+	const failed = l.slice(["dispatch", "parse", dispatched, "--timeout", "540"], { FAKE_SCOUT: "fail" });
+	assert.equal(readFileSync(join(l.state, "parse.spec"), "utf8"), readFileSync(dispatched, "utf8"));
 	assert.equal(failed.status, 1);
 	assert.match(failed.stderr, /did not pass \(FAIL, rc 0\)\. One rework/);
 	assert.match(failed.stdout, /^WORKER-SENSORS: FAIL/m, "the digest passes through");
 	assert.equal(calls(l).at(-1), `${tree} --rw --timeout 540 --spec -`);
 	assert.equal(l.slice(["merge", "parse", "feat: parse"]).status, 1, "nothing passed yet");
 
-	const passed = l.slice(["dispatch", "parse", l.spec("parse")], { FAKE_SCOUT: "pass" });
+	const rework = l.spec("parse");
+	writeFileSync(rework, readFileSync(rework, "utf8") + "\nRework: fix the sensors' FAIL tests: exit 1.\n");
+	const passed = l.slice(["dispatch", "parse", rework], { FAKE_SCOUT: "pass" });
 	assert.equal(passed.status, 0, passed.stderr);
+	assert.equal(readFileSync(join(l.state, "parse.spec"), "utf8"), readFileSync(rework, "utf8"));
 	assert.match(passed.stdout, /slice\/parse passed its sensors\. Next: auto-slice merge parse/);
 	const start = l.git(l.run, "rev-parse", "HEAD");
 	assert.deepEqual([...new Set(readFileSync(`${l.log}.base`, "utf8").trim().split("\n"))], [start], "the rework is judged from where the slice began, not from what the failed worker committed");
