@@ -55,6 +55,8 @@ config/pi/bin/pi
 
 # agent-eval probe outputs
 agent-eval/results/
+agent-eval/long/.pkgs/
+agent-eval/long/results/*/grade/**/judge/home/
 
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/

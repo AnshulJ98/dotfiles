@@ -1,0 +1,10 @@
+{
+  "repo": "/tmp/agent-eval-long/seed-1794689321089/repo",
+  "home": "/tmp/agent-eval-long/seed-1794689321089/home",
+  "commit": "822eee5",
+  "model": "anthropic/claude-opus-5-5",
+  "thinking": "medium",
+  "lines": 66,
+  "contextTokens": 117719,
+  "createdAt": "2026-11-14T20:57:27.910Z"
+}

@@ -1,0 +1,217 @@
+I recommend 31 of the 44 items below (27 Yes, plus 4 Maybe items in the core set). Each Yes either makes code quality checkable instead of ritual, simplifies the design rules, or removes machinery built for workflows you've stopped using. Nothing has been changed yet; I need your sign-off by ID.
+
+Each item reads **ID · pick · effort**: Yes / Maybe / No, and S (<30 min), M (1–2 h), L (half a day or more). Then what changes, and why in one line. Proposed wording is included where the exact words matter, so you sign off on text rather than intentions.
+
+## A. Code philosophy: Ousterhout and decomplecting
+
+**A1 · Yes · S. Split strategic and tactical work by session type.**
+- **Change:** add two lines to the top of `ladder.md`.
+- **Why:** your scope rules ("least code", "no unrequested refactors") are tactical by Ousterhout's definition. That is right for a slice session and wrong for a planning session. Today nothing says which applies when.
+
+> In a planning session, invest in design: sketch each new or changed interface twice and keep the one that hides more. In a slice session the design is settled; the scope rules hold.
+
+**A2 · Yes · S. Add four rules to the Design section in `standards.md`.** Each is a concrete check, not a slogan. Your deep-module and leak tests are already there; these fill the gaps.
+
+> - Pull complexity down: the module absorbs it so callers don't. A caller that must check, retry or convert after every call means the module is too shallow.
+> - A flag or mode parameter that switches behaviour is two functions braided together; split it.
+> - A function or class that only forwards to another adds a name and hides nothing; delete it or give it work.
+> - Define errors out of existence where the semantics allow: deleting what is absent succeeds, an empty result is `[]`, not `null`.
+
+**A3 · Yes · S. Fix ladder rung 5.**
+- **Change:** "Write the least code that works" becomes "Write the simplest code that works: fewest concepts, not fewest lines."
+- **Why:** "least code" rewards clever one-liners, which tangle concerns together. Hickey's simple vs easy.
+
+**A4 · Yes · S. Separate what from how and when.**
+- **Change:** one line added to the "Keep logic pure" bullet: "Keep what is decided apart from when and how it runs: no scheduling, retries or caching inside business logic."
+- **Why:** this is the decomplecting rule your pure-core rule doesn't yet cover.
+
+**A5 · Yes · S. Design it twice in `/plan`.**
+- **Change:** `plan.md:48` "Approach: only when two designs are plausible" becomes "for a new or changed interface, always two sketches, two lines each; pick by which hides more and leaks less".
+- **Depends on:** A1.
+
+**A6 · No. Interface comments written before the code** (Ousterhout's comments-first). Agents already over-comment. "Match the surrounding comment density" is the better guard.
+
+## B. Testing
+
+**B1 · Yes · S. Red-first only for bugs.**
+- **Change:** replace `spec-contract.md:49` and `claude-delta.md:23` ("TDD enforced"). Add to Testing:
+
+> New behaviour is tested through the interface after the interface is settled. Red-first applies to bugs, where the failing test proves the test can see the bug.
+
+- **Why:** test-first on new code fixes the interface before it is designed, and an agent that already knows the implementation writes tests that only mirror it.
+
+**B2 · Yes · S. Expected values never come from the implementation.**
+- **Change:** one line in Testing:
+
+> A test's expected value comes from the requirement or a hand computation, never from running the code under test.
+
+- **Why:** this is the most common agent test defect on Reddit: the bug becomes the asserted value.
+
+**B3 · Yes · S. Break-it check in `/review` pass 2.**
+- **Change:** "For each new test, break the code it covers once (revert the fix or invert the condition) and confirm the test fails."
+- **Why:** it extends your bug-fix rule to every test, cheaply, using git.
+
+**B4 · Yes · M. `slice-check` script plus optional pre-commit, run in every session.**
+- **What it checks:** `tests` rerun green, test and assertion count not lower than base, no new skip/only markers, and the diff limited to the files the card declares.
+- **How:** lift the pure logic out of `worker-sensors.ts` and `lib/bash-changes.ts`.
+- **Why:** agents game tests in main sessions too. Your own rule says a check in code beats a sentence of prose, and this one currently fires only for workers.
+
+**B5 · Maybe · M. Mutation testing (Stryker for TS, mutmut for Python) on changed files, on request in `/review`.** It is the strongest objective measure of test quality, but slow. Make it opt-in, not part of every slice.
+
+**B6 · No. A TDD-guard hook that blocks edits until a failing test exists.** That is strict red-green enforced in code, which is the model you're leaving.
+
+## C. Outcome-driven workflow
+
+**C1 · Yes · M. The outcome card becomes the one unit of work.**
+- **Change:** it replaces `/plan`'s Goal block plus closing frontmatter, and `spec-contract.md`.
+- **Format:**
+```
+outcome:   <what is true for a user or caller when done>
+done-when: <1-5 runnable checks; the first is red today>
+interface: <signatures callers see, or "unchanged">
+mechanism: <the route: which function, which seam>
+out:       <non-goals>
+```
+- **Why:** an outcome without `mechanism` and `interface` invites the agent to reach the checks by the cheapest route. With them, the result is checkable both ways.
+
+**C2 · Yes · S. A done-when rule at the top of `persona-core.md`.**
+- **Change:** promote and generalise `standards.md:44`:
+
+> Before acting, state the check that shows it's done. Done means you ran it and showed the output.
+
+- **Why:** it covers config, docs and research too, and it sits at the top of the prompt where models pay the most attention.
+
+**C3 · Yes · M. Rewrite `/plan` for two modes.**
+- **Planning:** Now/Target/Between, then a slice list where each slice is a card.
+- **Slice:** one card, then "go".
+- **Removed:** the auto section (~860 words), "dispatch" and "rework".
+- **Depends on:** C1, F1, F2.
+
+**C4 · Yes · S. Delete `spec-contract.md`.** C1 covers it. For pasting into other tools, the card is the portable form.
+
+**C5 · Yes · S. Slice-session start rule in `/plan` "go".**
+- **Change:** "Run the done-when checks (expect red), work, run them again (green), run `slice-check`, report."
+- **Why:** this is the Ralph loop's real benefit (a fresh context per task) with you as the loop.
+
+**C6 · Yes · S. Shorten `/handoff` by default.**
+- **Default:** the next card, plus branch/sha/uncommitted files, decisions with reasons, gotchas, and the first command.
+- **Kept:** the 12-section form as `/handoff full`, for the end of a planning session.
+- **Why:** 12 sections is ceremony for a 40-minute slice.
+
+**C7 · Maybe · S. Cut `/where` to three rungs: target, slice, this.**
+- **Change:** drop `higher`/`beyond` and the alignment and 30-row rules. That removes about half of its 816 words.
+- **Why:** it loads only on demand, so this is for clarity, not token cost.
+
+## D. Communication and prose
+
+**D1 · Yes · S. Cut the Recommendations block (`persona-core.md:15`) to two lines.**
+
+> A recommendation gives the pick with its cost and effort, then each alternative with when it would win. Add consequences and the seam only when they change the choice.
+
+- **Why:** your `decisions` eval found that templates buy compliance, not better picks.
+
+**D2 · Yes · S. Fix the CLAUDE.md contradiction.**
+- **Conflict:** `claude-delta.md` "Teach concepts… explain why" vs `persona-core` "Explain how or why only when asked".
+- **Change:** "Teach a concept when it's new to me and the task turns on it, in at most three sentences."
+
+**D3 · Yes · S. Remove duplicate rules in Replies.**
+- **Duplicates:** "Say each fact once" overlaps "Cut… repeated evidence"; "Stop when the answer is complete" overlaps "Answer only the question asked".
+- **Change:** about 15% fewer words, every rule kept.
+
+**D4 · Yes · S. Scout exception when the content is the subject.**
+- **Change:** one clause in Delegation: "Read it yourself when the content itself is the subject (prose, config, a document under review), not an answer to be found in it."
+
+**D5 · Maybe · S. Fewer coined labels** (rungs, sensors, effort, beyond). Most go away with F1, F2 and C7 anyway.
+
+## E. Prompt architecture: what is always loaded
+
+**E1 · Yes · S. Take worker and auto protocol out of `persona-pi.md`.**
+- **Change:** remove `persona-pi.md:39-66`, `ops.md:43` and the `slice/`/`auto/` branch prefixes.
+- **Why:** they are mode protocol loaded into every turn, and `/plan` already holds them.
+
+**E2 · Maybe · S. Move the review checklist from `ops.md` to `review.md`, leaving a one-line pointer.**
+- **Risk:** a casual "review this" without `/review` loses the categories. Your September run showed AGENTS.md carried 3 review categories.
+- **Gate:** run I1's review role before and after; keep the move only if recall holds.
+
+**E3 · Yes · S. Prompt order.** Judgment, done-when (C2) and Scope first; the ladder last (as today). Mode protocol out (E1).
+
+**E4 · No. Shrinking AGENTS.md for tokens.** You measured it raises output tokens. Every cut on this list is for salience.
+
+## F. Harness: delegation, loops, sessions
+
+**F1 · Yes · M. Retire auto mode.**
+- **Removed:** `auto-run.ts`, `bin/auto-slice`, their tests, `config/git/bin/auto-guard`, the `init.templateDir` stub and `git-hooks-install` line, the husky and `githooks/` hook calls, the auto parts of `pi-health`, the `orch` eval role, and the DESIGN rows.
+- **Size:** about 1,000 lines plus prose.
+- **Why:** it was built because prose failed, and it reaches every repo on the machine.
+- **Recovery:** git history.
+
+**F2 · Yes · S. Retire `--rw` workers once B4 has landed.**
+- **Change:** delete `worker.prompt.md`, the `--rw` paths in `bin/scout` and the worker-only sensors. The shared logic moves to B4.
+- **Why:** a fresh session started from a card is a worker you can watch and steer.
+
+**F3 · Yes · S. Keep `scout --review <base>` as an on-demand second reviewer for a slice.**
+- **Why:** a fresh-context read-only reviewer is the subagent pattern that holds up (Amp's Oracle, LangChain's read/write split). Today it is wired only to auto mode.
+
+**F4 · Yes · S. At the compaction cap, start a new session instead of compacting.**
+- **Change:** `compact-cap` notifies "`/handoff` and start fresh" and stops auto-resuming (drop that part of `prime-reminder.ts`). Optionally lower the cap from 210k to about 120k.
+- **Why:** short sessions are your cost lever, and compaction is where rules got lost.
+
+**F5 · Yes · S. Align the Claude Code delta with this.**
+- **Change:** remove "at most 4 concurrent… spawn all Agent calls in one message". Use the same rule as pi: read-only subagents, one writer.
+
+**F6 · Maybe · S. Drop `health-footer.ts`** (it runs `pi-health` every minute). Most problems it reports come from auto runs and workers. Keep `bash.log`, `events.log` and `stream-watchdog`: they cost zero tokens.
+
+**F7 · No. Ralph loops, parallel writers, spec kits.** Your experience and the field agree.
+
+## G. Context and memory
+
+**G1 · Yes · M. Clean up memory.**
+- **State:** `memory.md` is 146 KB and 349 bullets, against `/memory`'s own cap of "under 250 lines". The `dotfiles` (58 KB) and `pi` (37 KB) scopes are 65% of it.
+- **Change:** move those two scopes into the repo (DESIGN or the log) or delete them. Merge and drop stale bullets elsewhere.
+
+**G2 · Yes · S. Bullet cap of about 200 characters in `/memory`, plus a `verify.sh` check for the line cap.**
+- **Why:** paragraph-length bullets make grep return paragraphs.
+
+**G3 · Maybe · S. Idle cache rebuilds** ($166 across 30 sessions, from `NEXT.md`).
+- **Check first:** whether pi exposes Anthropic's longer cache TTL. I haven't verified that it does.
+
+## H. Hygiene and docs
+
+**H1 · Yes · M. Split `DESIGN.md`.**
+- **DESIGN.md:** current decisions, one or two lines each.
+- **`LOG.md`:** dated evidence, spikes and numbers.
+- **Why:** 8k words with 500-word table cells; nobody can find the current decision.
+
+**H2 · Yes · S. Commit the uncommitted fragment and prompt edits in the live dotfiles before anything else,** so the baseline is in git. Also fix the stale `claude-delta.md:23`.
+
+**H3 · Yes · S. Prose checks in `verify.sh`.**
+- Every agent named in `claude-delta.md` exists in `claude/agents/`.
+- The memory line cap holds.
+- No fragment mentions a removed feature (`AUTO.md`, `--rw`).
+
+## I. Measurement
+
+**I1 · Yes · M. Before/after gate for this whole change set.**
+- **Runs:** agent-eval's `review`, `plan` and `scout` roles plus the cold-start token probe, on the current fragments and then on the new ones, same model.
+- **Pass:** no recall drop.
+- **Why:** your rule is to measure prose changes, not assert them.
+
+**I2 · Maybe · M. A `slice` eval role to replace `orch`.**
+- **How:** a card goes in; a plain `pi -p` session must turn done-when green, stay inside the declared files and not weaken any test.
+- **Why:** it tests the workflow you actually use.
+
+## Order and dependencies
+
+1. **Baseline:** H2, then I1 (the "before" run).
+2. **Prose:** A1–A5, B1–B3, C2, D1–D4, E1, E3, F5.
+3. **Workflow:** C1, C3–C6, then B4, then F1 and F2.
+4. **Session and memory:** F3, F4, G1, G2.
+5. **Docs and checks:** H1, H3, then I1 (the "after" run).
+
+The core set is every Yes plus B5, E2, F6 and G3. B5 is opt-in at review time; E2 is gated by the I1 eval run; F6 and G3 are small.
+
+## Decisions for you
+
+1. Sign off by ID: list what to drop from the core set, or add any of C7, D5, I2.
+2. F4: is the cap only a notice to start fresh, or also lowered to about 120k?
+3. G1: move the `dotfiles` and `pi` memory scopes into the repo, or delete them?
