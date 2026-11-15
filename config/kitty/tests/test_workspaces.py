@@ -465,6 +465,41 @@ class IntentWatcherTests(unittest.TestCase):
                 module.on_set_user_var(boss, window, {"key": "zworktree", "value": folder})
                 self.assertFalse(any(c[0] in ("launch", "action") for c in boss.calls))
 
+    def test_box_reading_overlay_runs_nvim_on_the_host_only(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, '')
+            module = load(directory, boss)
+            window = Window("dev", 1)
+            window.id = 7
+            window.screen = types.SimpleNamespace(last_reported_cwd=b"file://box/home/a")
+            path = "/home/a/notes: it's.md"
+            with patch.dict(os.environ, ZWS_HOST="box"), patch.object(module, "add_timer") as timer:
+                module.on_set_user_var(boss, window, {"key": "zmdread", "value": "12:" + path})
+                self.assertEqual(boss.calls[0], ("set-user-vars", "--match=id:7", "zmdread"))
+                launch = boss.calls[1]
+                self.assertEqual(launch[:5], ("launch", "--type=overlay", "--match=id:7",
+                                              "--title", "md reading"))
+                self.assertEqual(launch[5], "/bin/bash")
+                self.assertEqual(launch[8:], (
+                    "nvim", "--cmd", "let $MD_READING_OVERLAY = '1'", "-R", "-n", "+12", "-c",
+                    'autocmd UIEnter * ++once lua vim.schedule(function() vim.cmd.MdRender "toggle" end)',
+                    "--", path))
+                self.assertEqual(len(boss.calls), 2)
+                for invalid in ("x:/a.md", "12:relative.md", "12:/bad\nlaunch", "12:/bad\x1b", ":/a.md"):
+                    boss.calls.clear()
+                    module.on_set_user_var(boss, window, {"key": "zmdread", "value": invalid})
+                    self.assertEqual(boss.calls, [("set-user-vars", "--match=id:7", "zmdread")])
+                for unset in (None, ""):
+                    boss.calls.clear()
+                    module.on_set_user_var(boss, window, {"key": "zmdread", "value": unset})
+                    self.assertEqual(boss.calls, [])
+                timer.assert_not_called()
+            with patch.dict(os.environ, ZWS_HOST=""):
+                boss.calls.clear()
+                module.on_set_user_var(boss, window, {"key": "zmdread", "value": "12:" + path})
+                self.assertEqual(boss.calls, [("set-user-vars", "--match=id:7", "zmdread")])
+
     def test_pane_query_answers_and_empty_callback_is_ignored(self):
         from types import SimpleNamespace as NS
         from unittest.mock import patch

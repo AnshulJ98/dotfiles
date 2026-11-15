@@ -131,6 +131,13 @@ vim.api.nvim_create_autocmd('FileType', {
     vim.keymap.set('n', '<leader>mr', toggle, { buffer = ev.buf, desc = '[M]arkdown [R]eading view' })
     if vim.env.KITTY_LISTEN_ON then
       vim.keymap.set('n', '<leader>mo', function() overlay(ev.buf) end, { buffer = ev.buf, desc = '[M]arkdown reading [O]verlay (kitty)' })
+    elseif vim.env.SSH_CONNECTION then
+      -- Over ssh kitty's socket is on the Mac: a box window's watcher (config/kitty/workspaces.py) opens the overlay on this host.
+      vim.keymap.set('n', '<leader>mo', function()
+        vim.cmd 'silent update'
+        local report = vim.fn.line '.' .. ':' .. vim.api.nvim_buf_get_name(ev.buf)
+        vim.api.nvim_ui_send('\027]1337;SetUserVar=zmdread=' .. vim.base64.encode(report) .. '\007')
+      end, { buffer = ev.buf, desc = '[M]arkdown reading [O]verlay (kitty box window)' })
     end
   end,
 })
