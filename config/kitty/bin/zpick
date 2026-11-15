@@ -47,11 +47,21 @@ onload() {
   else echo "reload($self --list)"; fi
 }
 
+# Keep the local invocation intact; only host windows route it through the bounded transport.
+on_machine() {
+  if [ -n "${ZWS_HOST:-}" ] && [ "${ZPICK_MODE:-}" != zmx ]; then
+    [ "$1" != timeout ] || shift 2
+    "$here/zhost" "$ZWS_HOST" "$@"
+  else
+    "$@"
+  fi
+}
+
 # Preview: the session's screen in colour, cut to the preview height. fzf only understands colour
 # codes, so cursor-forward gaps become spaces and other controls are dropped. Full-screen apps
 # (alternate screen) keep their top rows with blank runs squeezed, shells their last non-blank rows.
 preview() { # name lines
-  local raw vt; raw=$(timeout 3 zmx history "$1" --vt 2>/dev/null)
+  local raw vt; raw=$(on_machine timeout 3 zmx history "$1" --vt 2>/dev/null)
   vt=$(LC_ALL=C perl -pe 's/\e\[(\d*)C/" " x ($1||1)/ge; s/\e\[[0-9;?]*[A-Za-ln-z]|\e[()][0-9A-Za-z]|\e\][^\a\e]*(\a|\e\\)|\r//g' <<<"$raw")
   if [[ $raw == *$'\e[?1049h'* ]]; then
     # squeeze blank runs so a mostly-empty app (pi) still shows its bottom rows
@@ -78,7 +88,7 @@ kill_rows() { # file of selected rows: kills the zmx session behind panes and de
         [ -n "$holder" ] || continue
         [ "$kind" = pane ] && [ "$target" = "${ZPICK_FROM:-}" ] && continue
         if [ "$clients" != 0 ] && ! grep -qxF "$holder" <<<"$asked"; then echo "$holder" >> "$ZPICK_VIEW.ask"
-        else zmx kill "$holder" >/dev/null 2>&1; fi ;;
+        else on_machine zmx kill "$holder" >/dev/null 2>&1; fi ;;
       closed) case $target in "$DIR"/*.kitty-session) rm -f "$target" ;; esac ;;
     esac
   done < <(tr '\t' '\037' < "$1")
@@ -103,7 +113,7 @@ export ZPICK_VIEW=$scratch/view
 tick() {
   local last now first=1
   while sleep 2; do
-    now=$(zmx ls 2>/dev/null | cut -f1,3)
+    now=$(on_machine zmx ls 2>/dev/null | cut -f1,3)
     if [ -z "$first" ] && [ "$now" != "$last" ]; then
       curl -s -m 2 --unix-socket "$ZPICK_VIEW.sock" -X POST http://fzf -d "reload($self --list)"
     fi
@@ -125,7 +135,8 @@ except (ValueError, IndexError, KeyError): pass')
 
 attach() { # name cwd where: reattach a detached session as a tab, or a split next to $from
   # No command: kitty runs its shell (zshell), which reattaches the holder session.
-  local args=(--cwd "$2" --var "holder=$1")
+  local args=(--var "holder=$1")
+  if [ -z "${ZWS_HOST:-}" ] || [ "${ZPICK_MODE:-}" = zmx ]; then args=(--cwd "$2" "${args[@]}"); fi
   [ -n "$ws" ] && args+=(--add-to-session "$ws")
   if [ "$3" = split ] && [ -n "$from" ]; then
     # launch opens in the active tab (the picker) unless --match names the target window's tab.

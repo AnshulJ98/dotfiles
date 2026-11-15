@@ -115,6 +115,32 @@ class SavingTests(unittest.TestCase):
             module._save()  # a pane moved to another workspace is labelled again
             self.assertEqual(labels(), [("a-1", "space=62")])
 
+    def test_host_label_uses_zhost_and_keeps_retry_and_bookkeeping(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ZWS_HOST="box"):
+            a = Window("my space", 1)
+            a.id, a.user_vars["holder"] = 5, "a-1"
+            boss = Boss([a], a, "")
+            module = load(directory, boss)
+            module._label(boss)
+            call, = boss.calls
+            self.assertIn("zlabel=retry", call[5])
+            self.assertEqual(call[-7:], (str(KITTY_DIR / "bin/zhost"), "box", "zmx", "set",
+                                         "a-1", "space=6d79207370616365", "5"))
+            module._label(boss)
+            self.assertEqual(len(boss.calls), 1)
+            fake = Path(directory) / "zhost"
+            fake.write_text("#!/bin/sh\nexit 1\n")
+            fake.chmod(0o700)
+            kitten = Path(directory) / "kitten"
+            kitten.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            kitten.chmod(0o700)
+            result = subprocess.run(["sh", "-c", call[5], "sh", str(fake), *call[-6:]],
+                                    env=dict(os.environ, PATH=directory + ":/usr/bin:/bin"),
+                                    capture_output=True, text=True, timeout=4)
+            self.assertEqual(result.stdout.splitlines(), ["@", "set-user-vars", "--match",
+                                                         "id:5", "zlabel=retry"])
+
     def test_a_label_zmx_refused_is_retried_a_few_times(self):
         with tempfile.TemporaryDirectory() as directory:
             a = Window("a", 1)

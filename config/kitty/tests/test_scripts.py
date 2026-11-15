@@ -25,7 +25,7 @@ with (root / "calls").open("a") as log:
     log.write(json.dumps([cmd, args]) + "\n")
 mode = os.environ.get("MODE", "")
 if cmd == "timeout":
-    assert args[0] == "3"
+    assert args[0] in ("2", "3")
     # Match the requested deadline: Python fake startup can exceed 0.2s under load.
     try: sys.exit(subprocess.run(args[1:], timeout=float(args[0])).returncode)
     except subprocess.TimeoutExpired: sys.exit(124)
@@ -36,6 +36,8 @@ if cmd == "zmx":
     if args == ["ls"]: print("name=old-1\tpid=123\tclients=0")
     if args == ["ls", "--short"]: print(os.environ.get("SESSIONS", "old-1"))
     sys.exit(0)
+if cmd == "ssh" and mode == "hang": time.sleep(30)
+if cmd == "ssh" and mode == "echo": print(sys.stdin.read(), end="")
 if cmd == "ssh" and (root / "ssh-codes").exists():
     codes = (root / "ssh-codes").read_text().splitlines()
     code = codes.pop(0)
@@ -73,6 +75,9 @@ if cmd == "fzf":
     subprocess.run([str(root / "zpick"), "--list"], check=True, stdout=subprocess.DEVNULL)
     assert view.exists()  # helpers must not remove the interactive owner's scratch
     (root / "view").write_text(str(view))
+    if mode == "attach-host":
+        print("\ndet\tremote\tremote\t/remote/path\t0\tshown")
+        sys.exit(0)
     if mode == "interrupt": time.sleep(30)
     if mode.startswith("pick:"):  # zpick --zmx: query, key and the selected row, as fzf prints them
         rc, query, key, sel = mode[5:].split("|")
@@ -101,7 +106,7 @@ class ScriptTests(unittest.TestCase):
             path = self.root / cmd
             path.write_text("#!" + sys.executable + "\n" + FAKE)
             path.chmod(0o700)
-        for name in ("zshell", "kmain", "zws", "zpick", "zgoto"):
+        for name in ("zshell", "kmain", "zws", "zpick", "zgoto", "zhost"):
             source = (BIN / name).read_text()
             # Preserve logic; redirect fixed production paths and PATH additions to fakes.
             source = source.replace("/opt/homebrew/bin", str(self.root))
@@ -685,6 +690,73 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(call[-3:], [str((self.root / "zws").resolve()), "cwd-space", "/cwd space"])
         self.assertEqual(self.calls("zmx"), [])
         self.assertEqual(self.calls("lsof"), [])
+
+    def test_zhost_transport_quoting_validation_and_deadline(self):
+        result = self.run_script("zhost", "box", "zmx", "kill", "a b", "it's")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args, = self.calls("ssh")
+        self.assertEqual(args[:-1], ["-q", "-o", "ControlPath=/tmp/zcm-%C", "-o",
+                                    "ControlMaster=no", "-o", "BatchMode=yes", "-o",
+                                    "ConnectTimeout=2", "box"])
+        self.assertEqual(self.calls("timeout")[0][:2], ["2", "ssh"])
+        self.assertTrue(args[-1].startswith("PATH=$PATH:$HOME/.local/bin; "))
+        remote = subprocess.run(["/bin/sh", "-c", args[-1]], env=self.env,
+                                capture_output=True, text=True, timeout=3)
+        self.assertEqual(remote.returncode, 0, remote.stderr)
+        self.assertEqual(self.calls("zmx"), [["kill", "a b", "it's"]])
+        before = self.calls("ssh")
+        for host in ("-oProxyCommand=x", "a b", "box;true", ""):
+            self.assertEqual(self.run_script("zhost", host, "true").returncode, 2)
+        self.assertEqual(self.calls("ssh"), before)
+        for name in ("zhost", "zshell"):
+            self.assertIn("ControlPath=/tmp/zcm-%C", (BIN / name).read_text())
+        (self.root / "ssh-codes").write_text("23")
+        self.assertEqual(self.run_script("zhost", "box", "true").returncode, 23)
+
+    def test_zhost_passes_streams_and_times_out_a_frozen_command(self):
+        result = subprocess.run([str(self.root / "zhost"), "box", "cat"], input="the script\n",
+                                env=dict(self.env, MODE="echo"), capture_output=True,
+                                text=True, timeout=5)
+        self.assertEqual(result.stdout, "the script\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        started = time.monotonic()
+        result = self.run_script("zhost", "box", "true", MODE="hang")
+        self.assertEqual(result.returncode, 124, result.stderr)
+        self.assertLess(time.monotonic() - started, 4)
+
+    def test_picker_host_ticker_and_zmx_override(self):
+        script = self.root / "zpick"
+        # One real tick per picker, so a killed ticker cannot leave a child logging into the next case.
+        script.write_text(script.read_text().replace("while sleep 2; do", "for tick in 1; do"))
+        fzf = self.root / "fzf"
+        fzf.write_text(fzf.read_text().replace('if mode == "interrupt": time.sleep(30)',
+                                             'if mode == "interrupt": time.sleep(.8)'))
+        for extra, remote in (((), True), (("--zmx",), False)):
+            (self.root / "calls").unlink(missing_ok=True)
+            self.run_script("zpick", *extra, MODE="interrupt", ZWS_HOST="box")
+            if remote:
+                self.assertTrue(self.calls("ssh"))
+                self.assertTrue(all(a[-1].endswith("zmx ls ") for a in self.calls("ssh")))
+                self.assertEqual(self.calls("zmx"), [])
+            else:
+                self.assertTrue(self.calls("zmx"))
+                self.assertEqual(self.calls("ssh"), [])
+
+    def test_picker_host_actions_never_touch_local_zmx(self):
+        result = self.run_script("zpick", "--preview", "det", "s", "s", "10", ZWS_HOST="box")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("zmx history s --vt", self.calls("ssh")[-1][-1])
+        rows = self.root / "rows"
+        rows.write_text("det\ts\ts\t/remote\t0\tshown\n")
+        self.run_script("zpick", "--kill", str(rows), ZWS_HOST="box",
+                        ZPICK_VIEW=str(self.root / "view"))
+        self.assertIn("zmx kill s", self.calls("ssh")[-1][-1])
+        self.assertEqual(self.calls("zmx"), [])
+        result = self.run_script("zpick", "1", ZWS_HOST="box", MODE="attach-host")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        launch, = [a for a in self.calls("kitten") if "launch" in a]
+        self.assertNotIn("--cwd", launch)
+        self.assertIn("holder=remote", launch)
 
     def test_picker_uses_active_theme_colors(self):
         result = self.run_script("zpick", "1")
