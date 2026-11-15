@@ -59,6 +59,22 @@ def load(state_dir: str, boss: Boss | None = None) -> types.ModuleType:
     return module
 
 
+class PortsStartTests(unittest.TestCase):
+    def test_host_load_starts_once_including_restored_instances_mac_starts_none(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            boss = Boss([], None, "")
+            module = load(directory, boss)
+            with patch.dict(os.environ, ZWS_HOST=""):
+                module.on_load(boss, {})
+                self.assertEqual(boss.calls, [])
+            with patch.dict(os.environ, ZWS_HOST="box"):
+                module.on_load(boss, {})
+                module.on_load(boss, {})
+            self.assertEqual(boss.calls, [("launch", "--type=background",
+                                          str(KITTY_DIR / "bin/zports"), "run", str(os.getpid()))])
+
+
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
         from unittest.mock import patch
