@@ -13,15 +13,28 @@ const PACKAGE = join("@earendil-works", "pi-coding-agent");
 
 /** Root folder of the @earendil-works/pi-coding-agent package pi runs from. */
 export function piPackage(): string {
-	const agentDir = join(homedir(), ".pi", "agent");
-	const current = join(agentDir, "install", "current-version");
-	if (existsSync(current)) {
-		const version = readFileSync(current, "utf8").trim().replace(/^v/, "");
-		return join(agentDir, "install", "releases", version, "node_modules", PACKAGE);
-	}
-	const onPath = execFileSync("sh", ["-c", "command -v pi"], { encoding: "utf8" }).trim();
-	for (let dir = dirname(realpathSync(onPath)); dir !== dirname(dir); dir = dirname(dir)) {
-		if (dir.endsWith(sep + PACKAGE)) return dir;
-	}
-	throw new Error(`pi-package: ${onPath} does not lead into ${PACKAGE}`);
+  const agentDir = join(homedir(), ".pi", "agent");
+  const current = join(agentDir, "install", "current-version");
+  if (existsSync(current)) {
+    const version = readFileSync(current, "utf8").trim().replace(/^v/, "");
+    return join(
+      agentDir,
+      "install",
+      "releases",
+      version,
+      "node_modules",
+      PACKAGE,
+    );
+  }
+  const onPath = execFileSync("sh", ["-c", "command -v pi"], {
+    encoding: "utf8",
+  }).trim();
+  for (
+    let dir = dirname(realpathSync(onPath));
+    dir !== dirname(dir);
+    dir = dirname(dir)
+  ) {
+    if (dir.endsWith(sep + PACKAGE)) return dir;
+  }
+  throw new Error(`pi-package: ${onPath} does not lead into ${PACKAGE}`);
 }

@@ -15,7 +15,9 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "bin/zports"
 
 
-class PortsTests(unittest.TestCase):  # Real CLI, isolated by a socket-owning fake master.
+class PortsTests(
+    unittest.TestCase
+):  # Real CLI, isolated by a socket-owning fake master.
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -69,7 +71,11 @@ class PortsTests(unittest.TestCase):  # Real CLI, isolated by a socket-owning fa
 
         self.addCleanup(close)
         fake = self.root / "ssh"
-        fake.write_text("#!" + sys.executable + "\n" + """
+        fake.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + """
 import json
 import os
 import socket
@@ -99,20 +105,32 @@ with socket.socket(socket.AF_UNIX) as s:
     code, message = json.loads(s.makefile("r").readline())
 print(message, file=sys.stderr)
 sys.exit(code)
-""")
+"""
+        )
         fake.chmod(0o755)
         notifier = self.root / "osascript"
-        notifier.write_text("#!" + sys.executable + "\n" + """
+        notifier.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + """
 import json
 import os
 import sys
 from pathlib import Path
 with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
-""")
+"""
+        )
         notifier.chmod(0o755)
-        self.env = dict(os.environ, HOME=str(self.root), ZWS_DIR=str(self.root), ZWS_HOST="box",
-                        PATH=str(self.root), FAKE_MASTER=str(self.root / "ssh.sock"))
+        self.env = dict(
+            os.environ,
+            HOME=str(self.root),
+            ZWS_DIR=str(self.root),
+            ZWS_HOST="box",
+            PATH=str(self.root),
+            FAKE_MASTER=str(self.root / "ssh.sock"),
+        )
         self.processes = []
 
         def reap():
@@ -124,12 +142,21 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         self.addCleanup(reap)
 
     def cli(self, *args, **env):
-        return subprocess.run([str(SCRIPT), *args], env=dict(self.env, **env),
-                              capture_output=True, text=True, timeout=8)
+        return subprocess.run(
+            [str(SCRIPT), *args],
+            env=dict(self.env, **env),
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
 
     def start(self, owner=None):
-        process = subprocess.Popen([str(SCRIPT), "run", str(owner or os.getpid())],
-                                   env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(
+            [str(SCRIPT), "run", str(owner or os.getpid())],
+            env=self.env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         self.processes.append(process)
         self.wait(lambda: (self.root / ".ports.sock").exists())
         return process
@@ -137,7 +164,7 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
     def wait(self, predicate):
         deadline = time.monotonic() + 4
         while not predicate() and time.monotonic() < deadline:
-            time.sleep(.02)
+            time.sleep(0.02)
         self.assertTrue(predicate())
 
     def command(self, *args):
@@ -151,20 +178,43 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
     def test_forward_stop_restart_and_master_recovery(self):
         process = self.start()
         state = self.command("forward", "8000")
-        self.assertEqual(state["forwards"]["8000"], dict(local=8000, target="127.0.0.1", active=True,
-                                                                  automatic=False, program=None))
-        self.assertEqual(self.forwards(), [["-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
-                                          "-o", "BatchMode=yes", "-O", "forward",
-                                          "-L", "127.0.0.1:8000:127.0.0.1:8000", "box"]])
+        self.assertEqual(
+            state["forwards"]["8000"],
+            dict(
+                local=8000,
+                target="127.0.0.1",
+                active=True,
+                automatic=False,
+                program=None,
+            ),
+        )
+        self.assertEqual(
+            self.forwards(),
+            [
+                [
+                    "-o",
+                    "ControlPath=/tmp/zcm-%C",
+                    "-o",
+                    "ControlMaster=no",
+                    "-o",
+                    "BatchMode=yes",
+                    "-O",
+                    "forward",
+                    "-L",
+                    "127.0.0.1:8000:127.0.0.1:8000",
+                    "box",
+                ]
+            ],
+        )
         self.command("forward", "8001", "[::1]")
         self.assertIn("127.0.0.1:8001:[::1]:8001", self.forwards()[-1])
         for listener in self.listeners.values():
             listener.close()
         self.listeners.clear()
         self.pid = None
-        time.sleep(.7)
+        time.sleep(0.7)
         before = len(self.forwards())
-        time.sleep(.7)
+        time.sleep(0.7)
         self.assertEqual(len(self.forwards()), before)
         self.pid = 456
         self.wait(lambda: len(self.forwards()) == before + 2)
@@ -181,7 +231,12 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         self.assertEqual(self.command("list")["stopped"], [8000])
         self.assertNotIn("8000", self.command("list")["forwards"])
         self.assertEqual(self.command("forward", "8000")["stopped"], [])
-        self.assertEqual(json.loads((self.root / "ports.json").read_text())["forwards"]["8000"]["local"], 8000)
+        self.assertEqual(
+            json.loads((self.root / "ports.json").read_text())["forwards"]["8000"][
+                "local"
+            ],
+            8000,
+        )
 
     def test_collision_singleton_and_killed_owner_cleanup(self):
         owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -251,8 +306,12 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
     def test_engine_waits_for_previous_lock_then_serves_requests(self):
         with (self.root / ".ports.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            process = subprocess.Popen([str(SCRIPT), "run", str(os.getpid())],
-                                       env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process = subprocess.Popen(
+                [str(SCRIPT), "run", str(os.getpid())],
+                env=self.env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             self.processes.append(process)
             time.sleep(1)
             self.assertIsNone(process.poll())
@@ -264,9 +323,13 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
     def test_invalid_requests_do_not_kill_engine_or_cancel_forwards(self):
         process = self.start()
         self.command("forward", "8000")
-        for data in ([], {"command": "forward", "port": "x"},
-                     {"command": "forward", "port": 8000, "target": 5},
-                     {"command": "forward", "port": []}, None):
+        for data in (
+            [],
+            {"command": "forward", "port": "x"},
+            {"command": "forward", "port": 8000, "target": 5},
+            {"command": "forward", "port": []},
+            None,
+        ):
             with self.subTest(data=data), socket.socket(socket.AF_UNIX) as client:
                 client.settimeout(3)
                 client.connect(str(self.root / ".ports.sock"))
@@ -280,20 +343,29 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         self.assertFalse(any("cancel" in call for call in self.calls))
 
     def test_mapped_and_other_loopback_addresses_use_the_right_target(self):
-        self.scan((8160, "::ffff:127.0.0.1", None), (8161, "::ffff:0.0.0.0", None),
-                  (8162, "127.0.0.2", None), (8163, "::ffff:192.168.1.2", None))
+        self.scan(
+            (8160, "::ffff:127.0.0.1", None),
+            (8161, "::ffff:0.0.0.0", None),
+            (8162, "127.0.0.2", None),
+            (8163, "::ffff:192.168.1.2", None),
+        )
         self.start()
         self.wait(lambda: self.detected(8160, 8161, 8162))
         forwards = self.command("list")["forwards"]
         self.assertEqual(set(forwards), {"8160", "8161", "8162"})
-        for remote, target in (("8160", "127.0.0.1"), ("8161", "127.0.0.1"),
-                               ("8162", "127.0.0.2")):
+        for remote, target in (
+            ("8160", "127.0.0.1"),
+            ("8161", "127.0.0.1"),
+            ("8162", "127.0.0.2"),
+        ):
             self.assertEqual(forwards[remote]["target"], target)
 
     def test_stop_retries_a_busy_probe_and_forward_readds(self):
         self.start()
         self.command("forward", "8000")
-        self.cancel_delay = .1  # The real listener holds the port through the first probe.
+        self.cancel_delay = (
+            0.1  # The real listener holds the port through the first probe.
+        )
         started = time.monotonic()
         state = self.command("stop", "8000")
         self.assertEqual(state["stopped"], [8000])
@@ -329,8 +401,9 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         self.assertLess(self.check_times[-1] - self.check_times[-2], 2)
 
     def scan(self, *items):
-        (self.root / "scan").write_text(json.dumps([
-            dict(port=p, address=a, program=name) for p, a, name in items]))
+        (self.root / "scan").write_text(
+            json.dumps([dict(port=p, address=a, program=name) for p, a, name in items])
+        )
 
     def record(self):
         path = self.root / "ports.json"
@@ -338,16 +411,28 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
 
     def notifications(self):
         path = self.root / "notifications"
-        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+        return (
+            [json.loads(line) for line in path.read_text().splitlines()]
+            if path.exists()
+            else []
+        )
 
     def detected(self, *ports):
-        return all(self.record()["forwards"].get(str(p), {}).get("active") for p in ports)
+        return all(
+            self.record()["forwards"].get(str(p), {}).get("active") for p in ports
+        )
 
     def test_auto_addresses_owners_collision_and_single_notification(self):
-        self.scan((8000, "127.0.0.1", "python"), (8001, "0.0.0.0", None),
-                  (8002, "::", None), (8003, "::1", "node"),
-                  (8004, "192.168.1.2", "lan"), (53, "127.0.0.1", None),
-                  (2222, "::", None), (8002, "::1", "dual"))
+        self.scan(
+            (8000, "127.0.0.1", "python"),
+            (8001, "0.0.0.0", None),
+            (8002, "::", None),
+            (8003, "::1", "node"),
+            (8004, "192.168.1.2", "lan"),
+            (53, "127.0.0.1", None),
+            (2222, "::", None),
+            (8002, "::1", "dual"),
+        )
         with socket.socket() as taken:
             taken.bind(("127.0.0.1", 8000))
             taken.listen()
@@ -362,7 +447,7 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
             self.assertEqual(state["forwards"]["8003"]["target"], "[::1]")
             self.assertGreater(state["forwards"]["8000"]["local"], 8000)
             self.wait(lambda: len(self.notifications()) == 1)
-            notification, = self.notifications()
+            (notification,) = self.notifications()
             self.assertEqual(notification[-2], "box")
             for remote, item in state["forwards"].items():
                 self.assertIn(f"{remote}→{item['local']}", notification[-1])
@@ -372,7 +457,9 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         process = self.start()
         self.wait(lambda: self.detected(8100, 8101))
         self.wait(lambda: len(self.notifications()) == 1)
-        self.command("forward", "8101", "[::1]")  # Promote an automatic forward to manual.
+        self.command(
+            "forward", "8101", "[::1]"
+        )  # Promote an automatic forward to manual.
         self.command("forward", "8102")
         self.assertFalse(self.record()["forwards"]["8101"]["automatic"])
         self.command("stop", "8100")
@@ -489,9 +576,13 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
             with self.subTest(failure=failure):
                 before = len((self.root / "scans").read_text().splitlines())
                 (self.root / "scan").write_text(failure)
-                self.wait(lambda: len((self.root / "scans").read_text().splitlines()) > before)
+                self.wait(
+                    lambda: len((self.root / "scans").read_text().splitlines()) > before
+                )
                 started = time.monotonic()
-                self.command("list")  # Even a hung remote scan has a two-second deadline.
+                self.command(
+                    "list"
+                )  # Even a hung remote scan has a two-second deadline.
                 self.assertLess(time.monotonic() - started, 2.5)
                 self.assertEqual(self.record(), initial)
                 self.assertEqual(len(self.notifications()), 1)
@@ -532,32 +623,44 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         exec(scan, namespace)
         proc = self.root / "proc"
         (proc / "net").mkdir(parents=True)
+
         def row(address, remote, state, inode):
             return f"0: {address}:{remote:04X} 0:0 {state} 0 0 0 0 0 {inode}\n"
+
         (proc / "net/tcp").write_text(
-            "header\n" + row("0100007F", 8000, "0A", 100) +
-            row("00000000", 4317, "0A", 101) + row("0201A8C0", 8004, "0A", 102) +
-            row("0100007F", 9000, "01", 103))
+            "header\n"
+            + row("0100007F", 8000, "0A", 100)
+            + row("00000000", 4317, "0A", 101)
+            + row("0201A8C0", 8004, "0A", 102)
+            + row("0100007F", 9000, "01", 103)
+        )
         (proc / "net/tcp6").write_text(
-            "header\n" + row("00000000000000000000000001000000", 8003, "0A", 104) +
-            row("00000000000000000000000000000000", 4318, "0A", 105))
+            "header\n"
+            + row("00000000000000000000000001000000", 8003, "0A", 104)
+            + row("00000000000000000000000000000000", 4318, "0A", 105)
+        )
         (proc / "12/fd").mkdir(parents=True)
         (proc / "12/comm").write_text("python3\n")
         (proc / "12/fd/3").symlink_to("socket:[100]")
         (proc / "12/fd/4").symlink_to("disappeared")
         rows = namespace["listeners"](proc)
-        self.assertEqual(rows, [
-            dict(port=8000, address="127.0.0.1", program="python3"),
-            dict(port=4317, address="0.0.0.0", program=None),
-            dict(port=8004, address="192.168.1.2", program=None),
-            dict(port=8003, address="::1", program=None),
-            dict(port=4318, address="::", program=None)])
+        self.assertEqual(
+            rows,
+            [
+                dict(port=8000, address="127.0.0.1", program="python3"),
+                dict(port=4317, address="0.0.0.0", program=None),
+                dict(port=8004, address="192.168.1.2", program=None),
+                dict(port=8003, address="::1", program=None),
+                dict(port=4318, address="::", program=None),
+            ],
+        )
         (proc / "net/tcp6").unlink()  # IPv6 may be disabled.
         self.assertEqual(len(namespace["listeners"](proc)), 3)
 
     def test_validation_never_calls_ssh(self):
-        for args, host in [(("forward", p), "box") for p in ("abc", "0", "-1", "65536")] + [
-                (("forward", "8000"), h) for h in ("", "-box", "a b", "box;true")]:
+        for args, host in [
+            (("forward", p), "box") for p in ("abc", "0", "-1", "65536")
+        ] + [(("forward", "8000"), h) for h in ("", "-box", "a b", "box;true")]:
             with self.subTest(args=args, host=host):
                 self.assertNotEqual(self.cli(*args, ZWS_HOST=host).returncode, 0)
         self.assertEqual(self.calls, [])

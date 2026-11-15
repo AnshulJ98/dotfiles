@@ -1,12 +1,13 @@
 """The kitty boundary uses remote control only and never starts processes."""
+
 import ast
 import importlib.util
 import os
-import tempfile
-from pathlib import Path
 import sys
-from types import SimpleNamespace as NS
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace as NS
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
@@ -19,35 +20,42 @@ class Pane:
     id = 7
     created_in_session_name = None
     user_vars = {}
-    program_status = NS(as_list=lambda: [{'state': 'working', 'app': 'pi'}])
-    screen = NS(last_reported_cwd=b'kitty-shell-cwd://host/reported path')
+    program_status = NS(as_list=lambda: [{"state": "working", "app": "pi"}])
+    screen = NS(last_reported_cwd=b"kitty-shell-cwd://host/reported path")
 
     @property
     def cwd_of_child(self):
-        raise AssertionError('unnecessary child cwd read')
+        raise AssertionError("unnecessary child cwd read")
 
 
 class Sidebar(Pane):
-    user_vars = {'role': 'sidebar'}
+    user_vars = {"role": "sidebar"}
 
     @property
     def screen(self):
-        raise AssertionError('sidebar screen read')
+        raise AssertionError("sidebar screen read")
 
 
 class Tab(list):
     def __init__(self, wid, session, status):
-        pane = NS(id=wid, created_in_session_name=session, user_vars={},
-                  program_status=NS(as_list=lambda: status),
-                  screen=NS(last_reported_cwd=b'kitty-shell-cwd://host/live folder'),
-                  cwd_of_child='/stale')
+        pane = NS(
+            id=wid,
+            created_in_session_name=session,
+            user_vars={},
+            program_status=NS(as_list=lambda: status),
+            screen=NS(last_reported_cwd=b"kitty-shell-cwd://host/live folder"),
+            cwd_of_child="/stale",
+        )
         super().__init__([pane])
         self.id, self.active_window = wid + 100, pane
 
 
 class Boss:
     def __init__(self):
-        self.all_tabs = [Tab(7, 'alpha', []), Tab(41, 'beta', [{'app': 'pi', 'state': 'working'}])]
+        self.all_tabs = [
+            Tab(7, "alpha", []),
+            Tab(41, "beta", [{"app": "pi", "state": "working"}]),
+        ]
         self.all_windows = [w for t in self.all_tabs for w in t]
         self.active_window = self.all_windows[0]
         self.active_tab = self.all_tabs[0]
@@ -55,9 +63,9 @@ class Boss:
 
     def call_remote_control(self, window, args):
         self.calls.append((window, args))
-        if args[:2] == ('launch', '--type=tab'):
+        if args[:2] == ("launch", "--type=tab"):
             self.active_tab = NS(id=999)
-            return '50'
+            return "50"
 
 
 class IntentTests(unittest.TestCase):
@@ -70,56 +78,93 @@ class IntentTests(unittest.TestCase):
         self.boss = Boss()
 
     def goto(self, name):
-        return (None, ('action', 'goto_session', str(Path(self.directory.name) / (name + '.kitty-session'))))
+        return (
+            None,
+            (
+                "action",
+                "goto_session",
+                str(Path(self.directory.name) / (name + ".kitty-session")),
+            ),
+        )
 
     def test_host_cwd_never_uses_local_child_folder(self):
-        pane = NS(screen=NS(last_reported_cwd=None), cwd_of_child='/mac/folder')
-        with patch.dict(os.environ, ZWS_HOST='box'):
-            self.assertEqual(zkitty.cwd(pane), '')
-            pane.screen.last_reported_cwd = b'kitty-shell-cwd://box/host/folder'
-            self.assertEqual(zkitty.cwd(pane), '/host/folder')
+        pane = NS(screen=NS(last_reported_cwd=None), cwd_of_child="/mac/folder")
+        with patch.dict(os.environ, ZWS_HOST="box"):
+            self.assertEqual(zkitty.cwd(pane), "")
+            pane.screen.last_reported_cwd = b"kitty-shell-cwd://box/host/folder"
+            self.assertEqual(zkitty.cwd(pane), "/host/folder")
         pane.screen.last_reported_cwd = None
-        self.assertEqual(zkitty.cwd(pane), '/mac/folder')
+        self.assertEqual(zkitty.cwd(pane), "/mac/folder")
 
     def test_host_new_without_folder_leaves_home_to_the_host(self):
-        self.boss.active_window = NS(created_in_session_name='dev',
-                                    screen=NS(last_reported_cwd=None), cwd_of_child='/mac/folder')
-        with patch.dict(os.environ, ZWS_HOST='box'):
-            self.assertEqual(zkitty.run(self.boss, ['new']), [('new', '')])
-        self.assertEqual(self.boss.calls[-1][1][-2:], ('new', ''))
+        self.boss.active_window = NS(
+            created_in_session_name="dev",
+            screen=NS(last_reported_cwd=None),
+            cwd_of_child="/mac/folder",
+        )
+        with patch.dict(os.environ, ZWS_HOST="box"):
+            self.assertEqual(zkitty.run(self.boss, ["new"]), [("new", "")])
+        self.assertEqual(self.boss.calls[-1][1][-2:], ("new", ""))
 
     def test_host_and_mac_launchers(self):
         # hunk joins no workspace; the shell tab joins the active pane's, as the plain
         # 'launch --type=tab' key did, so it is not shown in every space.
         for host in ("", "winpc"):
             with patch.dict(os.environ, ZWS_HOST=host):
-                for word, command in (("hunk", ("/opt/homebrew/bin/hunk", "diff")),
-                                      ("shell", ("/bin/zsh", "-il"))):
+                for word, command in (
+                    ("hunk", ("/opt/homebrew/bin/hunk", "diff")),
+                    ("shell", ("/bin/zsh", "-il")),
+                ):
                     self.boss.calls.clear()
                     zkitty.run(self.boss, [word])
-                    self.assertEqual(self.boss.calls, [(None, (
-                        "launch", "--type=tab", "--match=id:7",
-                        *(("--tab-title", "hunk", "--add-to-session=!") if word == "hunk"
-                          else ("--add-to-session=alpha",)),
-                        *(("--cwd=current",) if not host else ()),
-                        "/bin/bash", str(ROOT / "bin/zrun"), "/live folder", *command))])
+                    self.assertEqual(
+                        self.boss.calls,
+                        [
+                            (
+                                None,
+                                (
+                                    "launch",
+                                    "--type=tab",
+                                    "--match=id:7",
+                                    *(
+                                        ("--tab-title", "hunk", "--add-to-session=!")
+                                        if word == "hunk"
+                                        else ("--add-to-session=alpha",)
+                                    ),
+                                    *(("--cwd=current",) if not host else ()),
+                                    "/bin/bash",
+                                    str(ROOT / "bin/zrun"),
+                                    "/live folder",
+                                    *command,
+                                ),
+                            )
+                        ],
+                    )
 
     def test_shell_outside_a_workspace_joins_none(self):
-        self.boss.active_window.created_in_session_name = ''
-        zkitty.run(self.boss, ['shell'])
-        self.assertNotIn('--add-to-session', ' '.join(self.boss.calls[-1][1]))
+        self.boss.active_window.created_in_session_name = ""
+        zkitty.run(self.boss, ["shell"])
+        self.assertNotIn("--add-to-session", " ".join(self.boss.calls[-1][1]))
 
     def test_navigation_and_noops(self):
         for words, ops, calls in [
-            (['switch', '2'], [('goto', 'beta')], [self.goto('beta')]),
-            (['space', 'beta'], [('goto', 'beta')], [self.goto('beta')]),
-            (['next'], [('goto', 'beta')], [self.goto('beta')]),
-            (['prev'], [('goto', 'beta')], [self.goto('beta')]),
-            (['agent', '1'], [('goto', 'beta'), ('focus', 41)],
-             [self.goto('beta'), (None, ('focus-window', '--match=id:41'))]),
-            (['pane', '41'], [('goto', 'beta'), ('focus', 41)],
-             [self.goto('beta'), (None, ('focus-window', '--match=id:41'))]),
-            (['nope'], [], []), ([], [], []), (['switch', '99'], [], []),
+            (["switch", "2"], [("goto", "beta")], [self.goto("beta")]),
+            (["space", "beta"], [("goto", "beta")], [self.goto("beta")]),
+            (["next"], [("goto", "beta")], [self.goto("beta")]),
+            (["prev"], [("goto", "beta")], [self.goto("beta")]),
+            (
+                ["agent", "1"],
+                [("goto", "beta"), ("focus", 41)],
+                [self.goto("beta"), (None, ("focus-window", "--match=id:41"))],
+            ),
+            (
+                ["pane", "41"],
+                [("goto", "beta"), ("focus", 41)],
+                [self.goto("beta"), (None, ("focus-window", "--match=id:41"))],
+            ),
+            (["nope"], [], []),
+            ([], [], []),
+            (["switch", "99"], [], []),
         ]:
             with self.subTest(words=words):
                 self.boss.calls.clear()
@@ -127,124 +172,234 @@ class IntentTests(unittest.TestCase):
                 self.assertEqual(self.boss.calls, calls)
         self.boss.calls.clear()
         self.boss.active_window = self.boss.all_windows[1]
-        self.assertEqual(zkitty.run(self.boss, ['agent', '1']), [('focus', 41)])
-        self.assertEqual(self.boss.calls, [(None, ('focus-window', '--match=id:41'))])
+        self.assertEqual(zkitty.run(self.boss, ["agent", "1"]), [("focus", 41)])
+        self.assertEqual(self.boss.calls, [(None, ("focus-window", "--match=id:41"))])
 
     def test_new_launches_once_with_live_cwd_and_whole_arguments(self):
-        for words, flag in [(['new'], ()), (['new', 'ask'], ('--ask',)),
-                            (['new', 'window'], ('--window',))]:
+        for words, flag in [
+            (["new"], ()),
+            (["new", "ask"], ("--ask",)),
+            (["new", "window"], ("--window",)),
+        ]:
             with self.subTest(words=words):
                 self.boss.calls.clear()
                 self.boss.active_window = Pane()
-                with patch.object(zkitty, 'snapshot', side_effect=AssertionError('snapshot read')):
-                    self.assertEqual(zkitty.run(self.boss, words), [('new', '/reported path')])
-                self.assertEqual(self.boss.calls, [(self.boss.active_window, (
-                    'launch', '--type=background', '--allow-remote-control',
-                    str(ROOT / 'bin/zws'), 'new', *flag, '/reported path'))])
+                with patch.object(
+                    zkitty, "snapshot", side_effect=AssertionError("snapshot read")
+                ):
+                    self.assertEqual(
+                        zkitty.run(self.boss, words), [("new", "/reported path")]
+                    )
+                self.assertEqual(
+                    self.boss.calls,
+                    [
+                        (
+                            self.boss.active_window,
+                            (
+                                "launch",
+                                "--type=background",
+                                "--allow-remote-control",
+                                str(ROOT / "bin/zws"),
+                                "new",
+                                *flag,
+                                "/reported path",
+                            ),
+                        )
+                    ],
+                )
 
     def test_new_fallbacks_and_invalid_words(self):
         for active, directory in [
-            (None, os.path.expanduser('~')),
-            (NS(created_in_session_name='', screen=NS(last_reported_cwd=None),
-                cwd_of_child=''), os.path.expanduser('~')),
-            (NS(created_in_session_name='', screen=NS(last_reported_cwd=None),
-                cwd_of_child='/child folder'), '/child folder'),
+            (None, os.path.expanduser("~")),
+            (
+                NS(
+                    created_in_session_name="",
+                    screen=NS(last_reported_cwd=None),
+                    cwd_of_child="",
+                ),
+                os.path.expanduser("~"),
+            ),
+            (
+                NS(
+                    created_in_session_name="",
+                    screen=NS(last_reported_cwd=None),
+                    cwd_of_child="/child folder",
+                ),
+                "/child folder",
+            ),
         ]:
             with self.subTest(active=active):
                 self.boss.active_window = active
                 self.boss.calls.clear()
-                self.assertEqual(zkitty.run(self.boss, ['new']), [('new', directory)])
-                self.assertEqual(self.boss.calls, [(active, (
-                    'launch', '--type=background', '--allow-remote-control',
-                    str(ROOT / 'bin/zws'), 'new', directory))])
-        for words in (['new', 'bogus'], ['new', '--ask'], ['new', 'ask', 'extra']):
+                self.assertEqual(zkitty.run(self.boss, ["new"]), [("new", directory)])
+                self.assertEqual(
+                    self.boss.calls,
+                    [
+                        (
+                            active,
+                            (
+                                "launch",
+                                "--type=background",
+                                "--allow-remote-control",
+                                str(ROOT / "bin/zws"),
+                                "new",
+                                directory,
+                            ),
+                        )
+                    ],
+                )
+        for words in (["new", "bogus"], ["new", "--ask"], ["new", "ask", "extra"]):
             self.boss.calls.clear()
-            with patch.object(zkitty, 'cwd', side_effect=AssertionError('cwd read')), \
-                    patch.object(zkitty, 'snapshot', side_effect=AssertionError('snapshot read')):
+            with (
+                patch.object(zkitty, "cwd", side_effect=AssertionError("cwd read")),
+                patch.object(
+                    zkitty, "snapshot", side_effect=AssertionError("snapshot read")
+                ),
+            ):
                 self.assertEqual(zkitty.run(self.boss, words), [])
             self.assertEqual(self.boss.calls, [])
 
     def test_tab_here_launches_dock_immediately_with_live_cwd_and_name(self):
         active = self.boss.active_window
-        self.boss.all_windows[1].created_in_session_name = 'alpha'
-        self.boss.all_windows[1].user_vars['ws_name'] = 'Renamed'
-        self.assertEqual(zkitty.run(self.boss, ['tab', 'here']), [('tab', 'alpha')])
-        self.assertEqual(self.boss.calls, [
-            (active, ('launch', '--type=tab', '--cwd', '/live folder', '--add-to-session', 'alpha')),
-            (None, ('launch', '--type=tab-dock', '--match=id:999', '--dock-edge=left', '--dock-size=24',
-                    '--dock-skip-focus', '--keep-focus', '--add-to-session', 'alpha', '--var',
-                    'role=sidebar', '--var', 'ws_name=Renamed', zkitty.SIDEBAR))])
+        self.boss.all_windows[1].created_in_session_name = "alpha"
+        self.boss.all_windows[1].user_vars["ws_name"] = "Renamed"
+        self.assertEqual(zkitty.run(self.boss, ["tab", "here"]), [("tab", "alpha")])
+        self.assertEqual(
+            self.boss.calls,
+            [
+                (
+                    active,
+                    (
+                        "launch",
+                        "--type=tab",
+                        "--cwd",
+                        "/live folder",
+                        "--add-to-session",
+                        "alpha",
+                    ),
+                ),
+                (
+                    None,
+                    (
+                        "launch",
+                        "--type=tab-dock",
+                        "--match=id:999",
+                        "--dock-edge=left",
+                        "--dock-size=24",
+                        "--dock-skip-focus",
+                        "--keep-focus",
+                        "--add-to-session",
+                        "alpha",
+                        "--var",
+                        "role=sidebar",
+                        "--var",
+                        "ws_name=Renamed",
+                        zkitty.SIDEBAR,
+                    ),
+                ),
+            ],
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_tab_in_host_workspace_passes_no_remote_cwd(self):
         active = self.boss.active_window
-        for words in (['tab', 'here'], ['tab']):
+        for words in (["tab", "here"], ["tab"]):
             with self.subTest(words=words):
                 self.boss.calls.clear()
-                self.assertEqual(zkitty.run(self.boss, words), [('tab', 'alpha')])
-                self.assertEqual(self.boss.calls[0],
-                                 (active, ('launch', '--type=tab', '--add-to-session', 'alpha')))
-                self.assertNotIn('--cwd', self.boss.calls[0][1])
+                self.assertEqual(zkitty.run(self.boss, words), [("tab", "alpha")])
+                self.assertEqual(
+                    self.boss.calls[0],
+                    (active, ("launch", "--type=tab", "--add-to-session", "alpha")),
+                )
+                self.assertNotIn("--cwd", self.boss.calls[0][1])
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_new_in_host_instance_passes_remote_folder(self):
         self.test_new_launches_once_with_live_cwd_and_whole_arguments()
 
     def test_tab_without_cwd_sidebar_off_and_outside_workspace(self):
-        self.assertEqual(zkitty.run(self.boss, ['tab']), [('tab', 'alpha')])
-        self.assertEqual(self.boss.calls[0],
-                         (self.boss.active_window, ('launch', '--type=tab', '--add-to-session', 'alpha')))
+        self.assertEqual(zkitty.run(self.boss, ["tab"]), [("tab", "alpha")])
+        self.assertEqual(
+            self.boss.calls[0],
+            (
+                self.boss.active_window,
+                ("launch", "--type=tab", "--add-to-session", "alpha"),
+            ),
+        )
         self.assertEqual(len(self.boss.calls), 2)
-        self.assertNotIn('ws_name=', ' '.join(self.boss.calls[1][1]))
-        Path(self.directory.name, '.sidebar-off').touch()
+        self.assertNotIn("ws_name=", " ".join(self.boss.calls[1][1]))
+        Path(self.directory.name, ".sidebar-off").touch()
         self.boss.calls.clear()
-        zkitty.run(self.boss, ['tab', 'here'])
+        zkitty.run(self.boss, ["tab", "here"])
         self.assertEqual(len(self.boss.calls), 1)
-        Path(self.directory.name, '.sidebar-off').unlink()
+        Path(self.directory.name, ".sidebar-off").unlink()
         self.boss.active_window.created_in_session_name = None
         self.boss.active_window.screen.last_reported_cwd = None
-        self.boss.active_window.cwd_of_child = ''
+        self.boss.active_window.cwd_of_child = ""
         self.boss.calls.clear()
-        self.assertEqual(zkitty.run(self.boss, ['tab', 'here']), [('tab', '')])
-        self.assertEqual(self.boss.calls, [(self.boss.active_window, ('launch', '--type=tab'))])
+        self.assertEqual(zkitty.run(self.boss, ["tab", "here"]), [("tab", "")])
+        self.assertEqual(
+            self.boss.calls, [(self.boss.active_window, ("launch", "--type=tab"))]
+        )
 
     def test_no_active_window(self):
         self.boss.active_window = None
         self.boss.all_tabs = []
-        self.assertEqual(zkitty.run(self.boss, ['tab']), [('tab', '')])
-        self.assertEqual(zkitty.run(self.boss, ['next']), [])
-        self.assertEqual(self.boss.calls, [(None, ('launch', '--type=tab'))])
+        self.assertEqual(zkitty.run(self.boss, ["tab"]), [("tab", "")])
+        self.assertEqual(zkitty.run(self.boss, ["next"]), [])
+        self.assertEqual(self.boss.calls, [(None, ("launch", "--type=tab"))])
 
     def test_folder_reads_environment_each_time_and_has_default(self):
         self.assertEqual(zkitty.folder(), self.directory.name)
-        with patch.dict(os.environ, ZWS_DIR=''):
-            self.assertEqual(zkitty.folder(), os.path.expanduser('~/.local/state/kitty/workspaces'))
+        with patch.dict(os.environ, ZWS_DIR=""):
+            self.assertEqual(
+                zkitty.folder(), os.path.expanduser("~/.local/state/kitty/workspaces")
+            )
 
     def test_no_ui_kitten_dispatch_and_error_logging(self):
-        handler = NS(result_handler=lambda **kw: lambda fn: fn if kw == {'no_ui': True} else None)
-        modules = {'kittens': NS(), 'kittens.tui': NS(), 'kittens.tui.handler': handler,
-                   'kitty': NS(), 'kitty.constants': NS(config_dir=str(ROOT))}
-        with patch.dict(sys.modules, modules), patch.object(sys, 'path', [p for p in sys.path if p != str(ROOT)]):
-            spec = importlib.util.spec_from_file_location('zdo_test', ROOT / 'zdo.py')
+        handler = NS(
+            result_handler=lambda **kw: lambda fn: fn if kw == {"no_ui": True} else None
+        )
+        modules = {
+            "kittens": NS(),
+            "kittens.tui": NS(),
+            "kittens.tui.handler": handler,
+            "kitty": NS(),
+            "kitty.constants": NS(config_dir=str(ROOT)),
+        }
+        with (
+            patch.dict(sys.modules, modules),
+            patch.object(sys, "path", [p for p in sys.path if p != str(ROOT)]),
+        ):
+            spec = importlib.util.spec_from_file_location("zdo_test", ROOT / "zdo.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            module.__file__, module.__name__ = None, 'kitten'
+            module.__file__, module.__name__ = None, "kitten"
             self.assertIsNone(module.main([]))
-            self.assertIsNone(module.handle_result(['zdo.py', 'switch', '2'], None, 1, self.boss))
+            self.assertIsNone(
+                module.handle_result(["zdo.py", "switch", "2"], None, 1, self.boss)
+            )
             self.assertEqual(sys.path[0], str(ROOT))
-            self.assertEqual(self.boss.calls, [self.goto('beta')])
+            self.assertEqual(self.boss.calls, [self.goto("beta")])
+
             class Broken:
                 active_window = None
+
                 @property
                 def all_tabs(self):
-                    raise RuntimeError('broken tabs')
-            self.assertIsNone(module.handle_result(['zdo.py', 'next'], None, 1, Broken()))
-            logged = Path(self.directory.name, 'watcher.log').read_text()
-            self.assertIn('Traceback', logged)
-            self.assertIn('broken tabs', logged)
-            with patch.dict(sys.modules, {'kitty.constants': NS()}):
+                    raise RuntimeError("broken tabs")
+
+            self.assertIsNone(
+                module.handle_result(["zdo.py", "next"], None, 1, Broken())
+            )
+            logged = Path(self.directory.name, "watcher.log").read_text()
+            self.assertIn("Traceback", logged)
+            self.assertIn("broken tabs", logged)
+            with patch.dict(sys.modules, {"kitty.constants": NS()}):
                 self.assertIsNone(module.handle_result([], None, 1, self.boss))
-            self.assertIn('ImportError', Path(self.directory.name, 'watcher.log').read_text())
+            self.assertIn(
+                "ImportError", Path(self.directory.name, "watcher.log").read_text()
+            )
 
 
 class KittyTests(unittest.TestCase):
@@ -255,177 +410,311 @@ class KittyTests(unittest.TestCase):
 
     def test_sidebar_requires_role_and_launch_argv(self):
         for role, child, expected in [
-            ('sidebar', NS(argv=['/any/where/zside']), True),
-            ('sidebar', NS(argv=['/bin/zsh']), False),
-            ('sidebar', NS(argv=[]), False), ('sidebar', NS(), False),
-            ('sidebar', None, False), ('', NS(argv=[zkitty.SIDEBAR]), False),
+            ("sidebar", NS(argv=["/any/where/zside"]), True),
+            ("sidebar", NS(argv=["/bin/zsh"]), False),
+            ("sidebar", NS(argv=[]), False),
+            ("sidebar", NS(), False),
+            ("sidebar", None, False),
+            ("", NS(argv=[zkitty.SIDEBAR]), False),
         ]:
-            self.assertEqual(zkitty.is_sidebar(NS(user_vars={'role': role}, child=child)), expected)
-        self.assertFalse(zkitty.is_sidebar(NS(user_vars={'role': 'sidebar'})))
+            self.assertEqual(
+                zkitty.is_sidebar(NS(user_vars={"role": role}, child=child)), expected
+            )
+        self.assertFalse(zkitty.is_sidebar(NS(user_vars={"role": "sidebar"})))
 
     def test_attach_saved_and_fresh_order(self):
-        for saved in ('saved', ''):
+        for saved in ("saved", ""):
             with self.subTest(saved=saved):
                 events = []
-                window = NS(id=7, user_vars={'holder': saved, 'pi_session': '/p/s.jsonl'},
-                            cwd_of_child='/x/My Repo',
-                            write_to_child=lambda data: events.append(('write', data)))
+                window = NS(
+                    id=7,
+                    user_vars={"holder": saved, "pi_session": "/p/s.jsonl"},
+                    cwd_of_child="/x/My Repo",
+                    write_to_child=lambda data: events.append(("write", data)),
+                )
                 boss = NS(call_remote_control=lambda w, args: events.append((w, args)))
                 zkitty.attach(boss, window)
                 name = events[0][1].decode().split()[2]
                 if saved:
-                    self.assertEqual(name, 'saved')
+                    self.assertEqual(name, "saved")
                 else:
-                    self.assertTrue(name.startswith('my-repo-'))
+                    self.assertTrue(name.startswith("my-repo-"))
                     # 12 random hex digits: a full UUID left 9 characters for the folder (zmx path limit)
-                    self.assertRegex(name[len('my-repo-'):], r'^[0-9a-f]{12}$')
-                self.assertEqual(events, [
-                    ('write', f': zq {name} %2Fp%2Fs.jsonl\n'.encode()),
-                    (None, ('set-user-vars', '--match=id:7', 'zq')),
-                ] + ([(None, ('set-user-vars', '--match=id:7', 'holder=' + name))]
-                     if not saved else []))
+                    self.assertRegex(name[len("my-repo-") :], r"^[0-9a-f]{12}$")
+                self.assertEqual(
+                    events,
+                    [
+                        ("write", f": zq {name} %2Fp%2Fs.jsonl\n".encode()),
+                        (None, ("set-user-vars", "--match=id:7", "zq")),
+                    ]
+                    + (
+                        [(None, ("set-user-vars", "--match=id:7", "holder=" + name))]
+                        if not saved
+                        else []
+                    ),
+                )
 
     def test_attach_saved_does_not_read_cwd_and_missing_cwd_works(self):
         writes = []
         window = Pane()
-        window.user_vars = {'holder': 'saved'}
+        window.user_vars = {"holder": "saved"}
         window.write_to_child = writes.append
         boss = Boss()
         zkitty.attach(boss, window)
-        self.assertEqual(writes, [b': zq saved -\n'])
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
-            window = NS(id=8, user_vars={}, cwd_of_child=None, write_to_child=writes.append)
+        self.assertEqual(writes, [b": zq saved -\n"])
+        with patch.object(zkitty.uuid, "uuid4", return_value=NS(hex="U")):
+            window = NS(
+                id=8, user_vars={}, cwd_of_child=None, write_to_child=writes.append
+            )
             zkitty.attach(boss, window)
-        self.assertEqual(writes[-1], b': zq --U -\n')
-        self.assertEqual(boss.calls[-1], (None, ('set-user-vars', '--match=id:8', 'holder=--U')))
+        self.assertEqual(writes[-1], b": zq --U -\n")
+        self.assertEqual(
+            boss.calls[-1], (None, ("set-user-vars", "--match=id:8", "holder=--U"))
+        )
 
     def host_pane(self, wid, session, user_vars, focused, reported=None, events=None):
-        return NS(id=wid, created_in_session_name=session, user_vars=user_vars, last_focused_at=focused,
-                  screen=NS(last_reported_cwd=reported), cwd_of_child='/local',
-                  write_to_child=lambda data: events.append(('write', data)))
+        return NS(
+            id=wid,
+            created_in_session_name=session,
+            user_vars=user_vars,
+            last_focused_at=focused,
+            screen=NS(last_reported_cwd=reported),
+            cwd_of_child="/local",
+            write_to_child=lambda data: events.append(("write", data)),
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_new_pane_in_host_workspace_gets_host_and_remote_folder(self):
         events = []
-        window = self.host_pane(9, 'ws', {}, 50.0, events=events)
-        recent = self.host_pane(3, 'ws', {'holder': 'a'}, 40.0,
-                                b'kitty-shell-cwd://box/home/a/my proj')
-        older = self.host_pane(4, 'ws', {'host': 'box', 'holder': 'b'}, 10.0, b'kitty-shell-cwd://box/old')
-        sidebar = self.host_pane(5, 'ws', {'role': 'sidebar'}, 45.0)
-        other = self.host_pane(6, 'other', {'host': 'elsewhere'}, 49.0, b'kitty-shell-cwd://e/x')
-        boss = NS(all_windows=[older, recent, sidebar, other, window],
-                  call_remote_control=lambda w, args: events.append((w, args)))
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='0123456789abcdef')):
+        window = self.host_pane(9, "ws", {}, 50.0, events=events)
+        recent = self.host_pane(
+            3, "ws", {"holder": "a"}, 40.0, b"kitty-shell-cwd://box/home/a/my proj"
+        )
+        older = self.host_pane(
+            4, "ws", {"host": "box", "holder": "b"}, 10.0, b"kitty-shell-cwd://box/old"
+        )
+        sidebar = self.host_pane(5, "ws", {"role": "sidebar"}, 45.0)
+        other = self.host_pane(
+            6, "other", {"host": "elsewhere"}, 49.0, b"kitty-shell-cwd://e/x"
+        )
+        boss = NS(
+            all_windows=[older, recent, sidebar, other, window],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
+        with patch.object(
+            zkitty.uuid, "uuid4", return_value=NS(hex="0123456789abcdef")
+        ):
             zkitty.attach(boss, window)
-        self.assertEqual(events, [
-            ('write', b': zq my-proj-0123456789ab - box %2Fhome%2Fa%2Fmy%20proj\n'),
-            (None, ('set-user-vars', '--match=id:9', 'zq')),
-            (None, ('set-user-vars', '--match=id:9', 'holder=my-proj-0123456789ab')),
-            (None, ('set-user-vars', '--match=id:9', 'host=box'))])
+        self.assertEqual(
+            events,
+            [
+                ("write", b": zq my-proj-0123456789ab - box %2Fhome%2Fa%2Fmy%20proj\n"),
+                (None, ("set-user-vars", "--match=id:9", "zq")),
+                (
+                    None,
+                    ("set-user-vars", "--match=id:9", "holder=my-proj-0123456789ab"),
+                ),
+                (None, ("set-user-vars", "--match=id:9", "host=box")),
+            ],
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_split_in_host_tab_gets_host_and_remote_folder(self):
         # kitty gives a split (launch --location=vsplit) no created_in_session_name.
         events = []
-        split = self.host_pane(9, '', {}, 50.0, events=events)
-        peer = self.host_pane(3, 'ws', {'holder': 'a'}, 40.0, b'kitty-shell-cwd://box/srv/app')
-        elsewhere = self.host_pane(6, '', {'host': 'far'}, 49.0, b'kitty-shell-cwd://far/x')
-        boss = NS(all_windows=[peer, split, elsewhere], all_tabs=[[peer, split], [elsewhere]],
-                  call_remote_control=lambda w, args: events.append((w, args)))
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+        split = self.host_pane(9, "", {}, 50.0, events=events)
+        peer = self.host_pane(
+            3, "ws", {"holder": "a"}, 40.0, b"kitty-shell-cwd://box/srv/app"
+        )
+        elsewhere = self.host_pane(
+            6, "", {"host": "far"}, 49.0, b"kitty-shell-cwd://far/x"
+        )
+        boss = NS(
+            all_windows=[peer, split, elsewhere],
+            all_tabs=[[peer, split], [elsewhere]],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
+        with patch.object(zkitty.uuid, "uuid4", return_value=NS(hex="U")):
             zkitty.attach(boss, split)
-        self.assertEqual(events[0], ('write', b': zq app-U - box %2Fsrv%2Fapp\n'))
-        self.assertEqual(events[-1], (None, ('set-user-vars', '--match=id:9', 'host=box')))
+        self.assertEqual(events[0], ("write", b": zq app-U - box %2Fsrv%2Fapp\n"))
+        self.assertEqual(
+            events[-1], (None, ("set-user-vars", "--match=id:9", "host=box"))
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_first_and_restored_host_panes(self):
         events = []
-        first = self.host_pane(9, 'ws', {}, 0.0, events=events)
-        boss = NS(all_windows=[first], call_remote_control=lambda w, args: events.append((w, args)))
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+        first = self.host_pane(9, "ws", {}, 0.0, events=events)
+        boss = NS(
+            all_windows=[first],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
+        with patch.object(zkitty.uuid, "uuid4", return_value=NS(hex="U")):
             zkitty.attach(boss, first)
-        self.assertEqual(events, [('write', b': zq home-U - box -\n'),
-                                  (None, ('set-user-vars', '--match=id:9', 'zq')),
-                                  (None, ('set-user-vars', '--match=id:9', 'holder=home-U')),
-                                  (None, ('set-user-vars', '--match=id:9', 'host=box'))])
+        self.assertEqual(
+            events,
+            [
+                ("write", b": zq home-U - box -\n"),
+                (None, ("set-user-vars", "--match=id:9", "zq")),
+                (None, ("set-user-vars", "--match=id:9", "holder=home-U")),
+                (None, ("set-user-vars", "--match=id:9", "host=box")),
+            ],
+        )
         events.clear()
-        restored = self.host_pane(8, 'ws', {'host': 'box', 'holder': 'saved'}, 0.0, events=events)
+        restored = self.host_pane(
+            8, "ws", {"host": "box", "holder": "saved"}, 0.0, events=events
+        )
         boss.all_windows = [first, restored]
-        with patch.object(zkitty, 'cwd', side_effect=AssertionError('saved pane cwd read')):
+        with patch.object(
+            zkitty, "cwd", side_effect=AssertionError("saved pane cwd read")
+        ):
             zkitty.attach(boss, restored)
-        self.assertEqual(events, [('write', b': zq saved - box -\n'),
-                                  (None, ('set-user-vars', '--match=id:8', 'zq'))])
+        self.assertEqual(
+            events,
+            [
+                ("write", b": zq saved - box -\n"),
+                (None, ("set-user-vars", "--match=id:8", "zq")),
+            ],
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_attach_first_host_pane_uses_its_remote_folder(self):
         events = []
-        first = self.host_pane(9, 'ws', {'host': 'box', 'host_dir': '/srv/app'}, 0.0, events=events)
-        boss = NS(all_windows=[first], call_remote_control=lambda w, args: events.append((w, args)))
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+        first = self.host_pane(
+            9, "ws", {"host": "box", "host_dir": "/srv/app"}, 0.0, events=events
+        )
+        boss = NS(
+            all_windows=[first],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
+        with patch.object(zkitty.uuid, "uuid4", return_value=NS(hex="U")):
             zkitty.attach(boss, first)
-        self.assertEqual(events, [('write', b': zq app-U - box %2Fsrv%2Fapp\n'),
-                                  (None, ('set-user-vars', '--match=id:9', 'zq')),
-                                  (None, ('set-user-vars', '--match=id:9', 'holder=app-U'))])
+        self.assertEqual(
+            events,
+            [
+                ("write", b": zq app-U - box %2Fsrv%2Fapp\n"),
+                (None, ("set-user-vars", "--match=id:9", "zq")),
+                (None, ("set-user-vars", "--match=id:9", "holder=app-U")),
+            ],
+        )
 
     def test_host_user_var_without_instance_host_is_local(self):
         events = []
-        window = self.host_pane(9, 'ws', {'host': 'box', 'holder': 'saved'}, 0, events=events)
-        peer = self.host_pane(3, 'ws', {'host': 'box'}, 10, b'kitty-shell-cwd://box/remote')
-        boss = NS(all_windows=[peer, window], all_tabs=[[peer, window]],
-                  call_remote_control=lambda w, args: events.append((w, args)))
+        window = self.host_pane(
+            9, "ws", {"host": "box", "holder": "saved"}, 0, events=events
+        )
+        peer = self.host_pane(
+            3, "ws", {"host": "box"}, 10, b"kitty-shell-cwd://box/remote"
+        )
+        boss = NS(
+            all_windows=[peer, window],
+            all_tabs=[[peer, window]],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
         zkitty.attach(boss, window)
-        self.assertEqual(events, [('write', b': zq saved -\n'),
-                                  (None, ('set-user-vars', '--match=id:9', 'zq'))])
+        self.assertEqual(
+            events,
+            [
+                ("write", b": zq saved -\n"),
+                (None, ("set-user-vars", "--match=id:9", "zq")),
+            ],
+        )
 
     @patch.dict(os.environ, ZWS_HOST="box")
     def test_host_folder_falls_back_and_host_is_set_on_initial_pane(self):
         events = []
-        first = self.host_pane(9, 'ws', {'host_dir': '/srv/app'}, 0, events=events)
-        peer = self.host_pane(3, 'ws', {}, 10)
-        peer.cwd_of_child = ''
-        boss = NS(all_windows=[peer, first], call_remote_control=lambda w, args: events.append((w, args)))
-        with patch.object(zkitty.uuid, 'uuid4', return_value=NS(hex='U')):
+        first = self.host_pane(9, "ws", {"host_dir": "/srv/app"}, 0, events=events)
+        peer = self.host_pane(3, "ws", {}, 10)
+        peer.cwd_of_child = ""
+        boss = NS(
+            all_windows=[peer, first],
+            call_remote_control=lambda w, args: events.append((w, args)),
+        )
+        with patch.object(zkitty.uuid, "uuid4", return_value=NS(hex="U")):
             zkitty.attach(boss, first)
-        self.assertEqual(events[0], ('write', b': zq app-U - box %2Fsrv%2Fapp\n'))
-        self.assertEqual(events[-1], (None, ('set-user-vars', '--match=id:9', 'host=box')))
+        self.assertEqual(events[0], ("write", b": zq app-U - box %2Fsrv%2Fapp\n"))
+        self.assertEqual(
+            events[-1], (None, ("set-user-vars", "--match=id:9", "host=box"))
+        )
 
     def test_snapshot_all_fields_and_lazy_cwd(self):
         w, dock = Pane(), Sidebar()
-        tab = type('Tab', (list,), {})([w, dock])
+        tab = type("Tab", (list,), {})([w, dock])
         tab.id, tab.active_window = 3, w
         panes = zkitty.snapshot(NS(all_tabs=[tab]))
-        self.assertEqual(panes[0], dict(id=7, tab=3, session='', vars={},
-                                       status=[{'state': 'working', 'app': 'pi'}],
-                                       active=True, cwd='/reported path'))
-        self.assertEqual(panes[1]['cwd'], '')
-        self.assertFalse(panes[1]['active'])
-        self.assertIsNot(panes[1]['vars'], dock.user_vars)
-        fallback = NS(**{k: getattr(w, k) for k in
-                        ('id', 'created_in_session_name', 'user_vars', 'program_status')},
-                      screen=NS(last_reported_cwd=None), cwd_of_child='/fallback')
+        self.assertEqual(
+            panes[0],
+            dict(
+                id=7,
+                tab=3,
+                session="",
+                vars={},
+                status=[{"state": "working", "app": "pi"}],
+                active=True,
+                cwd="/reported path",
+            ),
+        )
+        self.assertEqual(panes[1]["cwd"], "")
+        self.assertFalse(panes[1]["active"])
+        self.assertIsNot(panes[1]["vars"], dock.user_vars)
+        fallback = NS(
+            **{
+                k: getattr(w, k)
+                for k in (
+                    "id",
+                    "created_in_session_name",
+                    "user_vars",
+                    "program_status",
+                )
+            },
+            screen=NS(last_reported_cwd=None),
+            cwd_of_child="/fallback",
+        )
         tab[:] = [fallback]
-        self.assertEqual(zkitty.snapshot(NS(all_tabs=[tab]))[0]['cwd'], '/fallback')
+        self.assertEqual(zkitty.snapshot(NS(all_tabs=[tab]))[0]["cwd"], "/fallback")
 
     def test_no_process_api_in_kitty_thread(self):
-        for name in ('workspaces.py', 'zcore.py', 'zkitty.py', 'zdo.py'):
+        for name in ("workspaces.py", "zcore.py", "zkitty.py", "zdo.py"):
             path = ROOT / name
             if not path.exists():
                 continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
-                with self.subTest(file=name, line=getattr(node, 'lineno', 0)):
+                with self.subTest(file=name, line=getattr(node, "lineno", 0)):
                     if isinstance(node, (ast.Import, ast.ImportFrom)):
-                        modules = ([node.module or ''] if isinstance(node, ast.ImportFrom)
-                                   else [a.name for a in node.names])
-                        self.assertFalse(any(m.split('.')[0] in
-                                             {'subprocess', 'multiprocessing', 'pty', 'socket'} for m in modules))
-                    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'os':
-                        self.assertFalse(node.attr in {'system', 'popen', 'fork', 'posix_spawn'}
-                                         or node.attr.startswith(('exec', 'spawn', 'posix_spawn')))
-            if name == 'workspaces.py':
+                        modules = (
+                            [node.module or ""]
+                            if isinstance(node, ast.ImportFrom)
+                            else [a.name for a in node.names]
+                        )
+                        self.assertFalse(
+                            any(
+                                m.split(".")[0]
+                                in {"subprocess", "multiprocessing", "pty", "socket"}
+                                for m in modules
+                            )
+                        )
+                    if (
+                        isinstance(node, ast.Attribute)
+                        and isinstance(node.value, ast.Name)
+                        and node.value.id == "os"
+                    ):
+                        self.assertFalse(
+                            node.attr in {"system", "popen", "fork", "posix_spawn"}
+                            or node.attr.startswith(("exec", "spawn", "posix_spawn"))
+                        )
+            if name == "workspaces.py":
                 for node in tree.body:
-                    if isinstance(node, ast.FunctionDef) and node.name.startswith('on_'):
-                        self.assertIn('_safe', [ast.unparse(d) for d in node.decorator_list])
+                    if isinstance(node, ast.FunctionDef) and node.name.startswith(
+                        "on_"
+                    ):
+                        self.assertIn(
+                            "_safe", [ast.unparse(d) for d in node.decorator_list]
+                        )
                 for node in ast.walk(tree):
-                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'add_timer':
-                        self.assertEqual(ast.unparse(node.args[0].func), '_safe')
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id == "add_timer"
+                    ):
+                        self.assertEqual(ast.unparse(node.args[0].func), "_safe")

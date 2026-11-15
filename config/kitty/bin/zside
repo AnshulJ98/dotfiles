@@ -4,6 +4,7 @@
 Kitty supplies framed JSON views after the raw-terminal readiness handshake. Folder and
 branch discovery read .git files only; row clicks send zdo intents, menus use bin/zws.
 """
+
 from __future__ import annotations  # /usr/bin/python3 is 3.9
 
 import base64
@@ -19,86 +20,126 @@ import termios
 import time
 import tty
 
-os.environ['PATH'] = '/opt/homebrew/bin:' + os.environ.get('PATH', '')
-ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
-ZPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zports')
-PORT_ERROR = ''
-GIT = shutil.which('git')
-if GIT in (None, '/usr/bin/git'):
-    GIT = next((p for p in ('/Applications/Xcode.app/Contents/Developer/usr/bin/git',
-                            '/Library/Developer/CommandLineTools/usr/bin/git')
-                if os.path.exists(p)), '/usr/bin/git')
+os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zws")
+ZPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zports")
+PORT_ERROR = ""
+GIT = shutil.which("git")
+if GIT in (None, "/usr/bin/git"):
+    GIT = next(
+        (
+            p
+            for p in (
+                "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+                "/Library/Developer/CommandLineTools/usr/bin/git",
+            )
+            if os.path.exists(p)
+        ),
+        "/usr/bin/git",
+    )
 # glyph, SGR colour (terminal palette, so it follows the kitty theme)
-ICON = {'': ('·', '39'), 'idle': ('○', '32'), 'working': ('◐', '33'), 'done': ('●', '36'),
-        'error': ('✗', '31'), 'blocked': ('◉', '31')}
-BAND = '48;5;8;'  # selected row
-MENU = (('Rename', 'rename'), ('Close', 'close'), ('New worktree', 'new'), ('Open worktree…', 'open'))
+ICON = {
+    "": ("·", "39"),
+    "idle": ("○", "32"),
+    "working": ("◐", "33"),
+    "done": ("●", "36"),
+    "error": ("✗", "31"),
+    "blocked": ("◉", "31"),
+}
+BAND = "48;5;8;"  # selected row
+MENU = (
+    ("Rename", "rename"),
+    ("Close", "close"),
+    ("New worktree", "new"),
+    ("Open worktree…", "open"),
+)
 REST_MAX = 1 << 20
 INPUT = re.compile(
-    rb'\x1b(?:_z([vt])([^\x1b]*)\x1b\\|\[<(\d+);(\d+);(\d+)([Mm])|'
-    rb'(?P<rest>(?:_z[vt][^\x1b]*\x1b?|_z?|_|\[(?:<(?:\d+(?:;(?:\d+(?:;\d*)?)?)?)?)?)?)\Z)')
+    rb"\x1b(?:_z([vt])([^\x1b]*)\x1b\\|\[<(\d+);(\d+);(\d+)([Mm])|"
+    rb"(?P<rest>(?:_z[vt][^\x1b]*\x1b?|_z?|_|\[(?:<(?:\d+(?:;(?:\d+(?:;\d*)?)?)?)?)?)?)\Z)"
+)
 
 
 def run(*cmd: str) -> str:
     """Return an error for actions that can display it, or empty text on success."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
-        return (result.stderr.strip() or result.stdout.strip() or 'Command failed') if result.returncode else ''
+        return (
+            (result.stderr.strip() or result.stdout.strip() or "Command failed")
+            if result.returncode
+            else ""
+        )
     except (OSError, subprocess.SubprocessError) as error:
         return str(error)
 
 
 def fit(text: str, width: int) -> str:
-    return text if len(text) <= width else text[:max(0, width - 1)] + '…'
+    return text if len(text) <= width else text[: max(0, width - 1)] + "…"
 
 
 def repo(cwd):
-    folder = os.path.abspath(cwd) if cwd else ''
+    folder = os.path.abspath(cwd) if cwd else ""
     # git's own setting: the search does not climb into these folders
-    ceilings = {os.path.abspath(p) for p in os.environ.get('GIT_CEILING_DIRECTORIES', '').split(':') if p}
+    ceilings = {
+        os.path.abspath(p)
+        for p in os.environ.get("GIT_CEILING_DIRECTORIES", "").split(":")
+        if p
+    }
     for _ in range(40):
         if not folder:
             break
-        gitdir = os.path.join(folder, '.git')
+        gitdir = os.path.join(folder, ".git")
         if os.path.isfile(gitdir):
             try:
                 with open(gitdir) as f:
                     pointer = f.read().strip()
-                gitdir = os.path.join(folder, pointer[8:]) if pointer.startswith('gitdir: ') else ''
+                gitdir = (
+                    os.path.join(folder, pointer[8:])
+                    if pointer.startswith("gitdir: ")
+                    else ""
+                )
             except OSError:
-                gitdir = ''
+                gitdir = ""
         if os.path.isdir(gitdir):
             try:
-                with open(os.path.join(gitdir, 'HEAD')) as f:
+                with open(os.path.join(gitdir, "HEAD")) as f:
                     head = f.read().strip()
-                branch = head[len('ref: refs/heads/'):] if head.startswith('ref: refs/heads/') else 'HEAD'
+                branch = (
+                    head[len("ref: refs/heads/") :]
+                    if head.startswith("ref: refs/heads/")
+                    else "HEAD"
+                )
             except OSError:
-                branch = ''
+                branch = ""
             return folder, branch
         parent = os.path.dirname(folder)
         if parent == folder or parent in ceilings:
             break
         folder = parent
-    return '', ''
+    return "", ""
 
 
 def split_input(data):
-    rest, mouse, view, tick = b'', [], None, False
+    rest, mouse, view, tick = b"", [], None, False
     for match in INPUT.finditer(data):
         kind, body, button, col, row, event, partial = match.groups()
         if partial is not None:
             if len(data) - match.start() <= REST_MAX:
-                rest = data[match.start():]
+                rest = data[match.start() :]
         elif button is not None:
             mouse.append((button, col, row, event))
-        elif kind == b't':
+        elif kind == b"t":
             tick = True
         else:
             try:
                 obj = json.loads(body)
-                if (isinstance(obj, dict) and obj.get('v') == 1
-                        and isinstance(obj.get('current'), str)
-                        and isinstance(obj.get('spaces'), list) and isinstance(obj.get('agents'), list)):
+                if (
+                    isinstance(obj, dict)
+                    and obj.get("v") == 1
+                    and isinstance(obj.get("current"), str)
+                    and isinstance(obj.get("spaces"), list)
+                    and isinstance(obj.get("agents"), list)
+                ):
                     view = obj
             except (ValueError, UnicodeError):
                 pass
@@ -113,23 +154,39 @@ class Git:
 
     def request(self, tops, current, now):
         for top in dict.fromkeys(tops):
-            if (top and top not in self.queue and top != self.top
-                    and now - self.cache.get(top, (-float('inf'), ''))[0] >= (3 if top == current else 30)):
+            if (
+                top
+                and top not in self.queue
+                and top != self.top
+                and now - self.cache.get(top, (-float("inf"), ""))[0]
+                >= (3 if top == current else 30)
+            ):
                 self.queue.append(top)
 
     def start(self, now):
         if self.proc or not self.queue:
             return
         self.top = self.queue.pop(0)
-        self.started, self.output = now, b''
+        self.started, self.output = now, b""
         try:
             self.proc = subprocess.Popen(
-                [GIT, '-C', self.top, 'rev-list', '--left-right', '--count', '@{u}...HEAD'],
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+                [
+                    GIT,
+                    "-C",
+                    self.top,
+                    "rev-list",
+                    "--left-right",
+                    "--count",
+                    "@{u}...HEAD",
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"),
+            )
             os.set_blocking(self.proc.stdout.fileno(), False)
         except OSError:
-            self.cache[self.top] = now, ''
+            self.cache[self.top] = now, ""
             self.top = None
 
     def collect(self, ready, now):
@@ -143,15 +200,21 @@ class Git:
         code = p.poll()
         if code is None:
             return False
-        self.output += p.stdout.read() or b''
+        self.output += p.stdout.read() or b""
         p.stdout.close()
-        status = ''
+        status = ""
         counts = self.output.split()
         if code == 0 and len(counts) == 2 and all(c.isdigit() for c in counts):
             behind, ahead = (int(c) for c in counts)
-            status = ' '.join(x for x in ('↑' + str(ahead) if ahead else '',
-                                          '↓' + str(behind) if behind else '') if x)
-        changed = status != self.cache.get(self.top, (0, ''))[1]
+            status = " ".join(
+                x
+                for x in (
+                    "↑" + str(ahead) if ahead else "",
+                    "↓" + str(behind) if behind else "",
+                )
+                if x
+            )
+        changed = status != self.cache.get(self.top, (0, ""))[1]
         self.cache[self.top] = now, status
         self.proc, self.top = None, None
         return changed
@@ -159,47 +222,59 @@ class Git:
 
 class HostGit:
     """One nonblocking job at a time; all remote disk/git access goes through zhost."""
+
     def __init__(self):
         self.cache, self.refs, self.queue = {}, {}, []
         self.proc = None
-        self.address = self.here = self.there = self.home = ''
+        self.address = self.here = self.there = self.home = ""
         self.down = self.initialized = self.version_asked = False
-        self.failed, self.kind = False, ''
+        self.failed, self.kind = False, ""
         self.next_refresh = 0
 
     def request(self, paths, current, now):
         if self.proc or self.queue or now < self.next_refresh:
             return
         if not self.initialized:
-            self.queue.extend([('address', []), ('here', [])])
+            self.queue.extend([("address", []), ("here", [])])
             self.initialized = True
-        self.queue.append(('host', list(dict.fromkeys(paths))))
+        self.queue.append(("host", list(dict.fromkeys(paths))))
         self.next_refresh = now + 3
 
     def start(self, now):
         if self.proc or not self.queue:
             return
         self.kind, paths = self.queue.pop(0)
-        host = os.environ.get('ZWS_HOST', '')
+        host = os.environ.get("ZWS_HOST", "")
         source = None
-        self.started, self.output = now, b''
+        self.started, self.output = now, b""
         try:
-            if self.kind == 'address':
-                cmd = ['ssh', '-G', host]
-            elif self.kind == 'here':
-                cmd = ['zmx', 'version']
+            if self.kind == "address":
+                cmd = ["ssh", "-G", host]
+            elif self.kind == "here":
+                cmd = ["zmx", "version"]
             else:
                 folder = os.path.dirname(os.path.abspath(__file__))
-                source = open(os.path.join(folder, 'zpick-rows'), 'rb')
-                cmd = [os.path.join(folder, 'zhost'), host, 'python3', '-', '--side-facts',
-                       'cached' if self.version_asked else 'version', *paths]
-            self.proc = subprocess.Popen(cmd, stdin=source or subprocess.DEVNULL,
-                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                         env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+                source = open(os.path.join(folder, "zpick-rows"), "rb")
+                cmd = [
+                    os.path.join(folder, "zhost"),
+                    host,
+                    "python3",
+                    "-",
+                    "--side-facts",
+                    "cached" if self.version_asked else "version",
+                    *paths,
+                ]
+            self.proc = subprocess.Popen(
+                cmd,
+                stdin=source or subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"),
+            )
             os.set_blocking(self.proc.stdout.fileno(), False)
         except OSError:
             # collect() reports the failure on the next loop, so it triggers a redraw.
-            self.output = b''
+            self.output = b""
             self.failed = True
         finally:
             if source:
@@ -208,7 +283,7 @@ class HostGit:
     def collect(self, ready, now):
         if self.failed:
             self.failed = False
-            if self.kind == 'host':
+            if self.kind == "host":
                 self.down = True
             return True
         if not self.proc:
@@ -221,30 +296,54 @@ class HostGit:
         code = p.poll()
         if code is None:
             return False
-        self.output += p.stdout.read() or b''
+        self.output += p.stdout.read() or b""
         p.stdout.close()
         self.proc = None
-        text = self.output.decode('utf-8', errors='replace')
-        if self.kind == 'address':
-            self.address = next((parts[1] for parts in map(str.split, text.splitlines())
-                                 if len(parts) == 2 and parts[0].lower() == 'hostname'), '') if code == 0 else ''
-        elif self.kind == 'here':
+        text = self.output.decode("utf-8", errors="replace")
+        if self.kind == "address":
+            self.address = (
+                next(
+                    (
+                        parts[1]
+                        for parts in map(str.split, text.splitlines())
+                        if len(parts) == 2 and parts[0].lower() == "hostname"
+                    ),
+                    "",
+                )
+                if code == 0
+                else ""
+            )
+        elif self.kind == "here":
             lines = text.splitlines()
             fields = lines[0].split() if code == 0 and lines else []
-            self.here = fields[-1] if len(fields) > 1 else ''
+            self.here = fields[-1] if len(fields) > 1 else ""
         else:
             try:
                 data = json.loads(text) if code == 0 else None
-                if (not isinstance(data, dict) or not isinstance(data.get('home'), str)
-                        or not isinstance(data.get('refs'), dict) or not isinstance(data.get('counts'), dict)
-                        or not all(isinstance(p, str) and isinstance(v, list) and len(v) == 2
-                                   and all(isinstance(s, str) for s in v) for p, v in data['refs'].items())
-                        or not all(isinstance(p, str) and isinstance(s, str) for p, s in data['counts'].items())):
-                    raise ValueError('invalid host snapshot')
-                self.home, self.refs = data['home'], data['refs']
-                self.cache = {top: (now, status) for top, status in data['counts'].items()}
-                if isinstance(data.get('version'), str) and data['version']:
-                    self.there = data['version']
+                if (
+                    not isinstance(data, dict)
+                    or not isinstance(data.get("home"), str)
+                    or not isinstance(data.get("refs"), dict)
+                    or not isinstance(data.get("counts"), dict)
+                    or not all(
+                        isinstance(p, str)
+                        and isinstance(v, list)
+                        and len(v) == 2
+                        and all(isinstance(s, str) for s in v)
+                        for p, v in data["refs"].items()
+                    )
+                    or not all(
+                        isinstance(p, str) and isinstance(s, str)
+                        for p, s in data["counts"].items()
+                    )
+                ):
+                    raise ValueError("invalid host snapshot")
+                self.home, self.refs = data["home"], data["refs"]
+                self.cache = {
+                    top: (now, status) for top, status in data["counts"].items()
+                }
+                if isinstance(data.get("version"), str) and data["version"]:
+                    self.there = data["version"]
                 # Ask once per sidebar: a host without zmx would be asked on every poll.
                 self.version_asked = True
                 self.down = False
@@ -254,26 +353,37 @@ class HostGit:
 
 
 def ports():
-    if not os.environ.get('ZWS_HOST'):
+    if not os.environ.get("ZWS_HOST"):
         return None
-    directory = os.environ.get('ZWS_DIR') or os.path.expanduser(
-        '~/.local/state/kitty/hosts/' + os.environ['ZWS_HOST'])
+    directory = os.environ.get("ZWS_DIR") or os.path.expanduser(
+        "~/.local/state/kitty/hosts/" + os.environ["ZWS_HOST"]
+    )
     try:
-        with open(os.path.join(directory, 'ports.json')) as stream:
+        with open(os.path.join(directory, "ports.json")) as stream:
             data = json.load(stream)
+
         def number(value):
             return type(value) is int and 1 <= value <= 65535
-        if (not isinstance(data, dict) or not isinstance(data.get('forwards'), dict)
-                or not isinstance(data.get('waiting'), list)
-                or not all(number(p) for p in data['waiting'])):
+
+        if (
+            not isinstance(data, dict)
+            or not isinstance(data.get("forwards"), dict)
+            or not isinstance(data.get("waiting"), list)
+            or not all(number(p) for p in data["waiting"])
+        ):
             return None
-        for remote, item in data['forwards'].items():
-            if (not remote.isascii() or not remote.isdigit() or not number(int(remote))
-                    or not isinstance(item, dict) or 'local' not in item
-                    or (item['local'] is not None and not number(item['local']))
-                    or type(item.get('active')) is not bool
-                    or type(item.get('automatic')) is not bool
-                    or not isinstance(item.get('program'), (str, type(None)))):
+        for remote, item in data["forwards"].items():
+            if (
+                not remote.isascii()
+                or not remote.isdigit()
+                or not number(int(remote))
+                or not isinstance(item, dict)
+                or "local" not in item
+                or (item["local"] is not None and not number(item["local"]))
+                or type(item.get("active")) is not bool
+                or type(item.get("automatic")) is not bool
+                or not isinstance(item.get("program"), (str, type(None)))
+            ):
                 return None
         return data
     except (OSError, ValueError, UnicodeError):
@@ -281,92 +391,149 @@ def ports():
 
 
 def context_menu(action, menu):
-    if action and action[0] in ('space', 'port'):
-        key = action[1] if action[0] == 'space' else ('port', action[1])
-        return key if key != menu else ''
-    return ''
+    if action and action[0] in ("space", "port"):
+        key = action[1] if action[0] == "space" else ("port", action[1])
+        return key if key != menu else ""
+    return ""
 
 
 def rows(view, info, menu, cols, lines, host_info=None):
-    spaces = {s['name']: s for s in view['spaces']}
-    agents, current = view['agents'], view['current']
+    spaces = {s["name"]: s for s in view["spaces"]}
+    agents, current = view["agents"], view["current"]
 
     def line(segs: list[tuple[str, str]], band: bool = False) -> str:
         out, used = [], 0
-        bg = BAND if band else ''
+        bg = BAND if band else ""
         for text, sgr in segs:
-            text = text[:max(0, cols - used)]
+            text = text[: max(0, cols - used)]
             used += len(text)
-            out.append(f'\x1b[0;{bg}{sgr}m{text}')
-        return ''.join(out) + f'\x1b[0;{bg}39m' + ' ' * (cols - used) + '\x1b[0m'
+            out.append(f"\x1b[0;{bg}{sgr}m{text}")
+        return "".join(out) + f"\x1b[0;{bg}39m" + " " * (cols - used) + "\x1b[0m"
 
-    host = os.environ.get('ZWS_HOST', '')
-    header, colour = ' spaces', '1;97'
+    host = os.environ.get("ZWS_HOST", "")
+    header, colour = " spaces", "1;97"
     if host:
-        address = getattr(host_info, 'address', '')
-        header = ' ' + host + (' ' + address if address and address != host else '')
-        if getattr(host_info, 'down', False):
-            header, colour = header + ' down', '2;31'
+        address = getattr(host_info, "address", "")
+        header = " " + host + (" " + address if address and address != host else "")
+        if getattr(host_info, "down", False):
+            header, colour = header + " down", "2;31"
     top: list[tuple[str, tuple | None]] = [(line([(header, colour)]), None)]
-    here, there = getattr(host_info, 'here', ''), getattr(host_info, 'there', '')
+    here, there = getattr(host_info, "here", ""), getattr(host_info, "there", "")
     if host and here and there and here != there:
-        top.append((line([(' zmx ' + there + ', here ' + here, '2')]), None))
+        top.append((line([(" zmx " + there + ", here " + here, "2")]), None))
     top.append((line([]), None))
     for number, (name, sp) in enumerate(spaces.items(), 1):  # cmd+alt+N goes to space N
         shown, branch, status = info[name]
-        glyph, colour = ICON.get(sp['state'], ICON[''])
-        on, go = name == current, ('space', name)
-        tag = f' {number} '
+        glyph, colour = ICON.get(sp["state"], ICON[""])
+        on, go = name == current, ("space", name)
+        tag = f" {number} "
         indent = len(tag) + 2  # the name's column, after the glyph
-        top.append((line([(tag, '39'), (glyph + ' ', colour), (fit(shown, cols - indent - 1), '1;97' if on else '97')], on), go))
+        top.append(
+            (
+                line(
+                    [
+                        (tag, "39"),
+                        (glyph + " ", colour),
+                        (fit(shown, cols - indent - 1), "1;97" if on else "97"),
+                    ],
+                    on,
+                ),
+                go,
+            )
+        )
         if branch:
             room = cols - indent - 1 - (len(status) + 1 if status else 0)
-            segs = [(' ' * indent, ''), (fit(branch, room), '39')]
+            segs = [(" " * indent, ""), (fit(branch, room), "39")]
             for part in status.split():
-                segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
+                segs.append((" " + part, "32" if part[0] == "↑" else "31"))
             top.append((line(segs, on), go))
         if name == menu:  # the worktree entries need a repo
             for label, what in MENU if branch else MENU[:2]:
-                top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['cwd'])))
+                top.append(
+                    (
+                        line([("   ▸ ", "36"), (label, "36")]),
+                        ("menu", what, name, sp["cwd"]),
+                    )
+                )
 
     record = ports()
     if record is not None:
-        top.extend([(line([]), None), (line([(' ports', '1;97')]), None)])
+        top.extend([(line([]), None), (line([(" ports", "1;97")]), None)])
         if PORT_ERROR:
-            error = ''.join(c if c.isprintable() else ' ' for c in PORT_ERROR)
-            top.append((line([(' ' + error, '2')]), None))
-        for remote, item in sorted(record['forwards'].items(), key=lambda pair: int(pair[0])):
-            local = item['local']
-            mapping = str(local) if local is not None else '?'
+            error = "".join(c if c.isprintable() else " " for c in PORT_ERROR)
+            top.append((line([(" " + error, "2")]), None))
+        for remote, item in sorted(
+            record["forwards"].items(), key=lambda pair: int(pair[0])
+        ):
+            local = item["local"]
+            mapping = str(local) if local is not None else "?"
             if mapping != remote:
-                mapping += '→' + remote
-            mark = 'auto' if item['automatic'] else 'hand'
-            program = ''.join(c for c in (item.get('program') or '') if c.isprintable())
-            label = ' ' + mapping + ' ' + mark + (' ' + program if program else '')
-            top.append((line([(label, '39' if item['active'] else '2')]), ('port', remote, local)))
-            if menu == ('port', remote):
+                mapping += "→" + remote
+            mark = "auto" if item["automatic"] else "hand"
+            program = "".join(c for c in (item.get("program") or "") if c.isprintable())
+            label = " " + mapping + " " + mark + (" " + program if program else "")
+            top.append(
+                (
+                    line([(label, "39" if item["active"] else "2")]),
+                    ("port", remote, local),
+                )
+            )
+            if menu == ("port", remote):
                 if local is not None:
-                    top.append((line([('   ▸ Open in browser', '36')]), ('port-open', local)))
-                top.append((line([('   ▸ Stop forwarding', '36')]), ('port-stop', remote)))
-        if record['waiting']:
-            top.append((line([(f" {len(record['waiting'])} more not forwarded", '2')]), None))
-        top.append((line([(' forward port…', '36')]), ('port-forward', '')))
+                    top.append(
+                        (line([("   ▸ Open in browser", "36")]), ("port-open", local))
+                    )
+                top.append(
+                    (line([("   ▸ Stop forwarding", "36")]), ("port-stop", remote))
+                )
+        if record["waiting"]:
+            top.append(
+                (line([(f" {len(record['waiting'])} more not forwarded", "2")]), None)
+            )
+        top.append((line([(" forward port…", "36")]), ("port-forward", "")))
 
     bottom: list[tuple[str, tuple | None]] = []
     if agents:
-        bottom += [(line([('─' * cols, '38;5;8')]), None), (line([(' agents', '1;97')]), None), (line([]), None)]
+        bottom += [
+            (line([("─" * cols, "38;5;8")]), None),
+            (line([(" agents", "1;97")]), None),
+            (line([]), None),
+        ]
     for a in agents:  # same rows whichever workspace is shown
-        glyph, colour = ICON.get(a['state'], ICON[''])
-        go = ('pane', a['pane'], '' if a['space'] == current else a['space'])
-        shown, _, _ = info.get(a['space'], (a['space'], '', ''))
+        glyph, colour = ICON.get(a["state"], ICON[""])
+        go = ("pane", a["pane"], "" if a["space"] == current else a["space"])
+        shown, _, _ = info.get(a["space"], (a["space"], "", ""))
         label = fit(f"{a['app']} · {shown} {a['tab']}", cols - 4)
-        bottom.append((line([(' ', ''), (glyph + ' ', colour), (label, '1;97' if a['on'] else '97')], a['on']), go))
-        if a['model'] or a['ctx']:
-            tail = f" · {a['ctx']}" if a['model'] and a['ctx'] else a['ctx']
-            bottom.append((line([('   ', ''), (fit(a['model'], cols - 4 - len(tail)) + tail, '39')], a['on']), go))
+        bottom.append(
+            (
+                line(
+                    [
+                        (" ", ""),
+                        (glyph + " ", colour),
+                        (label, "1;97" if a["on"] else "97"),
+                    ],
+                    a["on"],
+                ),
+                go,
+            )
+        )
+        if a["model"] or a["ctx"]:
+            tail = f" · {a['ctx']}" if a["model"] and a["ctx"] else a["ctx"]
+            bottom.append(
+                (
+                    line(
+                        [
+                            ("   ", ""),
+                            (fit(a["model"], cols - 4 - len(tail)) + tail, "39"),
+                        ],
+                        a["on"],
+                    ),
+                    go,
+                )
+            )
 
-    bottom = bottom[:max(0, lines - 3)]
-    top = top[:max(0, lines - len(bottom))]
+    bottom = bottom[: max(0, lines - 3)]
+    top = top[: max(0, lines - len(bottom))]
     body = top + [(line([]), None)] * (lines - len(top) - len(bottom)) + bottom
     return [text for text, _ in body], [action for _, action in body]
 
@@ -374,26 +541,28 @@ def rows(view, info, menu, cols, lines, host_info=None):
 def write(text):
     data = text.encode()
     while data:
-        data = data[os.write(sys.stdout.fileno(), data):]
+        data = data[os.write(sys.stdout.fileno(), data) :]
 
 
 def render(view, git, menu):
     info, tops = {}, {}
-    for sp in view['spaces']:
-        cwd, name = sp['cwd'], sp['name']
-        host = os.environ.get('ZWS_HOST', '')
-        branch, top = git.refs.get(cwd, ('', '')) if host else ('', '')
+    for sp in view["spaces"]:
+        cwd, name = sp["cwd"], sp["name"]
+        host = os.environ.get("ZWS_HOST", "")
+        branch, top = git.refs.get(cwd, ("", "")) if host else ("", "")
         if not host:
             top, branch = repo(cwd)
-        home = git.home if host else os.path.expanduser('~')
-        folder = 'home' if cwd and cwd == home else os.path.basename(top or cwd)
+        home = git.home if host else os.path.expanduser("~")
+        folder = "home" if cwd and cwd == home else os.path.basename(top or cwd)
         if host and cwd not in git.refs:
             folder = name
-        shown = sp['shown'] or (folder if cwd else name)
-        info[name] = shown, branch, git.cache.get(top, (0, ''))[1]
+        shown = sp["shown"] or (folder if cwd else name)
+        info[name] = shown, branch, git.cache.get(top, (0, ""))[1]
         tops[name] = cwd if host else top
-    body, clicks = rows(view, info, menu, *shutil.get_terminal_size((24, 40)), host_info=git)
-    write('\x1b[?2026h\x1b[H' + '\r\n'.join(body) + '\x1b[?2026l')
+    body, clicks = rows(
+        view, info, menu, *shutil.get_terminal_size((24, 40)), host_info=git
+    )
+    write("\x1b[?2026h\x1b[H" + "\r\n".join(body) + "\x1b[?2026l")
 
     return clicks, tops
 
@@ -403,32 +572,37 @@ def act(action: tuple | None) -> None:
     if action is None:
         return
     kind, arg, *rest = action
-    if kind in ('port', 'port-open', 'port-stop', 'port-forward'):
-        if kind == 'port-stop':
-            cmd = (ZPORTS, 'stop', str(arg))
-        elif kind == 'port-forward':
-            cmd = (ZWS, 'forward-port')
+    if kind in ("port", "port-open", "port-stop", "port-forward"):
+        if kind == "port-stop":
+            cmd = (ZPORTS, "stop", str(arg))
+        elif kind == "port-forward":
+            cmd = (ZWS, "forward-port")
         else:
-            local = rest[0] if kind == 'port' else arg
+            local = rest[0] if kind == "port" else arg
             if local is None:
                 return
-            cmd = ('open', f'http://localhost:{local}')
+            cmd = ("open", f"http://localhost:{local}")
         PORT_ERROR = run(*cmd)
         return
-    if kind == 'menu':
+    if kind == "menu":
         name, cwd = rest
-        run(ZWS, *{'rename': ('rename', name), 'close': ('close', name)}.get(arg, ('worktree', arg, cwd)))
+        run(
+            ZWS,
+            *{"rename": ("rename", name), "close": ("close", name)}.get(
+                arg, ("worktree", arg, cwd)
+            ),
+        )
         return
-    words = f'{kind} {arg}'
+    words = f"{kind} {arg}"
     encoded = base64.b64encode(words.encode()).decode()
-    write(f'\x1b]1337;SetUserVar=zdo={encoded}\x07')
+    write(f"\x1b]1337;SetUserVar=zdo={encoded}\x07")
 
 
 def main() -> None:
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
-    clicks, menu, buffer, view = [], '', b'', None
-    git = HostGit() if os.environ.get('ZWS_HOST', '') else Git()
+    clicks, menu, buffer, view = [], "", b"", None
+    git = HostGit() if os.environ.get("ZWS_HOST", "") else Git()
     next_ports = time.monotonic() + 3
     wake_r, wake_w = os.pipe()
     os.set_blocking(wake_w, False)
@@ -436,18 +610,23 @@ def main() -> None:
     old_signal = signal.signal(signal.SIGWINCH, lambda *_: None)
     try:
         tty.setraw(fd)
-        write('\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J'
-              '\x1b]1337;SetUserVar=zside=cmVhZHk=\x07')
+        write(
+            "\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1006h\x1b[2J"
+            "\x1b]1337;SetUserVar=zside=cmVhZHk=\x07"
+        )
 
         while True:
             inputs = [fd, wake_r] + ([git.proc.stdout] if git.proc else [])
-            pending = git.proc or git.queue or getattr(git, 'failed', False)
-            timeout = .1 if pending else None
-            if os.environ.get('ZWS_HOST'):
-                timeout = min(timeout if timeout is not None else 3, max(0, next_ports - time.monotonic()))
+            pending = git.proc or git.queue or getattr(git, "failed", False)
+            timeout = 0.1 if pending else None
+            if os.environ.get("ZWS_HOST"):
+                timeout = min(
+                    timeout if timeout is not None else 3,
+                    max(0, next_ports - time.monotonic()),
+                )
             ready, _, _ = select.select(inputs, [], [], timeout)
             draw, refresh = False, False
-            if os.environ.get('ZWS_HOST') and time.monotonic() >= next_ports:
+            if os.environ.get("ZWS_HOST") and time.monotonic() >= next_ports:
                 draw = True
                 next_ports = time.monotonic() + 3
             if wake_r in ready:
@@ -463,20 +642,26 @@ def main() -> None:
                 draw = refresh = new_view is not None or tick
                 for button, _, row, event in mouse:
                     button, row = int(button), int(row) - 1
-                    if event != b'M' or button not in (0, 2) or not 0 <= row < len(clicks):
+                    if (
+                        event != b"M"
+                        or button not in (0, 2)
+                        or not 0 <= row < len(clicks)
+                    ):
                         continue
                     action = clicks[row]
                     if button == 2:
                         menu = context_menu(action, menu)
                     else:
-                        menu = ''
+                        menu = ""
                         act(action)
                     draw = True
             draw = git.collect(ready, time.monotonic()) or draw
             if view is not None and draw:
                 clicks, tops = render(view, git, menu)
                 if refresh:
-                    git.request(tops.values(), tops.get(view['current'], ''), time.monotonic())
+                    git.request(
+                        tops.values(), tops.get(view["current"], ""), time.monotonic()
+                    )
             git.start(time.monotonic())  # Only queued after a frame has been flushed.
     except (OSError, termios.error):
         pass  # A closed pty can fail both reads and terminal restoration.
@@ -490,12 +675,12 @@ def main() -> None:
         os.close(wake_r)
         os.close(wake_w)
         try:
-            write('\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h')
+            write("\x1b[?1000l\x1b[?1006l\x1b[?7h\x1b[?25h")
 
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
         except (OSError, termios.error):
             pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

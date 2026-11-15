@@ -19,14 +19,27 @@
  *
  * Skipped inside scouts (PI_SCOUT_DEPTH) so a child never polls for itself.
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  readdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const POLL_MS = 1_000;
-const SCOUT_ROOT = join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "sessions", "scout");
+const SCOUT_ROOT = join(
+  process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"),
+  "sessions",
+  "scout",
+);
 const RUNNING_DIR = join(SCOUT_ROOT, ".running");
 const DONE_DIR = join(SCOUT_ROOT, ".done");
 const ORPHAN_MS = 10 * 60_000;
@@ -117,15 +130,26 @@ function listMetaFiles(dir: string): string[] {
  * The wrapper's EXIT trap did not run (SIGKILL, often pi killing the bash tool's process group): finish the run on
  * its behalf, so it still gets a chat entry with its cost instead of vanishing.
  */
-function reapKilled(path: string, fields: Record<string, string>, now: number): void {
+function reapKilled(
+  path: string,
+  fields: Record<string, string>,
+  now: number,
+): void {
   const name = path.slice(RUNNING_DIR.length + 1);
   try {
-    renameSync(path.replace(/\.meta$/, ".out"), join(DONE_DIR, name.replace(/\.meta$/, ".out")));
+    renameSync(
+      path.replace(/\.meta$/, ".out"),
+      join(DONE_DIR, name.replace(/\.meta$/, ".out")),
+    );
   } catch {
     // No digest yet.
   }
   try {
-    const meta = Object.entries({ ...fields, rc: "137", finished: String(now) }).map(([k, v]) => `${k}=${v}\n`);
+    const meta = Object.entries({
+      ...fields,
+      rc: "137",
+      finished: String(now),
+    }).map(([k, v]) => `${k}=${v}\n`);
     writeFileSync(join(DONE_DIR, `${name}.tmp`), meta.join(""));
     renameSync(join(DONE_DIR, `${name}.tmp`), join(DONE_DIR, name));
   } catch {
@@ -172,7 +196,11 @@ function costOf(pid: number, since: number): number {
       try {
         const entry = JSON.parse(line) as {
           type?: string;
-          message?: { role?: string; timestamp?: number; usage?: { cost?: { total?: number } } };
+          message?: {
+            role?: string;
+            timestamp?: number;
+            usage?: { cost?: { total?: number } };
+          };
         };
         const message = entry.message;
         if (entry.type !== "message" || message?.role !== "assistant") continue;
@@ -261,20 +289,29 @@ export default function (pi: ExtensionAPI) {
   let timer: ReturnType<typeof setInterval> | undefined;
   let shown = false;
 
-  pi.registerEntryRenderer<ScoutEntry>("scout", (entry, { expanded }, theme) => {
-    const d = entry.data;
-    if (!d) return undefined;
-    const status = d.rc === 0 ? theme.fg("success", outcome(d.rc)) : theme.fg("error", outcome(d.rc));
-    const header =
-      theme.fg("toolTitle", theme.bold("scout ")) +
-      theme.fg("accent", `${shortModel(d.model)}/${d.thinking}`) +
-      theme.fg("muted", ` · ${formatElapsed(d.finished - d.started)} · $${d.cost.toFixed(3)} · `) +
-      status +
-      theme.fg("dim", ` · ${d.task}`);
-    if (!expanded) return new Text(header, 0, 0);
-    const body = d.digest.length > 0 ? d.digest : "(no digest)";
-    return new Text(`${header}\n${theme.fg("dim", body)}`, 0, 0);
-  });
+  pi.registerEntryRenderer<ScoutEntry>(
+    "scout",
+    (entry, { expanded }, theme) => {
+      const d = entry.data;
+      if (!d) return undefined;
+      const status =
+        d.rc === 0
+          ? theme.fg("success", outcome(d.rc))
+          : theme.fg("error", outcome(d.rc));
+      const header =
+        theme.fg("toolTitle", theme.bold("scout ")) +
+        theme.fg("accent", `${shortModel(d.model)}/${d.thinking}`) +
+        theme.fg(
+          "muted",
+          ` · ${formatElapsed(d.finished - d.started)} · $${d.cost.toFixed(3)} · `,
+        ) +
+        status +
+        theme.fg("dim", ` · ${d.task}`);
+      if (!expanded) return new Text(header, 0, 0);
+      const body = d.digest.length > 0 ? d.digest : "(no digest)";
+      return new Text(`${header}\n${theme.fg("dim", body)}`, 0, 0);
+    },
+  );
 
   const tick = (ctx: ExtensionContext) => {
     const now = Date.now();
@@ -288,7 +325,10 @@ export default function (pi: ExtensionAPI) {
       shown = false;
       return;
     }
-    ctx.ui.setStatus("scout", ctx.ui.theme.fg("accent", renderStatus(scouts, now)));
+    ctx.ui.setStatus(
+      "scout",
+      ctx.ui.theme.fg("accent", renderStatus(scouts, now)),
+    );
     shown = true;
   };
 

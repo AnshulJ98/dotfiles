@@ -14,75 +14,95 @@
  * has an outer, longer limit for a child whose event loop is itself stuck.
  * PI_STREAM_STALL_MS overrides the limit (tests).
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { logEvent } from "../lib/events.ts";
 
 const MINUTE = 60_000;
-const RESUME = "The previous response stalled and was cut off. Continue where you stopped.";
+const RESUME =
+  "The previous response stalled and was cut off. Continue where you stopped.";
 
 export default function (pi: ExtensionAPI): void {
-	let timer: NodeJS.Timeout | undefined;
-	let stalled = false;
-	let resumed = false;
+  let timer: NodeJS.Timeout | undefined;
+  let stalled = false;
+  let resumed = false;
 
-	const limitMs = (): number => {
-		const override = Number(process.env.PI_STREAM_STALL_MS);
-		if (override > 0) return override;
-		const level = pi.getThinkingLevel();
-		// Long thinking may stream nothing for minutes when the provider sends no summaries; workers run unattended
-		return level === "xhigh" || level === "max" || process.env.PI_WORKER_SPEC ? 10 * MINUTE : 5 * MINUTE;
-	};
-	const disarm = () => {
-		clearTimeout(timer);
-		timer = undefined;
-	};
-	const arm = (ctx: ExtensionContext) => {
-		disarm();
-		// A local server can take longer than any limit to read a long prompt; there is no network to hang
-		if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(ctx.model?.baseUrl ?? "")) return;
-		const ms = limitMs();
-		timer = setTimeout(() => {
-			timer = undefined;
-			stalled = true;
-			const note = `stream-watchdog: no model output for ${Math.round(ms / 1000)}s; aborting the response`;
-			if (ctx.hasUI) ctx.ui.notify(note, "warning");
-			else process.stderr.write(`${note}\n`);
-			logEvent("stream.stall", `no model output for ${Math.round(ms / 1000)}s`, ctx.sessionManager.getSessionId());
-			ctx.abort();
-		}, ms);
-		timer.unref();
-	};
+  const limitMs = (): number => {
+    const override = Number(process.env.PI_STREAM_STALL_MS);
+    if (override > 0) return override;
+    const level = pi.getThinkingLevel();
+    // Long thinking may stream nothing for minutes when the provider sends no summaries; workers run unattended
+    return level === "xhigh" || level === "max" || process.env.PI_WORKER_SPEC
+      ? 10 * MINUTE
+      : 5 * MINUTE;
+  };
+  const disarm = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+  const arm = (ctx: ExtensionContext) => {
+    disarm();
+    // A local server can take longer than any limit to read a long prompt; there is no network to hang
+    if (
+      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(
+        ctx.model?.baseUrl ?? "",
+      )
+    )
+      return;
+    const ms = limitMs();
+    timer = setTimeout(() => {
+      timer = undefined;
+      stalled = true;
+      const note = `stream-watchdog: no model output for ${Math.round(ms / 1000)}s; aborting the response`;
+      if (ctx.hasUI) ctx.ui.notify(note, "warning");
+      else process.stderr.write(`${note}\n`);
+      logEvent(
+        "stream.stall",
+        `no model output for ${Math.round(ms / 1000)}s`,
+        ctx.sessionManager.getSessionId(),
+      );
+      ctx.abort();
+    }, ms);
+    timer.unref();
+  };
 
-	pi.on("before_provider_request", (_event, ctx) => {
-		arm(ctx);
-		return undefined;
-	});
-	pi.on("provider_stream_event", (_event, ctx) => {
-		if (timer) arm(ctx);
-	});
-	pi.on("message_end", (event) => {
-		if (event.message.role === "assistant") disarm();
-	});
-	pi.on("agent_settled", (event, ctx) => {
-		disarm();
-		if (!stalled) {
-			resumed = false;
-			return;
-		}
-		stalled = false;
-		if (!event.aborted) return;
-		if (resumed) {
-			const note = "stream-watchdog: the model stream stalled again after one resume; stopping";
-			if (ctx.hasUI) ctx.ui.notify(note, "error");
-			else process.stderr.write(`${note}\n`);
-			logEvent("stream.stop", "stalled again after one resume", ctx.sessionManager.getSessionId());
-			resumed = false;
-			return;
-		}
-		resumed = true;
-		pi.sendUserMessage(RESUME);
-	});
-	pi.on("session_shutdown", () => {
-		disarm();
-	});
+  pi.on("before_provider_request", (_event, ctx) => {
+    arm(ctx);
+    return undefined;
+  });
+  pi.on("provider_stream_event", (_event, ctx) => {
+    if (timer) arm(ctx);
+  });
+  pi.on("message_end", (event) => {
+    if (event.message.role === "assistant") disarm();
+  });
+  pi.on("agent_settled", (event, ctx) => {
+    disarm();
+    if (!stalled) {
+      resumed = false;
+      return;
+    }
+    stalled = false;
+    if (!event.aborted) return;
+    if (resumed) {
+      const note =
+        "stream-watchdog: the model stream stalled again after one resume; stopping";
+      if (ctx.hasUI) ctx.ui.notify(note, "error");
+      else process.stderr.write(`${note}\n`);
+      logEvent(
+        "stream.stop",
+        "stalled again after one resume",
+        ctx.sessionManager.getSessionId(),
+      );
+      resumed = false;
+      return;
+    }
+    resumed = true;
+    pi.sendUserMessage(RESUME);
+  });
+  pi.on("session_shutdown", () => {
+    disarm();
+  });
 }

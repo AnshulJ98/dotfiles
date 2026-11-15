@@ -16,35 +16,48 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const isEmpty = (value: unknown) => value == null || value === "" || (Array.isArray(value) && value.length === 0);
-const ENTRY_FIELDS = ["context", "options", "allowMultiple", "allowFreeform"] as const;
+const isEmpty = (value: unknown) =>
+  value == null || value === "" || (Array.isArray(value) && value.length === 0);
+const ENTRY_FIELDS = [
+  "context",
+  "options",
+  "allowMultiple",
+  "allowFreeform",
+] as const;
 
 export function normalizeAskArgs(input: Record<string, unknown>): void {
-	if (!Array.isArray(input.questions)) return;
-	const seen = new Set<string>();
-	const entries = input.questions.filter((entry): entry is Record<string, unknown> => {
-		const text = typeof entry?.question === "string" ? entry.question.trim().toLowerCase() : "";
-		if (!text || seen.has(text)) return false;
-		seen.add(text);
-		return true;
-	});
-	if (entries.length < 2) {
-		delete input.questions;
-		const [only] = entries;
-		if (!only) return;
-		input.question = only.question;
-		for (const field of ENTRY_FIELDS) if (!isEmpty(only[field])) input[field] = only[field];
-		return;
-	}
-	input.questions = entries;
-	delete input.allowMultiple;
-	delete input.allowFreeform;
-	if (isEmpty(input.context)) delete input.context;
-	if (isEmpty(input.options)) delete input.options;
+  if (!Array.isArray(input.questions)) return;
+  const seen = new Set<string>();
+  const entries = input.questions.filter(
+    (entry): entry is Record<string, unknown> => {
+      const text =
+        typeof entry?.question === "string"
+          ? entry.question.trim().toLowerCase()
+          : "";
+      if (!text || seen.has(text)) return false;
+      seen.add(text);
+      return true;
+    },
+  );
+  if (entries.length < 2) {
+    delete input.questions;
+    const [only] = entries;
+    if (!only) return;
+    input.question = only.question;
+    for (const field of ENTRY_FIELDS)
+      if (!isEmpty(only[field])) input[field] = only[field];
+    return;
+  }
+  input.questions = entries;
+  delete input.allowMultiple;
+  delete input.allowFreeform;
+  if (isEmpty(input.context)) delete input.context;
+  if (isEmpty(input.options)) delete input.options;
 }
 
 export default function (pi: ExtensionAPI): void {
-	pi.on("tool_call", async (event) => {
-		if (event.toolName === "ask_user") normalizeAskArgs(event.input as Record<string, unknown>);
-	});
+  pi.on("tool_call", async (event) => {
+    if (event.toolName === "ask_user")
+      normalizeAskArgs(event.input as Record<string, unknown>);
+  });
 }

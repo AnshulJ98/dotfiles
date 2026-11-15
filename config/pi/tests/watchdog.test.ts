@@ -4,124 +4,189 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-	backgroundVerdict,
-	type BackgroundState,
-	describeQuiet,
-	foregroundVerdict,
-	heartbeatAge,
-	isExempt,
-	noteOutput,
-	observe,
-	type Reading,
-	startTrack,
-	type Track,
-	WORK_CPU_SHARE,
+  backgroundVerdict,
+  type BackgroundState,
+  describeQuiet,
+  foregroundVerdict,
+  heartbeatAge,
+  isExempt,
+  noteOutput,
+  observe,
+  type Reading,
+  startTrack,
+  type Track,
+  WORK_CPU_SHARE,
 } from "../lib/watchdog.ts";
 
 const TICK = 5_000;
 const IDLE = 90_000;
 
 interface Tick {
-	cpu?: number; // CPU seconds added this tick
-	net?: number; // bytes added this tick
-	fork?: boolean; // pid set changed
-	out?: boolean; // printed output this tick
-	noPs?: boolean; // ps failed
-	noNet?: boolean; // nettop failed
+  cpu?: number; // CPU seconds added this tick
+  net?: number; // bytes added this tick
+  fork?: boolean; // pid set changed
+  out?: boolean; // printed output this tick
+  noPs?: boolean; // ps failed
+  noNet?: boolean; // nettop failed
 }
 
 /** Replays `count` ticks of `tick` from t=0 and returns the final track and time. */
-function replay(count: number, tick: Tick | ((i: number) => Tick)): { track: Track; now: number } {
-	let track = startTrack(0, 1_000_000);
-	let cpu = 1;
-	let net = 100;
-	let pids = "10,11";
-	let now = 0;
-	for (let i = 1; i <= count; i += 1) {
-		now = i * TICK;
-		const t = typeof tick === "function" ? tick(i) : tick;
-		cpu += t.cpu ?? 0;
-		net += t.net ?? 0;
-		if (t.fork) pids = `10,11,${100 + i}`;
-		if (t.out) track = noteOutput(track, now);
-		const reading: Reading | undefined = t.noPs ? undefined : { cpu, pids, net: t.noNet ? undefined : net };
-		track = observe(track, reading, now, 1_000_000 + now, TICK);
-	}
-	return { track, now };
+function replay(
+  count: number,
+  tick: Tick | ((i: number) => Tick),
+): { track: Track; now: number } {
+  let track = startTrack(0, 1_000_000);
+  let cpu = 1;
+  let net = 100;
+  let pids = "10,11";
+  let now = 0;
+  for (let i = 1; i <= count; i += 1) {
+    now = i * TICK;
+    const t = typeof tick === "function" ? tick(i) : tick;
+    cpu += t.cpu ?? 0;
+    net += t.net ?? 0;
+    if (t.fork) pids = `10,11,${100 + i}`;
+    if (t.out) track = noteOutput(track, now);
+    const reading: Reading | undefined = t.noPs
+      ? undefined
+      : { cpu, pids, net: t.noNet ? undefined : net };
+    track = observe(track, reading, now, 1_000_000 + now, TICK);
+  }
+  return { track, now };
 }
 
-const fg = (track: Track, now: number, extra: { exempt?: boolean; heartbeatAgeMs?: number } = {}) =>
-	foregroundVerdict(track, { now, idleMs: IDLE, heartbeatAgeMs: extra.heartbeatAgeMs, exempt: extra.exempt ?? false });
+const fg = (
+  track: Track,
+  now: number,
+  extra: { exempt?: boolean; heartbeatAgeMs?: number } = {},
+) =>
+  foregroundVerdict(track, {
+    now,
+    idleMs: IDLE,
+    heartbeatAgeMs: extra.heartbeatAgeMs,
+    exempt: extra.exempt ?? false,
+  });
 
-const FOREGROUND: Array<[string, number, Tick | ((i: number) => Tick), "keep" | "kill", { exempt?: boolean; heartbeatAgeMs?: number }?]> = [
-	["hung curl: no output, CPU, network or forks", 20, {}, "kill"],
-	["sleep: idle just under the limit", 17, {}, "keep"],
-	["chatty loop prints every tick", 40, { out: true }, "keep"],
-	["busy loop burns CPU silently", 40, { cpu: 5 }, "keep"],
-	["throttled download: 0.01s CPU and bytes each tick", 40, { cpu: 0.01, net: 300_000 }, "keep"],
-	["download with flat CPU but growing bytes", 40, { net: 50_000 }, "keep"],
-	["one ps step (0.01s CPU) still counts", 40, { cpu: 0.01 }, "keep"],
-	["process churn counts as activity", 40, (i) => ({ fork: i % 2 === 0 }), "keep"],
-	["broken ps: no evidence, never kill", 40, { noPs: true }, "keep"],
-	["broken nettop: no evidence, never kill", 40, { noNet: true }, "keep"],
-	["exempt command (ssh) idle", 40, {}, "keep", { exempt: true }],
-	["fresh heartbeat beats idle CPU", 40, {}, "keep", { heartbeatAgeMs: 10_000 }],
-	["stale heartbeat beats busy CPU", 40, { cpu: 5 }, "kill", { heartbeatAgeMs: IDLE }],
-	["stale heartbeat kills even an exempt command", 40, {}, "kill", { exempt: true, heartbeatAgeMs: IDLE + 1 }],
-	["went quiet after early output", 40, (i) => ({ out: i < 10 }), "kill"],
+const FOREGROUND: Array<
+  [
+    string,
+    number,
+    Tick | ((i: number) => Tick),
+    "keep" | "kill",
+    { exempt?: boolean; heartbeatAgeMs?: number }?,
+  ]
+> = [
+  ["hung curl: no output, CPU, network or forks", 20, {}, "kill"],
+  ["sleep: idle just under the limit", 17, {}, "keep"],
+  ["chatty loop prints every tick", 40, { out: true }, "keep"],
+  ["busy loop burns CPU silently", 40, { cpu: 5 }, "keep"],
+  [
+    "throttled download: 0.01s CPU and bytes each tick",
+    40,
+    { cpu: 0.01, net: 300_000 },
+    "keep",
+  ],
+  ["download with flat CPU but growing bytes", 40, { net: 50_000 }, "keep"],
+  ["one ps step (0.01s CPU) still counts", 40, { cpu: 0.01 }, "keep"],
+  [
+    "process churn counts as activity",
+    40,
+    (i) => ({ fork: i % 2 === 0 }),
+    "keep",
+  ],
+  ["broken ps: no evidence, never kill", 40, { noPs: true }, "keep"],
+  ["broken nettop: no evidence, never kill", 40, { noNet: true }, "keep"],
+  ["exempt command (ssh) idle", 40, {}, "keep", { exempt: true }],
+  [
+    "fresh heartbeat beats idle CPU",
+    40,
+    {},
+    "keep",
+    { heartbeatAgeMs: 10_000 },
+  ],
+  [
+    "stale heartbeat beats busy CPU",
+    40,
+    { cpu: 5 },
+    "kill",
+    { heartbeatAgeMs: IDLE },
+  ],
+  [
+    "stale heartbeat kills even an exempt command",
+    40,
+    {},
+    "kill",
+    { exempt: true, heartbeatAgeMs: IDLE + 1 },
+  ],
+  ["went quiet after early output", 40, (i) => ({ out: i < 10 }), "kill"],
 ];
 
 for (const [name, ticks, tick, want, extra] of FOREGROUND) {
-	test(`foreground: ${name}`, () => {
-		const { track, now } = replay(ticks, tick);
-		assert.equal(fg(track, now, extra), want);
-	});
+  test(`foreground: ${name}`, () => {
+    const { track, now } = replay(ticks, tick);
+    assert.equal(fg(track, now, extra), want);
+  });
 }
 
 test("foreground: a tick gap (Mac sleep) restarts the quiet clocks", () => {
-	let { track } = replay(10, {});
-	const late = 10 * TICK + 4 * TICK + 1;
-	track = observe(track, { cpu: 1, pids: "10,11", net: 100 }, late, 1_000_000 + late, TICK);
-	assert.equal(track.lastOut, late);
-	assert.equal(track.lastActive, late);
-	assert.equal(fg(track, late + IDLE - 1), "keep");
+  let { track } = replay(10, {});
+  const late = 10 * TICK + 4 * TICK + 1;
+  track = observe(
+    track,
+    { cpu: 1, pids: "10,11", net: 100 },
+    late,
+    1_000_000 + late,
+    TICK,
+  );
+  assert.equal(track.lastOut, late);
+  assert.equal(track.lastActive, late);
+  assert.equal(fg(track, late + IDLE - 1), "keep");
 });
 
 test("observe: only CPU share or network growth moves the work clock", () => {
-	assert.equal(WORK_CPU_SHARE, 0.01);
-	const baseline = observe(startTrack(0, 0), { cpu: 0, pids: "1", net: 100 }, TICK, TICK, TICK);
-	const rows: Array<[Reading, number, number]> = [
-		[{ cpu: 0.05, pids: "1", net: 100 }, TICK, 2 * TICK],
-		[{ cpu: 0.01, pids: "1", net: 100 }, TICK, 0],
-		[{ cpu: 0.049999, pids: "1", net: 100 }, TICK, 0],
-		[{ cpu: 0, pids: "1,2", net: 100 }, TICK, 0],
-		[{ cpu: 0, pids: "1", net: 101 }, TICK, 2 * TICK],
-		[{ cpu: 0.05, pids: "1", net: 100 }, 2 * TICK, 0],
-		[{ cpu: 0.1, pids: "1", net: 100 }, 2 * TICK, 3 * TICK],
-	];
-	for (const [reading, elapsed, want] of rows) {
-		assert.equal(observe(baseline, reading, TICK + elapsed, TICK + elapsed, TICK).lastWork, want);
-	}
+  assert.equal(WORK_CPU_SHARE, 0.01);
+  const baseline = observe(
+    startTrack(0, 0),
+    { cpu: 0, pids: "1", net: 100 },
+    TICK,
+    TICK,
+    TICK,
+  );
+  const rows: Array<[Reading, number, number]> = [
+    [{ cpu: 0.05, pids: "1", net: 100 }, TICK, 2 * TICK],
+    [{ cpu: 0.01, pids: "1", net: 100 }, TICK, 0],
+    [{ cpu: 0.049999, pids: "1", net: 100 }, TICK, 0],
+    [{ cpu: 0, pids: "1,2", net: 100 }, TICK, 0],
+    [{ cpu: 0, pids: "1", net: 101 }, TICK, 2 * TICK],
+    [{ cpu: 0.05, pids: "1", net: 100 }, 2 * TICK, 0],
+    [{ cpu: 0.1, pids: "1", net: 100 }, 2 * TICK, 3 * TICK],
+  ];
+  for (const [reading, elapsed, want] of rows) {
+    assert.equal(
+      observe(baseline, reading, TICK + elapsed, TICK + elapsed, TICK).lastWork,
+      want,
+    );
+  }
 });
 
 test("observe: start, first reading, failed ps and gap reset preserve work-clock rules", () => {
-	let track = startTrack(123, 123);
-	assert.equal(track.lastWork, 123);
-	track = observe(track, { cpu: 100, pids: "1", net: 100 }, TICK, TICK, TICK);
-	assert.equal(track.lastWork, 123);
-	track = observe(track, undefined, 2 * TICK, 2 * TICK, TICK);
-	assert.equal(track.lastWork, 123);
-	const late = 6 * TICK;
-	track = observe(track, { cpu: 100, pids: "1", net: 100 }, late, late, TICK);
-	assert.equal(track.lastWork, late);
-	assert.equal(track.evidence, false);
+  let track = startTrack(123, 123);
+  assert.equal(track.lastWork, 123);
+  track = observe(track, { cpu: 100, pids: "1", net: 100 }, TICK, TICK, TICK);
+  assert.equal(track.lastWork, 123);
+  track = observe(track, undefined, 2 * TICK, 2 * TICK, TICK);
+  assert.equal(track.lastWork, 123);
+  const late = 6 * TICK;
+  track = observe(track, { cpu: 100, pids: "1", net: 100 }, late, late, TICK);
+  assert.equal(track.lastWork, late);
+  assert.equal(track.evidence, false);
 });
 
 test("heartbeatAge: never touched is undefined; older than the start counts from the start", () => {
-	const track = startTrack(0, 5_000);
-	assert.equal(heartbeatAge(undefined, track, 9_000), undefined);
-	assert.equal(heartbeatAge(1_000, track, 9_000), 4_000);
-	assert.equal(heartbeatAge(8_000, track, 9_000), 1_000);
+  const track = startTrack(0, 5_000);
+  assert.equal(heartbeatAge(undefined, track, 9_000), undefined);
+  assert.equal(heartbeatAge(1_000, track, 9_000), 4_000);
+  assert.equal(heartbeatAge(8_000, track, 9_000), 1_000);
 });
 
 const BG = { idleMs: 5 * 60_000, busyMs: 30 * 60_000, maxWakes: 3 };
@@ -129,112 +194,160 @@ const fresh: BackgroundState = { wakes: 0, lastWakeAt: 0, unhealthy: false };
 
 /** Runs the background verdict every tick for `minutes` and returns the alerts with the minute they fired. */
 function bgRun(
-	minutes: number,
-	tick: Tick,
-	opts: { heartbeatAgeMs?: (now: number) => number | undefined; healthy?: (i: number) => boolean | undefined; health?: boolean } = {},
+  minutes: number,
+  tick: Tick,
+  opts: {
+    heartbeatAgeMs?: (now: number) => number | undefined;
+    healthy?: (i: number) => boolean | undefined;
+    health?: boolean;
+  } = {},
 ): string[] {
-	let track = startTrack(0, 0);
-	let state = fresh;
-	let cpu = 1;
-	let net = 0;
-	const alerts: string[] = [];
-	const ticks = (minutes * 60_000) / TICK;
-	for (let i = 1; i <= ticks; i += 1) {
-		const now = i * TICK;
-		cpu += tick.cpu ?? 0;
-		net += tick.net ?? 0;
-		if (tick.out) track = noteOutput(track, now);
-		track = observe(track, tick.noPs ? undefined : { cpu, pids: tick.fork ? `1,${i}` : "1", net: tick.noNet ? undefined : net }, now, now, TICK);
-		const result = backgroundVerdict(track, state, { ...BG, now, heartbeatAgeMs: opts.heartbeatAgeMs?.(now), healthy: opts.healthy?.(i), health: opts.health ?? false });
-		state = result.state;
-		if (result.alert) alerts.push(`${Math.round(now / 60_000)}m ${result.alert}`);
-	}
-	return alerts;
+  let track = startTrack(0, 0);
+  let state = fresh;
+  let cpu = 1;
+  let net = 0;
+  const alerts: string[] = [];
+  const ticks = (minutes * 60_000) / TICK;
+  for (let i = 1; i <= ticks; i += 1) {
+    const now = i * TICK;
+    cpu += tick.cpu ?? 0;
+    net += tick.net ?? 0;
+    if (tick.out) track = noteOutput(track, now);
+    track = observe(
+      track,
+      tick.noPs
+        ? undefined
+        : {
+            cpu,
+            pids: tick.fork ? `1,${i}` : "1",
+            net: tick.noNet ? undefined : net,
+          },
+      now,
+      now,
+      TICK,
+    );
+    const result = backgroundVerdict(track, state, {
+      ...BG,
+      now,
+      heartbeatAgeMs: opts.heartbeatAgeMs?.(now),
+      healthy: opts.healthy?.(i),
+      health: opts.health ?? false,
+    });
+    state = result.state;
+    if (result.alert)
+      alerts.push(`${Math.round(now / 60_000)}m ${result.alert}`);
+  }
+  return alerts;
 }
 
 test("background: idle job wakes at 5m, then 15m and 45m later, then stops", () => {
-	assert.deepEqual(bgRun(120, {}), ["5m no output, CPU or network for 5m", "20m no output, CPU or network for 15m", "65m no output, CPU or network for 45m"]);
+  assert.deepEqual(bgRun(120, {}), [
+    "5m no output, CPU or network for 5m",
+    "20m no output, CPU or network for 15m",
+    "65m no output, CPU or network for 45m",
+  ]);
 });
 
 test("background: busy but silent wakes at 30m only", () => {
-	assert.deepEqual(bgRun(60, { cpu: 2 }), ["30m busy but no output for 30m"]);
+  assert.deepEqual(bgRun(60, { cpu: 2 }), ["30m busy but no output for 30m"]);
 });
 
 for (const fork of [false, true]) {
-	test(`background: printing without work wakes at 5m, 20m and 65m (churn: ${fork})`, () => {
-		assert.deepEqual(bgRun(120, { out: true, fork }), [
-			"5m almost no CPU and no network for 5m",
-			"20m almost no CPU and no network for 15m",
-			"65m almost no CPU and no network for 45m",
-		]);
-	});
+  test(`background: printing without work wakes at 5m, 20m and 65m (churn: ${fork})`, () => {
+    assert.deepEqual(bgRun(120, { out: true, fork }), [
+      "5m almost no CPU and no network for 5m",
+      "20m almost no CPU and no network for 15m",
+      "65m almost no CPU and no network for 45m",
+    ]);
+  });
 }
 
 test("background: printing with 1% CPU or growing bytes never wakes", () => {
-	assert.deepEqual(bgRun(120, { out: true, cpu: 0.05 }), []);
-	assert.deepEqual(bgRun(120, { out: true, net: 1000 }), []);
+  assert.deepEqual(bgRun(120, { out: true, cpu: 0.05 }), []);
+  assert.deepEqual(bgRun(120, { out: true, net: 1000 }), []);
 });
 
 test("background: silent polling below 1% CPU wakes at 5m", () => {
-	assert.deepEqual(bgRun(6, { cpu: 0.01 }), ["5m almost no CPU and no network for 5m"]);
+  assert.deepEqual(bgRun(6, { cpu: 0.01 }), [
+    "5m almost no CPU and no network for 5m",
+  ]);
 });
 
 test("background: download (bytes moving) never wakes before the busy limit", () => {
-	assert.deepEqual(bgRun(29, { net: 1000 }), []);
+  assert.deepEqual(bgRun(29, { net: 1000 }), []);
 });
 
 test("background: a health command with no result suppresses inference", () => {
-	assert.deepEqual(bgRun(120, {}, { health: true }), []);
+  assert.deepEqual(bgRun(120, {}, { health: true }), []);
 });
 
 test("background: no evidence never wakes", () => {
-	assert.deepEqual(bgRun(60, { noPs: true }), []);
-	assert.deepEqual(bgRun(60, { out: true, noNet: true }), []);
+  assert.deepEqual(bgRun(60, { noPs: true }), []);
+  assert.deepEqual(bgRun(60, { out: true, noNet: true }), []);
 });
 
 test("background: health failure wakes at once, once per failure streak", () => {
-	// Checked every 30s (6 ticks): down from 2m to 4m, up again, down again at 5m.
-	const healthy = (i: number) => (i % 6 !== 0 ? undefined : !((i >= 24 && i <= 48) || i === 60));
-	assert.deepEqual(bgRun(6, { out: true }, { healthy }), ["2m health check failed", "5m health check failed"]);
+  // Checked every 30s (6 ticks): down from 2m to 4m, up again, down again at 5m.
+  const healthy = (i: number) =>
+    i % 6 !== 0 ? undefined : !((i >= 24 && i <= 48) || i === 60);
+  assert.deepEqual(bgRun(6, { out: true }, { healthy }), [
+    "2m health check failed",
+    "5m health check failed",
+  ]);
 });
 
 test("background: a health failure still wakes after the idle wakes are used up", () => {
-	// Idle wakes at 5m, 20m, 65m use all three; the health check fails at 80m (tick 960)
-	const healthy = (i: number) => (i === 960 ? false : undefined);
-	assert.deepEqual(bgRun(90, {}, { healthy }).at(-1), "80m health check failed");
+  // Idle wakes at 5m, 20m, 65m use all three; the health check fails at 80m (tick 960)
+  const healthy = (i: number) => (i === 960 ? false : undefined);
+  assert.deepEqual(
+    bgRun(90, {}, { healthy }).at(-1),
+    "80m health check failed",
+  );
 });
 
 test("background: declared heartbeat decides both ways", () => {
-	assert.deepEqual(bgRun(30, {}, { heartbeatAgeMs: () => 1_000 }), []);
-	assert.deepEqual(bgRun(6, { cpu: 2, out: true }, { heartbeatAgeMs: (now) => now }), ["5m no heartbeat for 5m"]);
+  assert.deepEqual(bgRun(30, {}, { heartbeatAgeMs: () => 1_000 }), []);
+  assert.deepEqual(
+    bgRun(6, { cpu: 2, out: true }, { heartbeatAgeMs: (now) => now }),
+    ["5m no heartbeat for 5m"],
+  );
 });
 
 test("describeQuiet labels what the quiet job is doing", () => {
-	const busy = replay(20, { cpu: 1 });
-	assert.equal(describeQuiet(busy.track, busy.now, TICK), "quiet 2m · busy");
-	const dl = replay(20, { net: 10 });
-	assert.equal(describeQuiet(dl.track, dl.now, TICK), "quiet 2m · downloading");
-	const idle = replay(20, {});
-	assert.equal(describeQuiet(idle.track, idle.now, TICK), "quiet 2m · idle");
-	const chatty = replay(20, { out: true });
-	assert.equal(describeQuiet(chatty.track, chatty.now, TICK), "");
+  const busy = replay(20, { cpu: 1 });
+  assert.equal(describeQuiet(busy.track, busy.now, TICK), "quiet 2m · busy");
+  const dl = replay(20, { net: 10 });
+  assert.equal(describeQuiet(dl.track, dl.now, TICK), "quiet 2m · downloading");
+  const idle = replay(20, {});
+  assert.equal(describeQuiet(idle.track, idle.now, TICK), "quiet 2m · idle");
+  const chatty = replay(20, { out: true });
+  assert.equal(describeQuiet(chatty.track, chatty.now, TICK), "");
 });
 
 const EXEMPT: Array<[string, boolean]> = [
-	["ssh host uptime", true],
-	["/usr/local/bin/docker logs -f web", true],
-	["cd app && kubectl rollout status deploy/x", true],
-	["timeout 30 make test", true],
-	["~/.pi/agent/bin/scout 'map the repo'", true],
-	["curl -s http://x/", false],
-	["sleep 20", false],
-	["npm test", false],
-	["sshfs-helper --version", false],
-	// pi-rtk-optimizer rewrites the command before background.ts's operations run it
-	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk docker logs -f web", true],
-	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; timeout 30 rtk make test", true],
-	["export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk git status", false],
+  ["ssh host uptime", true],
+  ["/usr/local/bin/docker logs -f web", true],
+  ["cd app && kubectl rollout status deploy/x", true],
+  ["timeout 30 make test", true],
+  ["~/.pi/agent/bin/scout 'map the repo'", true],
+  ["curl -s http://x/", false],
+  ["sleep 20", false],
+  ["npm test", false],
+  ["sshfs-helper --version", false],
+  // pi-rtk-optimizer rewrites the command before background.ts's operations run it
+  [
+    "export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk docker logs -f web",
+    true,
+  ],
+  [
+    "export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; timeout 30 rtk make test",
+    true,
+  ],
+  [
+    "export RTK_DB_PATH='/var/folders/x/T/pi-rtk-optimizer/history.db'; rtk git status",
+    false,
+  ],
 ];
 for (const [command, want] of EXEMPT) {
-	test(`isExempt: ${command}`, () => assert.equal(isExempt(command), want));
+  test(`isExempt: ${command}`, () => assert.equal(isExempt(command), want));
 }

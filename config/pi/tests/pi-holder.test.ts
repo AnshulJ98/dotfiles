@@ -5,19 +5,35 @@ import piHolder from "../extensions/pi-holder.ts";
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
 test("kitty notifications: settled completion and input prompts, not turns, aborts, RPC or scouts", async () => {
-  const saved = { kitty: process.env.KITTY_WINDOW_ID, scout: process.env.SCOUT_DIGEST };
+  const saved = {
+    kitty: process.env.KITTY_WINDOW_ID,
+    scout: process.env.SCOUT_DIGEST,
+  };
   process.env.KITTY_WINDOW_ID = "42";
   delete process.env.SCOUT_DIGEST;
   const handlers = new Map<string, Handler>();
   const chunks: string[] = [];
-  const write = test.mock.method(process.stdout, "write", (chunk: string | Uint8Array) => {
-    chunks.push(String(chunk));
-    return true;
-  });
+  const write = test.mock.method(
+    process.stdout,
+    "write",
+    (chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    },
+  );
   try {
-    piHolder({ on: (name: string, fn: Handler) => handlers.set(name, fn) } as never);
-    const ctx = { mode: "tui", cwd: "/tmp/my project", sessionManager: { getSessionId: () => "session-123" }, getContextUsage: () => undefined };
-    const fire = async (name: string, event: unknown, context = ctx) => { await handlers.get(name)?.(event, context); };
+    piHolder({
+      on: (name: string, fn: Handler) => handlers.set(name, fn),
+    } as never);
+    const ctx = {
+      mode: "tui",
+      cwd: "/tmp/my project",
+      sessionManager: { getSessionId: () => "session-123" },
+      getContextUsage: () => undefined,
+    };
+    const fire = async (name: string, event: unknown, context = ctx) => {
+      await handlers.get(name)?.(event, context);
+    };
     await fire("turn_end", {});
     assert.equal(chunks.filter((s) => s.includes("]99;")).length, 0);
     await fire("agent_settled", { aborted: true });
@@ -31,45 +47,100 @@ test("kitty notifications: settled completion and input prompts, not turns, abor
     const notes = chunks.filter((s) => s.includes("]99;"));
     assert.equal(notes.length, 4);
     for (const note of notes) {
-      assert.match(note, /^\x1b\]99;i=pi-session-123:.*o=unfocused:.*e=1(?::[^;]*)?;/);
+      assert.match(
+        note,
+        /^\x1b\]99;i=pi-session-123:.*o=unfocused:.*e=1(?::[^;]*)?;/,
+      );
       assert.ok(note.endsWith("\x1b\\"));
       assert.doesNotMatch(note, /Choice|injection|my project/);
     }
     // Done and blocked sound different: kitty plays its "info" and "question" system sounds.
-    assert.ok(notes[0].includes(`:s=${Buffer.from("info").toString("base64")};`));
-    assert.ok(notes[2].includes(`:s=${Buffer.from("question").toString("base64")};`));
-    assert.equal(Buffer.from(notes[1].split(";").at(-1)!.slice(0, -2), "base64").toString(), "my project: ready for input");
-    assert.match(Buffer.from(notes[3].split(";").at(-1)!.slice(0, -2), "base64").toString(), /Choice/);
+    assert.ok(
+      notes[0].includes(`:s=${Buffer.from("info").toString("base64")};`),
+    );
+    assert.ok(
+      notes[2].includes(`:s=${Buffer.from("question").toString("base64")};`),
+    );
+    assert.equal(
+      Buffer.from(
+        notes[1].split(";").at(-1)!.slice(0, -2),
+        "base64",
+      ).toString(),
+      "my project: ready for input",
+    );
+    assert.match(
+      Buffer.from(
+        notes[3].split(";").at(-1)!.slice(0, -2),
+        "base64",
+      ).toString(),
+      /Choice/,
+    );
   } finally {
     write.mock.restore();
-    for (const [key, value] of [["KITTY_WINDOW_ID", saved.kitty], ["SCOUT_DIGEST", saved.scout]] as const) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    for (const [key, value] of [
+      ["KITTY_WINDOW_ID", saved.kitty],
+      ["SCOUT_DIGEST", saved.scout],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
 
 test("pi reports to the terminal inside kitty or inside a zmx session (a host pane, the iPad), nowhere else", async () => {
-  const saved = { kitty: process.env.KITTY_WINDOW_ID, zmx: process.env.ZMX_SESSION };
+  const saved = {
+    kitty: process.env.KITTY_WINDOW_ID,
+    zmx: process.env.ZMX_SESSION,
+  };
   const chunks: string[] = [];
-  const write = test.mock.method(process.stdout, "write", (chunk: string | Uint8Array) => {
-    chunks.push(String(chunk));
-    return true;
-  });
+  const write = test.mock.method(
+    process.stdout,
+    "write",
+    (chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    },
+  );
   try {
-    for (const [kitty, zmx, reports] of [[undefined, undefined, false], ["42", undefined, true], [undefined, "dev-1", true]] as const) {
-      for (const [key, value] of [["KITTY_WINDOW_ID", kitty], ["ZMX_SESSION", zmx]] as const) {
-        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    for (const [kitty, zmx, reports] of [
+      [undefined, undefined, false],
+      ["42", undefined, true],
+      [undefined, "dev-1", true],
+    ] as const) {
+      for (const [key, value] of [
+        ["KITTY_WINDOW_ID", kitty],
+        ["ZMX_SESSION", zmx],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
       }
       chunks.length = 0;
       const handlers = new Map<string, Handler>();
-      piHolder({ on: (name: string, fn: Handler) => handlers.set(name, fn) } as never);
-      await handlers.get("session_start")?.({}, { sessionManager: { getSessionFile: () => "/s/a.jsonl" }, model: { id: "m" }, getContextUsage: () => undefined });
-      assert.equal(chunks.some((s) => s.startsWith("\x1b]1337;SetUserVar=pi_session=")), reports, `kitty=${kitty} zmx=${zmx}`);
+      piHolder({
+        on: (name: string, fn: Handler) => handlers.set(name, fn),
+      } as never);
+      await handlers.get("session_start")?.(
+        {},
+        {
+          sessionManager: { getSessionFile: () => "/s/a.jsonl" },
+          model: { id: "m" },
+          getContextUsage: () => undefined,
+        },
+      );
+      assert.equal(
+        chunks.some((s) => s.startsWith("\x1b]1337;SetUserVar=pi_session=")),
+        reports,
+        `kitty=${kitty} zmx=${zmx}`,
+      );
     }
   } finally {
     write.mock.restore();
-    for (const [key, value] of [["KITTY_WINDOW_ID", saved.kitty], ["ZMX_SESSION", saved.zmx]] as const) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    for (const [key, value] of [
+      ["KITTY_WINDOW_ID", saved.kitty],
+      ["ZMX_SESSION", saved.zmx],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });

@@ -2,14 +2,27 @@
 // Drives bin/scout with a fake `pi` on PATH: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { EVENT_LINE } from "../lib/events.ts";
 
-const SCOUT = process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
-const SPEC = "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) → check: true\n";
+const SCOUT =
+  process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
+const SPEC =
+  "---\nfiles-allowed: [a.txt]\ntests: true\n---\n1. Do it (a.txt) → check: true\n";
 
 // FAKE_PI: ok (prints FAKE_BYTES of output), hang (one session line, then silent), sleep, env (prints the guard's mode and git),
 // args (prints the arguments scout passed), digest (prints FAKE_DIGEST),
@@ -46,748 +59,1225 @@ esac
 `;
 
 /** A .running meta as scout writes it; pid defaults to one that is alive for the test's lifetime. */
-function runningMeta(scoutRoot: string, fields: { pid?: number; mode: "read" | "rw"; repo?: string }): void {
-	const pid = fields.pid ?? process.pid;
-	mkdirSync(join(scoutRoot, ".running"), { recursive: true });
-	const lines = { pid, model: "m/x", thinking: "low", timeout: 300, started: Date.now(), session: "", task: "t", mode: fields.mode, repo: fields.repo ?? "" };
-	writeFileSync(join(scoutRoot, ".running", `${pid}.meta`), Object.entries(lines).map(([k, v]) => `${k}=${v}\n`).join(""));
+function runningMeta(
+  scoutRoot: string,
+  fields: { pid?: number; mode: "read" | "rw"; repo?: string },
+): void {
+  const pid = fields.pid ?? process.pid;
+  mkdirSync(join(scoutRoot, ".running"), { recursive: true });
+  const lines = {
+    pid,
+    model: "m/x",
+    thinking: "low",
+    timeout: 300,
+    started: Date.now(),
+    session: "",
+    task: "t",
+    mode: fields.mode,
+    repo: fields.repo ?? "",
+  };
+  writeFileSync(
+    join(scoutRoot, ".running", `${pid}.meta`),
+    Object.entries(lines)
+      .map(([k, v]) => `${k}=${v}\n`)
+      .join(""),
+  );
 }
 
 function gitCommonDir(cwd: string): string {
-	return spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, encoding: "utf8" }).stdout.trim();
+  return spawnSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { cwd, encoding: "utf8" },
+  ).stdout.trim();
 }
 
 function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
-	const root = mkdtempSync(join(tmpdir(), "scout-bin-"));
-	const bin = join(root, "bin");
-	mkdirSync(bin);
-	writeFileSync(join(bin, "pi"), FAKE_PI);
-	chmodSync(join(bin, "pi"), 0o755);
-	// A suite launched by a worker must not reuse its digest or a sibling worktree's guard.
-	const path = process.env.PATH?.split(":").filter((dir) => !dir.endsWith("/bin/guard")).join(":");
-	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${path}`, PI_CODING_AGENT_DIR: root };
-	delete env.SCOUT_DIGEST;
-	// Pane tests choose their own mode, independent of the worker running the suite.
-	delete env.SCOUT_KITTY;
-	delete env.PI_SCOUT_DEPTH;
-	delete env.PI_SESSION_FILE;
-	delete env.KITTY_WINDOW_ID;
-	delete env.KITTY_LISTEN_ON;
-	delete env.ZMX_SESSION;
-	return { env, scoutRoot: join(root, "sessions", "scout") };
+  const root = mkdtempSync(join(tmpdir(), "scout-bin-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "pi"), FAKE_PI);
+  chmodSync(join(bin, "pi"), 0o755);
+  // A suite launched by a worker must not reuse its digest or a sibling worktree's guard.
+  const path = process.env.PATH?.split(":")
+    .filter((dir) => !dir.endsWith("/bin/guard"))
+    .join(":");
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: `${bin}:${path}`,
+    PI_CODING_AGENT_DIR: root,
+  };
+  delete env.SCOUT_DIGEST;
+  // Pane tests choose their own mode, independent of the worker running the suite.
+  delete env.SCOUT_KITTY;
+  delete env.PI_SCOUT_DEPTH;
+  delete env.PI_SESSION_FILE;
+  delete env.KITTY_WINDOW_ID;
+  delete env.KITTY_LISTEN_ON;
+  delete env.ZMX_SESSION;
+  return { env, scoutRoot: join(root, "sessions", "scout") };
 }
 
 test("sandbox isolates the worker's inherited SCOUT_KITTY setting", () => {
-	const previous = process.env.SCOUT_KITTY;
-	try {
-		process.env.SCOUT_KITTY = "0";
-		assert.equal(sandbox().env.SCOUT_KITTY, undefined);
-	} finally {
-		if (previous === undefined) delete process.env.SCOUT_KITTY;
-		else process.env.SCOUT_KITTY = previous;
-	}
+  const previous = process.env.SCOUT_KITTY;
+  try {
+    process.env.SCOUT_KITTY = "0";
+    assert.equal(sandbox().env.SCOUT_KITTY, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.SCOUT_KITTY;
+    else process.env.SCOUT_KITTY = previous;
+  }
 });
 
 interface Run {
-	code: number | null;
-	stdout: string;
-	stderr: string;
-	ms: number;
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  ms: number;
 }
 
-function runScout(args: string[], env: NodeJS.ProcessEnv, stdin = "", onSpawn?: (pid: number) => void): Promise<Run> {
-	const started = Date.now();
-	return new Promise((done) => {
-		const child = spawn(SCOUT, args, { env });
-		let stdout = "";
-		let stderr = "";
-		child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-		child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-		child.stdin.end(stdin);
-		if (child.pid) onSpawn?.(child.pid);
-		child.on("close", (code) => done({ code, stdout, stderr, ms: Date.now() - started }));
-	});
+function runScout(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  stdin = "",
+  onSpawn?: (pid: number) => void,
+): Promise<Run> {
+  const started = Date.now();
+  return new Promise((done) => {
+    const child = spawn(SCOUT, args, { env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+    child.stdin.end(stdin);
+    if (child.pid) onSpawn?.(child.pid);
+    child.on("close", (code) =>
+      done({ code, stdout, stderr, ms: Date.now() - started }),
+    );
+  });
 }
 
 function report(scoutRoot: string): { verdict: string; reasons: string[] } {
-	const run = readdirSync(scoutRoot).find((d) => /^\d+$/.test(d));
-	assert.ok(run, "no run folder");
-	return JSON.parse(readFileSync(join(scoutRoot, run, "verdict.json"), "utf8"));
+  const run = readdirSync(scoutRoot).find((d) => /^\d+$/.test(d));
+  assert.ok(run, "no run folder");
+  return JSON.parse(readFileSync(join(scoutRoot, run, "verdict.json"), "utf8"));
 }
 
 function doneMeta(scoutRoot: string): string {
-	const meta = readdirSync(join(scoutRoot, ".done")).find((f) => f.endsWith(".meta"));
-	assert.ok(meta, "no .done meta");
-	return readFileSync(join(scoutRoot, ".done", meta), "utf8");
+  const meta = readdirSync(join(scoutRoot, ".done")).find((f) =>
+    f.endsWith(".meta"),
+  );
+  assert.ok(meta, "no .done meta");
+  return readFileSync(join(scoutRoot, ".done", meta), "utf8");
 }
 
 test("a refused spec leaves no run folder, running meta or spec temp file behind", async () => {
-	const { env, scoutRoot } = sandbox();
-	const tmp = mkdtempSync(join(tmpdir(), "scout-spec-tmp-"));
-	const run = await runScout(["--spec", "-"], { ...env, TMPDIR: tmp }, "no frontmatter\n");
-	assert.equal(run.code, 2);
-	const runs = existsSync(scoutRoot) ? readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)) : [];
-	assert.deepEqual(runs, []);
-	const running = join(scoutRoot, ".running");
-	assert.deepEqual(existsSync(running) ? readdirSync(running) : [], []);
-	assert.deepEqual(readdirSync(tmp), []);
+  const { env, scoutRoot } = sandbox();
+  const tmp = mkdtempSync(join(tmpdir(), "scout-spec-tmp-"));
+  const run = await runScout(
+    ["--spec", "-"],
+    { ...env, TMPDIR: tmp },
+    "no frontmatter\n",
+  );
+  assert.equal(run.code, 2);
+  const runs = existsSync(scoutRoot)
+    ? readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d))
+    : [];
+  assert.deepEqual(runs, []);
+  const running = join(scoutRoot, ".running");
+  assert.deepEqual(existsSync(running) ? readdirSync(running) : [], []);
+  assert.deepEqual(readdirSync(tmp), []);
 });
 
 test("a spec whose body is not a plan (no numbered step, or no check: line) is refused with exit 2", async () => {
-	const { env, scoutRoot } = sandbox();
-	for (const body of ["Do it.", "1. Do it (a.txt)", "Do it → check: true", ""]) {
-		const run = await runScout(["--spec", "-"], env, `---\nfiles-allowed: [a.txt]\ntests: true\n---\n${body}\n`);
-		assert.equal(run.code, 2, body);
-		assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
-		assert.doesNotMatch(run.stderr, /rerun with --model/);
-		assert.match(run.stderr, /it needs numbered steps or acceptance checks, each with a check: line/, body);
-	}
-	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
-	const events = readFileSync(join(scoutRoot, "..", "..", "logs", "events.log"), "utf8").trimEnd().split("\n");
-	assert.equal(events.length, 4, "each refusal is one line in the events log");
-	for (const line of events) assert.match(line, EVENT_LINE);
-	assert.match(events[0], / worker \d+ scout\.refused no plan in the spec$/);
+  const { env, scoutRoot } = sandbox();
+  for (const body of [
+    "Do it.",
+    "1. Do it (a.txt)",
+    "Do it → check: true",
+    "",
+  ]) {
+    const run = await runScout(
+      ["--spec", "-"],
+      env,
+      `---\nfiles-allowed: [a.txt]\ntests: true\n---\n${body}\n`,
+    );
+    assert.equal(run.code, 2, body);
+    assert.match(run.stderr, /scout: spec on stdin: no plan in the spec/, body);
+    assert.doesNotMatch(run.stderr, /rerun with --model/);
+    assert.match(
+      run.stderr,
+      /it needs numbered steps or acceptance checks, each with a check: line/,
+      body,
+    );
+  }
+  assert.deepEqual(
+    readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)),
+    [],
+  );
+  const events = readFileSync(
+    join(scoutRoot, "..", "..", "logs", "events.log"),
+    "utf8",
+  )
+    .trimEnd()
+    .split("\n");
+  assert.equal(events.length, 4, "each refusal is one line in the events log");
+  for (const line of events) assert.match(line, EVENT_LINE);
+  assert.match(events[0], / worker \d+ scout\.refused no plan in the spec$/);
 });
 
 test("a child loads background.ts for its bash tool and gets no bg_run; only a worker gets codemode", async () => {
-	const { env } = sandbox();
-	for (const [args, stdin, worker] of [[["look"], "", false], [["--spec", "-"], SPEC, true]] as const) {
-		const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
-		assert.equal(run.code, 0);
-		assert.match(run.stdout, /-e \S+\/extensions\/background\.ts -e \S+\/extensions\/bash-changes\.ts /);
-		assert.match(run.stdout, worker ? / -t read,grep,find,ls,bash,edit,write,codemode / : / -t read,grep,find,ls,bash /);
-		assert.equal(/ -e builtin:codemode /.test(run.stdout), worker);
-	}
+  const { env } = sandbox();
+  for (const [args, stdin, worker] of [
+    [["look"], "", false],
+    [["--spec", "-"], SPEC, true],
+  ] as const) {
+    const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
+    assert.equal(run.code, 0);
+    assert.match(
+      run.stdout,
+      /-e \S+\/extensions\/background\.ts -e \S+\/extensions\/bash-changes\.ts /,
+    );
+    assert.match(
+      run.stdout,
+      worker
+        ? / -t read,grep,find,ls,bash,edit,write,codemode /
+        : / -t read,grep,find,ls,bash /,
+    );
+    assert.equal(/ -e builtin:codemode /.test(run.stdout), worker);
+  }
 });
 
 test("worker and read defaults, and explicit model overrides, reach pi", async () => {
-	const { env } = sandbox();
-	for (const worker of [false, true]) {
-		for (const override of [false, true]) {
-			const args = worker ? ["--spec", "-"] : [];
-			if (override) args.push("--model", "x/y");
-			if (!worker) args.push("look");
-			const run = await runScout(args, { ...env, FAKE_PI: "args" }, worker ? SPEC : "");
-			assert.equal(run.code, 0, run.stderr);
-			const model = override ? "x/y" : worker ? "openai-codex/gpt-6.1-sol" : "anthropic/claude-sonnet-5-5";
-			assert.ok(run.stdout.includes(`--model ${model} --thinking ${worker ? "high" : "low"} `));
-		}
-	}
+  const { env } = sandbox();
+  for (const worker of [false, true]) {
+    for (const override of [false, true]) {
+      const args = worker ? ["--spec", "-"] : [];
+      if (override) args.push("--model", "x/y");
+      if (!worker) args.push("look");
+      const run = await runScout(
+        args,
+        { ...env, FAKE_PI: "args" },
+        worker ? SPEC : "",
+      );
+      assert.equal(run.code, 0, run.stderr);
+      const model = override
+        ? "x/y"
+        : worker
+          ? "openai-codex/gpt-6.1-sol"
+          : "anthropic/claude-sonnet-5-5";
+      assert.ok(
+        run.stdout.includes(
+          `--model ${model} --thinking ${worker ? "high" : "low"} `,
+        ),
+      );
+    }
+  }
 });
 
 test("a worker provider error offers one fallback without changing the verdict or exit", async () => {
-	for (const fallback of [false, true]) {
-		const { env, scoutRoot } = sandbox();
-		const args = ["--spec", "-"];
-		if (fallback) args.push("--model", "anthropic/claude-sonnet-5-5");
-		const run = await runScout(args, { ...env, FAKE_PI: "provider-error" }, SPEC);
-		assert.equal(run.code, 1, run.stderr);
-		assert.equal(run.stdout.split("\n")[0], "WORKER-SENSORS: CANNOT-RUN run ended: error");
-		assert.deepEqual(report(scoutRoot), { verdict: "CANNOT-RUN", reasons: ["run ended: error"], retriesUsed: 0 });
-		const hints = run.stderr.split("\n").filter((line) => line.startsWith("scout: the run ended on an error;"));
-		assert.deepEqual(hints, fallback ? [] : [
-			"scout: the run ended on an error; if openai-codex quota is out, rerun with --model anthropic/claude-sonnet-5-5",
-		]);
-	}
+  for (const fallback of [false, true]) {
+    const { env, scoutRoot } = sandbox();
+    const args = ["--spec", "-"];
+    if (fallback) args.push("--model", "anthropic/claude-sonnet-5-5");
+    const run = await runScout(
+      args,
+      { ...env, FAKE_PI: "provider-error" },
+      SPEC,
+    );
+    assert.equal(run.code, 1, run.stderr);
+    assert.equal(
+      run.stdout.split("\n")[0],
+      "WORKER-SENSORS: CANNOT-RUN run ended: error",
+    );
+    assert.deepEqual(report(scoutRoot), {
+      verdict: "CANNOT-RUN",
+      reasons: ["run ended: error"],
+      retriesUsed: 0,
+    });
+    const hints = run.stderr
+      .split("\n")
+      .filter((line) => line.startsWith("scout: the run ended on an error;"));
+    assert.deepEqual(
+      hints,
+      fallback
+        ? []
+        : [
+            "scout: the run ended on an error; if openai-codex quota is out, rerun with --model anthropic/claude-sonnet-5-5",
+          ],
+    );
+  }
 });
 
 test("a read provider error offers one fallback and preserves pi's exit code", async () => {
-	const { env } = sandbox();
-	for (const model of ["anthropic/claude-sonnet-5-5", "x/y", "openai-codex/gpt-6.1-terra"]) {
-		const run = await runScout(["--model", model, "look"], { ...env, FAKE_PI: "provider-error", FAKE_RC: "7" });
-		assert.equal(run.code, 7, run.stderr);
-		const hints = run.stderr.split("\n").filter((line) => line.startsWith("scout: the run ended on an error;"));
-		assert.deepEqual(hints, model === "openai-codex/gpt-6.1-terra" ? [] : [
-			`scout: the run ended on an error; if ${model.split("/")[0]} quota is out, rerun with --model openai-codex/gpt-6.1-terra`,
-		]);
-	}
+  const { env } = sandbox();
+  for (const model of [
+    "anthropic/claude-sonnet-5-5",
+    "x/y",
+    "openai-codex/gpt-6.1-terra",
+  ]) {
+    const run = await runScout(["--model", model, "look"], {
+      ...env,
+      FAKE_PI: "provider-error",
+      FAKE_RC: "7",
+    });
+    assert.equal(run.code, 7, run.stderr);
+    const hints = run.stderr
+      .split("\n")
+      .filter((line) => line.startsWith("scout: the run ended on an error;"));
+    assert.deepEqual(
+      hints,
+      model === "openai-codex/gpt-6.1-terra"
+        ? []
+        : [
+            `scout: the run ended on an error; if ${model.split("/")[0]} quota is out, rerun with --model openai-codex/gpt-6.1-terra`,
+          ],
+    );
+  }
 });
 
 test("success, PASS/FAIL verdicts, timeout and signals do not offer a fallback", async () => {
-	const { env } = sandbox();
-	for (const [worker, mode, extra, code] of [
-		[true, "pass", {}, 0],
-		[false, "ok", {}, 0],
-		[true, "provider-error", { FAKE_VERDICT: "PASS" }, 1],
-		[true, "provider-error", { FAKE_VERDICT: "FAIL" }, 1],
-		[true, "provider-error", { FAKE_RC: "143" }, 143],
-		[false, "provider-error", { FAKE_RC: "143" }, 143],
-		[false, "missing", { FAKE_RC: "7" }, 7], // a read scout that failed without a provider error
-		[true, "hang", {}, 124],
-		[false, "hang", {}, 124],
-	] as const) {
-		const args = ["--timeout", "1", ...(worker ? ["--spec", "-"] : ["look"])];
-		const run = await runScout(args, { ...env, FAKE_PI: mode, ...extra }, worker ? SPEC : "");
-		assert.equal(run.code, code, run.stderr);
-		assert.doesNotMatch(run.stderr, /rerun with --model/);
-	}
+  const { env } = sandbox();
+  for (const [worker, mode, extra, code] of [
+    [true, "pass", {}, 0],
+    [false, "ok", {}, 0],
+    [true, "provider-error", { FAKE_VERDICT: "PASS" }, 1],
+    [true, "provider-error", { FAKE_VERDICT: "FAIL" }, 1],
+    [true, "provider-error", { FAKE_RC: "143" }, 143],
+    [false, "provider-error", { FAKE_RC: "143" }, 143],
+    [false, "missing", { FAKE_RC: "7" }, 7], // a read scout that failed without a provider error
+    [true, "hang", {}, 124],
+    [false, "hang", {}, 124],
+  ] as const) {
+    const args = ["--timeout", "1", ...(worker ? ["--spec", "-"] : ["look"])];
+    const run = await runScout(
+      args,
+      { ...env, FAKE_PI: mode, ...extra },
+      worker ? SPEC : "",
+    );
+    assert.equal(run.code, code, run.stderr);
+    assert.doesNotMatch(run.stderr, /rerun with --model/);
+  }
 });
 
 test("only -nc children get the generated code standards in their system prompt", async () => {
-	const { env } = sandbox();
-	webFiles(env, false);
-	for (const [args, stdin, attached] of [
-		[["look"], "", true],
-		[["--spec", "-"], SPEC, true],
-		[["--web", "research"], "", true],
-		[["--ctx", "look"], "", false],
-		[["--ctx", "--spec", "-"], SPEC, false],
-		[["--ctx", "--web", "research"], "", false],
-	] as const) {
-		const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
-		assert.equal(run.code, 0, run.stderr);
-		assert.match(run.stdout, /--system-prompt /);
-		assert.equal((run.stdout.match(/# Before Writing Code/g) ?? []).length, attached ? 1 : 0);
-		assert.equal(run.stdout.includes("## Design"), attached);
-		assert.equal(/ -nc /.test(run.stdout), attached);
-	}
-	const review = spawnSync(SCOUT, ["--review", "HEAD~1"], {
-		cwd: reviewRepo(), env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
-	});
-	assert.equal(review.status, 0, review.stderr);
-	assert.match(review.stdout, /--system-prompt /);
-	assert.doesNotMatch(review.stdout, /Before Writing Code|## Design| -nc /);
+  const { env } = sandbox();
+  webFiles(env, false);
+  for (const [args, stdin, attached] of [
+    [["look"], "", true],
+    [["--spec", "-"], SPEC, true],
+    [["--web", "research"], "", true],
+    [["--ctx", "look"], "", false],
+    [["--ctx", "--spec", "-"], SPEC, false],
+    [["--ctx", "--web", "research"], "", false],
+  ] as const) {
+    const run = await runScout([...args], { ...env, FAKE_PI: "args" }, stdin);
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /--system-prompt /);
+    assert.equal(
+      (run.stdout.match(/# Before Writing Code/g) ?? []).length,
+      attached ? 1 : 0,
+    );
+    assert.equal(run.stdout.includes("## Design"), attached);
+    assert.equal(/ -nc /.test(run.stdout), attached);
+  }
+  const review = spawnSync(SCOUT, ["--review", "HEAD~1"], {
+    cwd: reviewRepo(),
+    env: { ...env, FAKE_PI: "args" },
+    encoding: "utf8",
+  });
+  assert.equal(review.status, 0, review.stderr);
+  assert.match(review.stdout, /--system-prompt /);
+  assert.doesNotMatch(review.stdout, /Before Writing Code|## Design| -nc /);
 });
 
 test("missing child standards refuse the run and name the generator without starting pi", () => {
-	const { env } = sandbox();
-	const bin = join(mkdtempSync(join(tmpdir(), "scout-no-standards-")), "bin");
-	cpSync(resolve(SCOUT, ".."), bin, {
-		recursive: true, filter: (source) => !source.endsWith("/standards.prompt.md"),
-	});
-	const run = spawnSync(join(bin, "scout"), ["look"], {
-		env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
-	});
-	assert.equal(run.status, 2, run.stderr);
-	assert.match(run.stderr, /standards\.prompt\.md/);
-	assert.match(run.stderr, /config\/pi\/build-agents\.sh/);
-	assert.equal(run.stdout, "");
-	const ctx = spawnSync(join(bin, "scout"), ["--ctx", "look"], {
-		env: { ...env, FAKE_PI: "args" }, encoding: "utf8",
-	});
-	assert.equal(ctx.status, 0, ctx.stderr);
+  const { env } = sandbox();
+  const bin = join(mkdtempSync(join(tmpdir(), "scout-no-standards-")), "bin");
+  cpSync(resolve(SCOUT, ".."), bin, {
+    recursive: true,
+    filter: (source) => !source.endsWith("/standards.prompt.md"),
+  });
+  const run = spawnSync(join(bin, "scout"), ["look"], {
+    env: { ...env, FAKE_PI: "args" },
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 2, run.stderr);
+  assert.match(run.stderr, /standards\.prompt\.md/);
+  assert.match(run.stderr, /config\/pi\/build-agents\.sh/);
+  assert.equal(run.stdout, "");
+  const ctx = spawnSync(join(bin, "scout"), ["--ctx", "look"], {
+    env: { ...env, FAKE_PI: "args" },
+    encoding: "utf8",
+  });
+  assert.equal(ctx.status, 0, ctx.stderr);
 });
 
 test("build-agents --check detects drift in the generated child standards", () => {
-	const root = mkdtempSync(join(tmpdir(), "child-standards-drift-"));
-	const source = resolve(import.meta.dirname, "..");
-	mkdirSync(join(root, "bin"));
-	for (const file of ["build-agents.sh", "agents-md", "AGENTS.md", "AGENTS.work.md", "CLAUDE.md", "bin/standards.prompt.md"]) {
-		cpSync(join(source, file), join(root, file), { recursive: true });
-	}
-	const check = () => spawnSync(join(root, "build-agents.sh"), ["--check"], { encoding: "utf8" });
-	const clean = check();
-	assert.equal(clean.status, 0, clean.stderr);
-	const generated = spawnSync(join(root, "build-agents.sh"), [], { encoding: "utf8" });
-	assert.equal(generated.status, 0, generated.stderr);
-	assert.match(generated.stdout, /bin\/standards\.prompt\.md/);
-	for (const file of ["AGENTS.md", "AGENTS.work.md", "CLAUDE.md", "bin/standards.prompt.md"]) {
-		assert.deepEqual(readFileSync(join(root, file)), readFileSync(join(source, file)), file);
-	}
-	writeFileSync(join(root, "bin/standards.prompt.md"), "drift\n");
-	const drift = check();
-	assert.equal(drift.status, 1, drift.stderr);
-	assert.match(drift.stderr, /DRIFT: generated files do not match fragments/);
+  const root = mkdtempSync(join(tmpdir(), "child-standards-drift-"));
+  const source = resolve(import.meta.dirname, "..");
+  mkdirSync(join(root, "bin"));
+  for (const file of [
+    "build-agents.sh",
+    "agents-md",
+    "AGENTS.md",
+    "AGENTS.work.md",
+    "CLAUDE.md",
+    "bin/standards.prompt.md",
+  ]) {
+    cpSync(join(source, file), join(root, file), { recursive: true });
+  }
+  const check = () =>
+    spawnSync(join(root, "build-agents.sh"), ["--check"], { encoding: "utf8" });
+  const clean = check();
+  assert.equal(clean.status, 0, clean.stderr);
+  const generated = spawnSync(join(root, "build-agents.sh"), [], {
+    encoding: "utf8",
+  });
+  assert.equal(generated.status, 0, generated.stderr);
+  assert.match(generated.stdout, /bin\/standards\.prompt\.md/);
+  for (const file of [
+    "AGENTS.md",
+    "AGENTS.work.md",
+    "CLAUDE.md",
+    "bin/standards.prompt.md",
+  ]) {
+    assert.deepEqual(
+      readFileSync(join(root, file)),
+      readFileSync(join(source, file)),
+      file,
+    );
+  }
+  writeFileSync(join(root, "bin/standards.prompt.md"), "drift\n");
+  const drift = check();
+  assert.equal(drift.status, 1, drift.stderr);
+  assert.match(drift.stderr, /DRIFT: generated files do not match fragments/);
 });
 
-function webFiles(env: NodeJS.ProcessEnv, skill: boolean): { extension: string; reddit: string } {
-	const root = String(env.PI_CODING_AGENT_DIR);
-	const extension = join(root, "npm/node_modules/pi-web-access/dist/index.js");
-	const reddit = join(root, "skills-local/reddit");
-	mkdirSync(join(extension, ".."), { recursive: true });
-	writeFileSync(extension, "");
-	if (skill) {
-		mkdirSync(reddit, { recursive: true });
-		writeFileSync(join(reddit, "SKILL.md"), "# Reddit\n");
-	}
-	return { extension, reddit };
+function webFiles(
+  env: NodeJS.ProcessEnv,
+  skill: boolean,
+): { extension: string; reddit: string } {
+  const root = String(env.PI_CODING_AGENT_DIR);
+  const extension = join(root, "npm/node_modules/pi-web-access/dist/index.js");
+  const reddit = join(root, "skills-local/reddit");
+  mkdirSync(join(extension, ".."), { recursive: true });
+  writeFileSync(extension, "");
+  if (skill) {
+    mkdirSync(reddit, { recursive: true });
+    writeFileSync(join(reddit, "SKILL.md"), "# Reddit\n");
+  }
+  return { extension, reddit };
 }
 
 test("--web appends the extension, tools, optional Reddit skill and web prompt", async () => {
-	for (const skill of [true, false]) {
-		const { env } = sandbox();
-		const { extension, reddit } = webFiles(env, skill);
-		const run = await runScout(["--web", "research"], { ...env, FAKE_PI: "args" });
-		assert.equal(run.code, 0, run.stderr);
-		assert.ok(run.stdout.includes(`-e ${extension} `));
-		assert.ok(run.stdout.indexOf("-e " + extension) > run.stdout.indexOf("/extensions/bash-changes.ts"));
-		assert.match(run.stdout, / -t read,grep,find,ls,bash,web_search,fetch_content,get_search_content /);
-		assert.equal(run.stdout.includes(`--skill ${reddit}`), skill);
-		assert.equal(run.stdout.includes("--skill"), skill);
-		assert.match(run.stdout, /You are a read-only scout\.[\s\S]*Web research \(--web\)/);
-	}
+  for (const skill of [true, false]) {
+    const { env } = sandbox();
+    const { extension, reddit } = webFiles(env, skill);
+    const run = await runScout(["--web", "research"], {
+      ...env,
+      FAKE_PI: "args",
+    });
+    assert.equal(run.code, 0, run.stderr);
+    assert.ok(run.stdout.includes(`-e ${extension} `));
+    assert.ok(
+      run.stdout.indexOf("-e " + extension) >
+        run.stdout.indexOf("/extensions/bash-changes.ts"),
+    );
+    assert.match(
+      run.stdout,
+      / -t read,grep,find,ls,bash,web_search,fetch_content,get_search_content /,
+    );
+    assert.equal(run.stdout.includes(`--skill ${reddit}`), skill);
+    assert.equal(run.stdout.includes("--skill"), skill);
+    assert.match(
+      run.stdout,
+      /You are a read-only scout\.[\s\S]*Web research \(--web\)/,
+    );
+  }
 });
 
 test("without --web, installed web tools and skill stay out of the child", async () => {
-	const { env } = sandbox();
-	const { extension, reddit } = webFiles(env, true);
-	const run = await runScout(["research"], { ...env, FAKE_PI: "args" });
-	assert.equal(run.code, 0, run.stderr);
-	assert.match(run.stdout, / -t read,grep,find,ls,bash /);
-	assert.ok(!run.stdout.includes(extension));
-	assert.ok(!run.stdout.includes(reddit));
-	assert.doesNotMatch(run.stdout, /--skill|Web research \(--web\)/);
+  const { env } = sandbox();
+  const { extension, reddit } = webFiles(env, true);
+  const run = await runScout(["research"], { ...env, FAKE_PI: "args" });
+  assert.equal(run.code, 0, run.stderr);
+  assert.match(run.stdout, / -t read,grep,find,ls,bash /);
+  assert.ok(!run.stdout.includes(extension));
+  assert.ok(!run.stdout.includes(reddit));
+  assert.doesNotMatch(run.stdout, /--skill|Web research \(--web\)/);
 });
 
 test("--web usage errors precede the fan-out cap and leave no run folder", async () => {
-	for (const args of [["--web", "--rw", "x"], ["--spec", "-", "--web"], ["--web", "--review", "HEAD"], ["--web", "x"]]) {
-		const { env, scoutRoot } = sandbox();
-		const missing = args.length === 2;
-		const extension = join(String(env.PI_CODING_AGENT_DIR), "npm/node_modules/pi-web-access/dist/index.js");
-		if (!missing) webFiles(env, false);
-		runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
-		runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
-		const run = await runScout(args, env, SPEC);
-		assert.equal(run.code, 2, run.stderr);
-		assert.equal(run.stderr.trim().split("\n").length, 1);
-		assert.ok(run.stderr.includes(missing ? extension : "--web is read-only"));
-		assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)), []);
-	}
+  for (const args of [
+    ["--web", "--rw", "x"],
+    ["--spec", "-", "--web"],
+    ["--web", "--review", "HEAD"],
+    ["--web", "x"],
+  ]) {
+    const { env, scoutRoot } = sandbox();
+    const missing = args.length === 2;
+    const extension = join(
+      String(env.PI_CODING_AGENT_DIR),
+      "npm/node_modules/pi-web-access/dist/index.js",
+    );
+    if (!missing) webFiles(env, false);
+    runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
+    runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
+    const run = await runScout(args, env, SPEC);
+    assert.equal(run.code, 2, run.stderr);
+    assert.equal(run.stderr.trim().split("\n").length, 1);
+    assert.ok(run.stderr.includes(missing ? extension : "--web is read-only"));
+    assert.deepEqual(
+      readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)),
+      [],
+    );
+  }
 });
 
 test("missing tools near the digest start fail with 69 and are named on the trailer", async () => {
-	for (const worker of [false, true]) {
-		const { env, scoutRoot } = sandbox();
-		const run = await runScout(worker ? ["--spec", "-"] : ["research"], { ...env, FAKE_PI: "missing" }, worker ? SPEC : "");
-		assert.equal(run.code, 69, run.stderr);
-		assert.match(run.stderr, worker
-			? /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=no tools-missing=web_search,fetch_content$/m
-			: /^scout: dir=\S+ cost=\$0\.000 tools-missing=web_search,fetch_content$/m);
-		assert.match(run.stdout, /TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done\.\n$/);
-		if (worker) assert.match(run.stdout, /^WORKER-SENSORS:/);
-		else assert.equal(run.stdout, "TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done.\n");
-		assert.match(doneMeta(scoutRoot), /^rc=69$/m);
-	}
+  for (const worker of [false, true]) {
+    const { env, scoutRoot } = sandbox();
+    const run = await runScout(
+      worker ? ["--spec", "-"] : ["research"],
+      { ...env, FAKE_PI: "missing" },
+      worker ? SPEC : "",
+    );
+    assert.equal(run.code, 69, run.stderr);
+    assert.match(
+      run.stderr,
+      worker
+        ? /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=no tools-missing=web_search,fetch_content$/m
+        : /^scout: dir=\S+ cost=\$0\.000 tools-missing=web_search,fetch_content$/m,
+    );
+    assert.match(
+      run.stdout,
+      /TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done\.\n$/,
+    );
+    if (worker) assert.match(run.stdout, /^WORKER-SENSORS:/);
+    else
+      assert.equal(
+        run.stdout,
+        "TOOLS-MISSING: web_search, fetch_content\nWeb research could not be done.\n",
+      );
+    assert.match(doneMeta(scoutRoot), /^rc=69$/m);
+  }
 });
 
 test("only the first three digest lines and a successful child trigger missing-tools handling", async () => {
-	for (const [prefix, childCode, expected] of [["intro\n", "0", 69], ["one\ntwo\n", "0", 69], ["intro\n".repeat(9), "0", 0], ["", "1", 1]] as const) {
-		const { env, scoutRoot } = sandbox();
-		const run = await runScout(["research"], { ...env, FAKE_PI: "missing", FAKE_RC: childCode,
-			FAKE_DIGEST: prefix + "TOOLS-MISSING:   web_search, ,  fetch_content   " });
-		assert.equal(run.code, expected, run.stderr);
-		if (expected === 69) assert.match(run.stderr, /tools-missing=web_search,fetch_content$/m);
-		else assert.doesNotMatch(run.stderr, /tools-missing=/);
-		assert.match(doneMeta(scoutRoot), new RegExp(`^rc=${expected}$`, "m"));
-	}
+  for (const [prefix, childCode, expected] of [
+    ["intro\n", "0", 69],
+    ["one\ntwo\n", "0", 69],
+    ["intro\n".repeat(9), "0", 0],
+    ["", "1", 1],
+  ] as const) {
+    const { env, scoutRoot } = sandbox();
+    const run = await runScout(["research"], {
+      ...env,
+      FAKE_PI: "missing",
+      FAKE_RC: childCode,
+      FAKE_DIGEST: prefix + "TOOLS-MISSING:   web_search, ,  fetch_content   ",
+    });
+    assert.equal(run.code, expected, run.stderr);
+    if (expected === 69)
+      assert.match(run.stderr, /tools-missing=web_search,fetch_content$/m);
+    else assert.doesNotMatch(run.stderr, /tools-missing=/);
+    assert.match(doneMeta(scoutRoot), new RegExp(`^rc=${expected}$`, "m"));
+  }
 });
 
 /** A clean repo with two commits, so HEAD~1 is a base. */
 function reviewRepo(): string {
-	const repo = mkdtempSync(join(tmpdir(), "scout-review-"));
-	const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8" });
-	git("init", "-q");
-	for (const text of ["one\n", "two\n"]) {
-		writeFileSync(join(repo, "a.txt"), text);
-		git("add", ".");
-		git("commit", "-qm", text.trim(), "--no-verify");
-	}
-	return repo;
+  const repo = mkdtempSync(join(tmpdir(), "scout-review-"));
+  const git = (...args: string[]) =>
+    spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: repo, encoding: "utf8" },
+    );
+  git("init", "-q");
+  for (const text of ["one\n", "two\n"]) {
+    writeFileSync(join(repo, "a.txt"), text);
+    git("add", ".");
+    git("commit", "-qm", text.trim(), "--no-verify");
+  }
+  return repo;
 }
-const reviewRecords = (repo: string): string[] => (existsSync(join(repo, ".git", "pi-review")) ? readdirSync(join(repo, ".git", "pi-review")).filter((name) => !name.endsWith(".findings")) : []);
-const headOf = (repo: string): string => spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+const reviewRecords = (repo: string): string[] =>
+  existsSync(join(repo, ".git", "pi-review"))
+    ? readdirSync(join(repo, ".git", "pi-review")).filter(
+        (name) => !name.endsWith(".findings"),
+      )
+    : [];
+const headOf = (repo: string): string =>
+  spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
 
 test("--review runs review.md over BASE...HEAD read-only, with AGENTS.md and AUTO.md, and records the reviewed tip", () => {
-	const { env } = sandbox();
-	const repo = reviewRepo();
-	writeFileSync(join(repo, "AUTO.md"), "spec\n");
-	mkdirSync(join(repo, ".git", "info"), { recursive: true });
-	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
-	const run = spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
-	assert.equal(run.status, 0, run.stderr);
-	assert.match(run.stdout, /git diff HEAD~1\.\.\.HEAD/);
-	assert.match(run.stdout, /Pass 2, attack your own review/);
-	assert.doesNotMatch(run.stdout, /\$@/);
-	assert.match(run.stdout, /You are a read-only reviewer/);
-	assert.match(run.stdout, /@\S+\/AUTO\.md/);
-	assert.match(run.stdout, /--thinking high/);
-	assert.doesNotMatch(run.stdout, / -nc /);
-	assert.doesNotMatch(run.stdout, /,edit,write/);
-	assert.deepEqual(reviewRecords(repo), [headOf(repo)]);
-	assert.match(readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8"), /^base=HEAD~1$/m);
+  const { env } = sandbox();
+  const repo = reviewRepo();
+  writeFileSync(join(repo, "AUTO.md"), "spec\n");
+  mkdirSync(join(repo, ".git", "info"), { recursive: true });
+  writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+  const run = spawnSync(SCOUT, ["--review", "HEAD~1"], {
+    cwd: repo,
+    env: { ...env, FAKE_PI: "args" },
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /git diff HEAD~1\.\.\.HEAD/);
+  assert.match(run.stdout, /Pass 2, attack your own review/);
+  assert.doesNotMatch(run.stdout, /\$@/);
+  assert.match(run.stdout, /You are a read-only reviewer/);
+  assert.match(run.stdout, /@\S+\/AUTO\.md/);
+  assert.match(run.stdout, /--thinking high/);
+  assert.doesNotMatch(run.stdout, / -nc /);
+  assert.doesNotMatch(run.stdout, /,edit,write/);
+  assert.deepEqual(reviewRecords(repo), [headOf(repo)]);
+  assert.match(
+    readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8"),
+    /^base=HEAD~1$/m,
+  );
 });
 
 test("--review attaches dispatched slice specs after AUTO.md, including beside round 2 findings", () => {
-	const { env } = sandbox();
-	const repo = realpathSync(reviewRepo());
-	const git = (...args: string[]) => {
-		const result = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8" });
-		assert.equal(result.status, 0, result.stderr);
-		return result.stdout.trim();
-	};
-	git("switch", "-c", "auto/x");
-	writeFileSync(join(repo, "AUTO.md"), "spec\n");
-	mkdirSync(join(repo, ".git", "info"), { recursive: true });
-	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
-	const state = join(repo, ".git", "pi-auto", "x");
-	mkdirSync(state, { recursive: true });
-	for (const name of ["a", "b"]) {
-		writeFileSync(join(state, `${name}.spec`), SPEC);
-		writeFileSync(join(state, `${name}.merged`), "");
-	}
-	writeFileSync(join(state, "c.spec"), SPEC); // dispatched, never merged: not part of the diff under review
-	const base = git("rev-parse", "HEAD~1");
-	const review = () => spawnSync(SCOUT, ["--review", base], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
-	const attachments = `@${repo}/AUTO.md @${state}/a.spec @${state}/b.spec`;
-	const checkSpecs = (run: ReturnType<typeof review>) => {
-		assert.equal(run.status, 0, run.stderr);
-		assert.ok(run.stdout.includes(attachments), run.stdout);
-		assert.doesNotMatch(run.stdout, /c\.spec/);
-		assert.match(run.stdout, /each slice's spec.*attached/i);
-		assert.match(run.stdout, /target and `mechanism:` line.*yardstick/);
-	};
-	const first = headOf(repo);
-	checkSpecs(review());
-	git("switch", "-c", "feature/x");
-	const other = review();
-	assert.equal(other.status, 0, other.stderr);
-	assert.doesNotMatch(other.stdout, /@\S+\.spec/);
-	assert.match(other.stdout, /against the spec in the attached AUTO\.md/);
-	assert.doesNotMatch(other.stdout, /each slice's spec/i);
+  const { env } = sandbox();
+  const repo = realpathSync(reviewRepo());
+  const git = (...args: string[]) => {
+    const result = spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: repo, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git("switch", "-c", "auto/x");
+  writeFileSync(join(repo, "AUTO.md"), "spec\n");
+  mkdirSync(join(repo, ".git", "info"), { recursive: true });
+  writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+  const state = join(repo, ".git", "pi-auto", "x");
+  mkdirSync(state, { recursive: true });
+  for (const name of ["a", "b"]) {
+    writeFileSync(join(state, `${name}.spec`), SPEC);
+    writeFileSync(join(state, `${name}.merged`), "");
+  }
+  writeFileSync(join(state, "c.spec"), SPEC); // dispatched, never merged: not part of the diff under review
+  const base = git("rev-parse", "HEAD~1");
+  const review = () =>
+    spawnSync(SCOUT, ["--review", base], {
+      cwd: repo,
+      env: { ...env, FAKE_PI: "args" },
+      encoding: "utf8",
+    });
+  const attachments = `@${repo}/AUTO.md @${state}/a.spec @${state}/b.spec`;
+  const checkSpecs = (run: ReturnType<typeof review>) => {
+    assert.equal(run.status, 0, run.stderr);
+    assert.ok(run.stdout.includes(attachments), run.stdout);
+    assert.doesNotMatch(run.stdout, /c\.spec/);
+    assert.match(run.stdout, /each slice's spec.*attached/i);
+    assert.match(run.stdout, /target and `mechanism:` line.*yardstick/);
+  };
+  const first = headOf(repo);
+  checkSpecs(review());
+  git("switch", "-c", "feature/x");
+  const other = review();
+  assert.equal(other.status, 0, other.stderr);
+  assert.doesNotMatch(other.stdout, /@\S+\.spec/);
+  assert.match(other.stdout, /against the spec in the attached AUTO\.md/);
+  assert.doesNotMatch(other.stdout, /each slice's spec/i);
 
-	git("switch", "auto/x");
-	writeFileSync(join(repo, "a.txt"), "three\n");
-	git("commit", "-qam", "fix", "--no-verify");
-	const second = review();
-	checkSpecs(second);
-	assert.match(second.stdout, /This is round 2 of 3/);
-	assert.ok(second.stdout.includes(`${attachments} @${repo}/.git/pi-review/${first}.findings`));
+  git("switch", "auto/x");
+  writeFileSync(join(repo, "a.txt"), "three\n");
+  git("commit", "-qam", "fix", "--no-verify");
+  const second = review();
+  checkSpecs(second);
+  assert.match(second.stdout, /This is round 2 of 3/);
+  assert.ok(
+    second.stdout.includes(
+      `${attachments} @${repo}/.git/pi-review/${first}.findings`,
+    ),
+  );
 });
 
 test("--review on auto/x without dispatched specs keeps the AUTO.md yardstick", () => {
-	const { env } = sandbox();
-	const repo = reviewRepo();
-	const branch = spawnSync("git", ["switch", "-c", "auto/x"], { cwd: repo, encoding: "utf8" });
-	assert.equal(branch.status, 0, branch.stderr);
-	writeFileSync(join(repo, "AUTO.md"), "spec\n");
-	mkdirSync(join(repo, ".git", "info"), { recursive: true });
-	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
-	const run = spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
-	assert.equal(run.status, 0, run.stderr);
-	assert.doesNotMatch(run.stdout, /@\S+\.spec/);
-	assert.match(run.stdout, /against the spec in the attached AUTO\.md/);
-	assert.doesNotMatch(run.stdout, /each slice's spec/i);
+  const { env } = sandbox();
+  const repo = reviewRepo();
+  const branch = spawnSync("git", ["switch", "-c", "auto/x"], {
+    cwd: repo,
+    encoding: "utf8",
+  });
+  assert.equal(branch.status, 0, branch.stderr);
+  writeFileSync(join(repo, "AUTO.md"), "spec\n");
+  mkdirSync(join(repo, ".git", "info"), { recursive: true });
+  writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+  const run = spawnSync(SCOUT, ["--review", "HEAD~1"], {
+    cwd: repo,
+    env: { ...env, FAKE_PI: "args" },
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.stdout, /@\S+\.spec/);
+  assert.match(run.stdout, /against the spec in the attached AUTO\.md/);
+  assert.doesNotMatch(run.stdout, /each slice's spec/i);
 });
 
 test("--review records nothing for a dirty tree, an unknown base, --rw, or a run that failed", () => {
-	const { env } = sandbox();
-	const repo = reviewRepo();
-	const review = (args: string[], extra: NodeJS.ProcessEnv = {}) => spawnSync(SCOUT, args, { cwd: repo, env: { ...env, FAKE_PI: "ok", ...extra }, encoding: "utf8" });
-	assert.equal(review(["--review", "nope"]).status, 2);
-	assert.equal(review(["--rw", "--review", "HEAD~1"]).status, 2);
-	assert.equal(review(["--review", "HEAD~1", "--timeout", "1"], { FAKE_PI: "hang" }).status, 124);
-	writeFileSync(join(repo, "a.txt"), "dirty\n");
-	const dirty = review(["--review", "HEAD~1"]);
-	assert.equal(dirty.status, 2);
-	assert.match(dirty.stderr, /needs a clean tree/);
-	assert.deepEqual(reviewRecords(repo), []);
+  const { env } = sandbox();
+  const repo = reviewRepo();
+  const review = (args: string[], extra: NodeJS.ProcessEnv = {}) =>
+    spawnSync(SCOUT, args, {
+      cwd: repo,
+      env: { ...env, FAKE_PI: "ok", ...extra },
+      encoding: "utf8",
+    });
+  assert.equal(review(["--review", "nope"]).status, 2);
+  assert.equal(review(["--rw", "--review", "HEAD~1"]).status, 2);
+  assert.equal(
+    review(["--review", "HEAD~1", "--timeout", "1"], { FAKE_PI: "hang" })
+      .status,
+    124,
+  );
+  writeFileSync(join(repo, "a.txt"), "dirty\n");
+  const dirty = review(["--review", "HEAD~1"]);
+  assert.equal(dirty.status, 2);
+  assert.match(dirty.stderr, /needs a clean tree/);
+  assert.deepEqual(reviewRecords(repo), []);
 });
 
 test("--review: rounds 2 and 3 read only the diff since the round before, with its findings; a fourth is refused", () => {
-	const { env } = sandbox();
-	const repo = reviewRepo();
-	const base = spawnSync("git", ["rev-parse", "HEAD~1"], { cwd: repo, encoding: "utf8" }).stdout.trim();
-	const review = () => spawnSync(SCOUT, ["--review", base], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
-	const fix = (text: string) => {
-		writeFileSync(join(repo, "a.txt"), text);
-		spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qam", text.trim(), "--no-verify"], { cwd: repo });
-	};
-	const record = () => readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8");
-	const first = headOf(repo);
-	assert.match(review().stdout, new RegExp(`git diff ${base}\\.\\.\\.HEAD`));
-	assert.match(record(), /^round=1$/m);
-	assert.match(review().stdout, /\.\.\.HEAD/, "the same tip again is the same round");
-	assert.match(record(), /^round=1$/m);
+  const { env } = sandbox();
+  const repo = reviewRepo();
+  const base = spawnSync("git", ["rev-parse", "HEAD~1"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).stdout.trim();
+  const review = () =>
+    spawnSync(SCOUT, ["--review", base], {
+      cwd: repo,
+      env: { ...env, FAKE_PI: "args" },
+      encoding: "utf8",
+    });
+  const fix = (text: string) => {
+    writeFileSync(join(repo, "a.txt"), text);
+    spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-qam",
+        text.trim(),
+        "--no-verify",
+      ],
+      { cwd: repo },
+    );
+  };
+  const record = () =>
+    readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8");
+  const first = headOf(repo);
+  assert.match(review().stdout, new RegExp(`git diff ${base}\\.\\.\\.HEAD`));
+  assert.match(record(), /^round=1$/m);
+  assert.match(
+    review().stdout,
+    /\.\.\.HEAD/,
+    "the same tip again is the same round",
+  );
+  assert.match(record(), /^round=1$/m);
 
-	fix("three\n");
-	const second = review();
-	assert.match(second.stdout, new RegExp(`git diff ${first}\\.\\.HEAD\`, the fixes made since round 1`));
-	assert.match(second.stdout, /This is round 2 of 3/);
-	assert.match(second.stdout, new RegExp(`@\\S+/pi-review/${first}\\.findings`));
-	assert.match(record(), /^round=2$/m);
+  fix("three\n");
+  const second = review();
+  assert.match(
+    second.stdout,
+    new RegExp(`git diff ${first}\\.\\.HEAD\`, the fixes made since round 1`),
+  );
+  assert.match(second.stdout, /This is round 2 of 3/);
+  assert.match(
+    second.stdout,
+    new RegExp(`@\\S+/pi-review/${first}\\.findings`),
+  );
+  assert.match(record(), /^round=2$/m);
 
-	fix("four\n");
-	assert.equal(review().status, 0);
-	assert.match(record(), /^round=3$/m);
-	fix("five\n");
-	const fourth = review();
-	assert.equal(fourth.status, 2);
-	assert.match(fourth.stderr, /three review rounds are done/);
-	assert.equal(reviewRecords(repo).length, 3);
-	assert.equal(spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" }).status, 0, "another base is another review");
+  fix("four\n");
+  assert.equal(review().status, 0);
+  assert.match(record(), /^round=3$/m);
+  fix("five\n");
+  const fourth = review();
+  assert.equal(fourth.status, 2);
+  assert.match(fourth.stderr, /three review rounds are done/);
+  assert.equal(reviewRecords(repo).length, 3);
+  assert.equal(
+    spawnSync(SCOUT, ["--review", "HEAD~1"], {
+      cwd: repo,
+      env: { ...env, FAKE_PI: "args" },
+      encoding: "utf8",
+    }).status,
+    0,
+    "another base is another review",
+  );
 });
 
 test("scout names its run folder and cost on stderr, and a worker's Blocked on me", async () => {
-	const { env, scoutRoot } = sandbox();
-	const read = await runScout(["look"], { ...env, FAKE_PI: "ok" });
-	assert.match(read.stderr, new RegExp(`^scout: dir=${scoutRoot}/\\d+ cost=\\$0\\.000$`, "m"));
-	const blocked = await runScout(["--spec", "-"], { ...env, FAKE_PI: "blocked" }, SPEC);
-	assert.match(blocked.stderr, /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=yes$/m);
-	assert.doesNotMatch(blocked.stdout, /^scout: dir=/m, "stdout stays the digest");
-	const clear = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
-	assert.match(clear.stderr, /blocked-on-me=no$/m);
+  const { env, scoutRoot } = sandbox();
+  const read = await runScout(["look"], { ...env, FAKE_PI: "ok" });
+  assert.match(
+    read.stderr,
+    new RegExp(`^scout: dir=${scoutRoot}/\\d+ cost=\\$0\\.000$`, "m"),
+  );
+  const blocked = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "blocked" },
+    SPEC,
+  );
+  assert.match(
+    blocked.stderr,
+    /^scout: dir=\S+ cost=\$0\.000 blocked-on-me=yes$/m,
+  );
+  assert.doesNotMatch(
+    blocked.stdout,
+    /^scout: dir=/m,
+    "stdout stays the digest",
+  );
+  const clear = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "verdict" },
+    SPEC,
+  );
+  assert.match(clear.stderr, /blocked-on-me=no$/m);
 });
 
 test("a worker's Route does not hide or create a Blocked on me entry", async () => {
-	for (const inline of [true, false]) {
-		for (const [body, expected] of [["nothing", "no"], ["needs src/b.ts, outside files-allowed", "yes"]]) {
-			const { env } = sandbox();
-			const digest = inline
-				? `- **Blocked on me**: ${body}\n- **Route**: prompt text only; no departure\n- **Changed**: a.txt\n`
-				: `**Blocked on me**\n${body}\n**Route**\nprompt text only; no departure\n**Changed**\na.txt\n`;
-			const contract = SPEC.replace("1. Do it (a.txt)", "1. Target is observable");
-			const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "digest", FAKE_DIGEST: digest }, contract);
-			assert.equal(run.code, 0, run.stderr);
-			assert.ok(run.stdout.endsWith(digest), "the digest keeps the Route");
-			assert.match(run.stderr, new RegExp(`blocked-on-me=${expected}$`, "m"));
-		}
-	}
+  for (const inline of [true, false]) {
+    for (const [body, expected] of [
+      ["nothing", "no"],
+      ["needs src/b.ts, outside files-allowed", "yes"],
+    ]) {
+      const { env } = sandbox();
+      const digest = inline
+        ? `- **Blocked on me**: ${body}\n- **Route**: prompt text only; no departure\n- **Changed**: a.txt\n`
+        : `**Blocked on me**\n${body}\n**Route**\nprompt text only; no departure\n**Changed**\na.txt\n`;
+      const contract = SPEC.replace(
+        "1. Do it (a.txt)",
+        "1. Target is observable",
+      );
+      const run = await runScout(
+        ["--spec", "-"],
+        { ...env, FAKE_PI: "digest", FAKE_DIGEST: digest },
+        contract,
+      );
+      assert.equal(run.code, 0, run.stderr);
+      assert.ok(run.stdout.endsWith(digest), "the digest keeps the Route");
+      assert.match(run.stderr, new RegExp(`blocked-on-me=${expected}$`, "m"));
+    }
+  }
 });
 
 test("a package.json without a type above scout does not refuse the spec", () => {
-	// The work laptop has ~/package.json = {}: node warned MODULE_TYPELESS_PACKAGE_JSON while
-	// loading worker-sensors.ts for the spec check, and scout read the warning as the spec error.
-	const { env } = sandbox();
-	const home = mkdtempSync(join(tmpdir(), "scout-typeless-"));
-	writeFileSync(join(home, "package.json"), "{}\n");
-	for (const dir of ["bin", "extensions", "lib"]) cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), { recursive: true });
-	const run = spawnSync(join(home, "bin", "scout"), ["--spec", "-"], { env: { ...env, FAKE_PI: "env" }, input: SPEC, encoding: "utf8" });
-	assert.doesNotMatch(run.stderr, /spec on stdin/);
-	assert.match(run.stdout, /^mode=rw$/m);
+  // The work laptop has ~/package.json = {}: node warned MODULE_TYPELESS_PACKAGE_JSON while
+  // loading worker-sensors.ts for the spec check, and scout read the warning as the spec error.
+  const { env } = sandbox();
+  const home = mkdtempSync(join(tmpdir(), "scout-typeless-"));
+  writeFileSync(join(home, "package.json"), "{}\n");
+  for (const dir of ["bin", "extensions", "lib"])
+    cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), {
+      recursive: true,
+    });
+  const run = spawnSync(join(home, "bin", "scout"), ["--spec", "-"], {
+    env: { ...env, FAKE_PI: "env" },
+    input: SPEC,
+    encoding: "utf8",
+  });
+  assert.doesNotMatch(run.stderr, /spec on stdin/);
+  assert.match(run.stdout, /^mode=rw$/m);
 });
 
 test("a read scout runs with the git guard first on PATH and PI_SCOUT_MODE=read", async () => {
-	const { env } = sandbox();
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "env" });
-	assert.equal(run.code, 0);
-	assert.match(run.stdout, /^mode=read$/m);
-	assert.match(run.stdout, /^git=.*\/guard\/git$/m);
-	assert.match(run.stdout, /^real=\/.*\/git$/m);
-	assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
+  const { env } = sandbox();
+  const run = await runScout(["look around"], { ...env, FAKE_PI: "env" });
+  assert.equal(run.code, 0);
+  assert.match(run.stdout, /^mode=read$/m);
+  assert.match(run.stdout, /^git=.*\/guard\/git$/m);
+  assert.match(run.stdout, /^real=\/.*\/git$/m);
+  assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
 });
 
 test("a worker runs with the git guard first on PATH and PI_SCOUT_MODE=rw", async () => {
-	const { env } = sandbox();
-	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
-	assert.match(run.stdout, /^mode=rw$/m);
-	assert.match(run.stdout, /^git=.*\/guard\/git$/m);
+  const { env } = sandbox();
+  const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
+  assert.match(run.stdout, /^mode=rw$/m);
+  assert.match(run.stdout, /^git=.*\/guard\/git$/m);
 });
 
 test("scout started with the guard already on PATH still hands the guard the real git", async () => {
-	const { env } = sandbox();
-	const guard = resolve(import.meta.dirname, "../bin/guard");
-	const run = await runScout(["look around"], { ...env, PATH: `${guard}:${env.PATH}`, FAKE_PI: "env" });
-	assert.match(run.stdout, /^real=\/.*\/git$/m);
-	assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
+  const { env } = sandbox();
+  const guard = resolve(import.meta.dirname, "../bin/guard");
+  const run = await runScout(["look around"], {
+    ...env,
+    PATH: `${guard}:${env.PATH}`,
+    FAKE_PI: "env",
+  });
+  assert.match(run.stdout, /^real=\/.*\/git$/m);
+  assert.doesNotMatch(run.stdout, /^real=.*\/guard\/git$/m);
 });
 
 test("the running meta records mode and repo for the fan-out cap", async () => {
-	const { env, scoutRoot } = sandbox();
-	await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
-	const meta = doneMeta(scoutRoot);
-	assert.match(meta, /^mode=rw$/m);
-	assert.match(meta, new RegExp(`^repo=${gitCommonDir(process.cwd())}$`, "m"));
+  const { env, scoutRoot } = sandbox();
+  await runScout(["--spec", "-"], { ...env, FAKE_PI: "env" }, SPEC);
+  const meta = doneMeta(scoutRoot);
+  assert.match(meta, /^mode=rw$/m);
+  assert.match(meta, new RegExp(`^repo=${gitCommonDir(process.cwd())}$`, "m"));
 });
 
 test("a third scout is refused with exit 75 while two are live; dead pids do not count", async () => {
-	const { env, scoutRoot } = sandbox();
-	runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
-	runningMeta(scoutRoot, { pid: 2 ** 22 - 1, mode: "read" }); // no such process
-	let run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 0, "one live scout should not block");
-	runningMeta(scoutRoot, { pid: process.ppid, mode: "rw", repo: "/elsewhere/.git" });
-	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 75);
-	assert.deepEqual(readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)).length, 1, "a refused scout leaves no run folder");
+  const { env, scoutRoot } = sandbox();
+  runningMeta(scoutRoot, { pid: process.pid, mode: "read" });
+  runningMeta(scoutRoot, { pid: 2 ** 22 - 1, mode: "read" }); // no such process
+  let run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+  assert.equal(run.code, 0, "one live scout should not block");
+  runningMeta(scoutRoot, {
+    pid: process.ppid,
+    mode: "rw",
+    repo: "/elsewhere/.git",
+  });
+  run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+  assert.equal(run.code, 75);
+  assert.deepEqual(
+    readdirSync(scoutRoot).filter((d) => /^\d+$/.test(d)).length,
+    1,
+    "a refused scout leaves no run folder",
+  );
 });
 
 test("scouts started together claim before they count: never more than two are admitted", async () => {
-	const { env, scoutRoot } = sandbox();
-	const runs = await Promise.all([1, 2, 3, 4, 5].map(() => runScout(["--timeout", "2", "look around"], { ...env, FAKE_PI: "hang" })));
-	const codes = runs.map((run) => run.code);
-	assert.ok(codes.every((code) => code === 75 || code === 124), runs.map((run) => `${run.code} ${run.stderr}`).join(""));
-	assert.ok(codes.filter((code) => code === 124).length <= 2, `admitted: ${codes}`);
-	assert.deepEqual(readdirSync(join(scoutRoot, ".running")).filter((name) => name.endsWith(".meta")), [], "a refused claim is removed");
+  const { env, scoutRoot } = sandbox();
+  const runs = await Promise.all(
+    [1, 2, 3, 4, 5].map(() =>
+      runScout(["--timeout", "2", "look around"], { ...env, FAKE_PI: "hang" }),
+    ),
+  );
+  const codes = runs.map((run) => run.code);
+  assert.ok(
+    codes.every((code) => code === 75 || code === 124),
+    runs.map((run) => `${run.code} ${run.stderr}`).join(""),
+  );
+  assert.ok(
+    codes.filter((code) => code === 124).length <= 2,
+    `admitted: ${codes}`,
+  );
+  assert.deepEqual(
+    readdirSync(join(scoutRoot, ".running")).filter((name) =>
+      name.endsWith(".meta"),
+    ),
+    [],
+    "a refused claim is removed",
+  );
 });
 
 test("a second worker on the same repo is refused with exit 75; another repo or a read scout is not", async () => {
-	const { env, scoutRoot } = sandbox();
-	const repo = gitCommonDir(process.cwd());
-	runningMeta(scoutRoot, { pid: process.pid, mode: "rw", repo });
-	let run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
-	assert.equal(run.code, 75);
-	run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
-	assert.equal(run.code, 0, "a read scout beside an open worker is fine");
-	writeFileSync(join(scoutRoot, ".running", `${process.pid}.meta`), `pid=${process.pid}\nstarted=1\nmode=rw\nrepo=/elsewhere/.git\n`);
-	run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
-	assert.equal(run.code, 0, "a worker on another repo is fine");
+  const { env, scoutRoot } = sandbox();
+  const repo = gitCommonDir(process.cwd());
+  runningMeta(scoutRoot, { pid: process.pid, mode: "rw", repo });
+  let run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+  assert.equal(run.code, 75);
+  run = await runScout(["look around"], { ...env, FAKE_PI: "ok" });
+  assert.equal(run.code, 0, "a read scout beside an open worker is fine");
+  writeFileSync(
+    join(scoutRoot, ".running", `${process.pid}.meta`),
+    `pid=${process.pid}\nstarted=1\nmode=rw\nrepo=/elsewhere/.git\n`,
+  );
+  run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+  assert.equal(run.code, 0, "a worker on another repo is fine");
 });
 
 test("usage errors come before the fan-out cap (verify.sh probes them from inside a worker)", async () => {
-	const { env, scoutRoot } = sandbox();
-	runningMeta(scoutRoot, { pid: process.pid, mode: "rw", repo: gitCommonDir(process.cwd()) });
-	runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
-	assert.equal((await runScout(["--rw", "x"], env)).code, 2);
-	assert.equal((await runScout(["--thinking", "max", "x"], env)).code, 2);
+  const { env, scoutRoot } = sandbox();
+  runningMeta(scoutRoot, {
+    pid: process.pid,
+    mode: "rw",
+    repo: gitCommonDir(process.cwd()),
+  });
+  runningMeta(scoutRoot, { pid: process.ppid, mode: "read" });
+  assert.equal((await runScout(["--rw", "x"], env)).code, 2);
+  assert.equal((await runScout(["--thinking", "max", "x"], env)).code, 2);
 });
 
 test("a worker's digest carries exactly one WORKER-SENSORS line, the one from the report", async () => {
-	const { env } = sandbox();
-	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "verdict" }, SPEC);
-	assert.equal(run.code, 0);
-	const lines = run.stdout.split("\n");
-	assert.match(lines[0], /^WORKER-SENSORS: CANNOT-RUN no verdict written/);
-	assert.equal(lines.filter((l) => l.startsWith("WORKER-SENSORS:")).length, 1);
-	assert.ok(lines.includes("report body"));
+  const { env } = sandbox();
+  const run = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "verdict" },
+    SPEC,
+  );
+  assert.equal(run.code, 0);
+  const lines = run.stdout.split("\n");
+  assert.match(lines[0], /^WORKER-SENSORS: CANNOT-RUN no verdict written/);
+  assert.equal(lines.filter((l) => l.startsWith("WORKER-SENSORS:")).length, 1);
+  assert.ok(lines.includes("report body"));
 });
 
-test("scout refuses a bash older than 4.4 instead of dying on an empty array", { skip: !existsSync("/bin/bash") }, () => {
-	const { env } = sandbox();
-	const version = spawnSync("/bin/bash", ["-c", "echo ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"], { encoding: "utf8" }).stdout.trim();
-	const run = spawnSync("/bin/bash", [SCOUT, "look around"], { env: { ...env, FAKE_PI: "env" }, encoding: "utf8" });
-	if (Number.parseFloat(version) >= 4.4) {
-		assert.equal(run.status, 0, run.stderr);
-	} else {
-		assert.equal(run.status, 2);
-		assert.match(run.stderr, /needs bash 4\.4\+/);
-		assert.doesNotMatch(run.stderr, /unbound variable/);
-	}
-});
+test(
+  "scout refuses a bash older than 4.4 instead of dying on an empty array",
+  { skip: !existsSync("/bin/bash") },
+  () => {
+    const { env } = sandbox();
+    const version = spawnSync(
+      "/bin/bash",
+      ["-c", "echo ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"],
+      { encoding: "utf8" },
+    ).stdout.trim();
+    const run = spawnSync("/bin/bash", [SCOUT, "look around"], {
+      env: { ...env, FAKE_PI: "env" },
+      encoding: "utf8",
+    });
+    if (Number.parseFloat(version) >= 4.4) {
+      assert.equal(run.status, 0, run.stderr);
+    } else {
+      assert.equal(run.status, 2);
+      assert.match(run.stderr, /needs bash 4\.4\+/);
+      assert.doesNotMatch(run.stderr, /unbound variable/);
+    }
+  },
+);
 
 test("a worker that writes no verdict still gets verdict.json", async () => {
-	const { env, scoutRoot } = sandbox();
-	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
-	assert.equal(run.code, 0);
-	assert.match(run.stdout.split("\n")[0], /^WORKER-SENSORS: CANNOT-RUN no verdict written \(pi exited 0\)/);
-	assert.equal(report(scoutRoot).verdict, "CANNOT-RUN");
+  const { env, scoutRoot } = sandbox();
+  const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
+  assert.equal(run.code, 0);
+  assert.match(
+    run.stdout.split("\n")[0],
+    /^WORKER-SENSORS: CANNOT-RUN no verdict written \(pi exited 0\)/,
+  );
+  assert.equal(report(scoutRoot).verdict, "CANNOT-RUN");
 });
 
 test("a worker terminated mid-run (143) still gets verdict.json and a finished entry", async () => {
-	const { env, scoutRoot } = sandbox();
-	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "sleep" }, SPEC, (pid) => setTimeout(() => process.kill(pid, "SIGTERM"), 1500));
-	assert.equal(run.code, 143);
-	assert.match(report(scoutRoot).reasons[0], /pi exited 143/);
-	assert.match(doneMeta(scoutRoot), /^rc=143$/m);
+  const { env, scoutRoot } = sandbox();
+  const run = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "sleep" },
+    SPEC,
+    (pid) => setTimeout(() => process.kill(pid, "SIGTERM"), 1500),
+  );
+  assert.equal(run.code, 143);
+  assert.match(report(scoutRoot).reasons[0], /pi exited 143/);
+  assert.match(doneMeta(scoutRoot), /^rc=143$/m);
 });
 
 test("killing scout's process group (pi aborting its bash tool) kills the child pi too", async () => {
-	const { env, scoutRoot } = sandbox();
-	const pidfile = join(scoutRoot, "..", "fake.pid");
-	const child = spawn(SCOUT, ["look around"], { env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile }, detached: true, stdio: "ignore" });
-	for (let i = 0; i < 50 && !existsSync(pidfile); i += 1) await new Promise((r) => setTimeout(r, 100));
-	const fakePid = Number(readFileSync(pidfile, "utf8"));
-	process.kill(-(child.pid ?? 0), "SIGKILL");
-	await new Promise((r) => setTimeout(r, 300));
-	let alive = true;
-	try {
-		process.kill(fakePid, 0);
-	} catch {
-		alive = false;
-	}
-	if (alive) process.kill(fakePid, "SIGKILL");
-	assert.equal(alive, false, "the child pi outlived scout");
+  const { env, scoutRoot } = sandbox();
+  const pidfile = join(scoutRoot, "..", "fake.pid");
+  const child = spawn(SCOUT, ["look around"], {
+    env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile },
+    detached: true,
+    stdio: "ignore",
+  });
+  for (let i = 0; i < 50 && !existsSync(pidfile); i += 1)
+    await new Promise((r) => setTimeout(r, 100));
+  const fakePid = Number(readFileSync(pidfile, "utf8"));
+  process.kill(-(child.pid ?? 0), "SIGKILL");
+  await new Promise((r) => setTimeout(r, 300));
+  let alive = true;
+  try {
+    process.kill(fakePid, 0);
+  } catch {
+    alive = false;
+  }
+  if (alive) process.kill(fakePid, "SIGKILL");
+  assert.equal(alive, false, "the child pi outlived scout");
 });
 
 test("a child whose session file goes stale is killed as a stall", async () => {
-	const { env, scoutRoot } = sandbox();
-	const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "hang", SCOUT_STALE_SECS: "2", SCOUT_POLL_SECS: "1" }, SPEC);
-	assert.equal(run.code, 124);
-	assert.ok(run.ms < 20_000, `took ${run.ms}ms`);
-	assert.match(run.stdout.split("\n")[0], /^WORKER-SENSORS: CANNOT-RUN model stream stalled/);
-	assert.match(report(scoutRoot).reasons[0], /model stream stalled/);
-	assert.doesNotMatch(run.stderr, /rerun with --model/);
+  const { env, scoutRoot } = sandbox();
+  const run = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "hang", SCOUT_STALE_SECS: "2", SCOUT_POLL_SECS: "1" },
+    SPEC,
+  );
+  assert.equal(run.code, 124);
+  assert.ok(run.ms < 20_000, `took ${run.ms}ms`);
+  assert.match(
+    run.stdout.split("\n")[0],
+    /^WORKER-SENSORS: CANNOT-RUN model stream stalled/,
+  );
+  assert.match(report(scoutRoot).reasons[0], /model stream stalled/);
+  assert.doesNotMatch(run.stderr, /rerun with --model/);
 });
 
-const sleepMs = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const sleepMs = (ms: number): Promise<void> =>
+  new Promise((r) => setTimeout(r, ms));
 
 /** The run folder's file, once scout has made it (the folder is keyed by scout's pid). */
 function runFile(scoutRoot: string, name: string): string | undefined {
-	if (!existsSync(scoutRoot)) return undefined;
-	const dir = readdirSync(scoutRoot).find((d) => /^\d+$/.test(d) && existsSync(join(scoutRoot, d, name)));
-	return dir ? join(scoutRoot, dir, name) : undefined;
+  if (!existsSync(scoutRoot)) return undefined;
+  const dir = readdirSync(scoutRoot).find(
+    (d) => /^\d+$/.test(d) && existsSync(join(scoutRoot, d, name)),
+  );
+  return dir ? join(scoutRoot, dir, name) : undefined;
 }
 
 /** Runs a pane-mode scout whose fake pi sleeps; reads pane.sh once the pane has started, then SIGTERMs scout. */
-async function capturePaneScript(env: NodeJS.ProcessEnv, scoutRoot: string): Promise<{ run: Run; text: string; mode: number; path: string }> {
-	const seen = { text: "", mode: -1, path: "" };
-	const run = await runScout(["look around"], { ...env, FAKE_PI: "sleep" }, "", (pid) => {
-		void (async () => {
-			// pane.sh is removed on exit, so an earlier run's folder never matches
-			const started = (): string | undefined => {
-				const sh = runFile(scoutRoot, "pane.sh");
-				return sh && existsSync(join(sh, "..", "pane.pid")) ? sh : undefined;
-			};
-			for (let i = 0; i < 100 && !started(); i += 1) await sleepMs(100);
-			const path = started();
-			if (path) Object.assign(seen, { text: readFileSync(path, "utf8"), mode: statSync(path).mode & 0o777, path });
-			process.kill(pid, "SIGTERM");
-		})();
-	});
-	return { run, ...seen };
+async function capturePaneScript(
+  env: NodeJS.ProcessEnv,
+  scoutRoot: string,
+): Promise<{ run: Run; text: string; mode: number; path: string }> {
+  const seen = { text: "", mode: -1, path: "" };
+  const run = await runScout(
+    ["look around"],
+    { ...env, FAKE_PI: "sleep" },
+    "",
+    (pid) => {
+      void (async () => {
+        // pane.sh is removed on exit, so an earlier run's folder never matches
+        const started = (): string | undefined => {
+          const sh = runFile(scoutRoot, "pane.sh");
+          return sh && existsSync(join(sh, "..", "pane.pid")) ? sh : undefined;
+        };
+        for (let i = 0; i < 100 && !started(); i += 1) await sleepMs(100);
+        const path = started();
+        if (path)
+          Object.assign(seen, {
+            text: readFileSync(path, "utf8"),
+            mode: statSync(path).mode & 0o777,
+            path,
+          });
+        process.kill(pid, "SIGTERM");
+      })();
+    },
+  );
+  return { run, ...seen };
 }
 
 test("SIGKILL of scout takes the pane child with it, and the pane still counts toward the cap until then", async () => {
-	const { env, scoutRoot } = kittySandbox();
-	const pidfile = join(scoutRoot, "..", "fake.pid");
-	const first = spawn(SCOUT, ["--rw", "--spec", "-"], { env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile }, stdio: ["pipe", "ignore", "ignore"] });
-	first.stdin.end(SPEC);
-	const metaPath = join(scoutRoot, ".running", `${first.pid}.meta`);
-	for (let i = 0; i < 100 && !(existsSync(pidfile) && existsSync(metaPath) && /^pane=\d+$/m.test(readFileSync(metaPath, "utf8"))); i += 1) await sleepMs(100);
-	const fakePid = Number(readFileSync(pidfile, "utf8"));
-	process.kill(first.pid ?? 0, "SIGKILL");
-	const second = await runScout(["--rw", "--spec", "-"], { ...env, FAKE_PI: "ok" }, SPEC);
-	const isAlive = (pid: number): boolean => {
-		try {
-			process.kill(pid, 0);
-			return true;
-		} catch {
-			return false;
-		}
-	};
-	const wasAlive = isAlive(fakePid);
-	for (let i = 0; i < 60 && isAlive(fakePid); i += 1) await sleepMs(100);
-	const alive = isAlive(fakePid);
-	if (alive) process.kill(fakePid, "SIGKILL");
-	assert.equal(second.code, 75, second.stderr);
-	assert.ok(wasAlive, "the child was already gone when the second scout ran");
-	assert.equal(alive, false, "the child pi outlived scout by more than 6s");
+  const { env, scoutRoot } = kittySandbox();
+  const pidfile = join(scoutRoot, "..", "fake.pid");
+  const first = spawn(SCOUT, ["--rw", "--spec", "-"], {
+    env: { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile },
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+  first.stdin.end(SPEC);
+  const metaPath = join(scoutRoot, ".running", `${first.pid}.meta`);
+  for (
+    let i = 0;
+    i < 100 &&
+    !(
+      existsSync(pidfile) &&
+      existsSync(metaPath) &&
+      /^pane=\d+$/m.test(readFileSync(metaPath, "utf8"))
+    );
+    i += 1
+  )
+    await sleepMs(100);
+  const fakePid = Number(readFileSync(pidfile, "utf8"));
+  process.kill(first.pid ?? 0, "SIGKILL");
+  const second = await runScout(
+    ["--rw", "--spec", "-"],
+    { ...env, FAKE_PI: "ok" },
+    SPEC,
+  );
+  const isAlive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const wasAlive = isAlive(fakePid);
+  for (let i = 0; i < 60 && isAlive(fakePid); i += 1) await sleepMs(100);
+  const alive = isAlive(fakePid);
+  if (alive) process.kill(fakePid, "SIGKILL");
+  assert.equal(second.code, 75, second.stderr);
+  assert.ok(wasAlive, "the child was already gone when the second scout ran");
+  assert.equal(alive, false, "the child pi outlived scout by more than 6s");
 });
 
 test("pi gets -na unless the cwd is under a trusted path in trust.json", async () => {
-	const { env, scoutRoot } = kittySandbox();
-	const trustFile = join(String(env.PI_CODING_AGENT_DIR), "trust.json");
-	writeFileSync(trustFile, JSON.stringify({ "/some/other/place": true }));
-	assert.match((await capturePaneScript(env, scoutRoot)).text, / -na /);
-	writeFileSync(trustFile, JSON.stringify({ [process.cwd()]: true, [process.env.PWD ?? process.cwd()]: true }));
-	const trusted = await capturePaneScript(env, scoutRoot);
-	assert.ok(trusted.text.includes("timeout --foreground"));
-	assert.doesNotMatch(trusted.text, / -na /);
+  const { env, scoutRoot } = kittySandbox();
+  const trustFile = join(String(env.PI_CODING_AGENT_DIR), "trust.json");
+  writeFileSync(trustFile, JSON.stringify({ "/some/other/place": true }));
+  assert.match((await capturePaneScript(env, scoutRoot)).text, / -na /);
+  writeFileSync(
+    trustFile,
+    JSON.stringify({
+      [process.cwd()]: true,
+      [process.env.PWD ?? process.cwd()]: true,
+    }),
+  );
+  const trusted = await capturePaneScript(env, scoutRoot);
+  assert.ok(trusted.text.includes("timeout --foreground"));
+  assert.doesNotMatch(trusted.text, / -na /);
 });
 
 test("a reader that quits early (| head) does not kill the run", () => {
-	const { env, scoutRoot } = sandbox();
-	const result = spawnSync("bash", ["-c", `"${SCOUT}" 'look around' | head -c 10 >/dev/null`], { env: { ...env, FAKE_PI: "ok", FAKE_BYTES: "300000" } });
-	assert.equal(result.status, 0);
-	// The EXIT trap runs after the pipe closed; give it a moment
-	for (let i = 0; i < 50 && !existsSync(join(scoutRoot, ".done")); i += 1) spawnSync("sleep", ["0.1"]);
-	assert.match(doneMeta(scoutRoot), /^rc=0$/m);
-	const out = readdirSync(join(scoutRoot, ".done")).find((f) => f.endsWith(".out"));
-	assert.ok(out && statSync(join(scoutRoot, ".done", out)).size >= 300_000);
+  const { env, scoutRoot } = sandbox();
+  const result = spawnSync(
+    "bash",
+    ["-c", `"${SCOUT}" 'look around' | head -c 10 >/dev/null`],
+    { env: { ...env, FAKE_PI: "ok", FAKE_BYTES: "300000" } },
+  );
+  assert.equal(result.status, 0);
+  // The EXIT trap runs after the pipe closed; give it a moment
+  for (let i = 0; i < 50 && !existsSync(join(scoutRoot, ".done")); i += 1)
+    spawnSync("sleep", ["0.1"]);
+  assert.match(doneMeta(scoutRoot), /^rc=0$/m);
+  const out = readdirSync(join(scoutRoot, ".done")).find((f) =>
+    f.endsWith(".out"),
+  );
+  assert.ok(out && statSync(join(scoutRoot, ".done", out)).size >= 300_000);
 });
 
-const FAKE_KITTY = "#!/usr/bin/python3\nimport json, os, subprocess, sys\nargs = sys.argv[1:]\nwith open(os.environ[\"FAKE_KITTY_LOG\"], \"a\") as f:\n    f.write(json.dumps(args) + \"\\n\")\nif \"ls\" in args:\n    print(json.dumps([{\"tabs\": [{\"windows\": [\n        {\"id\": 42, \"cwd\": os.getcwd(), \"session_name\": \"caller\"},\n        {\"id\": 43, \"cwd\": \"/other\", \"session_name\": \"other\"}]}]}]))\nelif \"launch\" in args:\n    if os.environ.get(\"FAKE_KITTY\") == \"broken\":\n        raise SystemExit(1)\n    script = args[-1]\n    env = dict(os.environ, KITTY_WINDOW_ID=\"99\", KITTY_LISTEN_ON=\"unix:/tmp/new-kitty\")\n    subprocess.Popen([\"/bin/bash\", script], env=env, start_new_session=True,\n                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n    print(99)\n";
+const FAKE_KITTY =
+  '#!/usr/bin/python3\nimport json, os, subprocess, sys\nargs = sys.argv[1:]\nwith open(os.environ["FAKE_KITTY_LOG"], "a") as f:\n    f.write(json.dumps(args) + "\\n")\nif "ls" in args:\n    print(json.dumps([{"tabs": [{"windows": [\n        {"id": 42, "cwd": os.getcwd(), "session_name": "caller"},\n        {"id": 43, "cwd": "/other", "session_name": "other"}]}]}]))\nelif "launch" in args:\n    if os.environ.get("FAKE_KITTY") == "broken":\n        raise SystemExit(1)\n    script = args[-1]\n    env = dict(os.environ, KITTY_WINDOW_ID="99", KITTY_LISTEN_ON="unix:/tmp/new-kitty")\n    subprocess.Popen(["/bin/bash", script], env=env, start_new_session=True,\n                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n    print(99)\n';
 
-function kittySandbox(mode = "ok"): { env: NodeJS.ProcessEnv; log: string; scoutRoot: string } {
+function kittySandbox(mode = "ok"): {
+  env: NodeJS.ProcessEnv;
+  log: string;
+  scoutRoot: string;
+} {
   const { env, scoutRoot } = sandbox();
   const root = String(env.PI_CODING_AGENT_DIR);
   writeFileSync(join(root, "bin", "kitten"), FAKE_KITTY);
   chmodSync(join(root, "bin", "kitten"), 0o755);
   const log = join(root, "kitty.log");
-  return { env: { ...env, KITTY_WINDOW_ID: "42", KITTY_LISTEN_ON: "unix:/tmp/test-kitty",
-    FAKE_KITTY: mode, FAKE_KITTY_LOG: log }, log, scoutRoot };
+  return {
+    env: {
+      ...env,
+      KITTY_WINDOW_ID: "42",
+      KITTY_LISTEN_ON: "unix:/tmp/test-kitty",
+      FAKE_KITTY: mode,
+      FAKE_KITTY_LOG: log,
+    },
+    log,
+    scoutRoot,
+  };
 }
 function kittyCalls(log: string): string[][] {
-  return readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+  return readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[]);
 }
 
 test("kitty: visible child joins the caller's workspace without taking focus; success closes only its pane", async () => {
@@ -799,23 +1289,49 @@ test("kitty: visible child joins the caller's workspace without taking focus; su
   const calls = kittyCalls(log);
   const launch = calls.find((args) => args.includes("launch"));
   assert.ok(launch);
-  for (const flag of ["--keep-focus", "--hold", "--source-window", "id:42", "--add-to-session", ".", "--type=tab"])
+  for (const flag of [
+    "--keep-focus",
+    "--hold",
+    "--source-window",
+    "id:42",
+    "--add-to-session",
+    ".",
+    "--type=tab",
+  ])
     assert.ok(launch.includes(flag), flag);
-  assert.ok(calls.some((args) => args.includes("close-window") && args.includes("id:99")));
+  assert.ok(
+    calls.some(
+      (args) => args.includes("close-window") && args.includes("id:99"),
+    ),
+  );
 });
 
 test("kitty: a visible worker loads sensors and returns their verdict before its digest", async () => {
   const { env, log } = kittySandbox();
-  const run = await runScout(["--spec", "-"], { ...env, FAKE_PI: "pass" }, SPEC);
+  const run = await runScout(
+    ["--spec", "-"],
+    { ...env, FAKE_PI: "pass" },
+    SPEC,
+  );
   assert.equal(run.code, 0, run.stderr);
   assert.match(run.stdout, /^WORKER-SENSORS: PASS\n\nreport body/);
-  assert.ok(kittyCalls(log).some((args) => args.some((arg) => /^worker \d+$/.test(arg))));
+  assert.ok(
+    kittyCalls(log).some((args) =>
+      args.some((arg) => /^worker \d+$/.test(arg)),
+    ),
+  );
 });
 
 test("kitty: failure is returned and its pane remains available; timeout still returns 124", async () => {
-  for (const [mode, code] of [["error", 1], ["hang", 124]] as const) {
+  for (const [mode, code] of [
+    ["error", 1],
+    ["hang", 124],
+  ] as const) {
     const { env, log } = kittySandbox();
-    const run = await runScout(["--timeout", "2", "look"], { ...env, FAKE_PI: mode });
+    const run = await runScout(["--timeout", "2", "look"], {
+      ...env,
+      FAKE_PI: mode,
+    });
     assert.equal(run.code, code, run.stderr);
     assert.ok(kittyCalls(log).some((args) => args.includes("--hold")));
     assert.ok(!kittyCalls(log).some((args) => args.includes("close-window")));
@@ -825,7 +1341,11 @@ test("kitty: failure is returned and its pane remains available; timeout still r
 test("kitty: launch failure and SCOUT_KITTY=0 fall back to headless", async () => {
   for (const disabled of [false, true]) {
     const { env, log } = kittySandbox(disabled ? "ok" : "broken");
-    const run = await runScout(["look"], { ...env, FAKE_PI: "args", ...(disabled ? { SCOUT_KITTY: "0" } : {}) });
+    const run = await runScout(["look"], {
+      ...env,
+      FAKE_PI: "args",
+      ...(disabled ? { SCOUT_KITTY: "0" } : {}),
+    });
     assert.equal(run.code, 0, run.stderr);
     assert.match(run.stdout, /-p /);
     if (disabled) assert.equal(existsSync(log), false);
@@ -834,9 +1354,16 @@ test("kitty: launch failure and SCOUT_KITTY=0 fall back to headless", async () =
 
 test("kitty: pane script keeps its secrets private, excludes old identities and is removed on termination", async () => {
   const { env, scoutRoot } = kittySandbox();
-  writeFileSync(join(String(env.PI_CODING_AGENT_DIR), "bin", "zmx"), "#!/bin/sh\nexit 1\n");
+  writeFileSync(
+    join(String(env.PI_CODING_AGENT_DIR), "bin", "zmx"),
+    "#!/bin/sh\nexit 1\n",
+  );
   chmodSync(join(String(env.PI_CODING_AGENT_DIR), "bin", "zmx"), 0o755);
-  const gone = await runScout(["look"], { ...env, ZMX_SESSION: "gone", FAKE_PI: "args" });
+  const gone = await runScout(["look"], {
+    ...env,
+    ZMX_SESSION: "gone",
+    FAKE_PI: "args",
+  });
   assert.equal(gone.code, 0, gone.stderr);
   assert.match(gone.stdout, /-p /);
   const captured = await capturePaneScript(env, scoutRoot);

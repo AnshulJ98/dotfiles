@@ -10,112 +10,150 @@ import { piPackage } from "./pi-package.ts";
 
 const piModules = pathToFileURL(join(piPackage(), "package.json")).href;
 register(
-	`data:text/javascript,${encodeURIComponent(`
+  `data:text/javascript,${encodeURIComponent(`
 		export async function resolve(specifier, context, next) {
 			if (/^(@earendil-works\\/|typebox)/.test(specifier)) return next(specifier, { ...context, parentURL: ${JSON.stringify(piModules)} });
 			return next(specifier, context);
 		}`)}`,
 );
 
-const { default: background, lastLines } = await import("../extensions/background.ts");
+const { default: background, lastLines } =
+  await import("../extensions/background.ts");
 
 interface Sent {
-	content: string;
-	options: { triggerTurn?: boolean; deliverAs?: string };
+  content: string;
+  options: { triggerTurn?: boolean; deliverAs?: string };
 }
-type Execute = (id: string, params: Record<string, unknown>, signal: undefined, onUpdate: undefined, ctx: unknown) => Promise<unknown>;
+type Execute = (
+  id: string,
+  params: Record<string, unknown>,
+  signal: undefined,
+  onUpdate: undefined,
+  ctx: unknown,
+) => Promise<unknown>;
 
 function load(mode: "print" | "tui" = "print") {
-	const tools = new Map<string, Execute>();
-	const handlers = new Map<string, Array<() => Promise<void>>>();
-	let onSent: (sent: Sent) => void = () => {};
-	// After session_shutdown the runtime is gone: pi's real API throws on any use, as on /reload.
-	let stale = false;
-	const live = <T>(value: T): T => {
-		if (stale) throw new Error("This extension ctx is stale after session replacement or reload.");
-		return value;
-	};
-	const ui = { setWidget: () => live(undefined) };
-	const pi = {
-		on: (event: string, handler: () => Promise<void>) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
-		registerTool: (tool: { name: string; execute: Execute }) => tools.set(tool.name, tool.execute),
-		registerMessageRenderer: () => {},
-		getSettings: () => live({}),
-		sendMessage: (message: { content: string }, options: Sent["options"]) => onSent({ content: message.content, options }),
-	};
-	background(pi as never);
-	return {
-		run: (name: string, params: Record<string, unknown>) => tools.get(name)!("call", params, undefined, undefined, { cwd: tmpdir(), mode, ui }),
-		next: () => new Promise<Sent>((resolve) => (onSent = resolve)),
-		/** The timeout a bash call ends up with after the tool_call handlers. */
-		timeoutFor: async (command: string, timeout?: number): Promise<number | undefined> => {
-			const input: { command: string; timeout?: number } = { command, ...(timeout === undefined ? {} : { timeout }) };
-			for (const handler of handlers.get("tool_call") ?? []) await (handler as unknown as (event: unknown) => Promise<void>)({ toolName: "bash", toolCallId: "c", input });
-			return input.timeout;
-		},
-		shutdown: async () => {
-			for (const handler of handlers.get("session_shutdown") ?? []) await handler();
-			stale = true;
-		},
-	};
+  const tools = new Map<string, Execute>();
+  const handlers = new Map<string, Array<() => Promise<void>>>();
+  let onSent: (sent: Sent) => void = () => {};
+  // After session_shutdown the runtime is gone: pi's real API throws on any use, as on /reload.
+  let stale = false;
+  const live = <T>(value: T): T => {
+    if (stale)
+      throw new Error(
+        "This extension ctx is stale after session replacement or reload.",
+      );
+    return value;
+  };
+  const ui = { setWidget: () => live(undefined) };
+  const pi = {
+    on: (event: string, handler: () => Promise<void>) =>
+      handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+    registerTool: (tool: { name: string; execute: Execute }) =>
+      tools.set(tool.name, tool.execute),
+    registerMessageRenderer: () => {},
+    getSettings: () => live({}),
+    sendMessage: (message: { content: string }, options: Sent["options"]) =>
+      onSent({ content: message.content, options }),
+  };
+  background(pi as never);
+  return {
+    run: (name: string, params: Record<string, unknown>) =>
+      tools.get(name)!("call", params, undefined, undefined, {
+        cwd: tmpdir(),
+        mode,
+        ui,
+      }),
+    next: () => new Promise<Sent>((resolve) => (onSent = resolve)),
+    /** The timeout a bash call ends up with after the tool_call handlers. */
+    timeoutFor: async (
+      command: string,
+      timeout?: number,
+    ): Promise<number | undefined> => {
+      const input: { command: string; timeout?: number } = {
+        command,
+        ...(timeout === undefined ? {} : { timeout }),
+      };
+      for (const handler of handlers.get("tool_call") ?? [])
+        await (handler as unknown as (event: unknown) => Promise<void>)({
+          toolName: "bash",
+          toolCallId: "c",
+          input,
+        });
+      return input.timeout;
+    },
+    shutdown: async () => {
+      for (const handler of handlers.get("session_shutdown") ?? [])
+        await handler();
+      stale = true;
+    },
+  };
 }
 
 test("a job's exit is steered into a running turn and wakes an idle one", async () => {
-	const pi = load();
-	const sent = pi.next();
-	await pi.run("bg_run", { command: "echo done" });
-	const { content, options } = await sent;
-	assert.match(content, /Background job finished: bg1 \[exit 0,/);
-	assert.deepEqual(options, { triggerTurn: true, deliverAs: "steer" });
-	await pi.shutdown();
+  const pi = load();
+  const sent = pi.next();
+  await pi.run("bg_run", { command: "echo done" });
+  const { content, options } = await sent;
+  assert.match(content, /Background job finished: bg1 \[exit 0,/);
+  assert.deepEqual(options, { triggerTurn: true, deliverAs: "steer" });
+  await pi.shutdown();
 });
 
 test("a job aborted by session shutdown (/reload) does not touch the stale runtime", async () => {
-	const errors: unknown[] = [];
-	const catchIt = (err: unknown) => errors.push(err);
-	process.on("unhandledRejection", catchIt);
-	process.on("uncaughtException", catchIt);
-	try {
-		const pi = load("tui");
-		await pi.run("bg_run", { command: "sleep 30" });
-		await pi.shutdown();
-		await new Promise((resolve) => setTimeout(resolve, 500));
-	} finally {
-		process.off("unhandledRejection", catchIt);
-		process.off("uncaughtException", catchIt);
-	}
-	assert.deepEqual(errors.map(String), []);
+  const errors: unknown[] = [];
+  const catchIt = (err: unknown) => errors.push(err);
+  process.on("unhandledRejection", catchIt);
+  process.on("uncaughtException", catchIt);
+  try {
+    const pi = load("tui");
+    await pi.run("bg_run", { command: "sleep 30" });
+    await pi.shutdown();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  } finally {
+    process.off("unhandledRejection", catchIt);
+    process.off("uncaughtException", catchIt);
+  }
+  assert.deepEqual(errors.map(String), []);
 });
 
 test("lastLines shows the last lines as a terminal would", () => {
-	const cases: Array<[string, number, string]> = [
-		["one\ntwo\n", 5, "one\ntwo"],
-		["a\rb\rc\n", 5, "c"],
-		["x\r\ny\r\n", 5, "x\ny"],
-		["one\ntwo\nthree\n", 2, "two\nthree"],
-		["", 5, "(no output)"],
-		["one\ntwo\n\n", 5, "one\ntwo"],
-		["one\n\ntwo\n", 5, "one\n\ntwo"],
-		["start\n10%\r20%\r\ndone\n", 5, "start\n20%\ndone"],
-		["start\n10%\r", 5, "start\n10%"],
-		["10%\r20%\r", 5, "20%"],
-	];
-	for (const [text, lines, expected] of cases) assert.equal(lastLines(text, lines), expected, JSON.stringify(text));
+  const cases: Array<[string, number, string]> = [
+    ["one\ntwo\n", 5, "one\ntwo"],
+    ["a\rb\rc\n", 5, "c"],
+    ["x\r\ny\r\n", 5, "x\ny"],
+    ["one\ntwo\nthree\n", 2, "two\nthree"],
+    ["", 5, "(no output)"],
+    ["one\ntwo\n\n", 5, "one\ntwo"],
+    ["one\n\ntwo\n", 5, "one\n\ntwo"],
+    ["start\n10%\r20%\r\ndone\n", 5, "start\n20%\ndone"],
+    ["start\n10%\r", 5, "start\n10%"],
+    ["10%\r20%\r", 5, "20%"],
+  ];
+  for (const [text, lines, expected] of cases)
+    assert.equal(lastLines(text, lines), expected, JSON.stringify(text));
 });
 
 test("bash timeout: 120 s by default, 600 s at most; scout and auto-slice bound themselves and are left alone", async () => {
-	const pi = load();
-	const rows: Array<[command: string, asked: number | undefined, expected: number | undefined]> = [
-		["npm test", undefined, 120],
-		["npm test", 300, 300],
-		["npm test", 3600, 600],
-		["echo scouting the repo", undefined, 120],
-		["~/.pi/agent/bin/scout --rw --spec - <spec.md", undefined, undefined],
-		["cd ../x && ~/.pi/agent/bin/scout 'look'", 900, 900],
-		["~/.pi/agent/bin/auto-slice dispatch parse /tmp/spec.md", undefined, undefined],
-		["auto-slice merge parse 'feat: parse'", undefined, undefined],
-		["sleep 500 &", 60, undefined],
-	];
-	for (const [command, asked, expected] of rows) assert.equal(await pi.timeoutFor(command, asked), expected, command);
-	await pi.shutdown();
+  const pi = load();
+  const rows: Array<
+    [command: string, asked: number | undefined, expected: number | undefined]
+  > = [
+    ["npm test", undefined, 120],
+    ["npm test", 300, 300],
+    ["npm test", 3600, 600],
+    ["echo scouting the repo", undefined, 120],
+    ["~/.pi/agent/bin/scout --rw --spec - <spec.md", undefined, undefined],
+    ["cd ../x && ~/.pi/agent/bin/scout 'look'", 900, 900],
+    [
+      "~/.pi/agent/bin/auto-slice dispatch parse /tmp/spec.md",
+      undefined,
+      undefined,
+    ],
+    ["auto-slice merge parse 'feat: parse'", undefined, undefined],
+    ["sleep 500 &", 60, undefined],
+  ];
+  for (const [command, asked, expected] of rows)
+    assert.equal(await pi.timeoutFor(command, asked), expected, command);
+  await pi.shutdown();
 });

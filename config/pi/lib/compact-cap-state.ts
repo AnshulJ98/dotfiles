@@ -10,22 +10,28 @@ const shared = globalThis as Record<symbol, unknown>;
 
 /** compact-cap: publish the live cap in tokens; `read` returns 0 while the cap is off. */
 export function publishThreshold(read: () => number): void {
-	Object.defineProperty(globalThis, THRESHOLD, { get: read, configurable: true });
+  Object.defineProperty(globalThis, THRESHOLD, {
+    get: read,
+    configurable: true,
+  });
 }
 
 /** The live cap in tokens, or 0 when it is off or compact-cap isn't loaded. */
 export function capThreshold(): number {
-	const value = shared[THRESHOLD];
-	return typeof value === "number" && value > 0 ? value : 0;
+  const value = shared[THRESHOLD];
+  return typeof value === "number" && value > 0 ? value : 0;
 }
 
 /** compact-cap: a cap compaction is in flight; `interrupted` when it aborted a running agent (turn_end path). */
 export function setCapFiring(firing: boolean, interrupted: boolean): void {
-	shared[FIRING] = firing;
-	shared[INTERRUPTED] = interrupted;
+  shared[FIRING] = firing;
+  shared[INTERRUPTED] = interrupted;
 }
 
 /** prime-reminder: whether the compaction now ending came from compact-cap, and whether it aborted a run. */
 export function capFiring(): { firing: boolean; interrupted: boolean } {
-	return { firing: Boolean(shared[FIRING]), interrupted: Boolean(shared[INTERRUPTED]) };
+  return {
+    firing: Boolean(shared[FIRING]),
+    interrupted: Boolean(shared[INTERRUPTED]),
+  };
 }

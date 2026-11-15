@@ -51,11 +51,32 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, matchesGlob, normalize, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  matchesGlob,
+  normalize,
+  relative,
+  resolve,
+} from "node:path";
 import { promisify } from "node:util";
-import { changedBy, snapshot as bashSnapshot, type Snapshot as BashSnapshot } from "../lib/bash-changes.ts";
+import {
+  changedBy,
+  snapshot as bashSnapshot,
+  type Snapshot as BashSnapshot,
+} from "../lib/bash-changes.ts";
 import { subjectOf } from "../lib/bash-log.ts";
 import { logEvent } from "../lib/events.ts";
 
@@ -63,7 +84,12 @@ const DEFAULT_MAX_LINES = 400;
 const MAX_RETRIES = 1;
 const TEST_TIMEOUT_MS = 300_000;
 const OUTPUT_TAIL_LINES = 40;
-const DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
+const DEP_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+] as const;
 // The installed map skill, the same path /plan and /review call.
 const MAP_MJS = join(homedir(), ".agents/skills/map/map.mjs");
 const MAP_TIMEOUT_MS = 120_000;
@@ -127,7 +153,8 @@ export function parseSpec(text: string): WorkerSpec | string {
     if (!pair) continue;
     const [, key, raw] = pair;
     listKey = undefined;
-    if (/^[|>]/.test(raw)) return `spec field ${key} uses a YAML block scalar; put it on one line`;
+    if (/^[|>]/.test(raw))
+      return `spec field ${key} uses a YAML block scalar; put it on one line`;
     if (raw === "") {
       fields.set(key, []);
       listKey = key;
@@ -138,34 +165,56 @@ export function parseSpec(text: string): WorkerSpec | string {
     }
   }
   const filesAllowed = fields.get("files-allowed");
-  if (!Array.isArray(filesAllowed) || filesAllowed.length === 0) return "spec frontmatter needs a non-empty files-allowed list";
+  if (!Array.isArray(filesAllowed) || filesAllowed.length === 0)
+    return "spec frontmatter needs a non-empty files-allowed list";
   const tests = fields.get("tests");
-  if (typeof tests !== "string" || tests === "") return "spec frontmatter needs a tests command";
+  if (typeof tests !== "string" || tests === "")
+    return "spec frontmatter needs a tests command";
   // A /tmp script vanishes or changes between runs, so the settle check cannot be reproduced
-  if (TEMP_PATH.test(tests)) return "spec tests must not run anything under /tmp or $TMPDIR; commit the script or use a single command";
+  if (TEMP_PATH.test(tests))
+    return "spec tests must not run anything under /tmp or $TMPDIR; commit the script or use a single command";
   const rawMax = fields.get("max-lines");
   const maxLines = rawMax === undefined ? DEFAULT_MAX_LINES : Number(rawMax);
-  if (!Number.isInteger(maxLines) || maxLines <= 0) return `spec max-lines must be a positive integer, got ${String(rawMax)}`;
+  if (!Number.isInteger(maxLines) || maxLines <= 0)
+    return `spec max-lines must be a positive integer, got ${String(rawMax)}`;
   const allowed = fields.get("allowed-commands") ?? [];
-  if (!Array.isArray(allowed)) return "spec allowed-commands must be a list of command prefixes";
+  if (!Array.isArray(allowed))
+    return "spec allowed-commands must be a list of command prefixes";
   const frozen = fields.get("interface-frozen") ?? [];
-  if (!Array.isArray(frozen)) return "spec interface-frozen must be a list of globs";
-  return { filesAllowed, tests, maxLines, allowedCommands: allowed, interfaceFrozen: frozen };
+  if (!Array.isArray(frozen))
+    return "spec interface-frozen must be a list of globs";
+  return {
+    filesAllowed,
+    tests,
+    maxLines,
+    allowedCommands: allowed,
+    interfaceFrozen: frozen,
+  };
 }
 
 /** True when a repo-relative path matches one of the spec's globs. */
-export function isAllowed(repoRelativePath: string, globs: readonly string[]): boolean {
+export function isAllowed(
+  repoRelativePath: string,
+  globs: readonly string[],
+): boolean {
   if (!repoRelativePath || isAbsolute(repoRelativePath)) return false;
   const path = normalize(repoRelativePath);
   if (path.startsWith("..")) return false;
-  return globs.some((glob) => path === normalize(glob) || matchesGlob(path, glob));
+  return globs.some(
+    (glob) => path === normalize(glob) || matchesGlob(path, glob),
+  );
 }
 
 /**
  * Resolve a tool path the way pi does (`@` prefix stripped, `~` expanded,
  * relative to cwd), then make it relative to the repo root.
  */
-export function repoRelative(input: string, cwd: string, root: string, home: string = homedir()): string {
+export function repoRelative(
+  input: string,
+  cwd: string,
+  root: string,
+  home: string = homedir(),
+): string {
   let path = input.startsWith("@") ? input.slice(1) : input;
   if (path === "~") path = home;
   else if (path.startsWith("~/")) path = join(home, path.slice(2));
@@ -173,9 +222,20 @@ export function repoRelative(input: string, cwd: string, root: string, home: str
 }
 
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
-const PACKAGE_CHANGES = new Set(["add", "remove", "rm", "uninstall", "un", "update", "up", "upgrade", "dlx"]);
+const PACKAGE_CHANGES = new Set([
+  "add",
+  "remove",
+  "rm",
+  "uninstall",
+  "un",
+  "update",
+  "up",
+  "upgrade",
+  "dlx",
+]);
 const PACKAGE_INSTALLS = new Set(["install", "i"]);
-const TEMP_PATH = /(^|[\s'"=:])(\/private)?\/tmp\/|\/var\/folders\/|\$\{?TMPDIR\b/;
+const TEMP_PATH =
+  /(^|[\s'"=:])(\/private)?\/tmp\/|\/var\/folders\/|\$\{?TMPDIR\b/;
 const CDK_CHANGES = new Set(["deploy", "destroy", "bootstrap"]);
 // aws <service> <operation>: create-*, put-*, update-*, delete-*, terminate-*, invoke, deploy
 const AWS_CHANGE = /^(put|delete|create|update|terminate|invoke)(-|$)|^deploy$/;
@@ -189,12 +249,21 @@ function shellSegments(command: string): string[][] {
   return command
     .replace(/["'\\]/g, " ")
     .split(/\$\(|[;&|\n`(){}]/)
-    .map((segment) => segment.split(/\s+/).filter(Boolean).map((word) => basename(word)))
+    .map((segment) =>
+      segment
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((word) => basename(word)),
+    )
     .filter((words) => words.length > 0);
 }
 
-function cloudReason(word: string, rest: readonly string[]): string | undefined {
-  if (word === "cdk" && rest.some((a) => CDK_CHANGES.has(a))) return "cdk deploy/destroy/bootstrap changes the cloud account";
+function cloudReason(
+  word: string,
+  rest: readonly string[],
+): string | undefined {
+  if (word === "cdk" && rest.some((a) => CDK_CHANGES.has(a)))
+    return "cdk deploy/destroy/bootstrap changes the cloud account";
   if (word === "aws") {
     const op = rest.find((a) => AWS_CHANGE.test(a));
     if (op) return `aws ${op} changes the cloud account`;
@@ -203,13 +272,27 @@ function cloudReason(word: string, rest: readonly string[]): string | undefined 
 }
 
 function wordReason(word: string, rest: readonly string[]): string | undefined {
-  if (word === "rm" && rest.some((a) => a === "--recursive" || /^-[a-zA-Z]*[rR]/.test(a))) return "recursive rm is not allowed in a worker";
-  if (word === "find" && rest.includes("-delete")) return "find -delete is not allowed in a worker";
-  if (word === "bunx" || (word === "npx" && rest.some((a) => a === "-y" || a === "--yes"))) return "fetching packages needs the operator";
+  if (
+    word === "rm" &&
+    rest.some((a) => a === "--recursive" || /^-[a-zA-Z]*[rR]/.test(a))
+  )
+    return "recursive rm is not allowed in a worker";
+  if (word === "find" && rest.includes("-delete"))
+    return "find -delete is not allowed in a worker";
+  if (
+    word === "bunx" ||
+    (word === "npx" && rest.some((a) => a === "-y" || a === "--yes"))
+  )
+    return "fetching packages needs the operator";
   if (PACKAGE_MANAGERS.has(word)) {
     const sub = rest.find((a) => !a.startsWith("-"));
-    if (sub && PACKAGE_CHANGES.has(sub)) return "dependency changes need the operator";
-    if (sub && PACKAGE_INSTALLS.has(sub) && rest.slice(rest.indexOf(sub) + 1).some((a) => !a.startsWith("-"))) {
+    if (sub && PACKAGE_CHANGES.has(sub))
+      return "dependency changes need the operator";
+    if (
+      sub &&
+      PACKAGE_INSTALLS.has(sub) &&
+      rest.slice(rest.indexOf(sub) + 1).some((a) => !a.startsWith("-"))
+    ) {
       return "dependency changes need the operator";
     }
   }
@@ -223,8 +306,13 @@ function wordReason(word: string, rest: readonly string[]): string | undefined {
  * Cloud-changing commands are refused unless they start with one of the
  * spec's allowed-commands prefixes (compared word by word).
  */
-export function forbiddenBash(command: string, allowedCommands: readonly string[] = []): string | undefined {
-  const allowed = allowedCommands.map((prefix) => shellSegments(prefix)[0] ?? []).filter((words) => words.length > 0);
+export function forbiddenBash(
+  command: string,
+  allowedCommands: readonly string[] = [],
+): string | undefined {
+  const allowed = allowedCommands
+    .map((prefix) => shellSegments(prefix)[0] ?? [])
+    .filter((words) => words.length > 0);
   for (const words of shellSegments(command)) {
     for (let i = 0; i < words.length; i += 1) {
       const rest = words.slice(i + 1);
@@ -232,7 +320,10 @@ export function forbiddenBash(command: string, allowedCommands: readonly string[
       if (reason) return reason;
       const cloud = cloudReason(words[i], rest);
       const from = words.slice(i);
-      if (cloud && !allowed.some((prefix) => prefix.every((word, k) => from[k] === word))) {
+      if (
+        cloud &&
+        !allowed.some((prefix) => prefix.every((word, k) => from[k] === word))
+      ) {
         return `${cloud}; list it under allowed-commands in the spec if the task needs it`;
       }
     }
@@ -242,7 +333,8 @@ export function forbiddenBash(command: string, allowedCommands: readonly string[
 
 const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)__tests__\//;
 const TEST_CASE = /\b(it|test|describe)\s*\(|\bassert\b|\bexpect\s*\(/g;
-const TEST_SKIP = /\.(skip|only|todo)\s*\(|\b(xit|xdescribe|xtest|fit|fdescribe)\s*\(|\b(skip|only|todo)\s*:\s*true/g;
+const TEST_SKIP =
+  /\.(skip|only|todo)\s*\(|\b(xit|xdescribe|xtest|fit|fdescribe)\s*\(|\b(skip|only|todo)\s*:\s*true/g;
 
 function occurrences(text: string | undefined, pattern: RegExp): number {
   return text === undefined ? 0 : (text.match(pattern) ?? []).length;
@@ -253,11 +345,16 @@ function occurrences(text: string | undefined, pattern: RegExp): number {
  * the code fixed: fewer cases or assertions than before, or new
  * skip/only markers. `undefined` content means the file does not exist.
  */
-export function testWeakening(before: string | undefined, after: string | undefined): string | undefined {
+export function testWeakening(
+  before: string | undefined,
+  after: string | undefined,
+): string | undefined {
   const casesBefore = occurrences(before, TEST_CASE);
   const casesAfter = occurrences(after, TEST_CASE);
-  if (casesAfter < casesBefore) return `test cases or assertions dropped from ${casesBefore} to ${casesAfter}`;
-  if (occurrences(after, TEST_SKIP) > occurrences(before, TEST_SKIP)) return "new skip/only/todo markers";
+  if (casesAfter < casesBefore)
+    return `test cases or assertions dropped from ${casesBefore} to ${casesAfter}`;
+  if (occurrences(after, TEST_SKIP) > occurrences(before, TEST_SKIP))
+    return "new skip/only/todo markers";
   return undefined;
 }
 
@@ -268,7 +365,8 @@ export function testWeakening(before: string | undefined, after: string | undefi
 export function addedLines(before: string, after: string): number {
   if (after.includes("\0")) return 0;
   const left = new Map<string, number>();
-  for (const line of before.split("\n")) left.set(line, (left.get(line) ?? 0) + 1);
+  for (const line of before.split("\n"))
+    left.set(line, (left.get(line) ?? 0) + 1);
   let added = 0;
   for (const line of after.split("\n")) {
     const n = left.get(line) ?? 0;
@@ -285,7 +383,9 @@ function dependencyMap(json: unknown): Map<string, string> {
   for (const field of DEP_FIELDS) {
     const deps = record[field];
     if (typeof deps !== "object" || deps === null) continue;
-    for (const [name, version] of Object.entries(deps as Record<string, unknown>)) {
+    for (const [name, version] of Object.entries(
+      deps as Record<string, unknown>,
+    )) {
       out.set(`${field}.${name}`, String(version));
     }
   }
@@ -293,7 +393,10 @@ function dependencyMap(json: unknown): Map<string, string> {
 }
 
 /** Dependency keys added, removed, or re-versioned between two package.json texts. */
-export function depsChanged(before: string | undefined, after: string): string[] {
+export function depsChanged(
+  before: string | undefined,
+  after: string,
+): string[] {
   let afterJson: unknown;
   try {
     afterJson = JSON.parse(after);
@@ -313,14 +416,23 @@ export function depsChanged(before: string | undefined, after: string): string[]
 }
 
 /** Whether a failing tests command means "the code is wrong" or "this machine can't run it". */
-export function classifyFailure(exitCode: number | null, output: string, timedOut: boolean): CheckFailure["kind"] {
-  if (timedOut || exitCode === 126 || exitCode === 127 || exitCode === 77) return "cannot-run";
-  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|command not found/.test(output)) return "cannot-run";
+export function classifyFailure(
+  exitCode: number | null,
+  output: string,
+  timedOut: boolean,
+): CheckFailure["kind"] {
+  if (timedOut || exitCode === 126 || exitCode === 127 || exitCode === 77)
+    return "cannot-run";
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|command not found/.test(output))
+    return "cannot-run";
   return "fail";
 }
 
 /** The settle decision: cannot-run beats everything, then one retry, then fail. */
-export function nextStep(failures: readonly CheckFailure[], retriesUsed: number): Step {
+export function nextStep(
+  failures: readonly CheckFailure[],
+  retriesUsed: number,
+): Step {
   if (failures.length === 0) return "pass";
   if (failures.some((f) => f.kind === "cannot-run")) return "cannot-run";
   return retriesUsed < MAX_RETRIES ? "retry" : "fail";
@@ -378,15 +490,23 @@ interface Snapshot {
 const UNTRACKED_TEXT_BUDGET = 8_000_000;
 
 function contentHash(path: string): string {
-  return existsSync(path) ? createHash("sha1").update(readFileSync(path)).digest("hex") : "";
+  return existsSync(path)
+    ? createHash("sha1").update(readFileSync(path)).digest("hex")
+    : "";
 }
 
 function hashUntracked(root: string): Map<string, string> {
-  return new Map(listUntracked(root).map((file) => [file, contentHash(resolve(root, file))]));
+  return new Map(
+    listUntracked(root).map((file) => [file, contentHash(resolve(root, file))]),
+  );
 }
 
 function git(root: string, args: string[]): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 /** Content at the snapshot, or undefined when the file did not exist there. */
@@ -413,7 +533,9 @@ function countLines(path: string): number {
 }
 
 function listUntracked(root: string): string[] {
-  return git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
+  return git(root, ["ls-files", "--others", "--exclude-standard", "-z"])
+    .split("\0")
+    .filter(Boolean);
 }
 
 /**
@@ -424,15 +546,37 @@ function worktreeCommit(root: string): string {
   const dir = mkdtempSync(join(tmpdir(), "worker-sensors-"));
   try {
     const index = join(dir, "index");
-    const realIndex = resolve(root, git(root, ["rev-parse", "--git-path", "index"]).trim());
+    const realIndex = resolve(
+      root,
+      git(root, ["rev-parse", "--git-path", "index"]).trim(),
+    );
     const env = { ...process.env, GIT_INDEX_FILE: index };
-    const run = (args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const run = (args: string[]) =>
+      execFileSync("git", args, {
+        cwd: root,
+        env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     if (existsSync(realIndex)) copyFileSync(realIndex, index);
     else run(["read-tree", "HEAD"]);
     run(["add", "-u"]);
     const tree = run(["write-tree"]).trim();
-    const who = ["-c", "user.name=worker-sensors", "-c", "user.email=worker-sensors@localhost"];
-    return run([...who, "commit-tree", tree, "-p", "HEAD", "-m", "worker-sensors snapshot"]).trim();
+    const who = [
+      "-c",
+      "user.name=worker-sensors",
+      "-c",
+      "user.email=worker-sensors@localhost",
+    ];
+    return run([
+      ...who,
+      "commit-tree",
+      tree,
+      "-p",
+      "HEAD",
+      "-m",
+      "worker-sensors snapshot",
+    ]).trim();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -447,8 +591,12 @@ function worktreeCommit(root: string): string {
 function takeSnapshot(cwd: string): Snapshot {
   const root = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
   const from = process.env.PI_WORKER_BASE;
-  const base = from ? git(root, ["rev-parse", "--verify", `${from}^{commit}`]).trim() : worktreeCommit(root);
-  const untrackedAtStart = from ? new Map<string, string>() : hashUntracked(root);
+  const base = from
+    ? git(root, ["rev-parse", "--verify", `${from}^{commit}`]).trim()
+    : worktreeCommit(root);
+  const untrackedAtStart = from
+    ? new Map<string, string>()
+    : hashUntracked(root);
   const untrackedText = new Map<string, string>();
   let budget = UNTRACKED_TEXT_BUDGET;
   for (const file of untrackedAtStart.keys()) {
@@ -465,8 +613,17 @@ function takeSnapshot(cwd: string): Snapshot {
 
 const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
 const EXPORTED = { kind: "export_statement", inside: { kind: "program" } };
-const EXPORTED_VARS = { any: [{ kind: "lexical_declaration" }, { kind: "variable_declaration" }], inside: EXPORTED };
-const FUNCTIONS = ["function_declaration", "generator_function_declaration", "function_expression", "generator_function", "arrow_function"].map((kind) => ({ kind }));
+const EXPORTED_VARS = {
+  any: [{ kind: "lexical_declaration" }, { kind: "variable_declaration" }],
+  inside: EXPORTED,
+};
+const FUNCTIONS = [
+  "function_declaration",
+  "generator_function_declaration",
+  "function_expression",
+  "generator_function",
+  "arrow_function",
+].map((kind) => ({ kind }));
 
 /**
  * What map's export headers cannot see, so a body edit could change the interface unseen: an inferred
@@ -479,7 +636,18 @@ const FROZEN_RULES: Record<string, { why: string; rule: object }> = {
     rule: {
       all: [
         { any: FUNCTIONS },
-        { any: [{ inside: EXPORTED }, { inside: { field: "value", kind: "variable_declarator", inside: EXPORTED_VARS } }] },
+        {
+          any: [
+            { inside: EXPORTED },
+            {
+              inside: {
+                field: "value",
+                kind: "variable_declarator",
+                inside: EXPORTED_VARS,
+              },
+            },
+          ],
+        },
         { not: { has: { field: "return_type", kind: "type_annotation" } } },
       ],
     },
@@ -489,16 +657,33 @@ const FROZEN_RULES: Record<string, { why: string; rule: object }> = {
     rule: {
       kind: "variable_declarator",
       inside: EXPORTED_VARS,
-      not: { any: [{ has: { field: "type", kind: "type_annotation" } }, { has: { field: "value", any: FUNCTIONS } }] },
+      not: {
+        any: [
+          { has: { field: "type", kind: "type_annotation" } },
+          { has: { field: "value", any: FUNCTIONS } },
+        ],
+      },
     },
   },
   "exported-class": {
     why: "exported class, whose members map cannot see",
-    rule: { any: [{ kind: "class_declaration" }, { kind: "abstract_class_declaration" }, { kind: "class" }], inside: EXPORTED },
+    rule: {
+      any: [
+        { kind: "class_declaration" },
+        { kind: "abstract_class_declaration" },
+        { kind: "class" },
+      ],
+      inside: EXPORTED,
+    },
   },
   "export-list": {
     why: "`export { ... }` list, which hides the signatures",
-    rule: { kind: "export_statement", inside: { kind: "program" }, has: { kind: "export_clause" }, not: { has: { field: "source", pattern: "$S" } } },
+    rule: {
+      kind: "export_statement",
+      inside: { kind: "program" },
+      has: { kind: "export_clause" },
+      not: { has: { field: "source", pattern: "$S" } },
+    },
   },
 };
 
@@ -507,23 +692,46 @@ const FROZEN_RULES: Record<string, { why: string; rule: object }> = {
  * Throws on a setup problem (no match, no ast-grep, no map skill) so the worker fails closed before editing.
  */
 function frozenGaps(root: string, globs: readonly string[]): string[] {
-  if (!existsSync(MAP_MJS)) throw new Error(`interface-frozen needs the map skill at ${MAP_MJS}`);
-  const files = git(root, ["ls-files", "-z"]).split("\0").filter((f) => f && isAllowed(f, globs));
-  if (files.length === 0) throw new Error(`interface-frozen matches no tracked file: ${globs.join(", ")}`);
+  if (!existsSync(MAP_MJS))
+    throw new Error(`interface-frozen needs the map skill at ${MAP_MJS}`);
+  const files = git(root, ["ls-files", "-z"])
+    .split("\0")
+    .filter((f) => f && isAllowed(f, globs));
+  if (files.length === 0)
+    throw new Error(
+      `interface-frozen matches no tracked file: ${globs.join(", ")}`,
+    );
   const ts = files.filter((f) => TS_SOURCE.test(f));
   if (ts.length === 0) return [];
   const yaml = ["TypeScript", "Tsx"]
-    .flatMap((language) => Object.entries(FROZEN_RULES).map(([id, { rule }]) => JSON.stringify({ id, language, rule })))
+    .flatMap((language) =>
+      Object.entries(FROZEN_RULES).map(([id, { rule }]) =>
+        JSON.stringify({ id, language, rule }),
+      ),
+    )
     .join("\n---\n");
-  const out = execFileSync("ast-grep", ["scan", "--inline-rules", yaml, "--json=compact", "--", ...ts], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 1 << 28,
-    timeout: MAP_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const hits = JSON.parse(out || "[]") as Array<{ ruleId: string; file: string; range: { start: { line: number } } }>;
-  return hits.map((h) => `${h.file}:${h.range.start.line + 1} ${FROZEN_RULES[h.ruleId]?.why ?? h.ruleId}`).sort();
+  const out = execFileSync(
+    "ast-grep",
+    ["scan", "--inline-rules", yaml, "--json=compact", "--", ...ts],
+    {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 1 << 28,
+      timeout: MAP_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  const hits = JSON.parse(out || "[]") as Array<{
+    ruleId: string;
+    file: string;
+    range: { start: { line: number } };
+  }>;
+  return hits
+    .map(
+      (h) =>
+        `${h.file}:${h.range.start.line + 1} ${FROZEN_RULES[h.ruleId]?.why ?? h.ruleId}`,
+    )
+    .sort();
 }
 
 interface ExportChange {
@@ -533,27 +741,55 @@ interface ExportChange {
 }
 
 function isExportChanges(value: unknown): value is ExportChange[] {
-  return Array.isArray(value) && value.every((e) => typeof e?.file === "string" && Array.isArray(e.added) && Array.isArray(e.removed));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (e) =>
+        typeof e?.file === "string" &&
+        Array.isArray(e.added) &&
+        Array.isArray(e.removed),
+    )
+  );
 }
 
 const execFileAsync = promisify(execFile);
 
 /** Export headers added or removed in the given frozen files, per map.mjs --diff against the snapshot. */
-async function frozenChanges(snap: Snapshot, frozen: readonly string[]): Promise<CheckFailure[]> {
+async function frozenChanges(
+  snap: Snapshot,
+  frozen: readonly string[],
+): Promise<CheckFailure[]> {
   if (frozen.length === 0) return [];
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync("node", [MAP_MJS, snap.root, "--diff", snap.base, "--json"], {
-      cwd: snap.root,
-      timeout: MAP_TIMEOUT_MS,
-      maxBuffer: 1 << 28,
-    }));
+    ({ stdout } = await execFileAsync(
+      "node",
+      [MAP_MJS, snap.root, "--diff", snap.base, "--json"],
+      {
+        cwd: snap.root,
+        timeout: MAP_TIMEOUT_MS,
+        maxBuffer: 1 << 28,
+      },
+    ));
   } catch (error) {
-    return [{ kind: "cannot-run", reason: `interface-frozen: map --diff failed: ${tail(error instanceof Error ? error.message : String(error), 3)}` }];
+    return [
+      {
+        kind: "cannot-run",
+        reason: `interface-frozen: map --diff failed: ${tail(error instanceof Error ? error.message : String(error), 3)}`,
+      },
+    ];
   }
-  const exports: unknown = (JSON.parse(stdout) as { exports?: unknown }).exports;
-  if (!isExportChanges(exports)) return [{ kind: "cannot-run", reason: "interface-frozen: map --diff --json has no exports list" }];
-  const short = (header: string): string => header.replace(/\s+/g, " ").slice(0, 160);
+  const exports: unknown = (JSON.parse(stdout) as { exports?: unknown })
+    .exports;
+  if (!isExportChanges(exports))
+    return [
+      {
+        kind: "cannot-run",
+        reason: "interface-frozen: map --diff --json has no exports list",
+      },
+    ];
+  const short = (header: string): string =>
+    header.replace(/\s+/g, " ").slice(0, 160);
   return exports
     .filter((e) => frozen.includes(e.file))
     .map((e) => ({
@@ -578,51 +814,120 @@ interface RuleHit {
   message: string;
 }
 
-function isScanOutput(value: unknown): value is Array<{ ruleId: string; severity: string; file: string; message?: string; range: { start: { line: number } } }> {
-  return Array.isArray(value) && value.every((h) => typeof h?.ruleId === "string" && typeof h.file === "string" && typeof h.range?.start?.line === "number");
+function isScanOutput(value: unknown): value is Array<{
+  ruleId: string;
+  severity: string;
+  file: string;
+  message?: string;
+  range: { start: { line: number } };
+}> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (h) =>
+        typeof h?.ruleId === "string" &&
+        typeof h.file === "string" &&
+        typeof h.range?.start?.line === "number",
+    )
+  );
 }
 
 /** The repo's own rules over the whole tree. ast-grep exits 1 when an error-severity rule matched; that is still a result. */
 async function scanRules(root: string): Promise<RuleHit[] | CheckFailure> {
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync("ast-grep", ["scan", "-c", SGCONFIG, "--json=compact"], { cwd: root, timeout: MAP_TIMEOUT_MS, maxBuffer: 1 << 28 }));
+    ({ stdout } = await execFileAsync(
+      "ast-grep",
+      ["scan", "-c", SGCONFIG, "--json=compact"],
+      { cwd: root, timeout: MAP_TIMEOUT_MS, maxBuffer: 1 << 28 },
+    ));
   } catch (error) {
-    const failed = error as { code?: unknown; stdout?: unknown; message?: string };
-    if (failed.code !== 1 || typeof failed.stdout !== "string" || failed.stdout === "") {
-      return { kind: "cannot-run", reason: `ast-grep scan failed: ${tail(failed.message ?? String(error), 3)}` };
+    const failed = error as {
+      code?: unknown;
+      stdout?: unknown;
+      message?: string;
+    };
+    if (
+      failed.code !== 1 ||
+      typeof failed.stdout !== "string" ||
+      failed.stdout === ""
+    ) {
+      return {
+        kind: "cannot-run",
+        reason: `ast-grep scan failed: ${tail(failed.message ?? String(error), 3)}`,
+      };
     }
     stdout = failed.stdout;
   }
   const hits: unknown = JSON.parse(stdout || "[]");
-  if (!isScanOutput(hits)) return { kind: "cannot-run", reason: "ast-grep scan printed no JSON match list" };
-  return hits.map((h) => ({ ruleId: h.ruleId, severity: h.severity, file: normalize(h.file), line: h.range.start.line + 1, message: h.message ?? "" }));
+  if (!isScanOutput(hits))
+    return {
+      kind: "cannot-run",
+      reason: "ast-grep scan printed no JSON match list",
+    };
+  return hits.map((h) => ({
+    ruleId: h.ruleId,
+    severity: h.severity,
+    file: normalize(h.file),
+    line: h.range.start.line + 1,
+    message: h.message ?? "",
+  }));
 }
 
 /** Pure: error hits in changed files, and warning rules counted past the baseline; no baseline, no warning ratchet. */
-export function ruleFailures(hits: readonly RuleHit[], changed: ReadonlySet<string>, baseline: Readonly<Record<string, number>> | undefined): string[] {
+export function ruleFailures(
+  hits: readonly RuleHit[],
+  changed: ReadonlySet<string>,
+  baseline: Readonly<Record<string, number>> | undefined,
+): string[] {
   const reasons: string[] = [];
-  const errors = hits.filter((h) => h.severity === "error" && changed.has(h.file));
+  const errors = hits.filter(
+    (h) => h.severity === "error" && changed.has(h.file),
+  );
   if (errors.length) {
-    const listed = errors.slice(0, LISTED_HITS).map((h) => `${h.file}:${h.line} ${h.ruleId}${h.message ? ` (${h.message})` : ""}`);
-    const more = errors.length > LISTED_HITS ? `, +${errors.length - LISTED_HITS} more` : "";
-    reasons.push(`ast-grep error rules hit in changed files: ${listed.join(", ")}${more}`);
+    const listed = errors
+      .slice(0, LISTED_HITS)
+      .map(
+        (h) =>
+          `${h.file}:${h.line} ${h.ruleId}${h.message ? ` (${h.message})` : ""}`,
+      );
+    const more =
+      errors.length > LISTED_HITS
+        ? `, +${errors.length - LISTED_HITS} more`
+        : "";
+    reasons.push(
+      `ast-grep error rules hit in changed files: ${listed.join(", ")}${more}`,
+    );
   }
   if (!baseline) return reasons;
   const counts = new Map<string, number>();
-  for (const h of hits) if (h.severity === "warning") counts.set(h.ruleId, (counts.get(h.ruleId) ?? 0) + 1);
-  for (const [rule, count] of [...counts].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const h of hits)
+    if (h.severity === "warning")
+      counts.set(h.ruleId, (counts.get(h.ruleId) ?? 0) + 1);
+  for (const [rule, count] of [...counts].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
     const allowed = Object.hasOwn(baseline, rule) ? baseline[rule] : 0;
-    if (count > allowed) reasons.push(`ast-grep warning ${rule}: ${count} hits, baseline ${allowed} in ${RULE_BASELINE}`);
+    if (count > allowed)
+      reasons.push(
+        `ast-grep warning ${rule}: ${count} hits, baseline ${allowed} in ${RULE_BASELINE}`,
+      );
   }
   return reasons;
 }
 
-function parseBaseline(text: string | undefined): Record<string, number> | undefined | string {
+function parseBaseline(
+  text: string | undefined,
+): Record<string, number> | undefined | string {
   if (text === undefined) return undefined;
   try {
     const data: unknown = JSON.parse(text);
-    if (data && typeof data === "object" && !Array.isArray(data) && Object.values(data).every((n) => Number.isInteger(n) && n >= 0)) {
+    if (
+      data &&
+      typeof data === "object" &&
+      !Array.isArray(data) &&
+      Object.values(data).every((n) => Number.isInteger(n) && n >= 0)
+    ) {
       return data as Record<string, number>;
     }
   } catch {
@@ -631,66 +936,125 @@ function parseBaseline(text: string | undefined): Record<string, number> | undef
   return `${RULE_BASELINE} at the snapshot is not a {"rule-id": count} object`;
 }
 
-async function rulesCheck(snap: Snapshot, changed: ReadonlySet<string>): Promise<CheckFailure[]> {
+async function rulesCheck(
+  snap: Snapshot,
+  changed: ReadonlySet<string>,
+): Promise<CheckFailure[]> {
   if (!existsSync(resolve(snap.root, SGCONFIG))) return [];
   const baseline = parseBaseline(showAtBase(snap, RULE_BASELINE));
-  if (typeof baseline === "string") return [{ kind: "cannot-run", reason: baseline }];
+  if (typeof baseline === "string")
+    return [{ kind: "cannot-run", reason: baseline }];
   const hits = await scanRules(snap.root);
   if (!Array.isArray(hits)) return [hits];
-  return ruleFailures(hits, changed, baseline).map((reason) => ({ kind: "fail", reason }));
+  return ruleFailures(hits, changed, baseline).map((reason) => ({
+    kind: "fail",
+    reason,
+  }));
 }
 
-async function runChecks(spec: WorkerSpec, snap: Snapshot): Promise<{ failures: CheckFailure[]; testOutput: string }> {
+async function runChecks(
+  spec: WorkerSpec,
+  snap: Snapshot,
+): Promise<{ failures: CheckFailure[]; testOutput: string }> {
   const failures: CheckFailure[] = [];
   const untrackedBeforeTests = new Set(listUntracked(snap.root));
   const tests = await runShell(spec.tests, snap.root);
   if (tests.code !== 0) {
     const kind = classifyFailure(tests.code, tests.output, tests.timedOut);
-    const why = tests.timedOut ? `timed out after ${TEST_TIMEOUT_MS / 1000}s` : `exit ${String(tests.code)}`;
+    const why = tests.timedOut
+      ? `timed out after ${TEST_TIMEOUT_MS / 1000}s`
+      : `exit ${String(tests.code)}`;
     failures.push({ kind, reason: `tests: \`${spec.tests}\` ${why}` });
   }
 
   const untrackedNow = hashUntracked(snap.root);
   // A file this rerun of the tests created is the spec's doing, not the worker's: no edit of its own can make it go away.
-  const leftByTests = [...untrackedNow.keys()].filter((f) => !untrackedBeforeTests.has(f));
+  const leftByTests = [...untrackedNow.keys()].filter(
+    (f) => !untrackedBeforeTests.has(f),
+  );
   if (leftByTests.length) {
-    failures.push({ kind: "cannot-run", reason: `tests: \`${spec.tests}\` leaves untracked files behind (${leftByTests.join(", ")}); ignore them or fix the command, then dispatch again` });
+    failures.push({
+      kind: "cannot-run",
+      reason: `tests: \`${spec.tests}\` leaves untracked files behind (${leftByTests.join(", ")}); ignore them or fix the command, then dispatch again`,
+    });
   }
-  const newFiles = [...untrackedNow.keys()].filter((f) => !snap.untrackedAtStart.has(f) && !leftByTests.includes(f));
-  const touchedUntracked = [...snap.untrackedAtStart].filter(([f, hash]) => untrackedNow.get(f) !== hash).map(([f]) => f);
-  const tracked = git(snap.root, ["diff", "--no-renames", "--numstat", snap.base]).split("\n").filter(Boolean);
+  const newFiles = [...untrackedNow.keys()].filter(
+    (f) => !snap.untrackedAtStart.has(f) && !leftByTests.includes(f),
+  );
+  const touchedUntracked = [...snap.untrackedAtStart]
+    .filter(([f, hash]) => untrackedNow.get(f) !== hash)
+    .map(([f]) => f);
+  const tracked = git(snap.root, [
+    "diff",
+    "--no-renames",
+    "--numstat",
+    snap.base,
+  ])
+    .split("\n")
+    .filter(Boolean);
   const changed = new Map<string, number>();
   for (const row of tracked) {
     const [added, , file] = row.split("\t");
     changed.set(file, added === "-" ? 0 : Number(added));
   }
-  for (const file of newFiles) changed.set(file, countLines(resolve(snap.root, file)));
+  for (const file of newFiles)
+    changed.set(file, countLines(resolve(snap.root, file)));
   // A pre-existing untracked file has no git base; diff against its text at load, or count every line when too big to keep.
   for (const file of touchedUntracked) {
     const before = snap.untrackedText.get(file);
     const path = resolve(snap.root, file);
-    changed.set(file, before === undefined ? countLines(path) : addedLines(before, readIfPresent(path) ?? ""));
+    changed.set(
+      file,
+      before === undefined
+        ? countLines(path)
+        : addedLines(before, readIfPresent(path) ?? ""),
+    );
   }
 
-  const outside = [...changed.keys()].filter((f) => !isAllowed(f, spec.filesAllowed));
-  if (outside.length) failures.push({ kind: "fail", reason: `files outside files-allowed: ${outside.join(", ")}` });
+  const outside = [...changed.keys()].filter(
+    (f) => !isAllowed(f, spec.filesAllowed),
+  );
+  if (outside.length)
+    failures.push({
+      kind: "fail",
+      reason: `files outside files-allowed: ${outside.join(", ")}`,
+    });
 
   const added = [...changed.values()].reduce((sum, n) => sum + n, 0);
-  if (added > spec.maxLines) failures.push({ kind: "fail", reason: `${added} lines added, cap ${spec.maxLines}` });
+  if (added > spec.maxLines)
+    failures.push({
+      kind: "fail",
+      reason: `${added} lines added, cap ${spec.maxLines}`,
+    });
 
   const packageJson = readIfPresent(resolve(snap.root, "package.json"));
   if (changed.has("package.json") && packageJson !== undefined) {
     const deps = depsChanged(showAtBase(snap, "package.json"), packageJson);
-    if (deps.length) failures.push({ kind: "fail", reason: `dependency changes: ${deps.join(", ")}` });
+    if (deps.length)
+      failures.push({
+        kind: "fail",
+        reason: `dependency changes: ${deps.join(", ")}`,
+      });
   }
 
-  for (const file of [...changed.keys()].filter((f) => TEST_FILE.test(f) && !snap.untrackedAtStart.has(f))) {
-    const why = testWeakening(showAtBase(snap, file), readIfPresent(resolve(snap.root, file)));
-    if (why) failures.push({ kind: "fail", reason: `${file}: ${why}. Restore the tests and fix the code instead` });
+  for (const file of [...changed.keys()].filter(
+    (f) => TEST_FILE.test(f) && !snap.untrackedAtStart.has(f),
+  )) {
+    const why = testWeakening(
+      showAtBase(snap, file),
+      readIfPresent(resolve(snap.root, file)),
+    );
+    if (why)
+      failures.push({
+        kind: "fail",
+        reason: `${file}: ${why}. Restore the tests and fix the code instead`,
+      });
   }
 
   // A file untracked at load has no base to compare, so map would call all its headers new.
-  const frozen = [...changed.keys()].filter((f) => isAllowed(f, spec.interfaceFrozen) && !snap.untrackedAtStart.has(f));
+  const frozen = [...changed.keys()].filter(
+    (f) => isAllowed(f, spec.interfaceFrozen) && !snap.untrackedAtStart.has(f),
+  );
   failures.push(...(await frozenChanges(snap, frozen)));
   failures.push(...(await rulesCheck(snap, new Set(changed.keys()))));
   return { failures, testOutput: tests.output };
@@ -721,23 +1085,43 @@ export default function (pi: ExtensionAPI) {
 
   const bashBefore = new Map<string, BashSnapshot>();
   // Events carry the scout directory's name (sessions/scout/<pid>), as bin/scout's own do
-  const record = (kind: string, detail: string) => logEvent(kind, detail, process.env.PI_WORKER_REPORT ? basename(dirname(process.env.PI_WORKER_REPORT)) : "");
+  const record = (kind: string, detail: string) =>
+    logEvent(
+      kind,
+      detail,
+      process.env.PI_WORKER_REPORT
+        ? basename(dirname(process.env.PI_WORKER_REPORT))
+        : "",
+    );
   let retriesUsed = 0;
   let verdict: { step: Exclude<Step, "retry">; reasons: string[] } | undefined;
 
   pi.on("tool_call", async (event) => {
-    if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "bash") return undefined;
-    if (setupError || !spec || !snap) return { block: true, reason: setupError ?? "worker-sensors not armed" };
+    if (
+      event.toolName !== "edit" &&
+      event.toolName !== "write" &&
+      event.toolName !== "bash"
+    )
+      return undefined;
+    if (setupError || !spec || !snap)
+      return { block: true, reason: setupError ?? "worker-sensors not armed" };
     const input = event.input as Record<string, unknown>;
     if (event.toolName === "bash") {
-      const reason = forbiddenBash(String(input.command ?? ""), spec.allowedCommands);
+      const reason = forbiddenBash(
+        String(input.command ?? ""),
+        spec.allowedCommands,
+      );
       if (reason) record("worker.block", `bash ${subjectOf(input)}`);
       if (reason) return { block: true, reason: `Blocked: ${reason}.` };
       const before = bashSnapshot(process.cwd());
       if (before) bashBefore.set(event.toolCallId, before);
       return undefined;
     }
-    const target = repoRelative(String(input.path ?? ""), process.cwd(), snap.root);
+    const target = repoRelative(
+      String(input.path ?? ""),
+      process.cwd(),
+      snap.root,
+    );
     if (isAllowed(target, spec.filesAllowed)) return undefined;
     record("worker.block", `${event.toolName} ${target}`);
     return {
@@ -756,29 +1140,43 @@ export default function (pi: ExtensionAPI) {
     const after = bashSnapshot(process.cwd());
     if (!after) return undefined;
     // Putting a file back, or removing an untracked one, is the undo this note asks for
-    const undone = (c: { path: string; kind: string }): boolean => c.kind === "reverted" || (c.kind === "deleted" && before.files.get(c.path)?.status === "??");
-    const outside = changedBy(before, after).filter((c) => !isAllowed(c.path, allowed) && !undone(c));
+    const undone = (c: { path: string; kind: string }): boolean =>
+      c.kind === "reverted" ||
+      (c.kind === "deleted" && before.files.get(c.path)?.status === "??");
+    const outside = changedBy(before, after).filter(
+      (c) => !isAllowed(c.path, allowed) && !undone(c),
+    );
     if (!outside.length) return undefined;
     record("worker.outside", outside.map((c) => c.path).join(", "));
     const note =
       `\n[worker-sensors] this command changed ${outside.map((c) => c.path).join(", ")}, outside files-allowed (${allowed.join(", ")}). ` +
       "Undo it now (git restore, or rm for a new file), or the run fails at settle.\n";
     // Codemode scripts get structuredContent, not content: bash's declared result there is { output, ... } (pi 1.5.2).
-    const structured = event.structuredContent as { output?: unknown } | undefined;
+    const structured = event.structuredContent as
+      { output?: unknown } | undefined;
     return {
       content: [...event.content, { type: "text" as const, text: note }],
-      structuredContent: structured && typeof structured.output === "string" ? { ...structured, output: structured.output + note } : event.structuredContent,
+      structuredContent:
+        structured && typeof structured.output === "string"
+          ? { ...structured, output: structured.output + note }
+          : event.structuredContent,
     };
   });
 
   pi.on("agent_before_settle", async (event) => {
     if (verdict) return undefined;
     if (setupError || !spec || !snap) {
-      verdict = { step: "cannot-run", reasons: [setupError ?? "worker-sensors not armed"] };
+      verdict = {
+        step: "cannot-run",
+        reasons: [setupError ?? "worker-sensors not armed"],
+      };
       return undefined;
     }
     if (event.outcome !== "completed") {
-      verdict = { step: "cannot-run", reasons: [`run ended: ${event.outcome}`] };
+      verdict = {
+        step: "cannot-run",
+        reasons: [`run ended: ${event.outcome}`],
+      };
       return undefined;
     }
     const { failures, testOutput } = await runChecks(spec, snap);
@@ -794,15 +1192,37 @@ export default function (pi: ExtensionAPI) {
       `The worker sensors reran the checks and they failed:\n- ${reasons.join("\n- ")}\n\n` +
       `Last ${OUTPUT_TAIL_LINES} lines of \`${spec.tests}\`:\n\`\`\`\n${tail(testOutput, OUTPUT_TAIL_LINES)}\n\`\`\`\n` +
       "Fix these within files-allowed, then end with the four report headings again. This is the only retry.";
-    return { entries: [{ type: "custom_message", customType: "worker-sensors", content, display: true }], continue: true };
+    return {
+      entries: [
+        {
+          type: "custom_message",
+          customType: "worker-sensors",
+          content,
+          display: true,
+        },
+      ],
+      continue: true,
+    };
   });
 
   pi.on("agent_settled", async () => {
-    const final = verdict ?? { step: "cannot-run" as const, reasons: ["settle check never ran"] };
+    const final = verdict ?? {
+      step: "cannot-run" as const,
+      reasons: ["settle check never ran"],
+    };
     const label = final.step.toUpperCase();
-    process.stdout.write(`\nWORKER-SENSORS: ${label}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}\n`);
-    record("worker.verdict", `${label} retries=${retriesUsed}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}`);
+    process.stdout.write(
+      `\nWORKER-SENSORS: ${label}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}\n`,
+    );
+    record(
+      "worker.verdict",
+      `${label} retries=${retriesUsed}${final.reasons.length ? ` ${final.reasons.join("; ")}` : ""}`,
+    );
     const reportPath = process.env.PI_WORKER_REPORT;
-    if (reportPath) writeFileSync(reportPath, `${JSON.stringify({ verdict: label, reasons: final.reasons, retriesUsed })}\n`);
+    if (reportPath)
+      writeFileSync(
+        reportPath,
+        `${JSON.stringify({ verdict: label, reasons: final.reasons, retriesUsed })}\n`,
+      );
   });
 }
