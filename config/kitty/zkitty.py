@@ -176,7 +176,8 @@ def run(boss, words) -> list[tuple]:
             hunk = words == ['hunk']
             launch_program(boss, active, 'tab',
                            ('/opt/homebrew/bin/hunk', 'diff') if hunk else ('/bin/zsh', '-il'),
-                           ('--tab-title', 'hunk', '--add-to-session=!') if hunk else ())
+                           ('--tab-title', 'hunk', '--add-to-session=!') if hunk
+                           else (('--add-to-session=' + current,) if current else ()))
         return []
     if words in (['tab'], ['tab', 'here']):
         # A host workspace's folders are remote; attach() hands them to the new pane.

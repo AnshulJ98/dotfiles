@@ -15,7 +15,7 @@ if FOLDER not in sys.path:
 import zcore
 import zkitty
 
-from kitty.fast_data_types import get_boss
+from kitty.fast_data_types import Color, get_boss
 from kitty.tab_bar import as_rgb, draw_tab_with_powerline
 
 _current = ''  # the active tab's workspace; tabs are drawn in order, so it is known by the last one
@@ -35,8 +35,11 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
     if zkitty.instance_host():
         screen.cursor.fg = as_rgb(0)
         screen.cursor.bg = as_rgb(int(draw_data.tab_fg(tab)))
-        tab_data = draw_data._replace(active_fg=0, active_bg=draw_data.active_fg,
-                                      inactive_fg=0, inactive_bg=draw_data.inactive_fg)
+        # Colors, not ints: kitty's soft separator between two inactive tabs calls
+        # Color.contrast on them, and a TypeError there falls back to its fade tabs.
+        black = Color(0, 0, 0)
+        tab_data = draw_data._replace(active_fg=black, active_bg=draw_data.active_fg,
+                                      inactive_fg=black, inactive_bg=draw_data.inactive_fg)
     end = draw_tab_with_powerline(tab_data, screen, tab, before, max_tab_length, index, is_last, extra_data)
     if is_last and not extra_data.for_layout:  # a layout pass measures tabs; the right end is not one
         view = zcore.view(zkitty.snapshot(get_boss()))
