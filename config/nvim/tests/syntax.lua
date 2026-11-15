@@ -15,8 +15,15 @@ local samples = {
   typescript = {
     text = '// note\ninterface Shape { size: number }\nfunction area(input: Shape): number {\n  const label = "text";\n  return input.size * 2;\n}\n',
     roles = {
-      comment = 'note', declaration = 'function', keyword = 'return', ['function'] = 'area', type = 'Shape',
-      property = 'size', variable = 'label', string = 'text', number = '2',
+      comment = 'note',
+      declaration = 'function',
+      keyword = 'return',
+      ['function'] = 'area',
+      type = 'Shape',
+      property = 'size',
+      variable = 'label',
+      string = 'text',
+      number = '2',
     },
   },
   python = {
@@ -52,15 +59,20 @@ assert(built.code == 0, built.stderr)
 
 -- The colour bat paints each byte of the sample in.
 local function bat(name, language, text)
-  local result = vim.system({ 'bat', '--color=always', '--paging=never', '--style=plain', '--theme', name, '--language', language },
-    { env = env, stdin = text }):wait()
+  local result = vim
+    .system({ 'bat', '--color=always', '--paging=never', '--style=plain', '--theme', name, '--language', language }, { env = env, stdin = text })
+    :wait()
   assert(result.code == 0, result.stderr)
   local colors, fg, i, out = {}, nil, 1, result.stdout
   while i <= #out do
     local stop, params = out:match('^\27%[()([%d;]*)m', i)
     if stop then
       local r, g, b = params:match '38;2;(%d+);(%d+);(%d+)'
-      if r then fg = r * 65536 + g * 256 + b elseif params == '0' or params == '' then fg = nil end
+      if r then
+        fg = r * 65536 + g * 256 + b
+      elseif params == '0' or params == '' then
+        fg = nil
+      end
       i = i + #params + 3
     else
       colors[#colors + 1] = fg or false
@@ -75,7 +87,9 @@ local function editor(buffer, row, column)
   for _, capture in ipairs(vim.treesitter.get_captures_at_pos(buffer, row, column)) do
     local value = vim.api.nvim_get_hl(0, { name = '@' .. capture.capture .. '.' .. capture.lang, link = false })
     local priority = tonumber(capture.metadata.priority) or 100
-    if value.fg and priority >= best then fg, best = value.fg, priority end
+    if value.fg and priority >= best then
+      fg, best = value.fg, priority
+    end
   end
   return fg
 end
@@ -95,9 +109,7 @@ for language, sample in pairs(samples) do
       local row = select(2, before:gsub('\n', ''))
       local column = #before - #(before:match '.*\n' or '')
       local ours, theirs = editor(buffer, row, column), painted[offset] or vim.api.nvim_get_hl(0, { name = 'Normal', link = false }).fg
-      if not same_family(ours, theirs) then
-        failures[#failures + 1] = ('%s %s %s: nvim #%06x, bat #%06x'):format(name, language, role, ours, theirs)
-      end
+      if not same_family(ours, theirs) then failures[#failures + 1] = ('%s %s %s: nvim #%06x, bat #%06x'):format(name, language, role, ours, theirs) end
     end
   end
 end

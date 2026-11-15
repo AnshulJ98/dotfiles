@@ -12,32 +12,32 @@ SHELL_BIN=/bin/zsh
 
 tries=0
 while :; do
-name= pi_session= host= dir=
-if [ -t 0 ] && [ -t 2 ] &&
-   IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
-   [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
-  IFS=' ' read -r d e f <<<"$d"
-  printf -v name '%b' "${c//%/\\x}"
-  [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
-  [ -z "$e" ] || [ "$e" = - ] || printf -v host '%b' "${e//%/\\x}"
-  [ -z "$f" ] || [ "$f" = - ] || printf -v dir '%b' "${f//%/\\x}"
-fi
-if [ -n "${ZWS_HOST:-}" ]; then
-  [ -n "$name" ] && [ -n "$host" ] && break
-  tries=$((tries + 1))
-  if [ "$tries" -ge 3 ]; then
-    echo "zshell: the workspace watcher did not answer; enter retries" >&2
-    IFS= read -r -s -n 1 key || exit 1
-    # A late answer may have been that key; drop the rest of it before asking again.
-    while IFS= read -r -s -t 1 -n 1 key; do :; done
-    tries=0
+  name= pi_session= host= dir=
+  if [ -t 0 ] && [ -t 2 ] &&
+    IFS=' ' read -r -s -t 2 -p $'\033]1337;SetUserVar=zq=MQ==\007' a b c d &&
+    [ "$a" = : ] && [ "$b" = zq ] && [ -n "$c" ]; then
+    IFS=' ' read -r d e f <<<"$d"
+    printf -v name '%b' "${c//%/\\x}"
+    [ "$d" = - ] || printf -v pi_session '%b' "${d//%/\\x}"
+    [ -z "$e" ] || [ "$e" = - ] || printf -v host '%b' "${e//%/\\x}"
+    [ -z "$f" ] || [ "$f" = - ] || printf -v dir '%b' "${f//%/\\x}"
   fi
-elif [ -z "$name" ]; then
-  echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
-  exec "$SHELL_BIN" -il
-else
-  break
-fi
+  if [ -n "${ZWS_HOST:-}" ]; then
+    [ -n "$name" ] && [ -n "$host" ] && break
+    tries=$((tries + 1))
+    if [ "$tries" -ge 3 ]; then
+      echo "zshell: the workspace watcher did not answer; enter retries" >&2
+      IFS= read -r -s -n 1 key || exit 1
+      # A late answer may have been that key; drop the rest of it before asking again.
+      while IFS= read -r -s -t 1 -n 1 key; do :; done
+      tries=0
+    fi
+  elif [ -z "$name" ]; then
+    echo "zshell: the workspace watcher did not answer; starting plain shell" >&2
+    exec "$SHELL_BIN" -il
+  else
+    break
+  fi
 done
 
 if [ -n "$host" ]; then
@@ -83,7 +83,7 @@ cd "$1" 2>/dev/null || cd "$HOME"; pi --session "$2"; exec "$0" -il
   # %C stays under macOS's socket path limit; a dead link ends after 15 s x (2 + 1) = 45 s.
   # -q hides ssh's notices when sshd's session limit forces an unshared connection.
   opts=(-o ControlPath=/tmp/zcm-%C -o ControlPersist=600 -o ConnectTimeout=5
-        -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
   shared_connection() {
     ssh -q "${opts[@]}" -O check "$host" >/dev/null 2>&1 && return 0
     local lock="/tmp/zcm-lock-$host" until_lock=$((SECONDS + 10)) status
@@ -146,8 +146,8 @@ unset ZMX_SESSION
 export KITTY_SHELL_INTEGRATION=enabled
 export ZDOTDIR=${KITTY_INSTALLATION_DIR:-/Applications/kitty.app/Contents/Resources/kitty}/shell-integration/zsh
 case $'\n'"$existing"$'\n' in
-  *$'\n'"$name"$'\n'*) present=1 ;;
-  *) present=0 ;;
+*$'\n'"$name"$'\n'*) present=1 ;;
+*) present=0 ;;
 esac
 
 if [ "$present" = 0 ] && [ -n "$pi_session" ] && [ -f "$pi_session" ]; then

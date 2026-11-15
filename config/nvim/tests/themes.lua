@@ -52,9 +52,26 @@ for _, name in ipairs { 'ayu-ink', 'ayu-neutral', 'void-neutral', 'void-ink', 'd
   assert(hl('@lsp.typemod.property.declaration').fg == hl('@lsp.type.property').fg, name .. ': declared properties lose their colour')
   assert(hl('@lsp.type.enumMember').fg == hl('@constant').fg, name .. ': enum members change colour')
   if name == 'dark-2026' or name == 'tango' then
-    for _, syntax in ipairs { 'Normal', 'Comment', 'String', 'Number', 'Boolean', 'Constant',
-      'Function', 'Keyword', 'Type', 'Special', 'Identifier', '@property', '@variable.parameter',
-      '@variable.builtin', '@type.builtin', '@module', '@tag', '@tag.attribute' } do
+    for _, syntax in ipairs {
+      'Normal',
+      'Comment',
+      'String',
+      'Number',
+      'Boolean',
+      'Constant',
+      'Function',
+      'Keyword',
+      'Type',
+      'Special',
+      'Identifier',
+      '@property',
+      '@variable.parameter',
+      '@variable.builtin',
+      '@type.builtin',
+      '@module',
+      '@tag',
+      '@tag.attribute',
+    } do
       local fg = assert(hl(syntax).fg, name .. ': missing foreground for ' .. syntax)
       for _, surface in ipairs { 'Normal', 'NormalFloat', 'CursorLine', 'Visual' } do
         local bg = hl(surface).bg or hl('Normal').bg

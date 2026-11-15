@@ -11,8 +11,16 @@ AGENT="$HOME/.pi/agent"
 VERBOSE="${1:-}"
 pass=0 fail=0
 
-ok()   { pass=$((pass+1)); [ "$VERBOSE" = "-v" ] && printf '  ok    %s\n' "$1"; return 0; }
-bad()  { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; return 0; }
+ok() {
+  pass=$((pass + 1))
+  [ "$VERBOSE" = "-v" ] && printf '  ok    %s\n' "$1"
+  return 0
+}
+bad() {
+  fail=$((fail + 1))
+  printf '  FAIL  %s\n' "$1"
+  return 0
+}
 check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
 
 jqs() { python3 -c "import json,sys;d=json.load(open('$1'));print($2)" 2>/dev/null; }
@@ -52,7 +60,7 @@ if listing="$(cd "$HOME" && timeout 60 pi --list-models 2>&1)"; then
   if [ -n "$nomatch" ]; then
     while IFS= read -r p; do
       bad "enabledModels pattern $p matches no available model"
-    done <<< "$nomatch"
+    done <<<"$nomatch"
   else
     ok "every enabledModels pattern matches a model"
   fi
@@ -200,7 +208,8 @@ TSC="${TSC:-$HOME/Dev/pi-lab/node_modules/typescript/bin/tsc}"
 if [ -x "$TSC" ] && [ -d "$PI_PKG" ]; then
   NM="$(cd "$PI_PKG/../.." && pwd)"
   TSCONFIG="$(mktemp "${TMPDIR:-/tmp}/pi-verify-tsconfig.XXXXXX")"
-  NFILES="$(python3 - "$TSCONFIG" "$NM" "$DOT" <<'PY'
+  NFILES="$(
+    python3 - "$TSCONFIG" "$NM" "$DOT" <<'PY'
 import glob, json, sys
 out, nm, dot = sys.argv[1:]
 files = sorted(f for pattern in ("extensions/*.ts", "lib/*.ts", "tests/*.ts", "../git/tests/*.ts") for f in glob.glob(f"{dot}/{pattern}"))
@@ -214,7 +223,7 @@ json.dump({
 }, open(out, "w"))
 print(len(files))
 PY
-)"
+  )"
   if errors="$("$TSC" -p "$TSCONFIG" 2>&1)"; then
     ok "tsc --strict passes on every extension, lib and test ($NFILES files)"
   else

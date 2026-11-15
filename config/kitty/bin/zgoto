@@ -39,8 +39,8 @@ if key and st != "focused" and w:
         st = "remote"
 print(st, wid if wid.isdigit() else "")' "$1" "${2:-}")
 case $state in
-  remote)  kitten @ send-key --match "id:$wid" ctrl+backslash ;;
-  focused) kitten @ send-key --match var:role=zgoto ctrl+t ;;
-  open)    kitten @ focus-window --match var:role=zgoto ;;
-  *)       kitten @ launch --type=tab --tab-title 'Go to' --var role=zgoto "$(dirname "$(realpath "$0")")/zpick" ${wid:+"$wid"} >/dev/null ;;
+remote) kitten @ send-key --match "id:$wid" ctrl+backslash ;;
+focused) kitten @ send-key --match var:role=zgoto ctrl+t ;;
+open) kitten @ focus-window --match var:role=zgoto ;;
+*) kitten @ launch --type=tab --tab-title 'Go to' --var role=zgoto "$(dirname "$(realpath "$0")")/zpick" ${wid:+"$wid"} >/dev/null ;;
 esac
