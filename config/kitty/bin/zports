@@ -1,0 +1,220 @@
+#!/usr/bin/python3
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def port(value):
+    if not re.fullmatch(r"[0-9]+", value) or not 1 <= int(value) <= 65535:
+        raise argparse.ArgumentTypeError("port must be 1..65535")
+    return int(value)
+
+
+def ssh(host, operation, item=None, remote=None):
+    args = ["ssh", "-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
+            "-o", "BatchMode=yes", "-O", operation]
+    if item is not None:
+        args += ["-L", f"127.0.0.1:{item['local']}:{item['target']}:{remote}"]
+    try:
+        result = subprocess.run([*args, host], capture_output=True, text=True, timeout=2)
+        return result.returncode, result.stdout + result.stderr
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return 255, str(error)
+
+
+def free(local):
+    try:
+        with socket.socket() as probe:
+            # TIME_WAIT connections are not listeners and must not reserve a mapping.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(("127.0.0.1", local))
+        return True
+    except OSError:
+        return False
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def engine(directory, host, owner):
+    record = directory / "ports.json"  # sidebar contract: forwards keyed by box port, plus stopped ports
+    address = directory / ".ports.sock"
+    state = json.loads(record.read_text()) if record.exists() else dict(forwards={}, stopped=[])
+    master, next_sync, running = None, 0, True
+
+    def end(signum, frame):
+        nonlocal running
+        running = False
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, end)
+
+    def save():
+        temporary = record.with_suffix(".tmp")
+        temporary.write_text(json.dumps(state) + "\n")
+        os.replace(temporary, record)
+
+    def cancel(remote, item):
+        if item["local"] is not None:
+            code, message = ssh(host, "cancel", item, remote)
+            # A failed reply may still have removed the listener; never retain active=True.
+            item["active"] = False
+            save()
+            if not code:
+                for attempt in range(5):
+                    if free(item["local"]):
+                        return
+                    time.sleep(0.05)
+            raise RuntimeError("cancel failed: " + (message.strip() or "local port is still busy"))
+
+    def sync():
+        nonlocal master, next_sync
+        code, message = ssh(host, "check")
+        found = re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
+        pid = found.group(1) if found else None
+        if pid != master:
+            master = pid
+            for item in state["forwards"].values():
+                item["active"] = False
+        if master:
+            for remote, item in state["forwards"].items():
+                if item["active"]:
+                    continue
+                local = item["local"] or int(remote)
+                while local <= 65535:
+                    # A saved mapping may still belong to this master: forward is idempotent.
+                    if item["local"] == local or free(local):
+                        item["local"] = local
+                        code, _ = ssh(host, "forward", item, remote)
+                        if code == 0:
+                            item["active"] = True
+                            break
+                        if free(local):
+                            break  # connection failure, not a local collision; retry next poll
+                    local += 1
+        save()
+        next_sync = time.monotonic() + 2
+
+    def request(data):
+        command = data["command"]
+        if command != "list":
+            remote = str(port(str(data["port"])))
+            destination = data.get("target", "127.0.0.1")
+            if command not in ("forward", "stop"):
+                raise ValueError("unknown command")
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*|\[[0-9a-fA-F:.]+\]", destination):
+                raise ValueError("invalid target host")
+            item = state["forwards"].get(remote)
+            if item and (command == "stop" or item["target"] != destination):
+                cancel(remote, item)
+                del state["forwards"][remote]
+            if command == "stop":
+                state["stopped"] = sorted(set(state["stopped"]) | {int(remote)})
+            else:
+                state["forwards"].setdefault(remote, dict(local=None, target=destination, active=False))
+                state["stopped"] = [p for p in state["stopped"] if p != int(remote)]
+            save()
+        sync()
+        return state
+
+    try:
+        address.unlink(missing_ok=True)
+        with socket.socket(socket.AF_UNIX) as server:
+            server.bind(str(address))
+            address.chmod(0o600)
+            server.listen()
+            server.settimeout(0.5)
+            for item in state["forwards"].values():
+                item["active"] = False
+            progress = 0
+            while running and alive(owner):
+                if time.monotonic() >= next_sync:
+                    sync()
+                if time.monotonic() >= progress:
+                    print(f"zports: watching {host} for kitty {owner}", flush=True)
+                    progress = time.monotonic() + 30
+                try:
+                    connection, _ = server.accept()
+                except socket.timeout:
+                    continue
+                with connection:
+                    connection.settimeout(5)
+                    try:
+                        with connection.makefile("r") as stream:
+                            reply = request(json.loads(stream.readline(4096)))
+                    except (ValueError, OSError, RuntimeError, KeyError, argparse.ArgumentTypeError) as error:
+                        reply = dict(error=str(error))
+                    try:
+                        connection.sendall((json.dumps(reply) + "\n").encode())
+                    except OSError as error:
+                        print(f"zports: reply failed: {error}", file=sys.stderr)
+    finally:
+        for remote, item in state["forwards"].items():
+            try:
+                cancel(remote, item)
+            except RuntimeError as error:
+                print(f"zports: {error}", file=sys.stderr)
+            item["active"] = False
+        save()
+        address.unlink(missing_ok=True)
+        print("zports: stopped", flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("run").add_argument("owner", type=int)
+    forward = commands.add_parser("forward")
+    forward.add_argument("port", type=port)
+    forward.add_argument("target", nargs="?", default="127.0.0.1")
+    commands.add_parser("stop").add_argument("port", type=port)
+    commands.add_parser("list")
+    args = parser.parse_args()
+    host = os.environ.get("ZWS_HOST", "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", host):
+        parser.error("a valid ZWS_HOST is required (no forwarding on Mac)")
+    directory = Path(os.environ.get("ZWS_DIR") or Path.home() / ".local/state/kitty/hosts" / host)
+    if args.command == "run":
+        if args.owner <= 0:
+            parser.error("owner must be a positive pid")
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / ".ports.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            engine(directory, host, args.owner)
+    else:
+        with socket.socket(socket.AF_UNIX) as client:
+            client.settimeout(10)
+            client.connect(str(directory / ".ports.sock"))
+            client.sendall((json.dumps(vars(args)) + "\n").encode())
+            with client.makefile("r") as stream:
+                reply = json.loads(stream.readline())
+        if "error" in reply:
+            raise RuntimeError(reply["error"])
+        print(json.dumps(reply))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, RuntimeError) as error:
+        sys.exit(f"zports: {error}")
