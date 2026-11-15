@@ -74,6 +74,24 @@ import os
 import socket
 import sys
 
+from pathlib import Path
+import time
+
+root = Path(os.environ["HOME"])
+if "-G" in sys.argv:
+    print("port 2222")
+    sys.exit()
+if "--ports-scan" in sys.argv[-1]:
+    assert "def listeners(" in sys.stdin.read()
+    with (root / "scans").open("a") as log:
+        log.write(str(time.monotonic()) + "\\n")
+    content = (root / "scan").read_text() if (root / "scan").exists() else "[]"
+    if content == "hang":
+        time.sleep(30)
+    if content == "fail":
+        sys.exit(255)
+    print(content)
+    sys.exit()
 with socket.socket(socket.AF_UNIX) as s:
     s.connect(os.environ["FAKE_MASTER"])
     s.sendall(json.dumps(sys.argv[1:]).encode() + b"\\n")
@@ -82,6 +100,16 @@ print(message, file=sys.stderr)
 sys.exit(code)
 """)
         fake.chmod(0o755)
+        notifier = self.root / "osascript"
+        notifier.write_text("#!" + sys.executable + "\n" + """
+import json
+import os
+import sys
+from pathlib import Path
+with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\\n")
+""")
+        notifier.chmod(0o755)
         self.env = dict(os.environ, HOME=str(self.root), ZWS_DIR=str(self.root), ZWS_HOST="box",
                         PATH=str(self.root), FAKE_MASTER=str(self.root / "ssh.sock"))
         self.processes = []
@@ -122,7 +150,8 @@ sys.exit(code)
     def test_forward_stop_restart_and_master_recovery(self):
         process = self.start()
         state = self.command("forward", "8000")
-        self.assertEqual(state["forwards"]["8000"], dict(local=8000, target="127.0.0.1", active=True))
+        self.assertEqual(state["forwards"]["8000"], dict(local=8000, target="127.0.0.1", active=True,
+                                                                  automatic=False, program=None))
         self.assertEqual(self.forwards(), [["-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
                                           "-o", "BatchMode=yes", "-O", "forward",
                                           "-L", "127.0.0.1:8000:127.0.0.1:8000", "box"]])
@@ -227,6 +256,231 @@ sys.exit(code)
         self.command("list")
         self.assertEqual(len(self.check_times), before + 1)
         self.assertLess(self.check_times[-1] - self.check_times[-2], 2)
+
+    def scan(self, *items):
+        (self.root / "scan").write_text(json.dumps([
+            dict(port=p, address=a, program=name) for p, a, name in items]))
+
+    def record(self):
+        path = self.root / "ports.json"
+        return json.loads(path.read_text()) if path.exists() else {"forwards": {}}
+
+    def notifications(self):
+        path = self.root / "notifications"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def detected(self, *ports):
+        return all(self.record()["forwards"].get(str(p), {}).get("active") for p in ports)
+
+    def test_auto_addresses_owners_collision_and_single_notification(self):
+        self.scan((8000, "127.0.0.1", "python"), (8001, "0.0.0.0", None),
+                  (8002, "::", None), (8003, "::1", "node"),
+                  (8004, "192.168.1.2", "lan"), (53, "127.0.0.1", None),
+                  (2222, "::", None), (8002, "::1", "dual"))
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", 8000))
+            taken.listen()
+            self.start()
+            self.wait(lambda: self.detected(8000, 8001, 8002, 8003))
+            state = self.record()
+            self.assertEqual(set(state["forwards"]), {"8000", "8001", "8002", "8003"})
+            self.assertTrue(all(i["automatic"] for i in state["forwards"].values()))
+            self.assertEqual(state["forwards"]["8000"]["program"], "python")
+            self.assertIsNone(state["forwards"]["8001"]["program"])
+            self.assertEqual(state["forwards"]["8002"]["target"], "127.0.0.1")
+            self.assertEqual(state["forwards"]["8003"]["target"], "[::1]")
+            self.assertGreater(state["forwards"]["8000"]["local"], 8000)
+            self.wait(lambda: len(self.notifications()) == 1)
+            notification, = self.notifications()
+            self.assertEqual(notification[-2], "box")
+            for remote, item in state["forwards"].items():
+                self.assertIn(f"{remote}→{item['local']}", notification[-1])
+
+    def test_disappearance_preserves_manual_and_stop_survives_restart(self):
+        self.scan((8100, "127.0.0.1", "server"), (8101, "::1", None))
+        process = self.start()
+        self.wait(lambda: self.detected(8100, 8101))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.command("forward", "8101", "[::1]")  # Promote an automatic forward to manual.
+        self.command("forward", "8102")
+        self.assertFalse(self.record()["forwards"]["8101"]["automatic"])
+        self.command("stop", "8100")
+        time.sleep(2.2)
+        self.assertNotIn("8100", self.record()["forwards"])
+        self.assertEqual(self.record()["stopped"], [8100])
+        process.terminate()
+        process.wait(timeout=5)
+        self.start()
+        self.wait(lambda: self.detected(8101, 8102))
+        time.sleep(2.2)
+        self.assertNotIn("8100", self.record()["forwards"])
+        self.assertEqual(len(self.notifications()), 1)
+        self.command("forward", "8100")
+        self.assertEqual(self.record()["stopped"], [])
+        self.assertFalse(self.record()["forwards"]["8100"]["automatic"])
+        self.scan()
+        time.sleep(2.3)
+        self.assertTrue(self.detected(8100, 8101, 8102))
+        self.assertEqual(len(self.notifications()), 1)
+
+    def test_forward_without_target_uses_scanned_ipv6_after_stop_and_restart(self):
+        self.scan((8150, "::1", "server"))
+        process = self.start()
+        self.wait(lambda: self.detected(8150))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.command("stop", "8150")
+        process.terminate()
+        process.wait(timeout=5)
+        self.start()
+        self.command("list")  # The initial scan completes before requests are served.
+        self.assertNotIn("8150", self.record()["forwards"])
+        state = self.command("forward", "8150")
+        self.assertEqual(state["forwards"]["8150"]["target"], "[::1]")
+        self.assertFalse(state["forwards"]["8150"]["automatic"])
+        self.assertEqual(state["stopped"], [])
+        self.assertIn("127.0.0.1:8150:[::1]:8150", self.forwards()[-1])
+        self.command("stop", "8150")
+        state = self.command("forward", "8150", "127.0.0.1")
+        self.assertEqual(state["forwards"]["8150"]["target"], "127.0.0.1")
+        self.assertIn("127.0.0.1:8150:127.0.0.1:8150", self.forwards()[-1])
+        state = self.command("forward", "8151")
+        self.assertEqual(state["forwards"]["8151"]["target"], "127.0.0.1")
+        self.assertEqual(len(self.notifications()), 1)
+
+    def test_stopped_port_target_refreshes_only_after_a_good_scan(self):
+        self.scan((8152, "::1", "server"))
+        self.start()
+        self.wait(lambda: self.detected(8152))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.command("stop", "8152")
+        before = len((self.root / "scans").read_text().splitlines())
+        (self.root / "scan").write_text("fail")
+        self.wait(lambda: len((self.root / "scans").read_text().splitlines()) > before)
+        state = self.command("forward", "8152")
+        self.assertEqual(state["forwards"]["8152"]["target"], "[::1]")
+        self.command("stop", "8152")
+        before = len((self.root / "scans").read_text().splitlines())
+        self.scan((8152, "127.0.0.1", "server"))
+        self.wait(lambda: len((self.root / "scans").read_text().splitlines()) > before)
+        self.command("list")
+        self.assertNotIn("8152", self.record()["forwards"])
+        state = self.command("forward", "8152")
+        self.assertEqual(state["forwards"]["8152"]["target"], "127.0.0.1")
+        self.assertTrue(state["forwards"]["8152"]["active"])
+        self.assertEqual(len(self.notifications()), 1)
+
+    def test_automatic_removal_and_waiting_cap(self):
+        self.scan(*[(p, "127.0.0.1", None) for p in range(8200, 8222)])
+        self.start()
+        self.wait(lambda: self.detected(*range(8200, 8220)))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.assertEqual(len(self.record()["forwards"]), 20)
+        self.assertEqual(self.record()["waiting"], [8220, 8221])
+        self.command("forward", "8299")
+        self.assertEqual(len(self.record()["forwards"]), 21)
+        self.command("stop", "8299")
+        self.scan(*[(p, "127.0.0.1", None) for p in range(8201, 8222)])
+        self.wait(lambda: self.detected(8220))
+        self.assertNotIn("8200", self.record()["forwards"])
+        self.assertNotIn(8200, self.listeners)
+        self.assertEqual(self.record()["waiting"], [8221])
+        self.wait(lambda: len(self.notifications()) == 2)
+        self.assertEqual(self.notifications()[-1][-1], "8220→8220")
+        self.scan()
+        self.wait(lambda: not self.record()["forwards"])
+        self.assertEqual(self.listeners, {})
+        self.assertEqual(len(self.notifications()), 2)
+
+    def test_restart_and_master_recovery_do_not_notify(self):
+        self.scan((8300, "::1", "python"))
+        process = self.start()
+        self.wait(lambda: self.detected(8300))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.listeners.pop(8300).close()
+        self.pid = 456
+        self.wait(lambda: len(self.forwards()) == 2)
+        self.assertTrue(self.detected(8300))
+        process.terminate()
+        process.wait(timeout=5)
+        self.start()
+        self.wait(lambda: self.detected(8300))
+        time.sleep(2.2)
+        self.assertEqual(len(self.notifications()), 1)
+        self.assertTrue(self.record()["forwards"]["8300"]["automatic"])
+
+    def test_failed_malformed_and_timed_out_scans_preserve_state_then_recover(self):
+        self.scan((8400, "127.0.0.1", None))
+        self.start()
+        self.wait(lambda: self.detected(8400))
+        self.wait(lambda: len(self.notifications()) == 1)
+        initial = self.record()
+        for failure in ("fail", "{broken", "hang"):
+            with self.subTest(failure=failure):
+                before = len((self.root / "scans").read_text().splitlines())
+                (self.root / "scan").write_text(failure)
+                self.wait(lambda: len((self.root / "scans").read_text().splitlines()) > before)
+                started = time.monotonic()
+                self.command("list")  # Even a hung remote scan has a two-second deadline.
+                self.assertLess(time.monotonic() - started, 2.5)
+                self.assertEqual(self.record(), initial)
+                self.assertEqual(len(self.notifications()), 1)
+        self.scan((8401, "0.0.0.0", "new"))
+        self.wait(lambda: self.detected(8401))
+        self.assertNotIn("8400", self.record()["forwards"])
+        self.wait(lambda: len(self.notifications()) == 2)
+
+    def test_new_forward_waits_for_master_before_announcing(self):
+        self.scan((8450, "127.0.0.1", "server"))
+        self.pid = None
+        self.start()
+        self.wait(lambda: "8450" in self.record()["forwards"])
+        self.assertFalse(self.detected(8450))
+        self.assertEqual(self.notifications(), [])
+        self.pid = 456
+        self.wait(lambda: self.detected(8450))
+        self.wait(lambda: len(self.notifications()) == 1)
+        self.assertEqual(self.notifications()[0][-1], "8450→8450")
+
+    def test_scans_are_two_seconds_apart_even_with_requests(self):
+        self.start()
+        self.wait(lambda: (self.root / "scans").exists())
+        self.command("list")
+        self.command("forward", "8500")
+        self.command("list")
+        self.assertEqual(len((self.root / "scans").read_text().splitlines()), 1)
+        self.wait(lambda: len((self.root / "scans").read_text().splitlines()) >= 2)
+        times = list(map(float, (self.root / "scans").read_text().splitlines()))
+        self.assertGreaterEqual(times[1] - times[0], 2)
+        self.assertEqual(self.notifications(), [])
+
+    def test_proc_scanner_reads_both_families_and_keeps_invisible_owners(self):
+        scan = runpy.run_path(str(SCRIPT))["SCAN"]
+        namespace = {"__name__": "scanner_test"}
+        exec(scan, namespace)
+        proc = self.root / "proc"
+        (proc / "net").mkdir(parents=True)
+        def row(address, remote, state, inode):
+            return f"0: {address}:{remote:04X} 0:0 {state} 0 0 0 0 0 {inode}\n"
+        (proc / "net/tcp").write_text(
+            "header\n" + row("0100007F", 8000, "0A", 100) +
+            row("00000000", 4317, "0A", 101) + row("0201A8C0", 8004, "0A", 102) +
+            row("0100007F", 9000, "01", 103))
+        (proc / "net/tcp6").write_text(
+            "header\n" + row("00000000000000000000000001000000", 8003, "0A", 104) +
+            row("00000000000000000000000000000000", 4318, "0A", 105))
+        (proc / "12/fd").mkdir(parents=True)
+        (proc / "12/comm").write_text("python3\n")
+        (proc / "12/fd/3").symlink_to("socket:[100]")
+        (proc / "12/fd/4").symlink_to("disappeared")
+        rows = namespace["listeners"](proc)
+        self.assertEqual(rows, [
+            dict(port=8000, address="127.0.0.1", program="python3"),
+            dict(port=4317, address="0.0.0.0", program=None),
+            dict(port=8004, address="192.168.1.2", program=None),
+            dict(port=8003, address="::1", program=None),
+            dict(port=4318, address="::", program=None)])
+        (proc / "net/tcp6").unlink()  # IPv6 may be disabled.
+        self.assertEqual(len(namespace["listeners"](proc)), 3)
 
     def test_validation_never_calls_ssh(self):
         for args, host in [(("forward", p), "box") for p in ("abc", "0", "-1", "65536")] + [
