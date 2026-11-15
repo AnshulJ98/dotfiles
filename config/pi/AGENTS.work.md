@@ -179,8 +179,8 @@ the user corrects you.
 
 Never open a `.pdf` with the read tool. Amazon Bedrock rejects
 `application/pdf`, and a single read poisons every later message in the
-session. Use `pdftotext <file> -` for text, or load `/skill:pdf-images`
-for tables, images, and OCR.
+session. Use `pdftotext <file> -` for text, or load `/skill:pdf` for
+tables, images, OCR, creation, and forms.
 
 
 # Code
@@ -342,7 +342,7 @@ This rule names runtimes and browsers only. Shell utilities (`ls`, `grep`, `bash
 
 Never assume `~/.local/bin/` or `~/.bun/bin/` paths will work.
 
-Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/skills/pdf-images/.venv/bin/python` (see PDF rule).
+Exception: project virtualenvs and skill venvs are allowed — e.g. `~/.agents/skills/pdf/.venv/bin/python` (see PDF rule).
 
 ## Binary Files
 
