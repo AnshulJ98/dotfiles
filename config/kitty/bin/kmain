@@ -60,6 +60,8 @@ def focus(wid):
 
 def start():
     args = ["--listen-on", "unix:" + sock, "--session", str(main)]
+    if host:
+        args += ["--title", host]
     env = dict(os.environ, ZWS_HOST=host, ZWS_DIR=str(directory)) if host else dict(os.environ)
     app_env = ["--env", "ZWS_HOST=" + host, "--env", "ZWS_DIR=" + str(directory)] if host else []
     # macOS finds the app by name in any folder; elsewhere, or when it cannot, run kitty from PATH.
