@@ -94,7 +94,8 @@ lts=$(nvm version-remote --lts 2>/dev/null || true)
 if [ -n "$lts" ] && [ "$(nvm version default)" != "$lts" ]; then
   old=$(nvm version default)
   if [ "$old" = N/A ]; then nvm install --lts; else nvm install --lts --reinstall-packages-from="$old"; fi
-  nvm alias default 'lts/*'
+  # A major such as v26, not lts/*: .zshrc globs versions/node/<default>* to skip loading nvm.
+  nvm alias default "${lts%%.*}"
 fi
 nvm use default >/dev/null
 # bin/pi puts pi-node/current/bin first on PATH; keep it on the default node.
