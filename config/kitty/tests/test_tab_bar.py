@@ -38,6 +38,21 @@ class Tab(types.SimpleNamespace):
     pass
 
 
+class Color(namedtuple('Color', 'red green blue')):
+    """kitty's Color: contrast() raises TypeError for anything that is not a Color."""
+    def __int__(self):
+        return self.red << 16 | self.green << 8 | self.blue
+
+    def contrast(self, other):
+        if not isinstance(other, Color):
+            raise TypeError('Not a Color')
+        return 1.0
+
+
+def rgb(value):
+    return Color(value >> 16 & 255, value >> 8 & 255, value & 255)
+
+
 class Draw(namedtuple('Draw', 'active_fg active_bg inactive_fg inactive_bg default_bg')):
     def tab_fg(self, tab):
         return self.active_fg if tab.is_active else self.inactive_fg
@@ -47,6 +62,7 @@ def load():
     kitty = types.ModuleType('kitty')
     fast = types.ModuleType('kitty.fast_data_types')
     fast.get_boss = lambda: 'boss'
+    fast.Color = Color
     bar = types.ModuleType('kitty.tab_bar')
     bar.draw_tab_with_powerline = powerline
     bar.as_rgb = lambda x: x
@@ -92,7 +108,7 @@ class TabBarTests(unittest.TestCase):
         snapshot.assert_called_once_with('boss')
 
     def test_host_inverts_only_tabs_and_local_passes_data_untouched(self):
-        data = Draw(0xabcdef, 1, 0x123456, 2, 3)
+        data = Draw(rgb(0xabcdef), rgb(1), rgb(0x123456), rgb(2), rgb(3))
         self.data = data
         for host in ('box', ''):
             screen = Screen(40)
@@ -103,11 +119,18 @@ class TabBarTests(unittest.TestCase):
             for call in draw.call_args_list:
                 passed = call.args[0]
                 if host:
-                    self.assertEqual(passed, data._replace(active_fg=0, active_bg=data.active_fg,
-                                                          inactive_fg=0, inactive_bg=data.inactive_fg))
+                    black = Color(0, 0, 0)
+                    self.assertEqual(passed, data._replace(active_fg=black, active_bg=data.active_fg,
+                                                          inactive_fg=black, inactive_bg=data.inactive_fg))
+                    # kitty's soft separator between two inactive tabs calls Color.contrast on
+                    # these; an int there raises and kitty falls back to its fade tabs.
+                    for field in passed._fields:
+                        self.assertIsInstance(getattr(passed, field), Color, field)
+                    passed.inactive_bg.contrast(passed.inactive_fg)
                 else:
                     self.assertIs(passed, data)
-            self.assertEqual((screen.cursor.fg, screen.cursor.bg), (data.inactive_fg, data.default_bg))
+            self.assertEqual((screen.cursor.fg, screen.cursor.bg),
+                             (int(data.inactive_fg), int(data.default_bg)))
             self.assertEqual(self.data, data)
 
     def test_powerline_sees_host_cursor_colours_and_local_cursor_is_untouched(self):

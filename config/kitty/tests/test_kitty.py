@@ -89,6 +89,8 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(self.boss.calls[-1][1][-2:], ('new', ''))
 
     def test_host_and_mac_launchers(self):
+        # hunk joins no workspace; the shell tab joins the active pane's, as the plain
+        # 'launch --type=tab' key did, so it is not shown in every space.
         for host in ("", "winpc"):
             with patch.dict(os.environ, ZWS_HOST=host):
                 for word, command in (("hunk", ("/opt/homebrew/bin/hunk", "diff")),
@@ -97,9 +99,15 @@ class IntentTests(unittest.TestCase):
                     zkitty.run(self.boss, [word])
                     self.assertEqual(self.boss.calls, [(None, (
                         "launch", "--type=tab", "--match=id:7",
-                        *(("--tab-title", "hunk", "--add-to-session=!") if word == "hunk" else ()),
+                        *(("--tab-title", "hunk", "--add-to-session=!") if word == "hunk"
+                          else ("--add-to-session=alpha",)),
                         *(("--cwd=current",) if not host else ()),
                         "/bin/bash", str(ROOT / "bin/zrun"), "/live folder", *command))])
+
+    def test_shell_outside_a_workspace_joins_none(self):
+        self.boss.active_window.created_in_session_name = ''
+        zkitty.run(self.boss, ['shell'])
+        self.assertNotIn('--add-to-session', ' '.join(self.boss.calls[-1][1]))
 
     def test_navigation_and_noops(self):
         for words, ops, calls in [
