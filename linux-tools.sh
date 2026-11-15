@@ -26,8 +26,19 @@ APT_PKGS=(
   # office skills: headless render and recalc, .docx reading
   libreoffice-nogui pandoc
   golang-go rustup btop just hyperfine glow eza direnv xh git-filter-repo pipx 7zip
+  # the rest of the Brewfile that apt carries
+  ffmpeg luarocks ruby-full mpv ranger postgresql-client fastfetch resvg
 )
 if sudo -n true 2>/dev/null || [ -t 0 ]; then
+  # Ubuntu's git and gh lag the Mac's; take both from upstream's apt sources.
+  compgen -G '/etc/apt/sources.list.d/git-core-*' >/dev/null || sudo add-apt-repository -y -n ppa:git-core/ppa
+  if [ ! -f /etc/apt/sources.list.d/github-cli.list ]; then
+    sudo install -d -m 755 /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+      sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+      sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+  fi
   log "apt: installing ${#APT_PKGS[@]} packages..."
   sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${APT_PKGS[@]}"
@@ -35,10 +46,16 @@ if sudo -n true 2>/dev/null || [ -t 0 ]; then
 else
   warn "apt skipped (needs sudo): run install.sh from a terminal, e.g. ssh -t host 'cd ~/Dev/dotfiles && ./install.sh'"
 fi
-# Ubuntu names these fdfind and batcat.
+# `rustup default` fails when none is set; `toolchain list` prints a line either way.
+have rustup && ! rustup default >/dev/null 2>&1 && rustup default stable
+# apt's copies lag the Mac's; cargo builds current ones into $BIN, and a re-run upgrades them.
+if have cargo; then
+  log "cargo: ripgrep bat fd-find git-delta zoxide slumber rainfrog (first build takes minutes)..."
+  cargo install --locked --quiet --root "$HOME/.local" ripgrep bat fd-find git-delta zoxide slumber rainfrog
+fi
+# Ubuntu names these fdfind and batcat; only needed when cargo did not build them.
 have fdfind && ! have fd && ln -s "$(command -v fdfind)" "$BIN/fd"
 have batcat && ! have bat && ln -s "$(command -v batcat)" "$BIN/bat"
-have rustup && ! rustup toolchain list 2>/dev/null | grep -q . && rustup default stable
 
 # Pinned to match the Mac; bump both together.
 ZMX_VERSION=1.0.1
@@ -71,8 +88,18 @@ if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | PROFILE=/dev/null bash
 fi
 set +u; . "$NVM_DIR/nvm.sh"
-nvm ls default >/dev/null 2>&1 || { nvm install --lts && nvm alias default 'lts/*'; }
-nvm use default >/dev/null; set -u
+# Follow the current LTS, carrying npm globals across a major bump.
+lts=$(nvm version-remote --lts 2>/dev/null || true)
+if [ -n "$lts" ] && [ "$(nvm version default)" != "$lts" ]; then
+  old=$(nvm version default)
+  if [ "$old" = N/A ]; then nvm install --lts; else nvm install --lts --reinstall-packages-from="$old"; fi
+  nvm alias default 'lts/*'
+fi
+nvm use default >/dev/null
+# bin/pi puts pi-node/current/bin first on PATH; keep it on the default node.
+pi_node="$HOME/.local/share/pi-node/current"
+[ -L "$pi_node" ] && ln -sfn "$(dirname "$(dirname "$(nvm which default)")")" "$pi_node"
+set -u
 ok "node $(node --version) (nvm)"
 
 NPM_PKGS=(tree-sitter-cli hunkdiff @ast-grep/cli markdownlint-cli2 @steipete/summarize
@@ -85,6 +112,10 @@ case "$(uname -m)" in aarch64|arm64) HUNK_ARCH=arm64 ;; *) HUNK_ARCH=x64 ;; esac
 for h in "$(npm root -g)"/hunkdiff/node_modules/hunkdiff-linux-$HUNK_ARCH/bin/hunk "$(npm root -g)"/hunkdiff-linux-$HUNK_ARCH/bin/hunk; do
   [ -x "$h" ] && { ln -sf "$h" "$BIN/hunk"; break; }
 done
+
+[ -d "$HOME/.pyenv" ] || { log "pyenv..."; curl -fsSL https://pyenv.run | bash >/dev/null; }
+ln -sf "$HOME/.pyenv/bin/pyenv" "$BIN/pyenv"
+have harlequin || { log "harlequin..."; pipx install harlequin; }
 
 have bun || { log "bun..."; curl -fsSL https://bun.sh/install | bash >/dev/null; }
 [ -x "$HOME/.bun/bin/bun" ] && ln -sf "$HOME/.bun/bin/bun" "$BIN/bun"
