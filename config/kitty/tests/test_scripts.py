@@ -194,8 +194,11 @@ class ScriptTests(unittest.TestCase):
         folder.mkdir(parents=True)
         self.pane_start(f': zq box%20name - box {quote(str(folder), safe="")}\n'.encode())
         args, = self.calls("ssh")
-        self.assertEqual(args[:-1], ["-tt", "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/zcm-%C",
-                                     "-o", "ControlPersist=600", "box"])
+        # -q: past sshd's 10 sessions a connection, ssh opens its own and would print two notices.
+        # The keepalive ends a dead link in 45 s; ssh -O check cannot see one.
+        self.assertEqual(args[:-1], ["-tt", "-q", "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/zcm-%C",
+                                     "-o", "ControlPersist=600", "-o", "ServerAliveInterval=15",
+                                     "-o", "ServerAliveCountMax=3", "box"])
         remote = args[-1]
         self.assertIn(" attach box\\ name", remote)
         self.assertEqual(self.calls("zmx"), [])
@@ -568,21 +571,23 @@ class ScriptTests(unittest.TestCase):
     def test_ctrl_backslash_opens_the_picker_but_reaches_ssh_untouched(self):
         # kitty maps ctrl+\ to bin/zgoto --key: the picker, as cmd+alt+g, unless the pane runs ssh,
         # whose remote zmx-pick owns the key. ssh runs in kitty's pane or inside its zmx session.
-        def ls(fg, holder):
+        # A pane of a host workspace is ours although it runs ssh: its remote zmx has the key off.
+        def ls(fg, holder, host):
             return json.dumps([{"is_focused": True, "tabs": [{"is_focused": True, "windows": [{
-                "id": 7, "is_focused": True, "user_vars": {"holder": holder},
+                "id": 7, "is_focused": True, "user_vars": {"holder": holder, **({"host": host} if host else {})},
                 "foreground_processes": [{"pid": 1, "cmdline": fg}]}]}]}])
         zmx = ["/opt/homebrew/bin/zmx", "attach", "old-1"]
-        for fg, holder, ps, sent in ((["ssh", "-t", "box"], "", "", True),
-                                     (zmx, "old-1", "123 456 -zsh\n456 456 ssh\n", True),
-                                     (zmx, "old-1", "123 456 -zsh\n456 456 nvim\n", False),
-                                     (["/bin/zsh"], "", "", False)):
-            with self.subTest(fg=fg, ps=ps):
+        for fg, holder, ps, host, sent in ((["ssh", "-t", "box"], "", "", "", True),
+                                           (zmx, "old-1", "123 456 -zsh\n456 456 ssh\n", "", True),
+                                           (zmx, "old-1", "123 456 -zsh\n456 456 nvim\n", "", False),
+                                           (["ssh", "-tt", "box", "zmx attach old-1"], "old-1", "", "box", False),
+                                           (["/bin/zsh"], "", "", "", False)):
+            with self.subTest(fg=fg, ps=ps, host=host):
                 (self.root / "calls").unlink(missing_ok=True)
                 # kitty does not fill in @active-kitty-window-id for remote_control_script (0.50.0,
                 # boss.py remote_control_script); zgoto finds the focused window itself
                 result = self.run_script("zgoto", "@active-kitty-window-id", "--key",
-                                         KITTY_LS=ls(fg, holder), PS_OUT=ps)
+                                         KITTY_LS=ls(fg, holder, host), PS_OUT=ps)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 kitten = [a for a in self.calls("kitten") if "ls" not in a]
                 self.assertEqual(kitten[0][:2] == ["@", "send-key"], sent, kitten)
