@@ -286,7 +286,7 @@ def rows(view, info, menu, cols, lines, host_info=None):
                 segs.append((' ' + part, '32' if part[0] == '↑' else '31'))
             top.append((line(segs, on), go))
         if name == menu:  # the worktree entries need a repo
-            for label, what in MENU if branch and not host else MENU[:2]:
+            for label, what in MENU if branch else MENU[:2]:
                 top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['cwd'])))
 
     bottom: list[tuple[str, tuple | None]] = []

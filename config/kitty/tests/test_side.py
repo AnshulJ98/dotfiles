@@ -46,13 +46,14 @@ class SideTests(unittest.TestCase):
     def setUp(self):
         self.side = load()
 
-    def test_host_menu_has_no_worktree_launchers(self):
+    def test_worktree_menu_needs_a_branch_on_mac_and_host(self):
         info = {'a': ('Repo', 'topic', ''), 'b': ('Bee', '', '')}
-        for host, expected in (('', ['rename', 'close', 'new', 'open']),
-                               ('winpc', ['rename', 'close'])):
-            with patch.dict(os.environ, ZWS_HOST=host):
-                _, clicks = self.side.rows(view('/host/repo'), info, 'a', 60, 30)
-                self.assertEqual([c[1] for c in clicks if c and c[0] == 'menu'], expected)
+        for host in ('', 'winpc'):
+            for space, expected in (('a', ['rename', 'close', 'new', 'open']),
+                                    ('b', ['rename', 'close'])):
+                with self.subTest(host=host, space=space), patch.dict(os.environ, ZWS_HOST=host):
+                    _, clicks = self.side.rows(view('/host/repo'), info, space, 60, 30)
+                    self.assertEqual([c[1] for c in clicks if c and c[0] == 'menu'], expected)
 
     def test_host_header_down_address_and_versions(self):
         git = self.side.HostGit()
