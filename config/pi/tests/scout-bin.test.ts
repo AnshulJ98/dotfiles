@@ -2,7 +2,7 @@
 // Drives bin/scout with a fake `pi` on PATH: no model, no tokens.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -59,6 +59,8 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	const path = process.env.PATH?.split(":").filter((dir) => !dir.endsWith("/bin/guard")).join(":");
 	const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${path}`, PI_CODING_AGENT_DIR: root };
 	delete env.SCOUT_DIGEST;
+	// Pane tests choose their own mode, independent of the worker running the suite.
+	delete env.SCOUT_KITTY;
 	delete env.PI_SCOUT_DEPTH;
 	delete env.PI_SESSION_FILE;
 	delete env.KITTY_WINDOW_ID;
@@ -67,6 +69,16 @@ function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
 	return { env, scoutRoot: join(root, "sessions", "scout") };
 }
 
+test("sandbox isolates the worker's inherited SCOUT_KITTY setting", () => {
+	const previous = process.env.SCOUT_KITTY;
+	try {
+		process.env.SCOUT_KITTY = "0";
+		assert.equal(sandbox().env.SCOUT_KITTY, undefined);
+	} finally {
+		if (previous === undefined) delete process.env.SCOUT_KITTY;
+		else process.env.SCOUT_KITTY = previous;
+	}
+});
 
 interface Run {
 	code: number | null;
@@ -321,6 +333,63 @@ test("--review runs review.md over BASE...HEAD read-only, with AGENTS.md and AUT
 	assert.doesNotMatch(run.stdout, /,edit,write/);
 	assert.deepEqual(reviewRecords(repo), [headOf(repo)]);
 	assert.match(readFileSync(join(repo, ".git", "pi-review", headOf(repo)), "utf8"), /^base=HEAD~1$/m);
+});
+
+test("--review attaches dispatched slice specs after AUTO.md, including beside round 2 findings", () => {
+	const { env } = sandbox();
+	const repo = realpathSync(reviewRepo());
+	const git = (...args: string[]) => {
+		const result = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: repo, encoding: "utf8" });
+		assert.equal(result.status, 0, result.stderr);
+		return result.stdout.trim();
+	};
+	git("switch", "-c", "auto/x");
+	writeFileSync(join(repo, "AUTO.md"), "spec\n");
+	mkdirSync(join(repo, ".git", "info"), { recursive: true });
+	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+	const state = join(repo, ".git", "pi-auto", "x");
+	mkdirSync(state, { recursive: true });
+	for (const name of ["a", "b"]) writeFileSync(join(state, `${name}.spec`), SPEC);
+	const base = git("rev-parse", "HEAD~1");
+	const review = () => spawnSync(SCOUT, ["--review", base], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
+	const attachments = `@${repo}/AUTO.md @${state}/a.spec @${state}/b.spec`;
+	const checkSpecs = (run: ReturnType<typeof review>) => {
+		assert.equal(run.status, 0, run.stderr);
+		assert.ok(run.stdout.includes(attachments), run.stdout);
+		assert.match(run.stdout, /each slice's spec.*attached/i);
+		assert.match(run.stdout, /target and `mechanism:` line.*yardstick/);
+	};
+	const first = headOf(repo);
+	checkSpecs(review());
+	git("switch", "-c", "feature/x");
+	const other = review();
+	assert.equal(other.status, 0, other.stderr);
+	assert.doesNotMatch(other.stdout, /@\S+\.spec/);
+	assert.match(other.stdout, /against the spec in the attached AUTO\.md/);
+	assert.doesNotMatch(other.stdout, /each slice's spec/i);
+
+	git("switch", "auto/x");
+	writeFileSync(join(repo, "a.txt"), "three\n");
+	git("commit", "-qam", "fix", "--no-verify");
+	const second = review();
+	checkSpecs(second);
+	assert.match(second.stdout, /This is round 2 of 3/);
+	assert.ok(second.stdout.includes(`${attachments} @${repo}/.git/pi-review/${first}.findings`));
+});
+
+test("--review on auto/x without dispatched specs keeps the AUTO.md yardstick", () => {
+	const { env } = sandbox();
+	const repo = reviewRepo();
+	const branch = spawnSync("git", ["switch", "-c", "auto/x"], { cwd: repo, encoding: "utf8" });
+	assert.equal(branch.status, 0, branch.stderr);
+	writeFileSync(join(repo, "AUTO.md"), "spec\n");
+	mkdirSync(join(repo, ".git", "info"), { recursive: true });
+	writeFileSync(join(repo, ".git", "info", "exclude"), "AUTO.md\n");
+	const run = spawnSync(SCOUT, ["--review", "HEAD~1"], { cwd: repo, env: { ...env, FAKE_PI: "args" }, encoding: "utf8" });
+	assert.equal(run.status, 0, run.stderr);
+	assert.doesNotMatch(run.stdout, /@\S+\.spec/);
+	assert.match(run.stdout, /against the spec in the attached AUTO\.md/);
+	assert.doesNotMatch(run.stdout, /each slice's spec/i);
 });
 
 test("--review records nothing for a dirty tree, an unknown base, --rw, or a run that failed", () => {
