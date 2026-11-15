@@ -46,6 +46,14 @@ class SideTests(unittest.TestCase):
     def setUp(self):
         self.side = load()
 
+    def test_host_menu_has_no_worktree_launchers(self):
+        info = {'a': ('Repo', 'topic', ''), 'b': ('Bee', '', '')}
+        for host, expected in (('', ['rename', 'close', 'new', 'open']),
+                               ('winpc', ['rename', 'close'])):
+            with patch.dict(os.environ, ZWS_HOST=host):
+                _, clicks = self.side.rows(view('/host/repo'), info, 'a', 60, 30)
+                self.assertEqual([c[1] for c in clicks if c and c[0] == 'menu'], expected)
+
     def test_host_header_down_address_and_versions(self):
         git = self.side.HostGit()
         info = {'a': ('Repo', '', ''), 'b': ('Bee', '', '')}
