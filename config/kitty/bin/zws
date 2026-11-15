@@ -65,6 +65,16 @@ overlay() { # cwd script args...
 PAUSE='|| { echo; read -n1 -rsp "wt failed; press a key"; }'
 
 case ${1:-} in
+  forward-port)
+    overlay "$HOME" '
+      read -e -p "Forward port: " n && [ -n "$n" ] || exit 0
+      if [[ ! $n =~ ^[0-9]{1,5}$ ]] || (( 10#$n < 1 || 10#$n > 65535 )); then
+        echo "Port must be a number from 1 to 65535"
+      elif "$(dirname "$0")/zports" forward "$n" >/dev/null; then
+        exit 0
+      fi
+      echo; read -n1 -rsp "Forward failed; press a key"
+    ' ;;
   new)
     shift; mode= host=${ZWS_HOST:-}
     while :; do

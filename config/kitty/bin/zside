@@ -21,6 +21,8 @@ import tty
 
 os.environ['PATH'] = '/opt/homebrew/bin:' + os.environ.get('PATH', '')
 ZWS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zws')
+ZPORTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zports')
+PORT_ERROR = ''
 GIT = shutil.which('git')
 if GIT in (None, '/usr/bin/git'):
     GIT = next((p for p in ('/Applications/Xcode.app/Contents/Developer/usr/bin/git',
@@ -38,10 +40,12 @@ INPUT = re.compile(
 
 
 def run(*cmd: str) -> str:
+    """Return an error for actions that can display it, or empty text on success."""
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
-    except (OSError, subprocess.SubprocessError):
-        return ''
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+        return (result.stderr.strip() or result.stdout.strip() or 'Command failed') if result.returncode else ''
+    except (OSError, subprocess.SubprocessError) as error:
+        return str(error)
 
 
 def fit(text: str, width: int) -> str:
@@ -249,6 +253,40 @@ class HostGit:
         return True
 
 
+def ports():
+    if not os.environ.get('ZWS_HOST'):
+        return None
+    directory = os.environ.get('ZWS_DIR') or os.path.expanduser(
+        '~/.local/state/kitty/hosts/' + os.environ['ZWS_HOST'])
+    try:
+        with open(os.path.join(directory, 'ports.json')) as stream:
+            data = json.load(stream)
+        def number(value):
+            return type(value) is int and 1 <= value <= 65535
+        if (not isinstance(data, dict) or not isinstance(data.get('forwards'), dict)
+                or not isinstance(data.get('waiting'), list)
+                or not all(number(p) for p in data['waiting'])):
+            return None
+        for remote, item in data['forwards'].items():
+            if (not remote.isascii() or not remote.isdigit() or not number(int(remote))
+                    or not isinstance(item, dict) or 'local' not in item
+                    or (item['local'] is not None and not number(item['local']))
+                    or type(item.get('active')) is not bool
+                    or type(item.get('automatic')) is not bool
+                    or not isinstance(item.get('program'), (str, type(None)))):
+                return None
+        return data
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def context_menu(action, menu):
+    if action and action[0] in ('space', 'port'):
+        key = action[1] if action[0] == 'space' else ('port', action[1])
+        return key if key != menu else ''
+    return ''
+
+
 def rows(view, info, menu, cols, lines, host_info=None):
     spaces = {s['name']: s for s in view['spaces']}
     agents, current = view['agents'], view['current']
@@ -290,6 +328,29 @@ def rows(view, info, menu, cols, lines, host_info=None):
         if name == menu:  # the worktree entries need a repo
             for label, what in MENU if branch else MENU[:2]:
                 top.append((line([('   ▸ ', '36'), (label, '36')]), ('menu', what, name, sp['cwd'])))
+
+    record = ports()
+    if record is not None:
+        top.extend([(line([]), None), (line([(' ports', '1;97')]), None)])
+        if PORT_ERROR:
+            error = ''.join(c if c.isprintable() else ' ' for c in PORT_ERROR)
+            top.append((line([(' ' + error, '2')]), None))
+        for remote, item in sorted(record['forwards'].items(), key=lambda pair: int(pair[0])):
+            local = item['local']
+            mapping = str(local) if local is not None else '?'
+            if mapping != remote:
+                mapping += '→' + remote
+            mark = 'auto' if item['automatic'] else 'hand'
+            program = ''.join(c for c in (item.get('program') or '') if c.isprintable())
+            label = ' ' + mapping + ' ' + mark + (' ' + program if program else '')
+            top.append((line([(label, '39' if item['active'] else '2')]), ('port', remote, local)))
+            if menu == ('port', remote):
+                if local is not None:
+                    top.append((line([('   ▸ Open in browser', '36')]), ('port-open', local)))
+                top.append((line([('   ▸ Stop forwarding', '36')]), ('port-stop', remote)))
+        if record['waiting']:
+            top.append((line([(f" {len(record['waiting'])} more not forwarded", '2')]), None))
+        top.append((line([(' forward port…', '36')]), ('port-forward', '')))
 
     bottom: list[tuple[str, tuple | None]] = []
     if agents:
@@ -338,9 +399,22 @@ def render(view, git, menu):
 
 
 def act(action: tuple | None) -> None:
+    global PORT_ERROR
     if action is None:
         return
     kind, arg, *rest = action
+    if kind in ('port', 'port-open', 'port-stop', 'port-forward'):
+        if kind == 'port-stop':
+            cmd = (ZPORTS, 'stop', str(arg))
+        elif kind == 'port-forward':
+            cmd = (ZWS, 'forward-port')
+        else:
+            local = rest[0] if kind == 'port' else arg
+            if local is None:
+                return
+            cmd = ('open', f'http://localhost:{local}')
+        PORT_ERROR = run(*cmd)
+        return
     if kind == 'menu':
         name, cwd = rest
         run(ZWS, *{'rename': ('rename', name), 'close': ('close', name)}.get(arg, ('worktree', arg, cwd)))
@@ -355,6 +429,7 @@ def main() -> None:
     saved = termios.tcgetattr(fd)
     clicks, menu, buffer, view = [], '', b'', None
     git = HostGit() if os.environ.get('ZWS_HOST', '') else Git()
+    next_ports = time.monotonic() + 3
     wake_r, wake_w = os.pipe()
     os.set_blocking(wake_w, False)
     old_wake = signal.set_wakeup_fd(wake_w)
@@ -367,8 +442,14 @@ def main() -> None:
         while True:
             inputs = [fd, wake_r] + ([git.proc.stdout] if git.proc else [])
             pending = git.proc or git.queue or getattr(git, 'failed', False)
-            ready, _, _ = select.select(inputs, [], [], .1 if pending else None)
+            timeout = .1 if pending else None
+            if os.environ.get('ZWS_HOST'):
+                timeout = min(timeout if timeout is not None else 3, max(0, next_ports - time.monotonic()))
+            ready, _, _ = select.select(inputs, [], [], timeout)
             draw, refresh = False, False
+            if os.environ.get('ZWS_HOST') and time.monotonic() >= next_ports:
+                draw = True
+                next_ports = time.monotonic() + 3
             if wake_r in ready:
                 os.read(wake_r, 4096)
                 draw = True
@@ -386,7 +467,7 @@ def main() -> None:
                         continue
                     action = clicks[row]
                     if button == 2:
-                        menu = action[1] if action and action[0] == 'space' and action[1] != menu else ''
+                        menu = context_menu(action, menu)
                     else:
                         menu = ''
                         act(action)
