@@ -28,6 +28,8 @@ if [ -n "${ZWS_HOST:-}" ]; then
   if [ "$tries" -ge 3 ]; then
     echo "zshell: the workspace watcher did not answer; enter retries" >&2
     IFS= read -r -s -n 1 key || exit 1
+    # A late answer may have been that key; drop the rest of it before asking again.
+    while IFS= read -r -s -t 1 -n 1 key; do :; done
     tries=0
   fi
 elif [ -z "$name" ]; then

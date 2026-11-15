@@ -402,7 +402,8 @@ def on_set_user_var(boss, window, data) -> None:
         if zkitty.is_sidebar(window):
             zkitty.run(boss, data['value'].split())
     elif data.get('key') == 'zq' and data.get('value'):
-        if window.id not in _named:
+        # A host pane asks again when its answer was lost; a Mac pane falls back to zsh instead.
+        if window.id not in _named or zkitty.instance_host():
             _named.add(window.id)
             zkitty.attach(boss, window)
         else:

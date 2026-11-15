@@ -77,6 +77,11 @@ NPM_PKGS=(tree-sitter-cli hunkdiff @ast-grep/cli markdownlint-cli2 @steipete/sum
 log "npm: ${NPM_PKGS[*]}"
 npm install -g --silent "${NPM_PKGS[@]}"
 ok "npm globals"
+# Link hunk's prebuilt binary: the npm shim needs node, which a non-interactive ssh (kitty's zrun) lacks.
+case "$(uname -m)" in aarch64|arm64) HUNK_ARCH=arm64 ;; *) HUNK_ARCH=x64 ;; esac
+for h in "$(npm root -g)"/hunkdiff/node_modules/hunkdiff-linux-$HUNK_ARCH/bin/hunk "$(npm root -g)"/hunkdiff-linux-$HUNK_ARCH/bin/hunk; do
+  [ -x "$h" ] && { ln -sf "$h" "$BIN/hunk"; break; }
+done
 
 have bun || { log "bun..."; curl -fsSL https://bun.sh/install | bash >/dev/null; }
 [ -x "$HOME/.bun/bin/bun" ] && ln -sf "$HOME/.bun/bin/bun" "$BIN/bun"

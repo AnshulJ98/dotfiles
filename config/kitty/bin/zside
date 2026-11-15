@@ -241,7 +241,8 @@ class HostGit:
                 self.cache = {top: (now, status) for top, status in data['counts'].items()}
                 if isinstance(data.get('version'), str) and data['version']:
                     self.there = data['version']
-                    self.version_asked = True
+                # Ask once per sidebar: a host without zmx would be asked on every poll.
+                self.version_asked = True
                 self.down = False
             except ValueError:
                 self.down = True

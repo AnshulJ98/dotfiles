@@ -141,12 +141,12 @@ class ScriptTests(unittest.TestCase):
         return [args for cmd, args in map(json.loads, (self.root / "calls").read_text().splitlines())
                 if cmd == command]
 
-    def pane_start(self, reply, wait_for=None, **env):
-        code, output = self.pane_run(reply, wait_for=wait_for, **env)
+    def pane_start(self, reply, wait_for=None, key=b"x", **env):
+        code, output = self.pane_run(reply, wait_for=wait_for, key=key, **env)
         self.assertEqual(code, 0, output)
         return output
 
-    def pane_run(self, reply, wait_for=None, **env):
+    def pane_run(self, reply, wait_for=None, key=b"x", **env):
         # Only these logging fakes are reachable from the pane's PATH.
         for cmd in ("sed", "basename", "tr", "base64", "grep", "find", "head", "python3",
                     "sleep", "mkdir", "rmdir"):
@@ -209,7 +209,7 @@ class ScriptTests(unittest.TestCase):
                     self.assertIsNone(proc.poll(), bytes(output))
                     self.assertEqual(self.calls("ssh"), calls)
                     self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
-                    os.write(master, b"x")
+                    os.write(master, key)
                     wait_for = None
             self.assertTrue(queried, bytes(output))
             self.assertIsNone(wait_for, bytes(output))
@@ -234,6 +234,13 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(output.count(b'watcher did not answer'), 1)
         self.assertEqual(len(self.calls("ssh")), 2)
         self.assertEqual(self.calls("plain-shell"), [])
+
+    def test_host_late_answer_taken_as_the_key_is_dropped_before_asking_again(self):
+        output = self.pane_start([None, None, None, b': zq n - box -\n'],
+                                 wait_for=b'watcher did not answer; enter retries',
+                                 key=b': zq late - box -\n', ZWS_HOST="box")
+        self.assertEqual(output.count(b'SetUserVar=zq='), 4)
+        self.assertNotIn("late", self.calls("ssh")[-1][-1])
 
     def test_host_watcher_retries_a_missed_read_without_waiting_for_key(self):
         output = self.pane_start([None, b': zq n - box -\n'], ZWS_HOST="box")
@@ -262,7 +269,13 @@ class ScriptTests(unittest.TestCase):
 
     def test_zrun_host_shell_mapping_and_full_host_validation(self):
         self.run_script("zrun", "", "/bin/zsh", "-il", ZWS_HOST="box-1.example")
-        self.assertEqual(shlex.split(self.calls("ssh")[-1][-1])[-2:], ["zsh", "-il"])
+        remote = self.calls("ssh")[-1][-1]
+        self.assertEqual(shlex.split(remote)[-2:], ["zsh", "-il"])
+        # Shell integration gives the tab its title and folder, as in bin/zshell's panes.
+        self.assertIn("export ZDOTDIR=$d", remote)
+        self.assertIn("KITTY_SHELL_INTEGRATION=enabled", remote)
+        self.run_script("zrun", "", "/opt/homebrew/bin/hunk", ZWS_HOST="box-1.example")
+        self.assertNotIn("ZDOTDIR", self.calls("ssh")[-1][-1])
         before = self.calls("ssh")
         for host in ("a@box", "a/b", "a b", "-box"):
             with self.subTest(host=host):
@@ -844,6 +857,15 @@ elif args[:1] == ["attach"]:
         self.assertEqual(shlex.split(lines[1]), ["launch", "--var", "ws_name=Shown", "--var", "host=box",
                                                  "--var", "host_dir=/srv/app"])
         self.assertEqual(self.calls("zmx"), [])
+        self.assertEqual(self.calls("ssh"), [])
+
+    def test_new_host_names_the_box_home_home_without_ssh(self):
+        for folder, expected in (("/home/anshulj", "home"), ("/root", "home-2"),
+                                 ("/home/anshulj/code", "code"), ("/srv/anshulj", "anshulj")):
+            with self.subTest(folder=folder):
+                result = self.run_script("zws", "new", folder, ZWS_HOST="box")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(Path(self.calls("kitten")[-1][-1]).name, expected + ".kitty-session")
         self.assertEqual(self.calls("ssh"), [])
 
     def test_new_host_rejects_invalid_instance_host(self):
