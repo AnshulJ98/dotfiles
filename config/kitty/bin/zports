@@ -78,11 +78,14 @@ def detect(host, ssh_port):
         for item in json.loads(result.stdout):
             remote = str(port(str(item["port"])))
             address = ipaddress.ip_address(item["address"])
+            if isinstance(address, ipaddress.IPv6Address):
+                address = address.ipv4_mapped or address
             if int(remote) < 1024 or int(remote) == ssh_port:
                 continue
             if not (address.is_loopback or address.is_unspecified):
                 continue
-            target = "[::1]" if address == ipaddress.ip_address("::1") else "127.0.0.1"
+            target = ("127.0.0.1" if address.is_unspecified else
+                      f"[{address}]" if address.version == 6 else str(address))
             previous = found.get(remote)
             if previous is None or target == "127.0.0.1":
                 name = item.get("program") or (previous and previous["program"])
@@ -144,6 +147,15 @@ def free(local):
             # TIME_WAIT connections are not listeners and must not reserve a mapping.
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(("127.0.0.1", local))
+        # macOS permits the reusable bind above alongside a wildcard listener.
+        for family, address in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+            try:
+                with socket.socket(family) as probe:
+                    probe.settimeout(0.2)
+                    if probe.connect_ex((address, local)) == 0:
+                        return False
+            except OSError:
+                continue  # IPv6 may be disabled.
         return True
     except OSError:
         return False
@@ -225,14 +237,6 @@ def engine(directory, host, owner):
     def sync(poll=False):
         nonlocal master, next_sync, next_scan, ssh_port
         found = None
-        if poll and time.monotonic() >= next_scan:
-            if ssh_port is None:
-                ssh_port = configured_port(host)
-            found = detect(host, ssh_port) if ssh_port is not None else None
-            if found is not None:
-                targets.update({remote: item["target"] for remote, item in found.items()})
-                reconcile(found)
-            next_scan = time.monotonic() + 2
         code, message = ssh(host, "check")
         match = re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
         pid = match.group(1) if match else None
@@ -240,6 +244,14 @@ def engine(directory, host, owner):
             master = pid
             for item in state["forwards"].values():
                 item["active"] = False
+        if poll and time.monotonic() >= next_scan:
+            if master and ssh_port is None:
+                ssh_port = configured_port(host)
+            found = detect(host, ssh_port) if master and ssh_port is not None else None
+            if found is not None:
+                targets.update({remote: item["target"] for remote, item in found.items()})
+                reconcile(found)
+            next_scan = time.monotonic() + 2
         if master:
             for remote, item in state["forwards"].items():
                 if item["active"]:
@@ -316,7 +328,8 @@ def engine(directory, host, owner):
                     try:
                         with connection.makefile("r") as stream:
                             reply = request(json.loads(stream.readline(4096)))
-                    except (ValueError, OSError, RuntimeError, KeyError, argparse.ArgumentTypeError) as error:
+                    except (ValueError, TypeError, OSError, RuntimeError, KeyError,
+                            argparse.ArgumentTypeError) as error:
                         reply = dict(error=str(error))
                     try:
                         connection.sendall((json.dumps(reply) + "\n").encode())
@@ -353,10 +366,15 @@ def main():
             parser.error("owner must be a positive pid")
         directory.mkdir(parents=True, exist_ok=True)
         with (directory / ".ports.lock").open("a") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return
+            deadline = time.monotonic() + 3
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        return
+                    time.sleep(0.05)
             engine(directory, host, args.owner)
     else:
         with socket.socket(socket.AF_UNIX) as client:

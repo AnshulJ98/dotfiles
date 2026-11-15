@@ -1,3 +1,4 @@
+import fcntl
 import json
 import os
 import runpy
@@ -186,8 +187,11 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.processes.append(owner)
         process = self.start(owner.pid)
+        started = time.monotonic()
         self.assertEqual(self.cli("run", str(owner.pid)).returncode, 0)
+        self.assertGreaterEqual(time.monotonic() - started, 3)
         self.assertIsNone(process.poll())
+        self.assertEqual(self.listeners, {})
         with socket.socket() as taken:
             taken.bind(("127.0.0.1", 0))
             remote = taken.getsockname()[1]
@@ -218,6 +222,73 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         with socket.socket() as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(("127.0.0.1", local))
+
+    def test_wildcard_listeners_reserve_local_ports(self):
+        free = runpy.run_path(str(SCRIPT))["free"]
+        for family, address in ((socket.AF_INET, "0.0.0.0"), (socket.AF_INET6, "::")):
+            with self.subTest(address=address):
+                taken = socket.socket(family)
+                try:
+                    taken.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    if family == socket.AF_INET6:
+                        taken.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                    taken.bind((address, 0))
+                except OSError:
+                    taken.close()
+                    if family == socket.AF_INET:
+                        raise
+                    continue  # IPv6 may be disabled.
+                with taken:
+                    taken.listen()
+                    remote = taken.getsockname()[1]
+                    self.assertFalse(free(remote))
+                    process = self.start()
+                    item = self.command("forward", str(remote))["forwards"][str(remote)]
+                    self.assertEqual(item["local"], remote + 1)
+                    process.terminate()
+                    process.wait(timeout=5)
+
+    def test_engine_waits_for_previous_lock_then_serves_requests(self):
+        with (self.root / ".ports.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            process = subprocess.Popen([str(SCRIPT), "run", str(os.getpid())],
+                                       env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.processes.append(process)
+            time.sleep(1)
+            self.assertIsNone(process.poll())
+            self.assertFalse((self.root / ".ports.sock").exists())
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            self.wait(lambda: (self.root / ".ports.sock").exists())
+            self.assertEqual(self.command("list")["forwards"], {})
+
+    def test_invalid_requests_do_not_kill_engine_or_cancel_forwards(self):
+        process = self.start()
+        self.command("forward", "8000")
+        for data in ([], {"command": "forward", "port": "x"},
+                     {"command": "forward", "port": 8000, "target": 5},
+                     {"command": "forward", "port": []}, None):
+            with self.subTest(data=data), socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(3)
+                client.connect(str(self.root / ".ports.sock"))
+                client.sendall((json.dumps(data) + "\n").encode())
+                with client.makefile("r") as stream:
+                    self.assertIn("error", json.loads(stream.readline()))
+            self.assertIsNone(process.poll())
+            self.assertTrue(self.command("list")["forwards"]["8000"]["active"])
+            self.assertIn(8000, self.listeners)
+        self.assertTrue(self.command("forward", "8001")["forwards"]["8001"]["active"])
+        self.assertFalse(any("cancel" in call for call in self.calls))
+
+    def test_mapped_and_other_loopback_addresses_use_the_right_target(self):
+        self.scan((8160, "::ffff:127.0.0.1", None), (8161, "::ffff:0.0.0.0", None),
+                  (8162, "127.0.0.2", None), (8163, "::ffff:192.168.1.2", None))
+        self.start()
+        self.wait(lambda: self.detected(8160, 8161, 8162))
+        forwards = self.command("list")["forwards"]
+        self.assertEqual(set(forwards), {"8160", "8161", "8162"})
+        for remote, target in (("8160", "127.0.0.1"), ("8161", "127.0.0.1"),
+                               ("8162", "127.0.0.2")):
+            self.assertEqual(forwards[remote]["target"], target)
 
     def test_stop_retries_a_busy_probe_and_forward_readds(self):
         self.start()
@@ -433,7 +504,9 @@ with (Path(os.environ["HOME"]) / "notifications").open("a") as log:
         self.scan((8450, "127.0.0.1", "server"))
         self.pid = None
         self.start()
-        self.wait(lambda: "8450" in self.record()["forwards"])
+        self.wait(lambda: len([call for call in self.calls if "check" in call]) >= 2)
+        self.assertFalse((self.root / "scans").exists())
+        self.assertNotIn("8450", self.record()["forwards"])
         self.assertFalse(self.detected(8450))
         self.assertEqual(self.notifications(), [])
         self.pid = 456
