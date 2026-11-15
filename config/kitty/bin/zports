@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import ipaddress
 import os
 import re
 import signal
@@ -12,6 +13,111 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+# Sent on stdin over the existing SSH master; no files are installed on the box.
+SCAN = r"""
+import json
+import os
+import socket
+from pathlib import Path
+
+def listeners(proc="/proc"):
+    proc = Path(proc)
+    sockets = {}
+    for table, family in (("tcp", socket.AF_INET), ("tcp6", socket.AF_INET6)):
+        try:
+            rows = (proc / "net" / table).read_text().splitlines()[1:]
+        except FileNotFoundError:
+            if table == "tcp6":
+                continue
+            raise
+        for row in rows:
+            fields = row.split()
+            if fields[3] != "0A":
+                continue
+            address, port = fields[1].split(":")
+            raw = bytes.fromhex(address)
+            raw = b"".join(raw[i:i+4][::-1] for i in range(0, len(raw), 4))
+            address = socket.inet_ntop(family, raw)
+            sockets[fields[9]] = dict(port=int(port, 16), address=address, program=None)
+    for process in proc.iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            inodes = []
+            for fd in (process / "fd").iterdir():
+                try:
+                    link = os.readlink(fd)
+                    if link.startswith("socket:["):
+                        inodes.append(link[8:-1])
+                except OSError:
+                    continue  # Processes and fds can disappear during the walk.
+            name = (process / "comm").read_text().strip()
+            for inode in inodes:
+                if inode in sockets:
+                    sockets[inode]["program"] = name
+        except OSError:
+            continue  # An invisible owner does not hide its listener.
+    return list(sockets.values())
+
+if __name__ == "__main__":
+    print(json.dumps(listeners()))
+"""
+
+
+def detect(host, ssh_port):
+    try:
+        result = subprocess.run(
+            ["ssh", "-q", "-o", "ControlPath=/tmp/zcm-%C", "-o", "ControlMaster=no",
+             "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", host, "python3 - --ports-scan"],
+            input=SCAN, capture_output=True, text=True, timeout=2)
+        if result.returncode:
+            return None
+        found = {}
+        for item in json.loads(result.stdout):
+            remote = str(port(str(item["port"])))
+            address = ipaddress.ip_address(item["address"])
+            if int(remote) < 1024 or int(remote) == ssh_port:
+                continue
+            if not (address.is_loopback or address.is_unspecified):
+                continue
+            target = "[::1]" if address == ipaddress.ip_address("::1") else "127.0.0.1"
+            previous = found.get(remote)
+            if previous is None or target == "127.0.0.1":
+                name = item.get("program") or (previous and previous["program"])
+                found[remote] = dict(target=target, program=name)
+            elif not previous["program"]:
+                previous["program"] = item.get("program")
+        return found
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError,
+            argparse.ArgumentTypeError):
+        return None  # A partial/failed scan must never look like an empty box.
+
+
+def configured_port(host):
+    try:
+        result = subprocess.run(["ssh", "-G", host], capture_output=True, text=True, timeout=2)
+        if result.returncode == 0:
+            match = re.search(r"^port ([0-9]+)$", result.stdout, re.MULTILINE)
+            if match:
+                return port(match.group(1))
+    except (OSError, subprocess.TimeoutExpired, argparse.ArgumentTypeError):
+        pass
+    return None
+
+
+def notify(host, added):
+    script = ('on run argv\n'
+              'display notification (item 2 of argv) with title (item 1 of argv)\nend run')
+    message = ", ".join(f"{remote}→{item['local']}" for remote, item in added)
+    try:
+        result = subprocess.run(["osascript", "-e", script, host, message],
+                                capture_output=True, text=True, timeout=2)
+        if result.returncode:
+            print(f"zports: notification failed: {result.stderr.strip()}", file=sys.stderr)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"zports: notification failed: {error}", file=sys.stderr)
 
 
 def port(value):
@@ -57,7 +163,14 @@ def engine(directory, host, owner):
     record = directory / "ports.json"  # sidebar contract: forwards keyed by box port, plus stopped ports
     address = directory / ".ports.sock"
     state = json.loads(record.read_text()) if record.exists() else dict(forwards={}, stopped=[])
-    master, next_sync, running = None, 0, True
+    for item in state["forwards"].values():
+        item.setdefault("automatic", False)
+        item.setdefault("program", None)
+    state.setdefault("waiting", [])
+    master, next_sync, next_scan, running = None, 0, 0, True
+    ssh_port = None
+    targets = {}  # Last successfully scanned target for each observed port, even when stopped.
+    pending = set()  # Only genuinely new forwards in this engine lifetime may announce.
 
     def end(signum, frame):
         nonlocal running
@@ -84,11 +197,45 @@ def engine(directory, host, owner):
                     time.sleep(0.05)
             raise RuntimeError("cancel failed: " + (message.strip() or "local port is still busy"))
 
-    def sync():
-        nonlocal master, next_sync
+    def reconcile(found):
+        for remote, item in list(state["forwards"].items()):
+            if item["automatic"] and (remote not in found or item["target"] != found[remote]["target"]):
+                try:
+                    cancel(remote, item)
+                except RuntimeError as error:
+                    print(f"zports: {error}", file=sys.stderr)
+                    continue
+                del state["forwards"][remote]
+                pending.discard(remote)
+        count = sum(item["automatic"] for item in state["forwards"].values())
+        state["waiting"] = []
+        for remote in sorted(found, key=int):
+            item = state["forwards"].get(remote)
+            if item:
+                item["program"] = found[remote]["program"]
+            elif int(remote) not in state["stopped"]:
+                if count >= 20:
+                    state["waiting"].append(int(remote))
+                    continue
+                state["forwards"][remote] = dict(
+                    local=None, active=False, automatic=True, **found[remote])
+                pending.add(remote)
+                count += 1
+
+    def sync(poll=False):
+        nonlocal master, next_sync, next_scan, ssh_port
+        found = None
+        if poll and time.monotonic() >= next_scan:
+            if ssh_port is None:
+                ssh_port = configured_port(host)
+            found = detect(host, ssh_port) if ssh_port is not None else None
+            if found is not None:
+                targets.update({remote: item["target"] for remote, item in found.items()})
+                reconcile(found)
+            next_scan = time.monotonic() + 2
         code, message = ssh(host, "check")
-        found = re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
-        pid = found.group(1) if found else None
+        match = re.search(r"Master running \(pid=(\d+)\)", message) if code == 0 else None
+        pid = match.group(1) if match else None
         if pid != master:
             master = pid
             for item in state["forwards"].values():
@@ -110,13 +257,20 @@ def engine(directory, host, owner):
                             break  # connection failure, not a local collision; retry next poll
                     local += 1
         save()
+        announced = [(remote, state["forwards"][remote]) for remote in sorted(pending, key=int)
+                     if state["forwards"][remote]["active"]] if found is not None else []
+        if announced:
+            notify(host, announced)
+            pending.difference_update(remote for remote, _ in announced)
         next_sync = time.monotonic() + 2
 
     def request(data):
         command = data["command"]
         if command != "list":
             remote = str(port(str(data["port"])))
-            destination = data.get("target", "127.0.0.1")
+            destination = data.get("target")
+            if destination is None:
+                destination = targets.get(remote, "127.0.0.1")
             if command not in ("forward", "stop"):
                 raise ValueError("unknown command")
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*|\[[0-9a-fA-F:.]+\]", destination):
@@ -128,8 +282,11 @@ def engine(directory, host, owner):
             if command == "stop":
                 state["stopped"] = sorted(set(state["stopped"]) | {int(remote)})
             else:
-                state["forwards"].setdefault(remote, dict(local=None, target=destination, active=False))
+                item = state["forwards"].setdefault(
+                    remote, dict(local=None, target=destination, active=False, program=None))
+                item["automatic"] = False
                 state["stopped"] = [p for p in state["stopped"] if p != int(remote)]
+            pending.discard(remote)
             save()
         sync()
         return state
@@ -145,8 +302,8 @@ def engine(directory, host, owner):
                 item["active"] = False
             progress = 0
             while running and alive(owner):
-                if time.monotonic() >= next_sync:
-                    sync()
+                if time.monotonic() >= min(next_sync, next_scan):
+                    sync(poll=True)
                 if time.monotonic() >= progress:
                     print(f"zports: watching {host} for kitty {owner}", flush=True)
                     progress = time.monotonic() + 30
@@ -183,7 +340,7 @@ def main():
     commands.add_parser("run").add_argument("owner", type=int)
     forward = commands.add_parser("forward")
     forward.add_argument("port", type=port)
-    forward.add_argument("target", nargs="?", default="127.0.0.1")
+    forward.add_argument("target", nargs="?")
     commands.add_parser("stop").add_argument("port", type=port)
     commands.add_parser("list")
     args = parser.parse_args()
