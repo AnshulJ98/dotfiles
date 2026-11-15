@@ -4,10 +4,9 @@ import os
 import shlex
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
-
-import tomllib
 
 ROOT = Path(__file__).resolve().parents[3]
 

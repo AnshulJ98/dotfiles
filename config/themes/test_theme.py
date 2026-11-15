@@ -8,10 +8,9 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
-
-import tomllib
 
 ROOT = Path(__file__).resolve().parent
 NAMES = (
