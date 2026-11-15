@@ -3,7 +3,6 @@
   "scm.addAICoAuthor": "off",
   "git.addAICoAuthor": "off",
   "workbench.iconTheme": "material-icon-theme",
-  "workbench.productIconTheme": "material-product-icons",
   "editor.fontFamily": "Iosevka Nerd Font",
   "editor.codeLensFontFamily": "Iosevka Nerd Font",
   "editor.inlayHints.fontFamily": "Iosevka Nerd Font",
@@ -215,7 +214,6 @@
   "vscode_vibrancy.backgroundOverride": "#161f27",
   "vscode_vibrancy.enableAutoTheme": true,
   "vscode_vibrancy.theme": "Default Dark",
-  "workbench.preferredDarkColorTheme": "Bearded Theme HC Midnight Void",
   "editor.wordWrap": "on",
   "custom-ui-style.electron": {
     "frame": false,
@@ -240,12 +238,15 @@
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-folder-post-response.instructions.md": true,
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-folder-pre-request.instructions.md": true,
     "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-http-request-post-response.instructions.md": true,
-    "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-http-request-pre-request.instructions.md": true
+    "/var/folders/vj/vd1_qxf96633zxvwp1rmv07r0000gn/T/postman-http-request-pre-request.instructions.md": true,
   },
   "chat.editor.fontSize": 17,
   "editor.minimap.sectionHeaderFontSize": 12,
   "chat.fontSize": 16,
   "vscode-neovim.revealCursorScrollLine": true,
   "vscode-neovim.neovimInitVimPaths.darwin": "~/Dev/dotfiles/config/nvim/init.lua",
-  "workbench.activityBar.location": "hidden",
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "terminal.integrated.gpuAcceleration": "off",
+  "window.autoDetectColorScheme": true,
+  "window.controlsStyle": "custom",
 }
