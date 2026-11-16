@@ -15,6 +15,7 @@ for _, has_go in ipairs { false, true } do
   dofile 'config/nvim/lua/config/lsp.lua'
   assert(vim.tbl_contains(captured, 'delve') == has_go, 'Delve must be installed only when Go exists')
   assert(vim.tbl_contains(captured, 'js-debug-adapter'), 'Other debug adapters must remain installed')
+  assert(vim.tbl_contains(captured, 'debugpy'), 'The Python debug adapter must be installed')
 end
 vim.fn.executable = executable
 print 'PASS: Delve tool installation with and without Go'

@@ -1,5 +1,5 @@
--- Debugging for Node.js/TypeScript (config/dap/js.lua) and Go
--- (config/dap/go.lua): the session controls and the wiring between nvim-dap
+-- Debugging for Node.js/TypeScript (config/dap/js.lua), Go (config/dap/go.lua)
+-- and Python (config/dap/python.lua): the session controls and the wiring between nvim-dap
 -- and the integrated terminal. Required on the first debug key by
 -- config/dap/init.lua, which owns the plugin list.
 
@@ -168,6 +168,76 @@ vim.fn.sign_define('DapLogPoint', { text = '◉', texthl = 'DiagnosticInfo', num
 vim.fn.sign_define('DapStopped', { text = '▶', texthl = 'DiagnosticOk', linehl = 'DapStoppedLine', numhl = 'DiagnosticOk' })
 vim.fn.sign_define('DapBreakpointRejected', { text = '✖', texthl = 'DiagnosticError', numhl = 'DiagnosticError' })
 
-require 'config.dap.widgets'
+local widgets = require 'config.dap.widgets'
 require 'config.dap.go'
 require 'config.dap.js'
+require 'config.dap.python'
+
+-- Per adapter type: the exception filters for each level of the <leader>dE
+-- cycle, and how <leader>dy serialises a value. js-debug's filters are `all`
+-- (caught) and `uncaught`; debugpy's are `raised` and `uncaught`. Both start
+-- at none, as in VS Code's js-debug panel; debugpy alone would break on
+-- uncaught exceptions. debugpy answers `evaluate` with the value's repr, so a
+-- str comes back quoted with \n escapes; the Python expression wraps the JSON
+-- in an object whose repr is the JSON itself. The `clipboard` context skips
+-- the length cap debugpy puts on repl values.
+local languages = {
+  ['pwa-node'] = {
+    filters = { {}, { 'uncaught' }, { 'all' } },
+    json = function(expr) return 'JSON.stringify(' .. expr .. ', null, 2)', 'repl' end,
+  },
+  python = {
+    filters = { {}, { 'uncaught' }, { 'raised', 'uncaught' } },
+    json = function(expr)
+      local dumps = "__import__('json').dumps(" .. expr .. ', indent=2, default=str)'
+      return "type('JSON', (), {'__repr__': lambda self, text=" .. dumps .. ': text})()', 'clipboard'
+    end,
+  },
+}
+local exception_labels = { 'none', 'uncaught', 'caught and uncaught' }
+for type, language in pairs(languages) do
+  dap.defaults[type].exception_breakpoints = language.filters[1]
+end
+
+-- Cycles none -> uncaught -> caught and uncaught for the running sessions
+-- (attached children included) and every later one, in every language.
+local exception_index = 1
+vim.keymap.set('n', '<leader>dE', function()
+  exception_index = exception_index % #exception_labels + 1
+  for type, language in pairs(languages) do
+    dap.defaults[type].exception_breakpoints = language.filters[exception_index]
+  end
+  local function apply(sessions)
+    for _, session in pairs(sessions) do
+      local language = languages[session.config.type]
+      if language then session:set_exception_breakpoints(language.filters[exception_index]) end
+      apply(session.children)
+    end
+  end
+  apply(dap.sessions())
+  vim.notify('Break on exceptions: ' .. exception_labels[exception_index], vim.log.levels.INFO)
+end, { desc = 'Debug: Cycle [E]xception breakpoints' })
+
+vim.keymap.set('n', '<leader>dy', function()
+  local session = dap.session()
+  if not session then return end
+  local language = languages[session.config.type]
+  if not language then
+    vim.notify('No JSON yank for ' .. session.config.type, vim.log.levels.WARN)
+    return
+  end
+  local expr = widgets.expr_under_cursor()
+  local expression, context = language.json(expr)
+  session:request('evaluate', {
+    expression = expression,
+    context = context,
+    frameId = (session.current_frame or {}).id,
+  }, function(err, resp)
+    if err then
+      vim.notify(tostring(err), vim.log.levels.ERROR)
+      return
+    end
+    vim.fn.setreg('+', resp.result)
+    vim.notify('Yanked ' .. expr .. ' to clipboard', vim.log.levels.INFO)
+  end)
+end, { desc = 'Debug: [Y]ank variable as JSON' })
