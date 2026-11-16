@@ -228,6 +228,7 @@ else
   link "$DOT/config/pi/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 fi
 link "$DOT/config/pi/settings.json" "$HOME/.pi/agent/settings.json"
+link "$DOT/config/pi/keybindings.json" "$HOME/.pi/agent/keybindings.json"
 link "$DOT/config/pi/web-search.json" "$HOME/.pi/agent/web-search.json" # pi-web-access: deferred tools, result cap
 mkdir -p "$HOME/.pi/agent/pi-blackhole"                                 # pi-blackhole keeps its state beside the config
 link "$DOT/config/pi/pi-blackhole-config.json" "$HOME/.pi/agent/pi-blackhole/pi-blackhole-config.json"
