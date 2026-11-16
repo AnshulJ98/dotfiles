@@ -38,3 +38,15 @@ assert(vim.fn.filereadable(log) == 1, 'no log at ' .. log)
 local text = table.concat(vim.fn.readfile(log), '\n')
 assert(text:find('empty_render_buffer', 1, true), 'the log has no traceback to the culprit:\n' .. text)
 print 'PASS: an emptied reading view is rebuilt and the culprit is logged'
+
+-- Emptying the source empties the page through md-render's own live rebuild;
+-- that must not be logged.
+local logged = #vim.fn.readfile(log)
+local source = vim.fn.bufnr(path)
+vim.api.nvim_buf_set_lines(source, 0, -1, false, {})
+vim.api.nvim_exec_autocmds('TextChanged', { buffer = source })
+vim.wait(1000, function() return vim.api.nvim_buf_line_count(render) <= 1 end)
+assert(vim.api.nvim_buf_line_count(render) <= 1, 'the live rebuild did not run')
+vim.wait(100)
+assert(#vim.fn.readfile(log) == logged, 'an empty source was logged as a blanked view')
+print 'PASS: an empty source is not reported'
