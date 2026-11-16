@@ -163,8 +163,8 @@ vim.api.nvim_create_autocmd('FileType', {
 -- own copy of the page intact). md-render only checks that the source is
 -- unchanged and the buffer still exists, so the next toggle showed the empty
 -- buffer. Until the culprit is known, log a traceback whenever a change
--- leaves a render buffer with one line; md-render's own rebuilds write the
--- full page and never trip it.
+-- leaves a render buffer with one empty line while its source has text;
+-- md-render's own rebuilds write the full page and never trip it.
 local blank_log = vim.fs.joinpath(vim.fn.stdpath 'state', 'md-render-blank.log')
 local function watch_for_blanking(buf)
   if vim.b[buf].md_reading_watched then return end
@@ -172,6 +172,11 @@ local function watch_for_blanking(buf)
   vim.api.nvim_buf_attach(buf, false, {
     on_lines = function(_, _, _, first, last_old, last_new)
       if first ~= 0 or last_old <= 1 or vim.api.nvim_buf_line_count(buf) > 1 then return end
+      if vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] ~= '' then return end
+      -- An empty source renders to an empty page; that is not the bug.
+      local ok, preview = pcall(require, 'md-render.preview')
+      local session = ok and preview._sessions and preview._sessions[buf]
+      if session and not table.concat(session.source_lines or {}):find '%S' then return end
       local trace = debug.traceback('', 2)
       -- Ex commands and writefile are not allowed while the change is applied.
       vim.schedule(function()
