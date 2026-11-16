@@ -2,7 +2,6 @@
 -- nvim-dap is added in config/dap/init.lua.
 
 local dap = require 'dap'
-local widgets = require 'config.dap.widgets'
 
 -- Resolved per session, not at startup: `get_package` raises when mason has
 -- never fetched its registry, which on a new machine aborted the rest of
@@ -78,47 +77,6 @@ dap.defaults['pwa-node'].external_terminal = {
 
 vim.keymap.set('n', '<leader>ds', function() dap.run(debug_shell) end, { desc = 'Debug: debug [S]hell (split)' })
 vim.keymap.set('n', '<leader>dS', function() dap.run(debug_shell_kitty) end, { desc = 'Debug: debug [S]hell (kitty window)' })
-
--- js-debug's exception filters are `all` (caught) and `uncaught`; both are off
--- by default, as in VS Code's Breakpoints panel. Cycles none -> uncaught -> all
--- for the running sessions (the attached child included) and every later one.
-local exception_filters = {
-  { filters = {}, label = 'none' },
-  { filters = { 'uncaught' }, label = 'uncaught' },
-  { filters = { 'all' }, label = 'caught and uncaught' },
-}
-local exception_index = 1
-vim.keymap.set('n', '<leader>dE', function()
-  exception_index = exception_index % #exception_filters + 1
-  local choice = exception_filters[exception_index]
-  dap.defaults['pwa-node'].exception_breakpoints = choice.filters
-  local function apply(sessions)
-    for _, session in pairs(sessions) do
-      session:set_exception_breakpoints(choice.filters)
-      apply(session.children)
-    end
-  end
-  apply(dap.sessions())
-  vim.notify('Break on exceptions: ' .. choice.label, vim.log.levels.INFO)
-end, { desc = 'Debug: Cycle [E]xception breakpoints' })
-
-vim.keymap.set('n', '<leader>dy', function()
-  local session = require('dap').session()
-  if not session then return end
-  local expr = widgets.expr_under_cursor()
-  session:request('evaluate', {
-    expression = 'JSON.stringify(' .. expr .. ', null, 2)',
-    context = 'repl',
-    frameId = (session.current_frame or {}).id,
-  }, function(err, resp)
-    if err then
-      vim.notify(tostring(err), vim.log.levels.ERROR)
-      return
-    end
-    vim.fn.setreg('+', resp.result)
-    vim.notify('Yanked ' .. expr .. ' to clipboard', vim.log.levels.INFO)
-  end)
-end, { desc = 'Debug: [Y]ank variable as JSON' })
 
 for _, lang in ipairs { 'typescript', 'javascript', 'typescriptreact', 'javascriptreact' } do
   dap.configurations[lang] = {

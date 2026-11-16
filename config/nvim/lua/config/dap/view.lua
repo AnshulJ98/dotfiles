@@ -4,8 +4,9 @@ require('dap-view').setup {
   windows = {
     position = 'right',
     size = 60,
-    -- nvim-dap owns the pwa-node terminal (see terminal_win_cmd below).
-    terminal = { hide = { 'pwa-node' } },
+    -- nvim-dap owns the pwa-node and python terminals (see terminal_win_cmd
+    -- below).
+    terminal = { hide = { 'pwa-node', 'python' } },
   },
   switchbuf = function(bufnr)
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

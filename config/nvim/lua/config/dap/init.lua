@@ -37,6 +37,7 @@ local function load()
   vim.pack.add {
     'https://github.com/mfussenegger/nvim-dap',
     'https://github.com/leoluz/nvim-dap-go',
+    'https://github.com/mfussenegger/nvim-dap-python',
     'https://github.com/theHamsta/nvim-dap-virtual-text',
     'https://github.com/igorlfs/nvim-dap-view',
   }
