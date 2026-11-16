@@ -43,6 +43,10 @@ vim.keymap.set('n', ']Q', '<cmd>clast<CR>', { desc = 'Last quickfix' })
 
 vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 
+-- Shift+PageUp/PageDown scroll half a page, the same as pi's transcript.
+vim.keymap.set({ 'n', 'x' }, '<S-PageUp>', '<C-u>', { desc = 'Half page up' })
+vim.keymap.set({ 'n', 'x' }, '<S-PageDown>', '<C-d>', { desc = 'Half page down' })
+
 -- Terminals live in config/terminal.lua: a plain shell and nvim-dap's
 -- integrated terminal, both in a split below the code, both toggled from any
 -- mode so neither costs a mode change first.
