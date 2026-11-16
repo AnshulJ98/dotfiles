@@ -64,6 +64,14 @@ for key, dir in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
   vim.keymap.set('n', '<leader>ws' .. key, splits['swap_buf_' .. dir], { desc = 'Swap buffer ' .. dir })
 end
 vim.keymap.set('n', '<leader>w=', '<C-w>=', { desc = 'Equalize windows' })
+-- Split and close under <leader>w as well; the <C-w> forms still work.
+vim.keymap.set('n', '<leader>wv', '<C-w>v', { desc = 'Split right' })
+vim.keymap.set('n', '<leader>w-', '<C-w>s', { desc = 'Split below' })
+vim.keymap.set('n', '<leader>wq', '<C-w>q', { desc = 'Close window' })
+vim.keymap.set('n', '<leader>wo', '<C-w>o', { desc = 'Close [O]ther windows' })
+-- Zoom opens the buffer in a full-screen float and closes it on the second
+-- press, so the splits underneath keep their sizes.
+vim.keymap.set('n', '<leader>wz', function() require('mini.misc').zoom() end, { desc = '[Z]oom window (toggle)' })
 vim.keymap.set('n', '<leader>wr', function() require('which-key').show { keys = '<leader>w', loop = true } end, { desc = '[R]esize mode' })
 vim.keymap.set('n', '<leader>?', '<Cmd>WhichKey<CR>', { desc = '[?] All keymaps' })
 
