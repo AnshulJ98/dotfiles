@@ -158,6 +158,38 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
+-- Something outside md-render sometimes deletes every line of a hidden render
+-- buffer (seen 11-15: one empty line, all of md-render's marks on row 0, its
+-- own copy of the page intact). md-render only checks that the source is
+-- unchanged and the buffer still exists, so the next toggle showed the empty
+-- buffer. Until the culprit is known, log a traceback whenever a change
+-- leaves a render buffer with one line; md-render's own rebuilds write the
+-- full page and never trip it.
+local blank_log = vim.fs.joinpath(vim.fn.stdpath 'state', 'md-render-blank.log')
+local function watch_for_blanking(buf)
+  if vim.b[buf].md_reading_watched then return end
+  vim.b[buf].md_reading_watched = true
+  vim.api.nvim_buf_attach(buf, false, {
+    on_lines = function(_, _, _, first, last_old, last_new)
+      if first ~= 0 or last_old <= 1 or vim.api.nvim_buf_line_count(buf) > 1 then return end
+      local trace = debug.traceback('', 2)
+      -- Ex commands and writefile are not allowed while the change is applied.
+      vim.schedule(function()
+        local report = {
+          ('%s buf %d (%s) lost %d lines (new %d)'):format(os.date '%F %T', buf, vim.api.nvim_buf_get_name(buf), last_old, last_new),
+          'last : command: ' .. vim.fn.histget(':', -1),
+          'mode: ' .. vim.api.nvim_get_mode().mode .. ', current buffer: ' .. vim.api.nvim_buf_get_name(0),
+          trace,
+          '',
+        }
+        vim.fn.mkdir(vim.fs.dirname(blank_log), 'p')
+        vim.fn.writefile(vim.split(table.concat(report, '\n'), '\n'), blank_log, 'a')
+        vim.notify('md-render: reading view was emptied; traceback in ' .. blank_log, vim.log.levels.WARN)
+      end)
+    end,
+  })
+end
+
 -- The rendered buffer gets no FileType event; b:md_render marks it.
 vim.api.nvim_create_autocmd('BufWinEnter', {
   desc = 'Style the reading view',
@@ -193,6 +225,14 @@ vim.api.nvim_create_autocmd('BufWinEnter', {
       -- appear and heading bands land on the wrong rows.
       session:refresh_images()
     end
+    -- The rebuild behind the blank-buffer workaround above: md-render keeps
+    -- the page it last wrote in session.content, so a buffer that no longer
+    -- holds it is rewritten before it is shown.
+    if session and session.content and vim.api.nvim_buf_line_count(ev.buf) ~= #session.content.lines then
+      session:rebuild()
+      session:refresh_images()
+    end
+    watch_for_blanking(ev.buf)
   end,
 })
 
