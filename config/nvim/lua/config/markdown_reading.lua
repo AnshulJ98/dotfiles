@@ -1,7 +1,7 @@
 -- Reading view for markdown, on md-render.nvim. <leader>mr swaps the window
 -- between source and a read-only rendering with plain-size headings;
--- <leader>mo opens it in a kitty overlay instead, with scaled headings
--- (kitty's text-sizing protocol).
+-- <leader>ms does the same with scaled headings (kitty's text-sizing protocol);
+-- <leader>mo opens the scaled rendering in a kitty overlay instead.
 -- Unlike render-markdown's wrapped tables (virt_lines over conceal_lines), every
 -- screen row here is a buffer line, so j/k and <C-d> move one row at a time.
 local MARGIN = 3 -- columns each side, about VS Code's 26px preview padding
@@ -60,7 +60,23 @@ vim.api.nvim_set_decoration_provider(band_ns, {
 -- truncated wide tables. The statuscolumn supplies the left margin.
 local function fit(win) vim.g.md_render_max_width = math.max(20, vim.api.nvim_win_get_width(win) - 2 * MARGIN) end
 
-local function toggle() vim.cmd.MdRender 'toggle' end
+-- Scaling is md-render's one global switch, set before each toggle: heading
+-- rows are reserved when the rendering is built. The overlay always scales.
+local function toggle(scaled)
+  local ok, text_size = pcall(require, 'md-render.text_size')
+  if ok and not vim.env.MD_READING_OVERLAY then text_size.setup { enabled = scaled } end
+  vim.cmd.MdRender 'toggle'
+end
+
+local function scaling()
+  local ok, text_size = pcall(require, 'md-render.text_size')
+  return ok and text_size.config().enabled
+end
+
+local function map_toggles(buf)
+  vim.keymap.set('n', '<leader>mr', function() toggle(false) end, { buffer = buf, desc = '[M]arkdown [R]eading view' })
+  vim.keymap.set('n', '<leader>ms', function() toggle(true) end, { buffer = buf, desc = '[M]arkdown reading view, [S]caled headings' })
+end
 
 local function overlay(buf)
   vim.cmd 'silent update'
@@ -112,7 +128,7 @@ vim.api.nvim_create_autocmd('FileType', {
       local ok_du, display_utils = pcall(require, 'md-render.display_utils')
       if ok_du then display_utils.supports_osc8 = function() return false end end
       local ok_ts, text_size = pcall(require, 'md-render.text_size')
-      -- In place, headings stay plain: in kitty each scroll drops them to plain size until md-render repaints.
+      -- In place, headings stay plain unless <leader>ms asks: in kitty each scroll drops them to plain size until md-render repaints.
       if ok_ts and not vim.env.MD_READING_OVERLAY then text_size.setup { enabled = false } end
       -- md-render scales # to ###### at 2, 1.75, 1.5, 1.4, 1.25 and 1.17x, so #
       -- and ## read as the same size. VS Code's preview steps 2, 1.5, 1.25 and
@@ -128,7 +144,7 @@ vim.api.nvim_create_autocmd('FileType', {
       highlights()
       vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = highlights })
     end
-    vim.keymap.set('n', '<leader>mr', toggle, { buffer = ev.buf, desc = '[M]arkdown [R]eading view' })
+    map_toggles(ev.buf)
     if vim.env.KITTY_LISTEN_ON then
       vim.keymap.set('n', '<leader>mo', function() overlay(ev.buf) end, { buffer = ev.buf, desc = '[M]arkdown reading [O]verlay (kitty)' })
     elseif vim.env.SSH_CONNECTION then
@@ -150,7 +166,7 @@ vim.api.nvim_create_autocmd('BufWinEnter', {
     if not vim.b[ev.buf].md_render then return end
     -- Each scroll drops the scaled headings to plain size until md-render's
     -- 90-180 ms repaint; animated, every frame is a scroll and it flickers.
-    if vim.env.MD_READING_OVERLAY then vim.b[ev.buf].minianimate_disable = true end
+    if scaling() then vim.b[ev.buf].minianimate_disable = true end
     vim.opt_local.number = false
     vim.opt_local.relativenumber = false
     vim.opt_local.signcolumn = 'no'
@@ -159,7 +175,7 @@ vim.api.nvim_create_autocmd('BufWinEnter', {
     vim.opt_local.winhighlight = 'Bold:@markup.strong,Special:RenderMarkdownBullet,Underlined:@markup.link'
     vim.opt_local.fillchars:append { eob = ' ' }
     fit(vim.api.nvim_get_current_win())
-    vim.keymap.set('n', '<leader>mr', toggle, { buffer = ev.buf, desc = '[M]arkdown [R]eading view' })
+    map_toggles(ev.buf)
     if vim.env.MD_READING_OVERLAY then vim.keymap.set('n', 'q', '<cmd>qa!<CR>', { buffer = ev.buf, desc = 'Close the reading overlay' }) end
 
     -- Open every table expanded (cells wrap, as `za` does) rather than cut off
