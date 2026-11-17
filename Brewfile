@@ -7,6 +7,7 @@ tap "iina/mpv-iina", trusted: true
 tap "manaflow-ai/cmux", trusted: true
 tap "mongodb/brew", trusted: true
 tap "neurosnap/tap", trusted: true
+tap "nijingzhe/termpdf"
 tap "nikitabobko/tap", trusted: true
 tap "openclaw/tap", trusted: true
 tap "oven-sh/bun", trusted: true
@@ -199,6 +200,8 @@ brew "felixkratz/formulae/borders"
 brew "mongodb/brew/mongodb-community"
 # Persistent terminal sessions used by the kitty sidebar
 brew "neurosnap/tap/zmx"
+# Terminal PDF reader with Vim-style navigation and text selection
+brew "nijingzhe/termpdf/termpdf", trusted: true
 # Modern Go client + CLI for the Google Places API (New).
 brew "openclaw/tap/goplaces", link: false
 # Incredibly fast JavaScript runtime, bundler, transpiler and package manager - all in one.
