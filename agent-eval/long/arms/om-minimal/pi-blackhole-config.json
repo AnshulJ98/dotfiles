@@ -1,0 +1,38 @@
+{
+  "compaction": "auto",
+  "compactionEngine": "blackhole",
+  "midRunCompaction": "resume",
+  "showWorkerNotifications": false,
+  "statusBar": false,
+  "sessionFallback": false,
+  "debugLog": true,
+  "model": {
+    "provider": "anthropic",
+    "id": "claude-haiku-5-5",
+    "thinking": "low",
+    "cooldownHours": 1
+  },
+  "observerModel": {
+    "provider": "anthropic",
+    "id": "claude-haiku-5-5",
+    "thinking": "low",
+    "cooldownHours": 1
+  },
+  "reflectorModel": {
+    "provider": "anthropic",
+    "id": "claude-haiku-5-5",
+    "thinking": "low",
+    "cooldownHours": 1
+  },
+  "dropperModel": {
+    "provider": "anthropic",
+    "id": "claude-haiku-5-5",
+    "thinking": "low",
+    "cooldownHours": 1
+  },
+  "observerFallbackModels": [],
+  "reflectorFallbackModels": [],
+  "dropperFallbackModels": [],
+  "memory": true,
+  "tailBehavior": "minimal"
+}
