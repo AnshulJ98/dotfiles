@@ -1,0 +1,49 @@
+Answered from session memory, without opening files or running commands. Anything I couldn't place is marked **unsure**.
+
+**1. How you work**
+- **Testing:** strict red-green TDD may be the wrong model for agents. Agents may fit Ousterhout's design-first approach better.
+- **What drives development:** outcome-driven may fit agents better than spec-driven development.
+- **Subagents and session shape:** agentic loops and subagents haven't worked for you, and the read-only scout is the only delegation you accept. You prefer short sessions with small bounded slices to build, and longer sessions for planning and architecture.
+- **Unsure:** the TDD point is certainly from your first message. The other points come from my notes on that first exchange, but I can't confirm they were all in that one message.
+
+**2. The first enhancement list (44 items)**
+- **A, code philosophy:** A1 planning sessions design, slice sessions build. A2 four Design rules (pull complexity down, split flags, delete forwarders, define errors away). A3 rung 5 becomes "fewest concepts". A4 keep what is decided apart from when and how it runs. A5 sketch each interface twice in `/plan`. A6 interface comments first (No).
+- **B, testing:** B1 red-first only for bugs. B2 expected values never come from the implementation. B3 break-it check in `/review`. B4 `slice-check` script. B5 opt-in mutation testing (Maybe). B6 TDD-guard hook (No).
+- **C, outcome-driven workflow:** C1 the outcome card is the unit of work. C2 a done-when rule in `persona-core`. C3 `/plan` with planning and slice modes. C4 delete `spec-contract.md`. C5 slice-start rule for "go". C6 short `/handoff`. C7 cut `/where` to three rungs (Maybe).
+- **D, communication:** D1 cut Recommendations to two lines. D2 fix the teach-concepts contradiction. D3 remove duplicate rules in Replies. D4 read it yourself when the content is the subject. D5 fewer coined labels (Maybe).
+- **E, prompt architecture:** E1 take worker and auto protocol out of the prompt. E2 move the review checklist to `review.md` (Maybe). E3 prompt order. E4 shrink `AGENTS.md` for tokens (No).
+- **F, harness:** F1 retire auto mode. F2 retire `--rw` workers. F3 a second reviewer through scout. F4 the cap becomes a notice to `/handoff` and start fresh. F5 align the Claude Code delta. F6 drop `health-footer.ts` (Maybe). F7 Ralph loops, parallel writers and spec kits (No).
+- **G, context and memory:** G1 memory cleanup. G2 200-character bullet cap plus a `verify.sh` check. G3 idle cache rebuild cost (Maybe).
+- **H, hygiene:** H1 split `DESIGN.md` into `DESIGN.md` and `LOG.md`. H2 commit the live edits first. H3 prose checks in `verify.sh`.
+- **I, measurement:** I1 a before/after eval gate. I2 a `slice` eval role (Maybe).
+
+**3. Dropped:** G1.
+
+**4. Implemented, and what the review closed**
+- **Implemented:** A1–A5, B1–B5, C1–C6, D1–D4, E1, E3, F1, F2, F3 (as a prose step, not a flag), F4 (at 120k), F5, G2 (as a note, not a failure), H1 and H3.
+- **Not done:**
+  - H2: committing was off the table.
+  - I1: its probes read the live config, not this checkout.
+  - E2: depended on I1.
+  - F6: `health-footer.ts` isn't in this checkout.
+  - G3: needed only a report.
+  - Excluded: C7, D5 and I2.
+- **Closed by the hypercritical review:**
+  - `slice-check` crashed with `EISDIR` on a nested repo. Fixed, with a new test.
+  - The card had no `files:` field. Added.
+  - `slice-check` needed `--base` for slices with commits. Added.
+  - "go" didn't run the done-when checks first in a fresh session. It does now.
+  - The `ops.md` "spec" wording now says "plan".
+  - The `prime-reminder` text now includes the done-when rule.
+  - Two `DESIGN.md` facts were corrected.
+  - `tsc` was run with 5.9.3: 0 errors.
+- **Still open:** the `parallel` and `migrate` skills conflict with F5 and need your decision.
+
+**5. "X findings":** I don't recognise these. My lists used groups A–I, and I have no X-prefixed findings in memory. If you mean something else, tell me which list.
+
+**6. Latest check results**
+- **`build-agents.sh --check`:** `OK: AGENTS/CLAUDE files match fragments`, exit 0.
+- **`verify.sh`** (with the 5.9.3 `TSC` override): `58 passed, 6 failed`, exit 1. All 6 also failed before my changes:
+  - four links the sandbox HOME doesn't resolve: `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template` and `worktrunk/config.toml`
+  - `pdf-images`
+  - `node tests pass`, where 9 of 191 fail, all herdr and pane tests

@@ -1,0 +1,178 @@
+{
+  "01a1d8be-same": {
+    "b": {
+      "accurate": 5,
+      "stale": 0,
+      "missed": 0,
+      "invented": 0,
+      "usable": 5,
+      "why": "Covers the adoption, both commits, the r1 removal, the failed push (8), the still-open probes decision (4) and the untested compact-cap→blackhole path (10), each with a correct number."
+    },
+    "a": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 2,
+      "invented": 1,
+      "usable": 4,
+      "why": "Commits and push are right, but it drops the open snapshot-probes decision, moves the untested compact-cap path to ideas, and invents a 'session-audit --models' step."
+    },
+    "c": {
+      "accurate": 3,
+      "stale": 0,
+      "missed": 2,
+      "invented": 2,
+      "usable": 4,
+      "why": "Marks the snapshot probes resolved ('summaries judged in place of probes', comp* path) although the session never decided item 4, and moves the untested compact-cap check to ideas; push and commit rows are right."
+    }
+  },
+  "01a1dd4a-same": {
+    "b": {
+      "accurate": 3,
+      "stale": 1,
+      "missed": 2,
+      "invented": 2,
+      "usable": 4,
+      "why": "Records the merge, push and winpc pull correctly, but the higher row keeps its open ○ mark although every check is ticked; it cites a commit 80cd2ae and a 'round 1 record' that the session never shows; it drops the winpc verify.sh failures to an idea and omits the other sessions' uncommitted work."
+    },
+    "a": {
+      "accurate": 3,
+      "stale": 0,
+      "missed": 2,
+      "invented": 3,
+      "usable": 4,
+      "why": "Good re-centering on the clones and winpc rows and a clear decision on the Medium findings, but it invents 80cd2ae, 'round 1' and 'scout 775199'; it files the winpc verify failures as ideas and leaves out the other sessions' uncommitted work."
+    },
+    "c": {
+      "accurate": 3,
+      "stale": 1,
+      "missed": 2,
+      "invented": 2,
+      "usable": 4,
+      "why": "Clear review follow-ups and Δ marks, but spec #82 stays '?' after the user answered 'start'; it backs '51 node tests' with the 75/0 verify.sh result; it invents 80cd2ae and 'round 1'; it omits the winpc verify failures and the uncommitted work."
+    }
+  },
+  "01a1d8be-cross": {
+    "d": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 2,
+      "invented": 3,
+      "usable": 4,
+      "why": "Marks match the session: r2 scores, both commits, the open push and the untested compact-cap path. It omits the r1 deletion and verify.sh 75/0, and its evidence paths (final.json, compaction*, bg6 ALL-DONE) and the trial-end options have no basis in the session."
+    },
+    "plain": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 2,
+      "invented": 1,
+      "usable": 5,
+      "why": "The slice rungs are correct and concrete (072322a, 7b394d7, r1 removed, 75 passed) and the push action is exact. 'Opus + Sol' judges is invented. The isolate.sh finding is dropped, the untested compact-cap path is demoted to ideas, and the level ordering is odd."
+    }
+  },
+  "01a1dd4a-cross": {
+    "d": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 3,
+      "invented": 1,
+      "usable": 4,
+      "why": "Correctly closes spec, merge, push and winpc, drops the spike and keeps item 4. It omits the Bedrock Sol id, the unprobed terra id and the clone removal. It demotes winpc's 2 verify failures to ideas. 'review round 1 at 80cd2ae' has no basis in the session."
+    },
+    "plain": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 1,
+      "invented": 1,
+      "usable": 5,
+      "why": "Covers every open item: Medium findings, DESIGN.md wait, Bedrock id, terra probe, winpc verify 71/2, tomorrow's run, plus clones removed and pushed. It silently drops the start card's open item 4 (earlier items joining the effort). '80cd2ae' is unsupported."
+    }
+  },
+  "01a1cbd9-same": {
+    "b": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 1,
+      "invented": 3,
+      "usable": 5,
+      "why": "Rung 00 PASS, the processor test (9), the 01 guesses and the 01 Recreate step match the session; invented: 01-modify-a/b, rung 02 'faded to function names', infra/compose.yaml as evidence (start card cites infra/README.md); the router-reservation idea is dropped."
+    },
+    "c": {
+      "accurate": 3,
+      "stale": 1,
+      "missed": 1,
+      "invented": 2,
+      "usable": 4,
+      "why": "00 drills, processor gap and 01 guesses are right; invented: a '--fail output' check and 01-modify-a/b; item 5 still 'waiting until 11' although slice rows already point at it for active 01 work; the new hint.py and /learn changes are not reflected."
+    },
+    "a": {
+      "accurate": 3,
+      "stale": 0,
+      "missed": 1,
+      "invented": 5,
+      "usable": 4,
+      "why": "Core state is right (00 done, processor test, 01 guesses first); invented: README progress-row evidence, rung 02 'with Jaeger' and '(b)-(d) explained out loud', 01-modify-a/b, a hint.py dotfiles idea; rung 05 moved onto the lgtm stack instead of Phoenix, and every item is renumbered."
+    }
+  },
+  "01a1c98d-same": {
+    "a": {
+      "accurate": 3,
+      "stale": 0,
+      "missed": 5,
+      "invented": 1,
+      "usable": 4,
+      "why": "The zmx/shpool trial and the next key presses are right, but it drops Rex, the font and herdr-nvim decisions, ssh attach, shpool #44, the session-file reattach and the closure of pick 1, and it invents the /tmp/holdertry path."
+    },
+    "b": {
+      "accurate": 3,
+      "stale": 0,
+      "missed": 4,
+      "invented": 2,
+      "usable": 4,
+      "why": "It keeps the open decisions and closes 1 correctly, but it promotes the start card's ? rows to ✓ without evidence, invents the path, and omits shpool #44, the session-file reattach, the workspace keys and the kitty.conf status idea."
+    },
+    "c": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 3,
+      "invented": 2,
+      "usable": 4,
+      "why": "It covers most of the untested list (keys, reattach, tab close, bugs including shpool #44, upgrades, ssh) and keeps Rex, font and herdr-nvim, but it omits the session-file reattach, the workspace look and keys, and the shpool -d note, and it invents the path and the memory.md source."
+    }
+  },
+  "01a1cbd9-cross": {
+    "d": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 0,
+      "invented": 2,
+      "usable": 4,
+      "why": "Correctly retires the WSL slice, records the winpc Tempo test (30 traces, 8 error) and rung 00 PASS with explain-back, and keeps the learn.md commit open; the Ollama-on-winpc pick, the guess contents and the 01-modify-a/b names have no basis in the session, and the numbering (3,5,6,9–13) skips around."
+    },
+    "plain": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 2,
+      "invented": 2,
+      "usable": 5,
+      "why": "Clean 1–9 numbering and the rung 01 next steps are actionable, but it drops the open learn.md commit decision and never marks the winpc lgtm infra as built and tested; the Ollama-on-winpc pick, checkout.py --fail and the 01-modify-a/b names are unsupported."
+    }
+  },
+  "01a1c98d-cross": {
+    "plain": {
+      "accurate": 4,
+      "stale": 0,
+      "missed": 3,
+      "invented": 1,
+      "usable": 4,
+      "why": "Matches the move to kitty plus persistence well and its numbered actions are clear, but it omits the shpool 0.11.6 install and test kitty, shpool #44, the session-file reattach item and cleanup; '11-11 persistence list' has no basis."
+    },
+    "d": {
+      "accurate": 4,
+      "stale": 2,
+      "missed": 1,
+      "invented": 1,
+      "usable": 4,
+      "why": "It records the shpool install, the test kitty and shpool #44, but keeps the stale 'build kitty spec' row and the worktree-wonky ask after the user said not building; the /tmp/holdertry path is invented, cleanup is missing, and the numbering is jumbled."
+    }
+  }
+}

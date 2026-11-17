@@ -1,0 +1,1 @@
+`~/.pi/agent/bin/scout` resolves to the live dotfiles copy, whose own `--review` needs a clean tree. I'll run this checkout's `bin/scout` instead.

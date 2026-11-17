@@ -1,0 +1,30 @@
+```
+target  ◇ Sol 6.1 on high delivers auto slices from a settled spec, quality held, done when:
+          ▸ higher below, closed                                        4, 9-10        Δ
+          ☐ your next real auto run: first dispatches pass, Route read  11-12          Δ
+higher  ○ the work runs from dotfiles-v2-2026-05 on the Mac and winpc, done when:  Δ
+          ▸ beyond below, closed                                        4, 9-10        Δ
+          ✓ pushed to origin                       5fab8f2 = origin/dotfiles-v2-2026-05  Δ
+          ✓ winpc pulled, tests green on the box   5fab8f2, 51/51, build --check OK      Δ
+beyond  ▸ auto mode's slice and dispatch flow is better, done when:
+          ▸ slice below, closed                                         9-10           Δ
+          ☐ done-when not agreed: which earlier items join              4
+slice   ▸ main session writes contract specs; Sol picks steps, reports route, done when:
+          ✓ base tests green before any edit       40/40, node --test auto-slice + scout-bin
+          ✓ grill spec approved                    your "auto / autoapprove / start"     Δ
+          ✓ edits on a branch, tests green, review ship   51/51, review round 1 at 80cd2ae  Δ
+          ✓ merged into dotfiles-v2-2026-05        5fab8f2                               Δ
+          ▸ this below, closed                                          9-10           Δ
+this    ● review's two Medium findings and DESIGN.md drift resolved, done when:   Δ
+          ☐ review attaches only merged slices' specs                   9-10           Δ
+          ☐ fallback hint fires only on a provider error                9-10           Δ
+          ☐ DESIGN.md names standards.prompt.md and the Sol default     9-10           Δ
+
+needs you   9 ● Decide the review findings    fix now · after your run · leave   my pick: fix now  Δ
+            4   Add earlier items to effort   review model · 429 rework · retry  my pick: all 3
+            11  Run one real auto on new rules   home first · work laptop       my pick: home  Δ
+I do next   10  Fix findings on a branch      after 9; DESIGN.md's other edits settled first  Δ
+waiting     12  Judge the run: verdicts, stops, Route   until 11                            Δ
+ideas       pane-job rc 143 fix · winpc uutils timeout · winpc blackhole link · 8-slice cap in code
+reply       "9: fix now; 4: none; 11: home" → I fix both Mediums and DESIGN.md on a branch, stop.
+```

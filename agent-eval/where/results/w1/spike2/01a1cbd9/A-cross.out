@@ -1,0 +1,30 @@
+```
+target  ◇ Learn observability, then GenAI observability, hands-on, done when:
+          ✓ learning method researched and written down             config/pi/prompts/learn.md
+          ▸ beyond: lab rungs 00–05 worked through                  4 5 6 9
+          ☐ /learn prompt refined, then committed in dotfiles       3
+beyond  ▸ Observability lab rungs 00–05 worked through by you, done when:
+          ✓ 00–02 built; checkers say not yet unsolved, PASS solved  uv run check.py <drill>
+          ✓ 02 traces reach Jaeger: 30 sent, 5 error, 3 user.id=7   02-see-it/shop.py
+          ▸ slice below, closed                                     1 2 7 8
+          ▸ rungs 00–02 done by you (00 started, Modify hint 1)     6
+          ☐ rungs 03–05 built and done                              4 5 9
+slice   ▸ Lab paused cleanly for the Windows/WSL sidequest, done when:
+          ✓ handoff printed in chat                                 last reply
+          ☐ handoff kept: pasted into next session, or saved        2 8
+          ☐ this, closed                                            1 7
+this    ● Next session can resume the lab from memory, done when:
+          ☐ "11-09 observability lab" bullet replaces the 11-07 one 1 7
+
+needs you   1 ● Approve the drafted memory bullet  yes · edit · no                   my pick: yes
+            2   Keep the handoff                   paste only · "save"               my pick: paste
+            3   Choose when to commit learn.md     now · after rung 02 · never       my pick: after 02
+            4   Pick the rung 04 backend           native binaries · Docker · defer  my pick: native
+            5   Pick the rung 05 LLM               Ollama local · API key            my pick: none yet
+            6   Work rungs 00–02 to PASS           after the WSL session             my pick: 00 first
+I do next   7   Replace the memory bullet          after 1
+            8   Write HANDOFF.md in this lab dir   your "save"
+waiting     9   Build rung 03 (Node→Python trace)  until 6 reports rung 02 done
+ideas       switch get-jaeger.sh to linux-amd64 if the lab moves to WSL
+reply       "1 yes, 2 paste, 3 after 02" → I swap the memory bullet, write no file, and stop
+```

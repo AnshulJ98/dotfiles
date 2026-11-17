@@ -1,0 +1,2 @@
+{"step":"warmup","status":"ok","secs":23,"turns":1,"cost":2.0954949999999997,"ctx":116531,"compactions":0}
+{"step":"3","status":"stopped: budget $12 (at $12.27)","secs":918,"turns":78,"cost":12.2741866,"ctx":null,"compactions":7}

@@ -1,0 +1,31 @@
+```
+target  ◇ Learn observability, then GenAI observability, hands-on, done when:
+          ✓ learning method researched and written down             config/pi/prompts/learn.md
+          ▸ beyond: lab rungs 00–05 worked through                  6 9 10 11 12 13 Δ
+          ☐ /learn prompt refined, then committed in dotfiles       3
+beyond  ▸ Observability lab rungs 00–05 worked through by you, done when:
+          ✓ 00–02 built; checkers say not yet unsolved, PASS solved  uv run check.py <drill>
+          ✓ 02 traces reach Jaeger: 30 sent, 5 error, 3 user.id=7   02-see-it/shop.py
+          ✓ 04+ backend on winpc: 30 traces in Tempo, 8 error       infra/compose.yaml Δ
+          ▸ slice below, closed                                     6 10 11 12 13 Δ
+          ☐ rungs 03–05 built and done                              5 9
+slice   ▸ Rungs 00–02 done by you, done when:                                          Δ
+          ✓ 00: 00-modify and 00-make PASS, explain-back given      uv run check.py 00-make Δ
+          ☐ 00 gap closed: say what tea.py prints with no processor 12 Δ
+          ▸ this, closed                                            6 10 Δ
+          ☐ 01: 01-recreate, 01-modify-a/b, 01-make PASS            10 Δ
+          ☐ 02: UI questions answered, Recreate step done           11 13 Δ
+this    ● Your rung 01 step-1 guesses written and checked, done when:                  Δ
+          ☐ guesses sent: (a) span count and order, (b) ERROR spans 6 Δ
+          ☐ each wrong guess named as a specific misconception      10 Δ
+
+needs you   3   Choose when to commit learn.md      now · after rung 02 · never        my pick: after 02
+            5   Pick the rung 05 LLM                Ollama on winpc · API key   my pick: Ollama winpc Δ
+            6 ● Send your rung 01 step-1 guesses    (a) and (b), before running   my pick: now Δ
+            12  Run tea.py with no add_span_processor  try it · skip                my pick: try it Δ
+I do next   10  Check your 01 answers, name gaps    after 6 Δ
+waiting     11  Build the 02 Recreate step, faded   until 01 checks PASS Δ
+            13  Work rung 02 in Jaeger              until 11 Δ
+            9   Build rung 03 (Node→Python trace)   until 13 reports rung 02 done Δ
+reply       "6: a) 4 spans, root last b) only payment.charge; 12: prints nothing" → I check both
+```

@@ -1,0 +1,6 @@
+{
+  "retry": {
+    "maxRetries": 8,
+    "baseDelayMs": 15000
+  }
+}

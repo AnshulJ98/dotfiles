@@ -1,0 +1,420 @@
+{"t":1794860903978,"type":"notify","level":"warning","message":"bash log: cannot write /tmp/agent-eval-long/r3-tail/om-unobserved/home/.pi/agent/logs/bash.log; no more lines this session."}
+{"t":1794860991449,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~133,023 tokens); compacting inline"}
+{"t":1794860991499,"type":"compaction_start","reason":"threshold"}
+{"t":1794860991499,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":133023,"after":25059,"summaryChars":17317}
+{"t":1794860991999,"type":"notify","level":"info","message":"blackhole: 66 source entries processed; tail kept 1/4 user turns (~8.0k tok)."}
+{"t":1794861080388,"type":"compaction_start","reason":"threshold"}
+{"t":1794861080390,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":132753,"after":80466,"summaryChars":22453}
+{"t":1794861080891,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~58.9k tok)."}
+{"t":1794861085388,"type":"compaction_start","reason":"threshold"}
+{"t":1794861085390,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":133892,"after":82188,"summaryChars":23615}
+{"t":1794861085890,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~60.1k tok)."}
+{"t":1794861090407,"type":"compaction_start","reason":"threshold"}
+{"t":1794861090409,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":136236,"after":83007,"summaryChars":23620}
+{"t":1794861090910,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~60.8k tok)."}
+{"t":1794861093062,"type":"compaction_start","reason":"threshold"}
+{"t":1794861093064,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":137134,"after":84039,"summaryChars":26387}
+{"t":1794861093563,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~61.1k tok)."}
+{"t":1794861144626,"type":"compaction_start","reason":"threshold"}
+{"t":1794861144628,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":139334,"after":84647,"summaryChars":26392}
+{"t":1794861145130,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~61.5k tok)."}
+{"t":1794861193712,"type":"compaction_start","reason":"threshold"}
+{"t":1794861193714,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":139879,"after":84779,"summaryChars":26397}
+{"t":1794861194215,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~61.5k tok)."}
+{"t":1794861195649,"type":"compaction_start","reason":"threshold"}
+{"t":1794861195651,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":140467,"after":85322,"summaryChars":26402}
+{"t":1794861196152,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~62.0k tok)."}
+{"t":1794861198395,"type":"compaction_start","reason":"threshold"}
+{"t":1794861198397,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":141155,"after":85589,"summaryChars":26407}
+{"t":1794861198898,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~62.2k tok)."}
+{"t":1794861238643,"type":"compaction_start","reason":"threshold"}
+{"t":1794861238647,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":150981,"after":92836,"summaryChars":26412}
+{"t":1794861239148,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~68.0k tok)."}
+{"t":1794861321234,"type":"compaction_start","reason":"threshold"}
+{"t":1794861321239,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":161406,"after":96760,"summaryChars":27154}
+{"t":1794861321738,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~69.1k tok)."}
+{"t":1794861405283,"type":"compaction_start","reason":"threshold"}
+{"t":1794861405285,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":163528,"after":100626,"summaryChars":30698}
+{"t":1794861405787,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~69.7k tok)."}
+{"t":1794861410363,"type":"compaction_start","reason":"threshold"}
+{"t":1794861410366,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":158660,"after":101805,"summaryChars":30703}
+{"t":1794861410867,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~70.7k tok)."}
+{"t":1794861478112,"type":"compaction_start","reason":"threshold"}
+{"t":1794861478114,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":168732,"after":106855,"summaryChars":30708}
+{"t":1794861478616,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~73.7k tok)."}
+{"t":1794861536409,"type":"compaction_start","reason":"threshold"}
+{"t":1794861536414,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":170518,"after":108965,"summaryChars":30713}
+{"t":1794861536913,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~74.0k tok)."}
+{"t":1794861613356,"type":"compaction_start","reason":"threshold"}
+{"t":1794861613358,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":173189,"after":111770,"summaryChars":31391}
+{"t":1794861613860,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~74.3k tok)."}
+{"t":1794861674648,"type":"compaction_start","reason":"threshold"}
+{"t":1794861674654,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":182558,"after":123530,"summaryChars":31396}
+{"t":1794861675152,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~84.4k tok)."}
+{"t":1794861805650,"type":"compaction_start","reason":"threshold"}
+{"t":1794861805653,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":197556,"after":129431,"summaryChars":33144}
+{"t":1794861806153,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.1k tok)."}
+{"t":1794861863831,"type":"compaction_start","reason":"threshold"}
+{"t":1794861863834,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":192372,"after":131524,"summaryChars":33149}
+{"t":1794861864335,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.4k tok)."}
+{"t":1794861876956,"type":"compaction_start","reason":"threshold"}
+{"t":1794861876958,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":188530,"after":132029,"summaryChars":33154}
+{"t":1794861877457,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.4k tok)."}
+{"t":1794861941590,"type":"compaction_start","reason":"threshold"}
+{"t":1794861941596,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":194384,"after":134464,"summaryChars":33159}
+{"t":1794861942095,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.5k tok)."}
+{"t":1794861953157,"type":"compaction_start","reason":"threshold"}
+{"t":1794861953160,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":190761,"after":135452,"summaryChars":33164}
+{"t":1794861953659,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.5k tok)."}
+{"t":1794861959357,"type":"compaction_start","reason":"threshold"}
+{"t":1794861959359,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":191202,"after":136015,"summaryChars":33180}
+{"t":1794861959859,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.6k tok)."}
+{"t":1794861969442,"type":"compaction_start","reason":"threshold"}
+{"t":1794861969446,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":192432,"after":136824,"summaryChars":33196}
+{"t":1794861969945,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.6k tok)."}
+{"t":1794861987713,"type":"notify","level":"info","message":"bash changed: config/pi/prompts/spec-contract.md (deleted)"}
+{"t":1794861987742,"type":"compaction_start","reason":"threshold"}
+{"t":1794861987745,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":194313,"after":138175,"summaryChars":33211}
+{"t":1794861988245,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.6k tok)."}
+{"t":1794861998478,"type":"compaction_start","reason":"threshold"}
+{"t":1794861998481,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":195234,"after":138970,"summaryChars":33227}
+{"t":1794861998981,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.6k tok)."}
+{"t":1794862004189,"type":"compaction_start","reason":"threshold"}
+{"t":1794862004197,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":195890,"after":139527,"summaryChars":33232}
+{"t":1794862004692,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.8k tok)."}
+{"t":1794862016132,"type":"compaction_start","reason":"threshold"}
+{"t":1794862016134,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":197124,"after":140353,"summaryChars":33259}
+{"t":1794862016634,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.8k tok)."}
+{"t":1794862059686,"type":"compaction_start","reason":"threshold"}
+{"t":1794862059689,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":202689,"after":144898,"summaryChars":38721}
+{"t":1794862060190,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.8k tok)."}
+{"t":1794862092060,"type":"compaction_start","reason":"threshold"}
+{"t":1794862092063,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":208204,"after":147389,"summaryChars":38726}
+{"t":1794862092564,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~86.9k tok)."}
+{"t":1794862100095,"type":"compaction_start","reason":"threshold"}
+{"t":1794862100098,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":208923,"after":147608,"summaryChars":38061}
+{"t":1794862100599,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.0k tok)."}
+{"t":1794862150480,"type":"compaction_start","reason":"threshold"}
+{"t":1794862150494,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":216145,"after":151620,"summaryChars":38125}
+{"t":1794862150986,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.2k tok)."}
+{"t":1794862164640,"type":"notify","level":"info","message":"bash changed: config/pi/bin/worker.prompt.md (deleted), config/pi/extensions/worker-sensors.ts (deleted), config/pi/tests/worker-resume.test.ts (deleted), config/pi/tests/worker-sensors.test.ts (deleted)"}
+{"t":1794862164672,"type":"compaction_start","reason":"threshold"}
+{"t":1794862164675,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":218197,"after":152767,"summaryChars":38238}
+{"t":1794862165176,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.2k tok)."}
+{"t":1794862169594,"type":"compaction_start","reason":"threshold"}
+{"t":1794862169598,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":218618,"after":153392,"summaryChars":39764}
+{"t":1794862170097,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.2k tok)."}
+{"t":1794862190688,"type":"compaction_start","reason":"threshold"}
+{"t":1794862190692,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":222401,"after":154873,"summaryChars":37812}
+{"t":1794862191192,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.6k tok)."}
+{"t":1794862241298,"type":"compaction_start","reason":"threshold"}
+{"t":1794862241302,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":222884,"after":155451,"summaryChars":37857}
+{"t":1794862241801,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~87.9k tok)."}
+{"t":1794862266908,"type":"compaction_start","reason":"threshold"}
+{"t":1794862266914,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":226293,"after":157744,"summaryChars":38026}
+{"t":1794862267413,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.0k tok)."}
+{"t":1794862276037,"type":"notify","level":"info","message":"bash changed: config/git/bin/auto-guard (deleted), config/git/template/hooks/pre-commit (deleted), config/git/template/hooks/pre-merge-commit (deleted), config/git/template/hooks/pre-push (deleted), config/husky/init.sh (deleted), githooks/pre-merge-commit (deleted), githooks/pre-push (deleted)"}
+{"t":1794862276090,"type":"compaction_start","reason":"threshold"}
+{"t":1794862276094,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":227327,"after":158938,"summaryChars":40518}
+{"t":1794862276595,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.1k tok)."}
+{"t":1794862279631,"type":"notify","level":"info","message":"Observational memory: dropper skipping anthropic/claude-haiku-5-5 (cooldown — details in cooldown log)"}
+{"t":1794862279633,"type":"notify","level":"info","message":"Observational memory: dropper skipped — all candidates failed (sessionFallback disabled, won't use main model)"}
+{"t":1794862300849,"type":"compaction_start","reason":"threshold"}
+{"t":1794862300854,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":231024,"after":160460,"summaryChars":40534}
+{"t":1794862301115,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GYG541pM8d4zLsPANw\"}"}
+{"t":1794862301158,"type":"compaction_start","reason":"threshold"}
+{"t":1794862301168,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160460,"after":160461,"summaryChars":40539}
+{"t":1794862301171,"type":"notify","level":"info","message":"Observational memory: 2 repeated notices this run — dropper skipping anthropic/claude-haiku-5-5 (cooldown — details in cooldown log) (×2); dropper skipped — all candidates failed (sessionFallback disabled, won't use main model)"}
+{"t":1794862301245,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GYG541pM8d4zLsPANw\"}"}
+{"t":1794862301354,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862301662,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862316559,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GZQ6Y6aE3Ty8W8z7gd\"}"}
+{"t":1794862316563,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862316608,"type":"compaction_start","reason":"threshold"}
+{"t":1794862316609,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160461,"after":160462,"summaryChars":40544}
+{"t":1794862316611,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GZQ6Y6aE3Ty8W8z7gd\"}"}
+{"t":1794862317109,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862346877,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GbdkNZxxyjcUsDaauw\"}"}
+{"t":1794862346882,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862346924,"type":"compaction_start","reason":"threshold"}
+{"t":1794862346925,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160462,"after":160464,"summaryChars":40549}
+{"t":1794862346926,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GbdkNZxxyjcUsDaauw\"}"}
+{"t":1794862347425,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862407268,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Gg5fD3e4Lhz4miFQ3n\"}"}
+{"t":1794862407273,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862407321,"type":"compaction_start","reason":"threshold"}
+{"t":1794862407323,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160464,"after":160465,"summaryChars":40554}
+{"t":1794862407324,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Gg5fD3e4Lhz4miFQ3n\"}"}
+{"t":1794862407821,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862467658,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GkXqvY7MVk1RW77gHq\"}"}
+{"t":1794862467669,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862467712,"type":"compaction_start","reason":"threshold"}
+{"t":1794862467714,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160465,"after":160466,"summaryChars":40559}
+{"t":1794862467715,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GkXqvY7MVk1RW77gHq\"}"}
+{"t":1794862468212,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862528046,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Gpz6MBJq8eWHePSaBp\"}"}
+{"t":1794862528049,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862528119,"type":"compaction_start","reason":"threshold"}
+{"t":1794862528120,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160466,"after":160467,"summaryChars":40563}
+{"t":1794862528121,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Gpz6MBJq8eWHePSaBp\"}"}
+{"t":1794862528619,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862588428,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GuSLnB9qVLCvN3DzXm\"}"}
+{"t":1794862588431,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862588477,"type":"compaction_start","reason":"threshold"}
+{"t":1794862588478,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160467,"after":160312,"summaryChars":39944}
+{"t":1794862588479,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GuSLnB9qVLCvN3DzXm\"}"}
+{"t":1794862588976,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862648833,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GytTmECt6yf8coXKzm\"}"}
+{"t":1794862648842,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862648915,"type":"compaction_start","reason":"threshold"}
+{"t":1794862648916,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160312,"after":160314,"summaryChars":39949}
+{"t":1794862648917,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7GytTmECt6yf8coXKzm\"}"}
+{"t":1794862649413,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862709255,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H4Lr8WgtvGFotESgUM\"}"}
+{"t":1794862709261,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,426 tokens); compacting inline"}
+{"t":1794862709305,"type":"compaction_start","reason":"threshold"}
+{"t":1794862709305,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160314,"after":160315,"summaryChars":39954}
+{"t":1794862709307,"type":"auto_retry_end"}
+{"t":1794862709805,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~88.2k tok)."}
+{"t":1794862711063,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H4UmsePZHN4KzdPyUK\"}"}
+{"t":1794862711065,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862711100,"type":"compaction_start","reason":"threshold"}
+{"t":1794862711101,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160584,"after":160585,"summaryChars":39958}
+{"t":1794862711101,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H4UmsePZHN4KzdPyUK\"}"}
+{"t":1794862711599,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862726399,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H5cHbQ1EqktKseceki\"}"}
+{"t":1794862726403,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862726439,"type":"compaction_start","reason":"threshold"}
+{"t":1794862726439,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160585,"after":160109,"summaryChars":38053}
+{"t":1794862726440,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H5cHbQ1EqktKseceki\"}"}
+{"t":1794862726938,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862756741,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H7qvhKU4JmpEU14CHF\"}"}
+{"t":1794862756747,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862756791,"type":"compaction_start","reason":"threshold"}
+{"t":1794862756791,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160109,"after":160110,"summaryChars":38058}
+{"t":1794862756792,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7H7qvhKU4JmpEU14CHF\"}"}
+{"t":1794862757291,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862817093,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HCHxxztwp7YZ3H1bTQ\"}"}
+{"t":1794862817095,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862817137,"type":"compaction_start","reason":"threshold"}
+{"t":1794862817137,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160110,"after":160111,"summaryChars":38063}
+{"t":1794862817139,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HCHxxztwp7YZ3H1bTQ\"}"}
+{"t":1794862817638,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862877459,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HGk1FUjbtw4TkGTrSz\"}"}
+{"t":1794862877464,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862877509,"type":"compaction_start","reason":"threshold"}
+{"t":1794862877511,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160111,"after":160112,"summaryChars":38068}
+{"t":1794862877512,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HGk1FUjbtw4TkGTrSz\"}"}
+{"t":1794862878008,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862937826,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HMC8Eaet5sVSZ4De7b\"}"}
+{"t":1794862937830,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862937874,"type":"compaction_start","reason":"threshold"}
+{"t":1794862937875,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160112,"after":160114,"summaryChars":38073}
+{"t":1794862937876,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HMC8Eaet5sVSZ4De7b\"}"}
+{"t":1794862938375,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794862998242,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HReHDRcnKiVwWfBaLz\"}"}
+{"t":1794862998257,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794862998328,"type":"compaction_start","reason":"threshold"}
+{"t":1794862998330,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160114,"after":160115,"summaryChars":38078}
+{"t":1794862998331,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HReHDRcnKiVwWfBaLz\"}"}
+{"t":1794862998973,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794863058884,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HW6hoth3joWy1eL3AA\"}"}
+{"t":1794863058887,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794863058935,"type":"compaction_start","reason":"threshold"}
+{"t":1794863058937,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160115,"after":160116,"summaryChars":38083}
+{"t":1794863058938,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HW6hoth3joWy1eL3AA\"}"}
+{"t":1794863059435,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794863119270,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HaZpagXPAT8gJCJJaV\"}"}
+{"t":1794863119272,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,695 tokens); compacting inline"}
+{"t":1794863119316,"type":"compaction_start","reason":"threshold"}
+{"t":1794863119317,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160116,"after":160117,"summaryChars":38088}
+{"t":1794863119318,"type":"auto_retry_end"}
+{"t":1794863119816,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 2/5 user turns (~88.3k tok)."}
+{"t":1794863121065,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HahkZshgeY9bhxypTV\"}"}
+{"t":1794863121067,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863121103,"type":"compaction_start","reason":"threshold"}
+{"t":1794863121103,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160386,"after":160387,"summaryChars":38092}
+{"t":1794863121104,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HahkZshgeY9bhxypTV\"}"}
+{"t":1794863121602,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863136370,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Hbq6s4ZSDtKuu9jgS8\"}"}
+{"t":1794863136374,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863136412,"type":"compaction_start","reason":"threshold"}
+{"t":1794863136413,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160387,"after":160371,"summaryChars":38026}
+{"t":1794863136413,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Hbq6s4ZSDtKuu9jgS8\"}"}
+{"t":1794863136911,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863166695,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7He4hycoVhLYYsSwhat\"}"}
+{"t":1794863166700,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863166747,"type":"compaction_start","reason":"threshold"}
+{"t":1794863166748,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160371,"after":160372,"summaryChars":38031}
+{"t":1794863166749,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7He4hycoVhLYYsSwhat\"}"}
+{"t":1794863167247,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863227076,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HiWk1Sm3tV2TFYYkfD\"}"}
+{"t":1794863227080,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863227123,"type":"compaction_start","reason":"threshold"}
+{"t":1794863227124,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160372,"after":160367,"summaryChars":38011}
+{"t":1794863227125,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HiWk1Sm3tV2TFYYkfD\"}"}
+{"t":1794863227622,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863287455,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HnxySe7qV8SShYSpow\"}"}
+{"t":1794863287458,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863287506,"type":"compaction_start","reason":"threshold"}
+{"t":1794863287509,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160367,"after":160367,"summaryChars":38011}
+{"t":1794863287510,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HnxySe7qV8SShYSpow\"}"}
+{"t":1794863288006,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863347859,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HsR4SXoeYjCnAdi1J6\"}"}
+{"t":1794863347864,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863347911,"type":"compaction_start","reason":"threshold"}
+{"t":1794863347912,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160367,"after":160367,"summaryChars":38011}
+{"t":1794863347914,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HsR4SXoeYjCnAdi1J6\"}"}
+{"t":1794863348412,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863408253,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HwsK8GNFAbLAbtwCYZ\"}"}
+{"t":1794863408256,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863408299,"type":"compaction_start","reason":"threshold"}
+{"t":1794863408299,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160367,"after":160367,"summaryChars":38011}
+{"t":1794863408301,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7HwsK8GNFAbLAbtwCYZ\"}"}
+{"t":1794863408799,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863468628,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J2KVbBeyoTz8cd7Piy\"}"}
+{"t":1794863468634,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863468680,"type":"compaction_start","reason":"threshold"}
+{"t":1794863468682,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160367,"after":160367,"summaryChars":38011}
+{"t":1794863468682,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J2KVbBeyoTz8cd7Piy\"}"}
+{"t":1794863469183,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863529258,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J6ma66JEH4aF4KQu9y\"}"}
+{"t":1794863529260,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~138,964 tokens); compacting inline"}
+{"t":1794863529316,"type":"compaction_start","reason":"threshold"}
+{"t":1794863529317,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160367,"after":160367,"summaryChars":38011}
+{"t":1794863529317,"type":"auto_retry_end"}
+{"t":1794863529815,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 3/6 user turns (~88.4k tok)."}
+{"t":1794863531152,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J6w1sgJTE9sf8PRTvg\"}"}
+{"t":1794863531154,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863531205,"type":"compaction_start","reason":"threshold"}
+{"t":1794863531206,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863531207,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J6w1sgJTE9sf8PRTvg\"}"}
+{"t":1794863531703,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863546482,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J84Ypq7G4L9e8S7JyM\"}"}
+{"t":1794863546488,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863546534,"type":"compaction_start","reason":"threshold"}
+{"t":1794863546537,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863546538,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7J84Ypq7G4L9e8S7JyM\"}"}
+{"t":1794863547034,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863576813,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JAJ9h3cvKGPduQ25ux\"}"}
+{"t":1794863576819,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863576866,"type":"compaction_start","reason":"threshold"}
+{"t":1794863576868,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863576869,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JAJ9h3cvKGPduQ25ux\"}"}
+{"t":1794863577366,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863637202,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JEkAzCX29KgT9Fo1G4\"}"}
+{"t":1794863637204,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863637247,"type":"compaction_start","reason":"threshold"}
+{"t":1794863637247,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863637249,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JEkAzCX29KgT9Fo1G4\"}"}
+{"t":1794863637746,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863697574,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JKCKCn9PBPeKoMRRgJ\"}"}
+{"t":1794863697580,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863697624,"type":"compaction_start","reason":"threshold"}
+{"t":1794863697626,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863697627,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JKCKCn9PBPeKoMRRgJ\"}"}
+{"t":1794863698124,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863757988,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JPeZtWwJZuN82kXm9e\"}"}
+{"t":1794863757991,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863758037,"type":"compaction_start","reason":"threshold"}
+{"t":1794863758040,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863758041,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JPeZtWwJZuN82kXm9e\"}"}
+{"t":1794863758537,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863818392,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JU6mb7f4V5FLw3EMP1\"}"}
+{"t":1794863818395,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863818443,"type":"compaction_start","reason":"threshold"}
+{"t":1794863818446,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863818448,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JU6mb7f4V5FLw3EMP1\"}"}
+{"t":1794863818944,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863878797,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JYYxJRjJpg8xHgP1FE\"}"}
+{"t":1794863878800,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863878842,"type":"compaction_start","reason":"threshold"}
+{"t":1794863878844,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863878844,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JYYxJRjJpg8xHgP1FE\"}"}
+{"t":1794863879342,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863939229,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Jd1KfycTsMeJ3cBJDe\"}"}
+{"t":1794863939232,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,233 tokens); compacting inline"}
+{"t":1794863939279,"type":"compaction_start","reason":"threshold"}
+{"t":1794863939281,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160636,"after":160636,"summaryChars":38011}
+{"t":1794863939282,"type":"auto_retry_end"}
+{"t":1794863939779,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 4/7 user turns (~88.5k tok)."}
+{"t":1794863941106,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Jd9VYgk4qgoXSjmKdt\"}"}
+{"t":1794863941109,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794863941144,"type":"compaction_start","reason":"threshold"}
+{"t":1794863941144,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160905,"after":160938,"summaryChars":38141}
+{"t":1794863941145,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Jd9VYgk4qgoXSjmKdt\"}"}
+{"t":1794863941643,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794863956405,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JeH9hDM68acMFQ74fj\"}"}
+{"t":1794863956410,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794863956448,"type":"compaction_start","reason":"threshold"}
+{"t":1794863956449,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794863956450,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JeH9hDM68acMFQ74fj\"}"}
+{"t":1794863956948,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794863986759,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JgWnJFhaC6C6ayH8xy\"}"}
+{"t":1794863986765,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794863986809,"type":"compaction_start","reason":"threshold"}
+{"t":1794863986810,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794863986811,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JgWnJFhaC6C6ayH8xy\"}"}
+{"t":1794863987309,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864047264,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Jkxsok11K36uAtsStt\"}"}
+{"t":1794864047271,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864047311,"type":"compaction_start","reason":"threshold"}
+{"t":1794864047312,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864047313,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7Jkxsok11K36uAtsStt\"}"}
+{"t":1794864047811,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864107666,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JqRYHcb8j2xJwwZ3eC\"}"}
+{"t":1794864107671,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864107715,"type":"compaction_start","reason":"threshold"}
+{"t":1794864107716,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864107717,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JqRYHcb8j2xJwwZ3eC\"}"}
+{"t":1794864108216,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864168067,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JuspwEztGxLqAs8tGU\"}"}
+{"t":1794864168071,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864168114,"type":"compaction_start","reason":"threshold"}
+{"t":1794864168116,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864168117,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JuspwEztGxLqAs8tGU\"}"}
+{"t":1794864168615,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864228472,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JzL3soYeRSH2eTgPQU\"}"}
+{"t":1794864228477,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864228521,"type":"compaction_start","reason":"threshold"}
+{"t":1794864228523,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864228524,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7JzL3soYeRSH2eTgPQU\"}"}
+{"t":1794864229022,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864288894,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7K4nGaHPsvRZMDa1jpx\"}"}
+{"t":1794864288899,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864288944,"type":"compaction_start","reason":"threshold"}
+{"t":1794864288946,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864288946,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7K4nGaHPsvRZMDa1jpx\"}"}
+{"t":1794864289443,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864349282,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7K9EdD6bJn4e4iw3WqK\"}"}
+{"t":1794864349287,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,502 tokens); compacting inline"}
+{"t":1794864349330,"type":"compaction_start","reason":"threshold"}
+{"t":1794864349332,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":160938,"after":160938,"summaryChars":38141}
+{"t":1794864349332,"type":"auto_retry_end"}
+{"t":1794864349832,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 5/8 user turns (~88.5k tok)."}
+{"t":1794864351082,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7K9NZCfvJRpTvAptipg\"}"}
+{"t":1794864351085,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,771 tokens); compacting inline"}
+{"t":1794864351121,"type":"compaction_start","reason":"threshold"}
+{"t":1794864351122,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":161207,"after":161207,"summaryChars":38141}
+{"t":1794864351122,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7K9NZCfvJRpTvAptipg\"}"}
+{"t":1794864351621,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 6/9 user turns (~88.6k tok)."}
+{"t":1794864366389,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KAVyTkNXyU835PQdCA\"}"}
+{"t":1794864366394,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,771 tokens); compacting inline"}
+{"t":1794864366431,"type":"compaction_start","reason":"threshold"}
+{"t":1794864366432,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":161207,"after":161207,"summaryChars":38141}
+{"t":1794864366433,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KAVyTkNXyU835PQdCA\"}"}
+{"t":1794864366931,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 6/9 user turns (~88.6k tok)."}
+{"t":1794864396713,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KCjb5A535siSnBHwTv\"}"}
+{"t":1794864396718,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,771 tokens); compacting inline"}
+{"t":1794864396756,"type":"compaction_start","reason":"threshold"}
+{"t":1794864396756,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":161207,"after":161207,"summaryChars":38141}
+{"t":1794864396757,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KCjb5A535siSnBHwTv\"}"}
+{"t":1794864397255,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 6/9 user turns (~88.6k tok)."}
+{"t":1794864457111,"type":"assistant_error","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KHBdbJ8QENgiMwhnKd\"}"}
+{"t":1794864457123,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~139,771 tokens); compacting inline"}
+{"t":1794864457166,"type":"compaction_start","reason":"threshold"}
+{"t":1794864457169,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":161207,"after":161207,"summaryChars":38141}
+{"t":1794864457171,"type":"auto_retry_start","error":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit. Please try again later.\"},\"request_id\":\"req_011Ch7KHBdbJ8QENgiMwhnKd\"}"}
+{"t":1794864457668,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 6/9 user turns (~88.6k tok)."}
+{"t":1794864495754,"type":"auto_retry_end"}
+{"t":1794864497777,"type":"process_exit","code":0,"sig":null}

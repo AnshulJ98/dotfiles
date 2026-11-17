@@ -1,0 +1,32 @@
+```
+target  ◇ auto ships slices as well or better with Sol on the steps, Mac and winpc, done when:
+          ☐ next real auto run: first dispatches PASS, each worker reports Route   4
+          ☐ work laptop scout runs the Bedrock Sol id                              8
+higher  ○ dotfiles-v2-2026-05 holds this work and nothing half-done, done when:
+          ▸ the effort below, closed                                               3, 6
+          ☐ other sessions' uncommitted work committed or left on purpose           2
+beyond  ▸ main session owns the slice contract; Sol picks steps; standards reach every child, done when:
+          ✓ four slices merged, tests 51/51                                         5fab8f2
+          ✓ run review returned ship                                                round 1 on 80cd2ae
+          ☐ review Mediums resolved: unmerged .spec attached, hint on any error     3, 6
+          ☐ config/pi/DESIGN.md describes the new worker mode                       2, 6
+          ▸ the slice below, closed                                                 1, 5
+slice   ▸ committed, pushed, clones gone, winpc on the same commit, done when:
+          ✓ origin/dotfiles-v2-2026-05 at 5fab8f2                                   push 2da23c6..5fab8f2
+          ✓ ten upstream theme clones removed from ~/Dev/dotfiles                   git status
+          ✓ winpc ~/Dev/dotfiles at 5fab8f2, 51/51 tests, live Sol + Sonnet scouts  scout 775199
+          ☐ the piece below, closed                                                 1, 5
+this    ● winpc config/pi/verify.sh passes (now 71 passed, 2 failed), done when:
+          ☐ timeout check passes and pi-blackhole-config.json link resolves        1, 5
+
+needs you   1 ● Choose the winpc verify fix   a fix box · b leave · c relax timeout check   my pick: a
+            2   Decide other sessions' work   commit + push · leave to those sessions      my pick: leave
+            3   Choose Medium fixes           both · .spec on merged only · neither        my pick: .spec only
+            4   Run tomorrow's real auto run  adopt as is · revert 5fab8f2 if it regresses  my pick: adopt
+            8   Set the Bedrock Sol id        edit WORKER_MODEL in bin/scout on work laptop my pick: do it
+I do next   5   Apply the winpc fix, rerun verify.sh there   after 1
+            6   Dispatch one fix slice: Mediums + DESIGN.md  after 2-3
+waiting     7   Trial auto in a fresh session (decision 11)  until 4
+ideas       quota auto-resume extension · Opus+Sol union review · fail a PASS that skips a spec check
+reply       "1a 2 leave 3 .spec-only": I link the config, put GNU timeout on the box PATH, rerun verify
+```

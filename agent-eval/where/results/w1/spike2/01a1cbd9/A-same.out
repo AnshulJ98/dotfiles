@@ -1,0 +1,27 @@
+```
+target  ◇ the lab's Docker infra lives on winpc, done when:
+          ✓ lgtm container runs healthy on winpc         docker --context winpc ps: Up (healthy)
+          ✓ Mac traces reach Tempo through the tunnel    shop.py → 30 traces in Tempo
+          ✓ start, tunnel and stop steps are written     infra/README.md
+higher  ○ you can do observability hands-on, through GenAI, done when:
+          ☐ rung 00 learned (slice below)                1 2 4
+          ☐ rungs 01 and 02 done, their checkers PASS    5
+          ☐ rungs 03, 04, 05 built and done              3 6 7 8
+slice   ▸ rung 00, hello span, learned, done when:
+          ▸ 00 Modify passes (this, below)               1
+          ☐ `uv run check.py 00-make` prints PASS        2
+          ☐ rung 00 explained back, answers checked      2 4
+this    ● a second, nested span in hello.py, done when:
+          ☐ `uv run check.py 00-modify` prints PASS      1
+
+needs you   1 ● Do 00 Modify: nest a `with` span, run check   hints.md if stuck   my pick: hint 2 only if stuck
+            2   Do 00 Make, then explain rung 00 back          3 sentences, no notes  my pick: both today
+            3   Pick rung 05 LLM            Ollama on winpc · API key   my pick: Ollama on winpc (RTX 3060)
+I do next   4   Check answers, name gaps, update progress table   after 1-2
+waiting     5   Work through rungs 01 and 02 (yours)              until 4
+            6   Build rung 03, Node→Python propagation            until 5 is reported
+            7   Build rung 04 on the winpc lgtm stack             until 6 is done
+            8   Build rung 05, GenAI with Phoenix                 until 3 and 7
+ideas       commit config/pi/prompts/learn.md (untracked) · reserve 192.168.2.35 in the router
+reply       "1 done, 3 Ollama": I run check.py 00-modify, grade your answer, record Ollama in memory
+```

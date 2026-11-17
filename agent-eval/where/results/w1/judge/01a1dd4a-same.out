@@ -1,0 +1,5 @@
+```json
+{"X1": {"accurate": 3, "stale": 1, "missed": 2, "invented": 2, "usable": 4, "why": "Records the merge, push and winpc pull correctly, but the higher row keeps its open ○ mark although every check is ticked; it cites a commit 80cd2ae and a 'round 1 record' that the session never shows; it drops the winpc verify.sh failures to an idea and omits the other sessions' uncommitted work."},
+ "X2": {"accurate": 3, "stale": 0, "missed": 2, "invented": 3, "usable": 4, "why": "Good re-centering on the clones and winpc rows and a clear decision on the Medium findings, but it invents 80cd2ae, 'round 1' and 'scout 775199'; it files the winpc verify failures as ideas and leaves out the other sessions' uncommitted work."},
+ "X3": {"accurate": 3, "stale": 1, "missed": 2, "invented": 2, "usable": 4, "why": "Clear review follow-ups and Δ marks, but spec #82 stays '?' after the user answered 'start'; it backs '51 node tests' with the 75/0 verify.sh result; it invents 80cd2ae and 'round 1'; it omits the winpc verify failures and the uncommitted work."}}
+```

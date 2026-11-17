@@ -1,0 +1,27 @@
+```
+target  ◇ Herdr app and Rex tried properly on sane defaults that fit nvim + TUI, done when:
+          ▸ Herdr app runs on defaults that match kitty (slice)        2
+          ☐ the app's role against the herdr TUI and kitty is decided  1
+          ☐ Rex is installed with kitty Cmd keys in init.lua           6
+higher  ○ one daily terminal setup: persistent agents, workspaces→tabs, nvim, done when:
+          ▸ the target above, closed                                   1 2 6
+          ☐ kitty spec defined item by item, then spiked and tested    4
+slice   ▸ Sheprd gone and Herdr app config kept in dotfiles, done when:
+          ✓ Sheprd leftovers deleted, penso/tap untapped               822eee5
+          ✓ settings/keys/theme linked from config/herdr-app/          822eee5
+          ✓ cmd-shift-enter, shift-enter, cmd-alt-f work when pressed  hc read t2
+          ✓ pi in an app tab reports its state                         herdr-app ls: t4 idle
+          ☐ cmd-shift-[/] (switch tabs, app default) tried, then kept or moved  2
+this    ● blur and the nvim/TUI fit answered from sources, done when:
+          ☐ blur status reported: absent in 0.1.15, PR #191 still open  5
+          ☐ TUI-vs-app fit reported: TERM=ghostty, no OSC 66; images untested  5
+
+needs you   1   Decide the app's role                daily · side trial · drop     my pick: side trial
+            2   Use cmd-shift-[/] for a few days     keep tabs · move to panes     my pick: keep tabs
+            3   Decide on blur                       wait #191 · build PR · go opaque  my pick: wait #191
+            4   Say what felt wonky in the worktree flow (kitty spec item 1)   my pick: none yet
+I do next   5 ● Report blur + nvim/TUI findings with links   needs nothing
+waiting     6   Write Rex init.lua, run skill setup --dry-run   until Rex invite arrives
+ideas       build on hc core (earlier session)
+reply       "1 side trial, 3 wait": I report findings, keep kitty+herdr TUI daily, watch #191
+```

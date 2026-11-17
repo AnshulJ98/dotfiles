@@ -1,0 +1,25 @@
+```
+target  ◇ Agents organised on top of kitty and kitty sessions, no multiplexer, done when:
+          ☐ done-when not agreed                                        2
+          ▸ zmx and shpool each tried in kitty                          7 8
+beyond  ▸ Herdr app tried with kitty-like defaults, config in dotfiles, done when:
+          ✓ app settings, keys, theme symlinked from dotfiles           822eee5
+          ✓ Sheprd leftovers removed                                    822eee5
+          ☐ font workaround applied or declined                         3
+          ☐ herdr-nvim tried or declined                                4
+          ☐ Rex set up once the invite arrives                          6
+this    ● zmx and shpool each tried in kitty, done when:
+          ✓ both running in a throwaway kitty                           /tmp/holdertry/try.kitty-session
+          ☐ pi and nvim keys work in each                               7
+          ☐ each reattaches after the test kitty quits                  8
+
+needs you   1   (closed: you picked kitty and kitty sessions)
+            2   Agree when target is done   each piece tried · a spec · a daily setup   my pick: each piece tried
+            3   Decide Herdr app font fix   apply · leave                                my pick: leave
+            4   Decide herdr-nvim in TUI    try · skip                                   my pick: skip
+            7 ● Press shift+enter, cmd+shift+enter, ctrl chords in pi and nvim, both tabs  my pick: do it
+            8   Quit the test kitty, run `zmx attach try-zmx`, `shpool attach try-shpool`  my pick: do it
+waiting     6   Run `rex skill setup --dry-run`, then set up Rex    until the Rex invite arrives
+ideas       recheck zmx #295 #294 #300; test closing a tab, ssh attach, upgrades, status after reattach
+reply       "7 done, shift+enter broke in shpool; 8 both came back": I record it and kill both sessions
+```

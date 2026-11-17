@@ -1,0 +1,7 @@
+{
+  "anthropic/claude-haiku-5-5": {
+    "until": "2026-11-16T21:51:19.629Z",
+    "reason": "Dropper API error: 429",
+    "stage": "dropper"
+  }
+}

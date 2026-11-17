@@ -1,0 +1,32 @@
+{"t":1794858859324,"type":"notify","level":"warning","message":"bash log: cannot write /tmp/agent-eval-long/r3-tail/om-minimal/home/.pi/agent/logs/bash.log; no more lines this session."}
+{"t":1794859041109,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~130,450 tokens); compacting inline"}
+{"t":1794859041162,"type":"compaction_start","reason":"threshold"}
+{"t":1794859041163,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":130450,"after":24693,"summaryChars":21813}
+{"t":1794859041664,"type":"notify","level":"info","message":"blackhole: 66 source entries processed; tail kept 1/4 user turns (~6.0k tok)."}
+{"t":1794859158527,"type":"compaction_start","reason":"threshold"}
+{"t":1794859158530,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":130938,"after":30934,"summaryChars":27516}
+{"t":1794859159030,"type":"notify","level":"info","message":"blackhole: 37 source entries processed; tail kept 0/4 user turns (~10.2k tok)."}
+{"t":1794859285801,"type":"compaction_start","reason":"threshold"}
+{"t":1794859285803,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":136677,"after":36188,"summaryChars":35002}
+{"t":1794859286304,"type":"notify","level":"info","message":"blackhole: 48 source entries processed; tail kept 0/4 user turns (~13.9k tok)."}
+{"t":1794859440509,"type":"compaction_start","reason":"threshold"}
+{"t":1794859440512,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":132533,"after":39998,"summaryChars":43319}
+{"t":1794859441013,"type":"notify","level":"info","message":"blackhole: 38 source entries processed; tail kept 0/4 user turns (~12.4k tok)."}
+{"t":1794859580512,"type":"notify","level":"info","message":"bash changed: config/pi/bin/worker.prompt.md (deleted), config/pi/extensions/worker-sensors.ts (deleted), config/pi/tests/worker-resume.test.ts (deleted), config/pi/tests/worker-sensors.test.ts (deleted)"}
+{"t":1794859658882,"type":"compaction_start","reason":"threshold"}
+{"t":1794859658885,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":131029,"after":43388,"summaryChars":48225}
+{"t":1794859659385,"type":"notify","level":"info","message":"blackhole: 28 source entries processed; tail kept 0/4 user turns (~12.5k tok)."}
+{"t":1794859691445,"type":"notify","level":"info","message":"bash changed: config/pi/prompts/spec-contract.md (deleted)"}
+{"t":1794859742703,"type":"notify","level":"info","message":"bash changed: config/git/bin/auto-guard (deleted), config/git/template/hooks/pre-commit (deleted), config/git/template/hooks/pre-merge-commit (deleted), config/git/template/hooks/pre-push (deleted), config/husky/init.sh (deleted), githooks/pre-merge-commit (deleted), githooks/pre-push (deleted)"}
+{"t":1794859778306,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+52 −41), config/pi/AGENTS.work.md (+52 −41), config/pi/CLAUDE.md (+56 −41)"}
+{"t":1794859803055,"type":"notify","level":"info","message":"bash changed: config/pi/LOG.md (+196 −0)"}
+{"t":1794859807947,"type":"compaction_start","reason":"threshold"}
+{"t":1794859807950,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":132883,"after":40873,"summaryChars":55212}
+{"t":1794859808450,"type":"notify","level":"info","message":"blackhole: 36 source entries processed; tail kept 0/4 user turns (~13.5k tok)."}
+{"t":1794859830796,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+52 −41), config/pi/AGENTS.work.md (+52 −41), config/pi/CLAUDE.md (+56 −41)"}
+{"t":1794860088907,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~131,364 tokens); compacting inline"}
+{"t":1794860088943,"type":"compaction_start","reason":"threshold"}
+{"t":1794860088943,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":131364,"after":40422,"summaryChars":60439}
+{"t":1794860089444,"type":"notify","level":"info","message":"blackhole: 34 source entries processed; tail kept 0/5 user turns (~12.2k tok)."}
+{"t":1794860221637,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+53 −42), config/pi/AGENTS.work.md (+53 −42), config/pi/CLAUDE.md (+57 −42)"}
+{"t":1794860663388,"type":"process_exit","code":0,"sig":null}

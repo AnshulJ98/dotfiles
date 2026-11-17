@@ -1,0 +1,30 @@
+```
+target  ◇ herdr-style organisation built on plain kitty, no multiplexer or prefix, done when:
+          ☐ done-when not agreed                            4
+beyond  ▸ each kitty-native piece tried on its own and answered, done when:
+          ▸ holder slice below, closed                      1 2 3 5 6 7
+          ? zmx outlives kill -9 of kitty, protocols pass   memory.md 11-10 decision
+          ? kitty sessions work as workspaces               memory.md 11-10 fact
+          ☐ status and kitty-links right after reattach     8
+          ☐ workspace list look and keys tried              9
+slice   ▸ zmx and shpool tried side by side under kitty, done when:
+          ✓ both run in a throwaway kitty, a tab each       /tmp/holdertry/try.kitty-session
+          ▸ keys piece below, closed                        1
+          ☐ survive quitting kitty and a closed tab         2
+          ☐ reattach from a 2nd window and over ssh         6
+          ☐ one holder picked, bugs and upgrades known      3 5 7
+this    ● pi and nvim keys checked under both holders, done when:
+          ☐ shift+enter, cmd+shift+enter, ctrl chords pass  1
+
+needs you   1 ● Press the keys in pi and nvim, both tabs    pass · fail per holder  my pick: none yet
+            2   Quit test kitty, close a tab, then reattach survives · lost         my pick: none yet
+            3   Pick the holder                             zmx · shpool · neither  my pick: zmx
+            4   Agree when the target is done               spec · 11-11 list · own my pick: spec
+I do next   5   Recheck zmx #294 #295 #300 and shpool #44   needs nothing
+            6   Reattach from a 2nd kitty window and ssh    needs nothing
+            7   Reinstall both holders under live sessions  after 1-2
+waiting     8   Test status and kitty-links after reattach  until 3
+            9   Try the workspace list look and keys        until 4
+ideas       {tab.program_status} in kitty.conf:121-122 · my 1-6 build order · tuios
+reply       "1 zmx passes, shpool breaks ctrl chords; 3 zmx" → I run 5-7 on zmx, then report
+```

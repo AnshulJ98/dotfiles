@@ -1,0 +1,42 @@
+All signed-off items except G1 are implemented in this checkout. `build-agents.sh --check` passes. `verify.sh` fails 6 checks, and each of those 6 also failed before I changed anything. Nothing is committed or pushed. Some deletions are staged because I removed those files with `git mv`/`git rm`.
+
+## Check results
+- **`./config/pi/build-agents.sh --check`:** `OK: AGENTS/CLAUDE files match fragments`, exit 0.
+- **`./config/pi/verify.sh`:** `57 passed, 6 failed`, exit 1. The baseline was 62 passed and 7 failed. That baseline also had worker and auto-guard checks, which are now gone. The 6 failures are:
+  - `~/.pi/agent/bin`, `web-search.json`, `~/.config/git/template` and `worktrunk/config.toml` don't resolve. The sandbox HOME isn't linked to this checkout.
+  - `skill referenced by a fragment exists: pdf-images`. The skill in this checkout is named `pdf`. This check failed before my changes too.
+  - `node tests pass`: 190 tests, 181 pass, 9 fail. The 9 are the same herdr and scout pane tests that fail at baseline, for example `pane.sh is 0600…`.
+  - The type check was skipped because `tsc` isn't at `~/Dev/pi-lab`.
+  - The `husky init.sh` link failure from the baseline is gone because that file is deleted.
+- **`node --test config/git/tests/*.test.ts`:** 40 of 40 pass. `verify.sh` doesn't run these tests.
+- **`node --test config/pi/tests/slice-check.test.ts`:** 41 of 41 pass.
+
+## Blocked on me
+1. Staged versus unstaged: some deletions and the `DESIGN.md → LOG.md` rename are staged. The worker-file deletions are not. Run `git reset` if you want nothing staged before you review.
+2. I1 (the before/after eval) was not run. Its probes read the live `~/.pi/agent`, not this checkout. E2 depended on it, so the review checklist stays in `ops.md`.
+
+## Changed
+- **Prose (A1–A4, B1, B2, C2, D1–D4, E1, E3, F5):**
+  - `agents-md/` fragments: planning sessions versus slice sessions, ladder rung 5 changed to "fewest concepts", the four Ousterhout design rules, the what-versus-when-and-how rule, red-first for bugs only, and expected values not taken from the implementation.
+  - `persona-core.md`: a Done section, a shorter Recommendations rule, and the duplicate rules removed.
+  - `claude-delta.md`: read-only subagents with one writer, and the TDD line fixed.
+- **Workflow (A5, C1, C3–C6, B3, B5, F3):**
+  - `plan.md` is rebuilt around the outcome card, with planning and slice modes, two sketches for each interface, and "go" running `slice-check`.
+  - `spec-contract.md` is deleted.
+  - `review.md` gains the break-it step, mutation testing on request, and the scout second reviewer.
+  - `handoff.md` gains a Next card section. It was already short, so there is no separate `full` form.
+- **B4 `slice-check`:** new `bin/slice-check`, `lib/slice-check.ts` (pure logic) and `lib/slice-check-main.ts` (I/O), with exit codes 0, 1, 2 and 3.
+- **F2, workers removed:** `--rw` is gone from `bin/scout`. `worker-sensors.ts`, its tests, `worker-resume.test.ts` and `worker.prompt.md` are deleted. `bin/guard/git` now always refuses commit and add.
+- **F1, auto-guard removed:**
+  - Deleted: `auto-guard`, the template `pre-commit`, `pre-merge-commit` and `pre-push` stubs, `githooks/pre-merge-commit`, `githooks/pre-push` and `husky/init.sh`. The `install.sh` links went too.
+  - Kept: the template `post-checkout` and `post-merge` hooks, and `build-agents.sh --check` in `githooks/pre-commit`.
+- **F4:** `compact-cap.ts` now posts one notice at 120k suggesting `/handoff`, and never compacts. `prime-reminder.ts` resumes only after a manual `/compact` that aborted a running task.
+- **G2:** `/memory` caps each bullet at 200 characters, and `verify.sh` reports any overrun without failing.
+- **H1:** the old `DESIGN.md` became `LOG.md`, with a header saying it is history. The new `DESIGN.md` is about 70 lines of current decisions.
+- **H3:** `verify.sh` checks that agents named in `claude-delta.md` exist and that no prompt mentions a removed feature. Its worker checks are replaced by one that expects `--rw` to fail as a usage error.
+- **Not applicable here:** F6 (`health-footer.ts` is not in this checkout). G3 needed no change because pi 1.5.2 already has `cacheWarming: idle`.
+
+## Found
+- `claude/skills/parallel` and `claude/skills/migrate` still refer to worker Tasks. They were outside the item list, so I left them.
+- `docs/operating-proposal-2026-09-26.md` and `docs/pi-adjustments-plan.md` mention removed features. They are dated records, so I left them unedited.
+- Every change is in this sandbox checkout. The live `/Users/anshulj/Dev/dotfiles` is untouched, and it has edits that this checkout lacks.

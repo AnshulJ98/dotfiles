@@ -1,0 +1,27 @@
+```
+target  ◇ bh-om in daily use for a while, to see how it goes, done when:
+          ☐ done-when not agreed                                       9
+higher  ○ chosen compaction setup lives in the dotfiles pi config, done when:
+          ✓ pi-blackhole 0.5.18 pinned, bh-om config at 210k, DESIGN   7b394d7
+          ☐ compact-cap's 210k compaction seen going through blackhole 10
+beyond  ▸ reusable long eval saved in agent-eval/long, done when:
+          ✓ lib tests pass                                             tests/lib.test.ts (8 pass)
+          ✓ agent-eval/long and results/r2 committed                   072322a
+          ✓ broken run r1 removed                                      git status: no results/r1
+          ▸ slice r2 below, closed                                     4
+slice   ▸ r2: three arms from one seed, scored against the pre-set rule, done when:
+          ✓ all three arms finished every step                         results/r2/*/steps.jsonl
+          ✓ diffs judged by Opus + Sol: 22 / 25 / 28 of 30             results/r2/grade/*/impl
+          ✓ result and adoption recorded in memory                     ~/.pi/agent/memory.md:160
+          ☐ snapshot probes (probe.ts) run or dropped                  4
+this    ● 072322a and 7b394d7 on origin, done when:
+          ☐ git status no longer says "ahead 2"                        8
+
+needs you   8 ● Push from your terminal      cd ~/Dev/dotfiles && git push       my pick: do it
+            4   Decide snapshot probes       a run ~$35 · b drop                 my pick: b
+            9   Agree when the trial ends    a review in a week · b on lost work · c open
+                                                                                 my pick: a
+waiting    10   Check a session's compaction  until a session passes 210k
+ideas       link ~/Dev/dotfiles in agent-eval/lib/isolate.sh so matrix runs load extensions
+reply       "8 done, 4b, 9a": I confirm origin, mark the probes dropped, then wait on 10
+```

@@ -1,0 +1,26 @@
+```
+target  ◇ bh-om in daily use for a while, to see how it goes, done when:               Δ
+          ▸ higher (below)                                 7                            Δ
+          ✓ r2 scored: om 28/30 main items, vcc 25, base 22  results/r2/grade             Δ
+          ✓ adoption committed: pin 0.5.18, 210k, config     7b394d7                      Δ
+          ☐ compact-cap's 210k compaction runs via blackhole 9                            Δ
+          ☐ trial verdict: done-when not agreed              8                            Δ
+higher  ○ the long eval is saved in dotfiles and rerunnable, done when:
+          ✓ unit tests pass                          agent-eval/long/tests/lib.test.ts (8/8)
+          ✓ agent-eval/long + results/r2 committed   072322a                              Δ
+          ✓ beyond (below), closed                   results/r2/*/final.json              Δ
+          ▸ this (below)                             7                                    Δ
+beyond  ✓ r2 produces scored base, vcc and om evidence, done when:                        Δ
+          ✓ shared seed saved                        agent-eval/long/seed/session.jsonl
+          ✓ answer key written (47 items)            agent-eval/long/seed/task.json
+          ✓ all three arms reach FINAL at 130k       bg6 ALL-DONE                         Δ
+          ✓ compaction summaries scored (no probe.ts) results/r2/grade/*/compaction*     Δ
+this    ● both commits are on origin, done when:                                          Δ
+          ☐ git push succeeds; branch not ahead      7                                    Δ
+
+needs you   7 ● Push from your terminal: git push     push · hold                my pick: push  Δ
+            8   Set when the trial ends                a 2 weeks · b 5 compactions  my pick: b  Δ
+waiting     9   Check that compact-cap compacts via blackhole  until a session passes 210k   Δ
+ideas       clean om-vs-vcc rerun (~$20); link dotfiles in agent-eval/lib/isolate.sh; Sonnet arm
+reply       "7 done, 8b": I check the branch is even with origin and record 8b in memory.md.
+```

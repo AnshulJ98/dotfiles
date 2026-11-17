@@ -1,0 +1,31 @@
+```
+target  ◇ my own setup built on top of kitty, no multiplexer, done when:
+          ☐ done-when not agreed                               2
+          ☐ the trial effort below closed                      1 3 4 5 6 7 8
+beyond  ▸ each kitty piece tried on its own, done when:
+          ? kitty tab status, session workspaces, saved splits memory.md 11-10 spike
+          ▸ the holder slice below closed                      1 3 4 5 6
+          ☐ the workspace list's look and keys tried           7
+          ☐ Rex tried next to kitty                            8
+slice   ▸ zmx or shpool picked as the holder, done when:
+          ▸ the piece below closed                             1
+          ☐ zmx bugs #295, #294 and #300 rechecked upstream    3
+          ☐ survives closing one tab; attach from 2nd window   4
+          ☐ brew upgrade leaves running sessions alone         5
+          ☐ agent status correct after reattach                6
+this    ● zmx and shpool tried by hand in the test kitty, done when:
+          ☐ pi and nvim keys work in both tabs                 1
+          ☐ both reattach, screen intact, after quitting kitty 1
+          ? zmx survives kill -9, keeps graphics/OSC 66/7501   memory.md 11-10 probe
+
+needs you   1 ● try pi/nvim keys in both tabs, quit, reattach   a now · b zmx only   my pick: a
+            2   set the target's done-when                a 11-11 persistence list · b new   my pick: a
+I do next   3   recheck zmx issues #295 #294 #300           needs nothing
+            4   test one-tab close and second-window attach after 1
+            5   test brew reinstall with a live session     after 1
+            6   test agent status after reattach            after 1
+            7   try the workspace list look and keys        after 2
+waiting     8   run rex skill setup --dry-run, try Rex      until the invite arrives
+ideas       add {tab.program_status} to kitty.conf:121-122 · tuios with as few leader keys as it allows
+reply       "1 done: zmx fine, shpool broke shift+enter; 2a" → I run 3-6 on zmx only and report
+```

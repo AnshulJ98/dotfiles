@@ -1,0 +1,27 @@
+```
+target  ◇ bh-om adopted now, used for a while to see how it goes, done when:            Δ
+          ✓ you accepted one resumed run and picked adopt          your "1, adopt now"      Δ
+          ☐ done-when not agreed for "how it goes"                 9                        Δ
+higher  ○ chosen compaction setup lives in the dotfiles pi config, done when:
+          ✓ pi-blackhole 0.5.18 + 210k + DESIGN.md row committed   7b394d7                  Δ
+          ▸ beyond below, closed                                   8                        Δ
+beyond  ▸ reusable long eval saved in agent-eval/long, done when:
+          ✓ lib tests pass                                         tests/lib.test.ts (8 pass)
+          ✓ slice r2 below, closed                                 results/r2/grade/        Δ
+          ✓ agent-eval/long committed, r1 removed                  072322a                  Δ
+slice   ✓ r2: three arms from one seed, scored against the pre-set rule, done when:        Δ
+          ✓ all three arms finished every step                     results/r2/*/steps.jsonl
+          ✓ diffs judged by Opus + Sol: 22 / 25 / 28 of 30         results/r2/grade/*/impl
+          ✓ result recorded in memory                              ~/.pi/agent/memory.md:160
+          ✓ compaction summaries judged in place of probes         results/r2/grade/*/comp* Δ
+this    ● both commits on origin, done when:                                                Δ
+          ☐ git status no longer shows "ahead 2"                   8 10                     Δ
+
+needs you   8 ● Run git push in ~/Dev/dotfiles   my shell gets keychain -25308    my pick: run it Δ
+            9   Agree how the trial is judged   a session-audit after 2 weeks · b when you
+                                                notice loss · c other         my pick: a     Δ
+I do next  10   Confirm origin has 072322a and 7b394d7     after 8                           Δ
+ideas       link ~/Dev/dotfiles in agent-eval/lib/isolate.sh · check compact-cap→blackhole Δ
+            past 210k in a real session · clean om-vs-vcc rerun ~$20                        Δ
+reply       "8 done, 9a": I confirm the push, then note a 2-week session-audit review       Δ
+```

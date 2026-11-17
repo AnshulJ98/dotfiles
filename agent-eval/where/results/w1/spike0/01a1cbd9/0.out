@@ -1,0 +1,28 @@
+```
+target  ◇ I can trace and debug apps with OTel, from zero up to GenAI calls, done when:
+          ▸ lab ladder 00–05 done, each explained back                 1-9
+beyond  ▸ observability lab ladder 00–05 walked hands-on, done when:
+          ✓ rung 00 drills pass                                        `uv run check.py 00-make` PASS
+          ☐ rung 00 gap closed: what the processor/exporter do         2
+          ▸ rung 01 done (slice below)                                 1,3,5,6
+          ☐ rung 02 done: traces read in Jaeger, explained back        7
+          ☐ rungs 03–05 built and done                                 4,8,9
+slice   ▸ rung 01: span trees, status, events, resource understood, done when:
+          ☐ step-1 guesses sent before running                         1,5
+          ☐ `uv run check.py 01-recreate` PASS                         3
+          ☐ `01-modify-a`, `01-modify-b`, `01-make` PASS               3
+          ☐ explain-back given, gaps named                             3,6
+this    ● rung 01 predictions recorded before any run, done when:
+          ☐ guesses a and b for checkout.py --fail sent to me          1
+
+needs you   1 ● Send step-1 guesses a, b for checkout.py      before running it
+            2   Run tea.py without add_span_processor         say what prints and why
+            3   Work 01 Recreate, Modify, Make; explain back  hints: `uv run hint.py 01`
+            4   Pick rung 05 LLM          Ollama on winpc · API key       my pick: Ollama on winpc
+I do next   5   Check guesses against output, name misconceptions        after 1
+            6   Update 01 progress row and memory                        after 3
+waiting     7   Build 02 Recreate step, faded to function names          until 6
+            8   Build rung 03 Node→Python propagation                    until rung 02 reported
+            9   Build rungs 04–05 on winpc lgtm                          until 8 done and 4
+reply       "1: a) 4 spans, root last  b) only payment.charge" → I compare with the real output
+```

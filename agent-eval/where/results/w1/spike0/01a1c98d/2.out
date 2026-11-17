@@ -1,0 +1,28 @@
+```
+target  ◇ build on kitty and kitty sessions, no multiplexer, done when:
+          ☐ done-when not agreed                                   3
+higher  ○ herdr's organisation in plain kitty (11-11 /challenge), done when:
+          ☐ beyond closed: a trusted holder chosen                 1-2, 5-7
+          ☐ tab status, workspace keys and list tried in kitty     8
+beyond  ▸ agents survive kitty under a holder, done when:
+          ? zmx survives kill -9 of kitty, kitty features pass     memory.md 11-10
+          ▸ slice below                                            1-2
+          ☐ survives accidental tab close and attach elsewhere     6
+          ☐ brew upgrade leaves running sessions alone             7
+          ☐ zmx open bugs #295 #294 #300 rechecked                 5
+slice   ▸ zmx and shpool each tried by hand, done when:
+          ✓ both running in test kitty                             /tmp/holdertry/sock, zmx ls
+          ☐ quit test kitty, both reattach with screen intact      2
+this    ● pi and nvim keys work in each holder, done when:
+          ☐ shift+enter, cmd+shift+enter, ctrl chords pass         1
+
+needs you   1 ● Try pi and nvim keys in both tabs   zmx tab · shpool tab        my pick: zmx first
+            2   Quit test kitty, reattach both       from main kitty             my pick: after 1
+            3   Agree target done-when               a holder + workspaces · b open-ended   my pick: a
+I do next   5   Recheck zmx issues #295 #294 #300    needs nothing
+            6   Test tab close and second-window attach   after 2
+            7   Test brew reinstall with a live session   after 6
+            8   Spike {tab.program_status} in test kitty  needs nothing
+ideas       font metrics workaround for Herdr app · herdr-nvim in herdr TUI
+reply       "1 zmx passes, shpool breaks shift+enter; 3a" → I'd log it, then run 5 and 8
+```

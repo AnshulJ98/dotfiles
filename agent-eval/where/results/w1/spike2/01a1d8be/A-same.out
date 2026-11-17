@@ -1,0 +1,31 @@
+```
+target  ◇ evidence settles bh-om vs bh-vcc vs base, fairly, under new config, done when:
+          ✓ base arm ran under the new config                  results/r2/base/final.json
+          ☐ rule result holds, or you accept one resumed run   1 5
+higher  ○ chosen compaction setup lives in the dotfiles pi config, done when:
+          ☐ done-when not agreed                               3
+beyond  ▸ reusable long eval saved in agent-eval/long, done when:
+          ✓ lib tests pass                                     tests/lib.test.ts (8 pass)
+          ▸ slice r2 below, closed                             4
+          ☐ agent-eval/long committed                          2 6
+slice   ▸ r2: three arms from one seed, scored against the pre-set rule, done when:
+          ✓ all three arms finished every step                 results/r2/*/steps.jsonl
+          ✓ diffs judged by Opus + Sol: 22 / 25 / 28 of 30     results/r2/grade/*/impl
+          ✓ result recorded in memory                          ~/.pi/agent/memory.md:160
+          ☐ snapshot probes (probe.ts) run or dropped          4
+this    ● adopt-or-rerun decided from r2, done when:
+          ☐ you pick                                           1
+
+needs you   1 ● Pick adoption path   a adopt bh-om · b clean om-vs-vcc rerun ~$20 · c keep base
+                                                                                   my pick: b
+            2   Decide the commit    a with results/r2 · b without results · c not yet  my pick: b
+            3   Agree adoption done-when   pin 0.5.18 + 210k cap + DESIGN.md line · other
+                                                                         my pick: the first
+            4   Decide snapshot probes     a run ~$35 · b drop (summaries judged instead)
+                                                                                   my pick: b
+I do next   5   Run r3, bh-om and bh-vcc one arm at a time   after 1 = b
+            6   Commit agent-eval/long                       your "commit" (2)
+            7   Pin blackhole config, update DESIGN.md       after 1 = a, or 5, and 3
+ideas       link ~/Dev/dotfiles in agent-eval/lib/isolate.sh so matrix runs load extensions
+reply       "1b 2b 3 yes 4b": I run r3 one arm at a time, commit without results, report
+```

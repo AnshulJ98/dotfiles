@@ -1,0 +1,29 @@
+{"t":1794892931321,"type":"notify","level":"warning","message":"bash log: cannot write /tmp/agent-eval-long/r4-tail210/om-unobserved/home/.pi/agent/logs/bash.log; no more lines this session."}
+{"t":1794893418865,"type":"notify","level":"info","message":"Observational memory: compaction threshold reached mid-run (~210,920 tokens); compacting inline"}
+{"t":1794893418914,"type":"compaction_start","reason":"threshold"}
+{"t":1794893418914,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":210920,"after":68398,"summaryChars":31190}
+{"t":1794893419416,"type":"notify","level":"info","message":"blackhole: 66 source entries processed; tail kept 1/4 user turns (~35.2k tok)."}
+{"t":1794893532804,"type":"notify","level":"info","message":"bash changed: config/pi/bin/worker.prompt.md (deleted), config/pi/extensions/worker-sensors.ts (deleted), config/pi/tests/worker-resume.test.ts (deleted), config/pi/tests/worker-sensors.test.ts (deleted)"}
+{"t":1794893545135,"type":"notify","level":"info","message":"bash changed: config/git/bin/auto-guard (deleted), config/git/template/hooks/pre-commit (deleted), config/git/template/hooks/pre-merge-commit (deleted), config/git/template/hooks/pre-push (deleted), config/husky/init.sh (deleted), githooks/pre-merge-commit (deleted), githooks/pre-push (deleted)"}
+{"t":1794893742411,"type":"notify","level":"info","message":"bash changed: config/pi/prompts/spec-contract.md (deleted)"}
+{"t":1794893797910,"type":"notify","level":"info","message":"bash changed: config/pi/AGENTS.md (+56 −58), config/pi/AGENTS.work.md (+56 −58), config/pi/CLAUDE.md (+56 −56)"}
+{"t":1794893811538,"type":"compaction_start","reason":"threshold"}
+{"t":1794893811543,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":211576,"after":131295,"summaryChars":46620}
+{"t":1794893812043,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~72.5k tok)."}
+{"t":1794893819669,"type":"compaction_start","reason":"threshold"}
+{"t":1794893819673,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":211854,"after":131592,"summaryChars":46625}
+{"t":1794893820171,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~72.5k tok)."}
+{"t":1794893828187,"type":"compaction_start","reason":"threshold"}
+{"t":1794893828191,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":211722,"after":131748,"summaryChars":46630}
+{"t":1794893828688,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~72.6k tok)."}
+{"t":1794893832513,"type":"compaction_start","reason":"threshold"}
+{"t":1794893832518,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":212254,"after":132565,"summaryChars":48641}
+{"t":1794893833016,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~72.7k tok)."}
+{"t":1794893835375,"type":"compaction_start","reason":"threshold"}
+{"t":1794893835382,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":213789,"after":133268,"summaryChars":48646}
+{"t":1794893835881,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~73.3k tok)."}
+{"t":1794893838709,"type":"compaction_start","reason":"threshold"}
+{"t":1794893838713,"type":"compaction_end","reason":"threshold","ok":true,"aborted":false,"tokensBefore":214617,"after":133565,"summaryChars":48361}
+{"t":1794893838728,"type":"over_budget","cost":12.2741866}
+{"t":1794893839213,"type":"notify","level":"info","message":"blackhole: 0 source entries processed; tail kept 1/4 user turns (~73.6k tok)."}
+{"t":1794893840835,"type":"process_exit","code":0,"sig":null}

@@ -1,0 +1,28 @@
+```
+target  ◇ kitty + kitty sessions as the base, pieces tried one by one, done when:         Δ
+          ▸ zmx and shpool tried as holders under kitty (slice)        7 8 9              Δ
+          ☐ my untested items 3-8 tried one at a time                   10                Δ
+higher  ○ one daily terminal setup: persistent agents, workspaces→tabs, nvim, done when:
+          ▸ the target above, closed                                    7 8 9 10          Δ
+          ? Herdr app role: side trial, opaque until #191/#67/#332      compaction summary Δ
+          ☐ Herdr app cmd-shift-[/] tried, then kept or moved           2                 Δ
+          ☐ Rex is installed with kitty Cmd keys in init.lua            6                 Δ
+          ☐ kitty spec defined item by item, then spiked and tested     4
+slice   ▸ zmx and shpool tried as holders under kitty, done when:                         Δ
+          ✓ shpool 0.11.6 installed                                     shpool version    Δ
+          ✓ test kitty open with a zmx tab and a shpool tab   /tmp/holdertry/try.kitty-session Δ
+          ☐ both survive quitting kitty, reattach from main kitty       8                 Δ
+          ☐ zmx #295/#294/#300 and shpool #44 rechecked upstream        9                 Δ
+this    ● pi and nvim keys work under zmx and shpool as in bare kitty, done when:         Δ
+          ☐ shift+enter, cmd+shift+enter, ctrl chords pass in both tabs 7                 Δ
+
+needs you   7 ● Press pi/nvim keys in both test tabs     zmx · shpool       my pick: zmx first Δ
+            8   Quit test kitty, reattach from main      quit · kill -9     my pick: quit      Δ
+            2   Use cmd-shift-[/] in the app a few days  keep tabs · panes  my pick: keep tabs
+            4   Say what felt wonky in the worktree flow (kitty spec item 1)  my pick: none yet
+I do next   9   Recheck zmx and shpool open issues       needs nothing                         Δ
+            10  Try items 3-8 one at a time in test kitty  after 7-8                           Δ
+waiting     6   Write Rex init.lua, run skill setup --dry-run   until Rex invite arrives
+ideas       tuios as fallback · {tab.program_status} in kitty tabs · app font fix · herdr-nvim Δ
+reply       "7 shpool breaks shift+enter, zmx ok": I drop shpool, run 9, then 10 on zmx only   Δ
+```

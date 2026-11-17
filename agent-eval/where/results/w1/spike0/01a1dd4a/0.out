@@ -1,0 +1,31 @@
+```
+target  ◇ auto keeps its quality with Sol choosing the slice steps from a contract spec, done when:
+          ☐ higher rung closed                                 1 3 4 5 6 7 8
+          ☐ tomorrow's real auto run passes first dispatches   2
+higher  ○ dotfiles-v2-2026-05 runs on Mac, origin, winpc and work laptop, done when:
+          ▸ beyond rung closed                                 1 5 6 8
+          ☐ verify.sh clean on winpc (now 71 passed, 2 failed) 4 7
+          ☐ work laptop's bin/scout has the Bedrock Sol id     3
+beyond  ▸ main session writes the contract, Sol picks the steps, done when:
+          ▸ slice below closed                                 1 5
+          ☐ DESIGN.md:74,157 describe standards + worker model 8
+          ☐ gpt-6.1-terra fallback id answers a probe          6
+slice   ▸ contract-spec run merged, shipped and on winpc, done when:
+          ✓ final review says ship                             review round 1 on 80cd2ae
+          ✓ merged and pushed                                  origin at 5fab8f2
+          ✓ winpc on 5fab8f2, tests pass                       51/51 on winpc
+          ✓ ten theme clones removed                           git status
+          ☐ this rung closed                                   1 5
+this    ● the two Medium review findings are resolved, done when:
+          ☐ unmerged .spec not attached; hint scoped or waived 1 5
+
+needs you   1 ● Decide the Medium findings   fix both · spec filter only · waive    my pick: spec filter
+            2   Try a real auto run tomorrow  run · hold                           my pick: run
+            3   Set the Bedrock Sol id        by hand · I draft the line           my pick: by hand
+            4   Pick the winpc verify fix     link + accept uutils · GNU timeout   my pick: link + uutils
+I do next   5   Fix chosen findings via Sol   after 1; then push, pull on winpc
+            6   Probe gpt-6.1-terra           needs nothing
+            7   Fix winpc verify, rerun it    after 4
+waiting     8   Update DESIGN.md:74,157       until its uncommitted edits from another session land
+reply       "1 spec filter, 4 link + uutils" → Sol fixes the filter, I fix verify, push, pull winpc
+```

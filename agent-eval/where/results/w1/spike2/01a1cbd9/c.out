@@ -1,0 +1,28 @@
+```
+target  ◇ you do observability hands-on, from the start through GenAI, done when:             Δ
+          ☐ rung 00 gap closed: what the processor does    10                                Δ
+          ✓ rung 00 drills pass                            check.py 00-modify, 00-make: PASS Δ
+          ✓ lab infra runs on winpc, Mac traces reach it   docker --context winpc ps healthy Δ
+          ▸ rung 01 learned (slice below)                  9 11 5                            Δ
+          ☐ rung 02 done; rungs 03, 04, 05 built and done  5 12 6 7 8 3                      Δ
+slice   ▸ rung 01, a trace is a tree of spans, learned, done when:                            Δ
+          ▸ your guesses checked (this, below)             9 11                              Δ
+          ☐ `uv run check.py 01-recreate` prints PASS      5                                 Δ
+          ☐ 01-modify-a, 01-modify-b, 01-make print PASS   5                                 Δ
+          ☐ rung 01 explained back, answers checked        5 11                              Δ
+this    ● your rung 01 guesses checked, done when:                                            Δ
+          ☐ guesses a and b sent before running            9                                 Δ
+          ☐ guesses compared with the `--fail` output      11                                Δ
+
+needs you   9 ● Send rung 01 guesses a and b      read checkout.py, don't run   my pick: now  Δ
+           10   Run tea.py without add_span_processor   say what prints, why   my pick: today Δ
+            3   Pick rung 05 LLM            Ollama on winpc · API key   my pick: Ollama on winpc (RTX 3060)
+I do next  11   Check your 01 answers, name gaps, update progress table   after 9 and 10      Δ
+waiting     5   Work through rungs 01 and 02 (yours)              until 11                     Δ
+           12   Add a Recreate step to rung 02                    until 01 is reported        Δ
+            6   Build rung 03, Node→Python propagation            until 5 is reported
+            7   Build rung 04 on the winpc lgtm stack             until 6 is done
+            8   Build rung 05, GenAI with Phoenix                 until 3 and 7
+ideas       commit config/pi/prompts/learn.md (untracked) · reserve 192.168.2.35 in the router
+reply       "9: a) 4 spans, root last b) only payment.charge; 3 Ollama": I grade, record Ollama Δ
+```

@@ -1,0 +1,28 @@
+```
+target  ◇ Sol 6.1 on high delivers auto slices from a settled spec, quality held, done when:
+          ▸ auto effort below, closed                                   1-2, 4-8
+          ☐ done-when not agreed                                        3
+beyond  ▸ auto mode's slice and dispatch flow is better, done when:
+          ▸ slice below, closed                                         1-2, 5-8
+          ☐ done-when not agreed: which earlier items join              4
+slice   ▸ main session writes contract specs; Sol picks steps, reports route, done when:
+          ✓ base tests green before any edit       40/40, node --test auto-slice + scout-bin
+          ▸ grill spec approved (this)                                  1-2, 5
+          ☐ edits 1-7 on a branch, tests green                          6
+          ☐ regression spike passes (design in Q12)                     7
+          ☐ merged into dotfiles-v2-2026-05                             8
+this    ● grill spec for slice planning is settled and approved, done when:
+          ☐ wave 2 Q9-Q13 answered                                      1
+          ☐ spec printed and approved                                   2, 5
+
+needs you   1 ● Answer wave 2 Q9-Q13          take all · override by number       my pick: take all
+            2   Approve the printed spec      approve · change · save             my pick: none yet
+            3   Set the target's done-when    spike · next real run · both        my pick: both
+            4   Add earlier items to effort   review model · 429 rework · retry   my pick: all 3
+I do next   5   Print the grill spec          after 1
+            6   Make edits 1-7 on a branch    after 2 and your "go"
+waiting     7   Run the replay spike          until 6
+            8   Merge into dotfiles-v2-2026-05    until 7 passes and your "merge"
+ideas       8-slice cap in code · rc 75 wait-retry · overseer watcher · no graph framework
+reply       "1: take all; 3: both; 4: none" → I play the answers back, print the spec, and stop.
+```
