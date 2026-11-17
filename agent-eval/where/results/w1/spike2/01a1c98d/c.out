@@ -1,0 +1,25 @@
+```
+target  ◇ Herdr TUI's organisation built on kitty, no multiplexer or prefix, done when:      Δ
+          ☐ done-when not agreed                                       2
+beyond  ▸ kitty pieces tried one at a time, nothing built yet, done when:                  Δ
+          ? status, tab filter, goto_session, save_as_session work     memory.md 11-10 spike  Δ
+          ▸ zmx and shpool compared (below)                            7 8 9                  Δ
+          ☐ holder trusted: open bugs and upgrades checked             10 11                  Δ
+          ☐ second window and ssh attach tried, status after reattach  12                     Δ
+this    ● zmx and shpool compared in a test kitty, done when:                               Δ
+          ✓ both running in their own tab                              /tmp/holdertry/try.kitty-session Δ
+          ☐ pi and nvim keys work in each                              7                      Δ
+          ☐ each redraws the screen after kitty quits                  8                      Δ
+          ☐ each survives closing one tab by accident                  9                      Δ
+
+needs you   2   Agree when target is done      tried only · a daily driver     my pick: tried only Δ
+            7 ● Try pi and nvim in both tabs   shift+enter · cmd+shift+enter · ctrl my pick: all three Δ
+            8   Quit test kitty, reattach both from main kitty   zmx · shpool     my pick: both     Δ
+            9   Close one test tab, then reattach it              zmx · shpool     my pick: both     Δ
+I do next   10  Recheck zmx #295 #294 #300 and shpool #44         needs nothing                     Δ
+            11  Upgrade each holder with a live session           after 7-8                         Δ
+            12  Attach from a second kitty window and ssh         after 8                           Δ
+waiting     6   Run `rex skill setup --dry-run`, then set up Rex  until the Rex invite arrives
+ideas       Herdr app font fix (was 3) · herdr-nvim (was 4) · {tab.program_status} in kitty.conf:121 Δ
+reply       "2 tried only; 7 both fine; 8 shpool lost screen": I note it, then run 10 and 11       Δ
+```

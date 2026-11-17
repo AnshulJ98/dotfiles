@@ -1,0 +1,5 @@
+```json
+{"X1": {"accurate": 3, "stale": 0, "missed": 5, "invented": 1, "usable": 4, "why": "The zmx/shpool trial and the next key presses are right, but it drops Rex, the font and herdr-nvim decisions, ssh attach, shpool #44, the session-file reattach and the closure of pick 1, and it invents the /tmp/holdertry path."},
+ "X2": {"accurate": 3, "stale": 0, "missed": 4, "invented": 2, "usable": 4, "why": "It keeps the open decisions and closes 1 correctly, but it promotes the start card's ? rows to ✓ without evidence, invents the path, and omits shpool #44, the session-file reattach, the workspace keys and the kitty.conf status idea."},
+ "X3": {"accurate": 4, "stale": 0, "missed": 3, "invented": 2, "usable": 4, "why": "It covers most of the untested list (keys, reattach, tab close, bugs including shpool #44, upgrades, ssh) and keeps Rex, font and herdr-nvim, but it omits the session-file reattach, the workspace look and keys, and the shpool -d note, and it invents the path and the memory.md source."}}
+```

@@ -1,0 +1,18 @@
+{
+  "01a1dd4a": {
+    "runs": 1,
+    "parsed": 1,
+    "sameRungs": null,
+    "rungSim": null,
+    "checkSim": null,
+    "markAgree": null,
+    "actionSim": null,
+    "numberAgree": null,
+    "checks": [14],
+    "actions": [8],
+    "longRows": [2],
+    "rows": [28],
+    "outside": [0],
+    "openWithoutAction": [3]
+  }
+}

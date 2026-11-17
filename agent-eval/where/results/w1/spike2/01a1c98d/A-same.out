@@ -1,0 +1,22 @@
+```
+target  ◇ A tool with the Herdr app's idea but a better UI, less limiting, done when:
+          ☐ done-when not agreed                                      2
+          ☐ one alternative tried side by side with herdr             1 5
+beyond  ▸ Herdr app tried with kitty-like defaults, config in dotfiles, done when:
+          ? app settings, keys, theme symlinked from dotfiles         summary: 822eee5
+          ? Sheprd leftovers removed                                  summary: 822eee5
+          ☐ font workaround applied or declined                       3
+          ☐ herdr-nvim tried or declined                              4
+          ☐ Rex set up once the invite arrives                        6
+this    ● One alternative chosen to try, done when:
+          ☐ you name one from the shortlist                           1
+
+needs you   1 ● Pick an alternative to try   tuios · kitty 0.50 status · cmux     my pick: tuios
+            2   Agree when target is done     one tried · a new daily driver       my pick: one tried
+            3   Decide Herdr app font fix     apply · leave                        my pick: leave
+            4   Decide herdr-nvim in TUI      try · skip                           my pick: skip for now
+I do next   5   Install the pick, test it in a throwaway kitty window   after 1
+waiting     6   Run `rex skill setup --dry-run`, then set up Rex      until the Rex invite arrives
+ideas       check whether kitty.conf:121 tab_title_template hides kitty 0.50's OSC 7501 status
+reply       "1 tuios, 2 one tried, 3 leave, 4 skip": I brew install tuios and test it next to herdr
+```

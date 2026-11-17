@@ -1,0 +1,29 @@
+```
+target  ◇ Sol on high delivers slices from a target, intent and outcome spec, done when:
+          ☐ quality holds in your test auto run tomorrow           8
+higher  ○ auto/slice-contract merged into dotfiles-v2-2026-05, done when:
+          ☐ merge --no-ff lands on dotfiles-v2-2026-05             7
+beyond  ▸ auto runs on contract specs, risk marks and standards, done when:
+          ? spec #82 approved                                      read from your "auto"
+          ▸ the slice below, closed                                1, 3-5
+          ☐ agent-eval/fixtures/orch/rules.md synced to plan.md    6
+slice   ▸ four slices merged on auto/slice-contract and reviewed, done when:
+          ✓ build-agents.sh --check passes on base                 rc=0, this session
+          ? node tests pass on base (40)                           earlier, at a37a5b2
+          ☐ spec-shape, child-standards, review-specs, worker-model merged   3-4
+          ☐ final review says ship                                 5
+this    ● run started at 80fdd68, done when:
+          ☐ confirmation answered                                  1
+          ☐ ~/Dev/dotfiles.auto-slice-contract/AUTO.md exists      3
+
+needs you   1 ● Answer the auto confirmation   start · change · cancel          my pick: start
+            2   Grant the final merge          grant now · run it yourself      my pick: yourself
+I do next   3   auto-slice start slice-contract, write AUTO.md                  after 1
+            4   Dispatch slices 1-4 to Sol on high, merge each PASS             after 3
+            5   Run auto-slice review                                           after 4
+waiting     6   Sync the orch fixture rules.md          until eval-suite-2 resumes
+            7   Merge auto/slice-contract               until 5 says ship, per 2
+            8   Try the new rules in a real auto run    until 7
+ideas       Opus+Sol union review · quota-resume extension · scout auto-failover on quota
+reply       "1 start, 2 yourself" → I start the run and work through slices 1-4 unattended
+```

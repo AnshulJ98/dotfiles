@@ -1,0 +1,46 @@
+[
+  {
+    "id": "01a1dd4a",
+    "file": "/Users/anshulj/.pi/agent/sessions/--Users-anshulj-Dev-dotfiles--/2026-11-15T03-39-39-734Z_01a1dd4a-0b55-71a7-8c3c-99a6f42ae8e8.jsonl",
+    "cwd": "/Users/anshulj/Dev/dotfiles",
+    "cuts": {
+      "compaction": 114,
+      "aCross": 106,
+      "aSame": 131,
+      "b": 238
+    }
+  },
+  {
+    "id": "01a1d8be",
+    "file": "/Users/anshulj/.pi/agent/sessions/--Users-anshulj--/2026-11-14T06-29-12-973Z_01a1d8be-ea8c-7341-936e-6587503cc7a0.jsonl",
+    "cwd": "/Users/anshulj",
+    "cuts": {
+      "compaction": 242,
+      "aCross": 199,
+      "aSame": 312,
+      "b": 363
+    }
+  },
+  {
+    "id": "01a1cbd9",
+    "file": "/Users/anshulj/.pi/agent/sessions/--Users-anshulj-Dev-labs-observability--/2026-11-11T18-22-54-297Z_01a1cbd9-3d59-75c9-81b5-ba8856eb4ec5.jsonl",
+    "cwd": "/Users/anshulj/Dev/labs/observability",
+    "cuts": {
+      "compaction": 270,
+      "aCross": 226,
+      "aSame": 281,
+      "b": 343
+    }
+  },
+  {
+    "id": "01a1c98d",
+    "file": "/Users/anshulj/.pi/agent/sessions/--Users-anshulj-Dev--/2026-11-11T07-40-46-447Z_01a1c98d-59ef-701a-8e40-0e07d54ca875.jsonl",
+    "cwd": "/Users/anshulj/Dev",
+    "cuts": {
+      "compaction": 239,
+      "aCross": 184,
+      "aSame": 245,
+      "b": 294
+    }
+  }
+]

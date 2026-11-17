@@ -1,0 +1,4 @@
+```json
+{"X1": {"accurate": 4, "stale": 0, "missed": 0, "invented": 2, "usable": 4, "why": "Correctly retires the WSL slice, records the winpc Tempo test (30 traces, 8 error) and rung 00 PASS with explain-back, and keeps the learn.md commit open; the Ollama-on-winpc pick, the guess contents and the 01-modify-a/b names have no basis in the session, and the numbering (3,5,6,9–13) skips around."},
+ "X2": {"accurate": 4, "stale": 0, "missed": 2, "invented": 2, "usable": 5, "why": "Clean 1–9 numbering and the rung 01 next steps are actionable, but it drops the open learn.md commit decision and never marks the winpc lgtm infra as built and tested; the Ollama-on-winpc pick, checkout.py --fail and the 01-modify-a/b names are unsupported."}}
+```

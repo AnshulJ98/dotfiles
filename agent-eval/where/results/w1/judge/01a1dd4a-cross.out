@@ -1,0 +1,4 @@
+```json
+{"X1": {"accurate": 4, "stale": 0, "missed": 3, "invented": 1, "usable": 4, "why": "Correctly closes spec, merge, push and winpc, drops the spike and keeps item 4. It omits the Bedrock Sol id, the unprobed terra id and the clone removal. It demotes winpc's 2 verify failures to ideas. 'review round 1 at 80cd2ae' has no basis in the session."},
+ "X2": {"accurate": 4, "stale": 0, "missed": 1, "invented": 1, "usable": 5, "why": "Covers every open item: Medium findings, DESIGN.md wait, Bedrock id, terra probe, winpc verify 71/2, tomorrow's run, plus clones removed and pushed. It silently drops the start card's open item 4 (earlier items joining the effort). '80cd2ae' is unsupported."}}
+```

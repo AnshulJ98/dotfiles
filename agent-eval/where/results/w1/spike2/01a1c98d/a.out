@@ -1,0 +1,22 @@
+```
+target  ◇ kitty and its sessions as the base with no multiplexer, tried piece by piece, done when:
+          ☐ done-when not agreed                                       3
+          ▸ zmx and shpool trial below closed                          1 2 4 5 6
+slice   ▸ zmx and shpool each tried as what keeps kitty's shells alive, done when:
+          ✓ both running in a separate test kitty                      /tmp/holdertry/try.kitty-session
+          ☐ pi and nvim keys pass through both (this, below)           1
+          ☐ both reattach after the test kitty quits                   2
+          ☐ both survive closing a tab and attach from a 2nd window    4
+          ☐ upgrade safety and agent status after reattach checked     5 6
+this    ● pi and nvim behave under zmx and shpool as in bare kitty, done when:
+          ☐ shift+enter, cmd+shift+enter, ctrl chords work in both tabs   1
+
+needs you   1 ● Press pi and nvim keys in both test tabs  now · drop shpool first    my pick: now
+            2   Quit test kitty, reattach both from main  `zmx attach` · `shpool attach`  my pick: both
+            3   Agree when target is done           a holder picked · + workspace flow   my pick: holder
+I do next   4   Close one tab, attach from a 2nd kitty window   after 2
+            5   Recheck zmx #295 #294 #300, upgrade one live    needs nothing
+            6   Check agent status in pi after reattach         after 2
+ideas       `{tab.program_status}` in tab templates · shpool `-d` for cwd · workspace list look/keys
+reply       "1 zmx fine, shpool broke shift+enter; 3 holder": I note it, then run 5 and 4 on zmx only
+```

@@ -1,0 +1,31 @@
+```
+target  ◇ I understand observability from zero, then GenAI observability, done when:
+          ▸ the lab ladder below, closed                              1-9
+beyond  ▸ lab rungs 00–05 worked through, each explained back, done when:
+          ▸ the slice below, closed                                   1-6
+          ✓ the winpc backend receives the lab's traces               infra/compose.yaml
+          ☐ rung 03 done: one trace across Node and Python            7
+          ☐ rung 04 done: metrics and logs joined to traces           8
+          ☐ rung 05 done: GenAI calls traced in Phoenix               4, 9
+slice   ▸ rungs 00–02 done on the Mac, each explained back, done when:
+          ✓ 00 Modify and Make pass                                   check.py 00-make PASS
+          ☐ 00 gap closed: what the processor and exporter do         3
+          ▸ rung 01, the piece below                                  1, 2, 5
+          ☐ rung 02 done, with its own Recreate step                  6
+this    ● rung 01 done, done when:
+          ☐ Predict guesses a and b sent before running               1
+          ☐ 01-recreate, 01-modify-a, 01-modify-b, 01-make pass       2, 5
+          ☐ explained back in three sentences, gaps named             2, 5
+
+needs you   1 ● Send your 01 guesses a and b    read checkout.py, don't run    my pick: now
+            2   Work 01 steps 2–7 to PASS       uv run hint.py 01 if stuck     my pick: after 1
+            3   Run the tea.py experiment       comment out add_span_processor my pick: before 2
+            4   Pick the LLM for rung 05        Ollama on winpc · API key      my pick: Ollama on winpc
+I do next   5   Check your 01 answers and runs, name each misconception      after 1-2
+waiting     6   Build 02's Recreate step, with less guidance                 until 01 explained back
+            7   Build rung 03, Node calling Python                           until 02 reported
+            8   Build rung 04 on the winpc lgtm container                    until 03 done
+            9   Build rung 05, GenAI with Phoenix                            until 4 and 04 done
+ideas       commit config/pi/prompts/learn.md (still untracked in dotfiles)
+reply       "1: a) 4 spans, root last  b) only payment.charge" → I compare them to the run, name misses
+```

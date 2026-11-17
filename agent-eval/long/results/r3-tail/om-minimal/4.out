@@ -1,0 +1,35 @@
+I checked every change against items A1–I2 and found seven gaps. Six are fixed and one needs your decision. Both checks were re-run: `build-agents.sh --check` passes, and `verify.sh` fails 6 checks that also failed before I changed anything. Nothing is committed or pushed.
+
+## Check results
+- **`./config/pi/build-agents.sh --check`:** `OK: AGENTS/CLAUDE files match fragments`, exit 0.
+- **`TSC=…/typescript@5.9.3/bin/tsc ./config/pi/verify.sh`:** `58 passed, 6 failed`, exit 1. The baseline was 62 passed and 7 failed. The 6 failures:
+  - Four links don't resolve because the sandbox HOME isn't linked to this checkout: `~/.pi/agent/bin`, `~/.pi/agent/web-search.json`, `~/.config/git/template` and `~/.config/worktrunk/config.toml`.
+  - `skill referenced by a fragment exists: pdf-images`. `persona-pi.md` names `/skill:pdf-images`, but the skill here is `pdf`. This also failed at baseline.
+  - `node tests pass`: 191 tests, 182 pass, 9 fail. The 9 are the same herdr and scout pane tests that fail at baseline.
+- **Type check:** `tsc --strict` now runs and passes with 0 errors. The first run used TypeScript 4.9.5, which can't read `allowImportingTsExtensions`, and reported 170 errors from that alone. With 5.9.3, both this checkout and a HEAD copy in `/tmp/base` have 0 errors.
+- **`node --test 'config/git/tests/*.test.ts'`:** 40 of 40 pass.
+- **`slice-check.test.ts`:** 42 of 42 pass, including the new nested-repo test.
+
+## Blocked on me
+1. **F5 conflict:** `claude/skills/parallel/SKILL.md` and `claude/skills/migrate/SKILL.md` still start parallel `worker` Tasks, with "max 4 concurrent". That contradicts the new `claude-delta.md` rule: "Subagents read; code is written by the main agent only." There is also no `worker` agent in `claude/agents/`. Should I delete `parallel` and remove the parallel-worker branch from `migrate`, or leave both?
+2. **Staging is mixed:** the hook, `spec-contract.md` and husky deletions and the `DESIGN.md → LOG.md` rename are staged. The worker-file deletions are not. Run `git reset` if you want nothing staged before you review.
+
+## Changed in this pass
+- **Crash in `slice-check`:** an untracked nested repo or submodule crashed it with `EISDIR`, and the stack trace exited 1, which reads as FAIL. It now counts as a changed path. Fix in `lib/slice-check-main.ts`, with a test in `tests/slice-check.test.ts` that failed before the fix.
+- **B4 / C1 gap:** item B4 said the diff is limited to "the files the card declares", but the card format had no files field. Without the plan in context, `/review` couldn't pass `--files`. I added a `files:` line to the card in `plan.md`, and `/plan` "go" and `/review` now pass it to `slice-check`.
+- **Base for committed slices:** `slice-check` compares against HEAD by default, so a slice with commits passed the scope and weakening checks without checking anything. "go" now passes `--base <sha>` (the slice's start commit) when the slice has commits, and `/review` passes `--base <base>`.
+- **C5 gap:** a fresh slice session started from a handoff card never ran the done-when checks to see them fail first. "go" now runs them first if this session hasn't, and `/plan` treats a pasted card as settled.
+- **`ops.md`:** "Keep the task list in the spec" now says "in the plan", since `spec-contract.md` is gone.
+- **`prime-reminder.ts`:** the post-compaction reminder now includes the done-when rule from C2 and points at "the Delegation rules".
+- **`DESIGN.md`:** the card fields now include `files`. The scout digest now reads "about 300 words" (that's what `scout.prompt.md` says), replacing the wrong "3-4 KB".
+
+## Found
+- **Deviations you approved implicitly, now stated:**
+  - **F3:** the second reviewer is a prose step in `/review` that runs `scout`, not a `--review` flag.
+  - **G2:** the memory cap is a `verify.sh` note, not a failure. With G1 dropped, a failing check would never pass.
+  - **C6:** this checkout's `/handoff` was already short, so it only gained "Next card"; there is no 12-section form to keep as `/handoff full`.
+- **B4's optional pre-commit hook was not built.** A pre-commit hook can't know which card's checks to run.
+- **Not run:** I1, so E2 is also skipped.
+- **Untested:** the rewritten `compact-cap.ts`. It had no tests before either. It loads under node and passes the type check, but its notice logic has no test.
+- **Known false FAIL:** renaming a test file shows up as a deleted test file, so `slice-check` fails it as weakened. The reason line names the file, and you can override it.
+- **Possible stale reference:** `scout.ts` line 7 still lists `mode` among the meta fields. I didn't check whether `bin/scout` still writes it.

@@ -1,0 +1,5 @@
+```json
+{"X1": {"accurate": 5, "stale": 0, "missed": 0, "invented": 0, "usable": 5, "why": "Covers the adoption, both commits, the r1 removal, the failed push (8), the still-open probes decision (4) and the untested compact-cap→blackhole path (10), each with a correct number."},
+ "X2": {"accurate": 4, "stale": 0, "missed": 2, "invented": 1, "usable": 4, "why": "Commits and push are right, but it drops the open snapshot-probes decision, moves the untested compact-cap path to ideas, and invents a 'session-audit --models' step."},
+ "X3": {"accurate": 3, "stale": 0, "missed": 2, "invented": 2, "usable": 4, "why": "Marks the snapshot probes resolved ('summaries judged in place of probes', comp* path) although the session never decided item 4, and moves the untested compact-cap check to ideas; push and commit rows are right."}}
+```

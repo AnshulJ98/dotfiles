@@ -1,0 +1,32 @@
+```
+target  ◇ Sol on high delivers each auto slice from a contract spec, quality kept, done when:
+          ☐ next real auto run: first dispatches pass, no stop from a missing step   4, 8
+          ☐ Route line read every slice; risk-slice diffs read before merge         4
+higher  ○ dotfiles-v2-2026-05 the same on origin, Mac and winpc WSL, done when:
+          ✓ origin at 5fab8f2                                        push 2da23c6..5fab8f2
+          ✓ winpc WSL on 5fab8f2, 51/51 tests, Sol + Sonnet scouts rc 0  scout/775199
+          ☐ other sessions' uncommitted kitty/agents-md/skills work settled  3
+beyond  ▸ slice-contract shipped with no open review finding, done when:
+          ✓ 4 slices merged, run review says ship                    5fab8f2
+          ☐ two Medium findings (unmerged .spec attached; broad hint) settled  2, 6
+          ☐ config/pi/DESIGN.md:74,157 describe the new worker setup  6, 9
+          ▸ slice below closed                                       1, 7
+slice   ▸ commit, push, clones removed, work on winpc WSL, done when:
+          ✓ ten upstream clone dirs removed                          git status
+          ✓ winpc pulled to 5fab8f2, build-agents --check OK         box git log
+          ✓ winpc Anthropic login works again                        auth.json.bak.1794729708
+this    ● winpc config/pi/verify.sh all green, done when:
+          ☐ pi-blackhole-config.json link present on winpc           1, 7
+          ☐ "timeout on PATH is GNU" passes or accepts uutils 0.10.0  1, 7
+
+needs you   1 ● Pick winpc verify fix   a link + relax check · b link only · c leave   my pick: b
+            2   Settle Medium findings  a fix both · b .spec filter only · c leave   my pick: b
+            3   Settle others' edits    a leave to their sessions · b commit now      my pick: a
+            4   Run tomorrow's real auto with the new rules                     my pick: none yet
+I do next   6   Fix chosen findings + DESIGN.md as one slice    after 2 and your "go"
+            7   Apply winpc fix, rerun verify.sh there          after 1
+waiting     8   Compare first-dispatch verdicts in events.log   until 4
+            9   Edit DESIGN.md                                  until its uncommitted edits land
+ideas       Opus+Sol union review; quota auto-resume extension; graph orchestration
+reply       "1b 2b 3a" → I link pi-blackhole on winpc, rerun verify.sh, then plan the .spec slice
+```

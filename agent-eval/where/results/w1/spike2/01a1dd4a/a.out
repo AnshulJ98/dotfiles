@@ -1,0 +1,27 @@
+```
+target  ◇ Sol on high delivers slices from a target, intent and outcome spec, done when:
+          ☐ quality holds in your first real auto run on the new rules   2, 5
+higher  ○ dotfiles-v2-2026-05 carries the new auto rules on Mac and winpc, done when:
+          ✓ merged and pushed                                       origin at 5fab8f2
+          ▸ the effort below, closed                                1, 3-4, 6
+beyond  ▸ auto runs on contract specs, risk marks and standards, done when:
+          ✓ four slices merged, review round 1 says ship            80cd2ae
+          ✓ the slice below, closed                                 clones + winpc
+          ☐ DESIGN.md:74 and :157 describe the new rules            4
+          ☐ agent-eval/fixtures/orch/rules.md synced to plan.md     6
+slice   ✓ clones gone, winpc on the same commit, done when:
+          ✓ ten root theme clones removed                           rm per dir, git status
+          ✓ winpc pulled to 5fab8f2, 51/51 tests pass               node --test on winpc
+          ✓ scouts run on winpc after the auth re-copy              scout 775199 rc 0
+this    ● the two Medium review findings settled, done when:
+          ☐ each fixed with a test, or waived by you                1, 3
+
+needs you   1 ● Decide the Medium findings      fix both · spec-attach only · waive   my pick: both
+            2   Run a real auto run on the new rules   tomorrow · later              my pick: tomorrow
+I do next   3   Fix the chosen findings via a Sol worker, push, pull on winpc   after 1
+            5   Read worker verdicts and Route lines from that run              after 2
+waiting     4   Update DESIGN.md for the new rules     until its uncommitted edits are committed
+            6   Sync the orch fixture rules.md         until eval-suite-2 resumes
+ideas       fix winpc verify FAILs (uutils timeout, pi-blackhole link) · quota-resume extension
+reply       "1 both, 2 tomorrow" → I dispatch one worker for both fixes, merge, push, pull on winpc
+```

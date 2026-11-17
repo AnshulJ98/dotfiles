@@ -1,0 +1,29 @@
+```
+target  ◇ I can trace and debug apps with OTel, then GenAI apps, done when:
+          ▸ the lab ladder below, closed                          1-9
+beyond  ▸ rungs 00–05 of ~/Dev/labs/observability done, done when:
+          ✓ rung 00: 00-modify and 00-make PASS                   uv run check.py 00-make
+          ☐ rung 00 gap: tea.py without add_span_processor        6
+          ▸ the slice below, closed                               1-5, 7
+          ☐ rung 02 done: Investigate b–d explained aloud         8
+          ☐ rungs 03–05: done-when not agreed                     9
+slice   ▸ rung 01 done, done when:
+          ☐ uv run check.py 01-recreate PASS                      3
+          ☐ 01-modify-a, 01-modify-b, 01-make PASS                4
+          ☐ explain-back: parent, ERROR status, resource          5
+this    ● rung 01 guesses tested against the output, done when:
+          ☐ guesses a and b sent before running                   1
+          ☐ Investigate c–g answered from the output              2, 7
+
+needs you   1 ● Send guesses a, b after reading checkout.py   guess · peek at hint        my pick: guess
+            2   Answer Investigate c–g from the output         run --fail · run plain     my pick: both
+            3   Write order.py from its comments               closed file · hint.py 01   my pick: closed
+            4   Do Modify A, B and Make, run their checkers    in order                   my pick: in order
+            5   Explain rung 01 back in three sentences        aloud · typed to me        my pick: typed
+            6   Explain what tea.py prints without processor   try it · reason it out     my pick: try it
+I do next   7   Check your 01 answers, name each misconception  after 1-2
+waiting     8   Hand over rung 02 with a faded Recreate step    until 5
+            9   Build rung 03 and agree done-when for 03–05     until rung 02 reported
+ideas       commit learn.md after 01's Recreate works; pick Ollama or an API key before rung 05
+reply       "1: a) 4 spans, root last  b) only payment.charge" → I check them against the output
+```

@@ -1,0 +1,19 @@
+{
+  "steps": ["warmup:ok", "3:stopped: budget $12 (at $12.27)"],
+  "session": {
+    "turns": 80,
+    "mainCost": 10.761404599999997,
+    "compactionCost": 0,
+    "compactions": 7,
+    "turnsAfterFirstCompaction": 49,
+    "avgContextAfterFirstCompaction": 161940
+  },
+  "workers": {
+    "calls": 35,
+    "cost": 0.089872015,
+    "malformed": 0
+  },
+  "verify": "60 passed, 6 failed",
+  "agentsCheck": "ok",
+  "diffStat": "46 files changed, 1078 insertions(+), 2592 deletions(-)"
+}

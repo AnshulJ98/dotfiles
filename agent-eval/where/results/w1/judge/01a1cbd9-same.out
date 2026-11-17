@@ -1,0 +1,5 @@
+```json
+{"X1": {"accurate": 4, "stale": 0, "missed": 1, "invented": 3, "usable": 5, "why": "Rung 00 PASS, the processor test (9), the 01 guesses and the 01 Recreate step match the session; invented: 01-modify-a/b, rung 02 'faded to function names', infra/compose.yaml as evidence (start card cites infra/README.md); the router-reservation idea is dropped."},
+ "X2": {"accurate": 3, "stale": 1, "missed": 1, "invented": 2, "usable": 4, "why": "00 drills, processor gap and 01 guesses are right; invented: a '--fail output' check and 01-modify-a/b; item 5 still 'waiting until 11' although slice rows already point at it for active 01 work; the new hint.py and /learn changes are not reflected."},
+ "X3": {"accurate": 3, "stale": 0, "missed": 1, "invented": 5, "usable": 4, "why": "Core state is right (00 done, processor test, 01 guesses first); invented: README progress-row evidence, rung 02 'with Jaeger' and '(b)-(d) explained out loud', 01-modify-a/b, a hint.py dotfiles idea; rung 05 moved onto the lgtm stack instead of Phoenix, and every item is renumbered."}}
+```

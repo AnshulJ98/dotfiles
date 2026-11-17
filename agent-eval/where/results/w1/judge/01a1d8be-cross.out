@@ -1,0 +1,3 @@
+```json
+{"X1": {"accurate": 4, "stale": 0, "missed": 2, "invented": 3, "usable": 4, "why": "Marks match the session: r2 scores, both commits, the open push and the untested compact-cap path. It omits the r1 deletion and verify.sh 75/0, and its evidence paths (final.json, compaction*, bg6 ALL-DONE) and the trial-end options have no basis in the session."}, "X2": {"accurate": 4, "stale": 0, "missed": 2, "invented": 1, "usable": 5, "why": "The slice rungs are correct and concrete (072322a, 7b394d7, r1 removed, 75 passed) and the push action is exact. 'Opus + Sol' judges is invented. The isolate.sh finding is dropped, the untested compact-cap path is demoted to ideas, and the level ordering is odd."}}
+```

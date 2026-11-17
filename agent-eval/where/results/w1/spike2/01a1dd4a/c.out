@@ -1,0 +1,29 @@
+```
+target  ◇ Sol on high delivers slices from a target, intent and outcome spec, done when:
+          ☐ quality holds in your test auto run tomorrow           8
+higher  ✓ auto/slice-contract merged into dotfiles-v2-2026-05, done when:                Δ
+          ✓ merge --no-ff lands on dotfiles-v2-2026-05             5fab8f2                Δ
+          ✓ pushed, and pulled on winpc                            box at 5fab8f2, 51/51  Δ
+beyond  ▸ auto runs on contract specs, risk marks and standards, done when:
+          ? spec #82 approved                                      read from your "auto"
+          ✓ the slice below, closed                                review ship, 80cd2ae   Δ
+          ☐ agent-eval/fixtures/orch/rules.md synced to plan.md    6
+          ☐ the review follow-ups below, closed                    9-11                   Δ
+slice   ✓ four slices merged on auto/slice-contract and reviewed, done when:             Δ
+          ✓ build-agents.sh --check passes on base                 rc=0, this session
+          ✓ node tests pass (51)                                   verify.sh 75/0, 5fab8f2 Δ
+          ✓ spec-shape, child-standards, review-specs, worker-model merged   80cd2ae      Δ
+          ✓ final review says ship                                 round 1 at 80cd2ae     Δ
+this    ● review follow-ups resolved, done when:                                          Δ
+          ☐ unmerged slice specs not attached to the review        9, 11                  Δ
+          ☐ fallback hint shown only after a provider error        9, 11                  Δ
+          ☐ DESIGN.md names standards.prompt.md and the Sol default  10                   Δ
+
+needs you   8   Try the new rules in a real auto run   tomorrow · later     my pick: tomorrow Δ
+            9 ● Decide the two Medium findings   fix both · specs only · waive   my pick: both Δ
+I do next   11  Fix per 9 on a branch, test, merge, push, pull on winpc   after 9            Δ
+waiting     6   Sync the orch fixture rules.md          until eval-suite-2 resumes
+            10  Update DESIGN.md lines 74 and 157       until its uncommitted edits land  Δ
+ideas       Opus+Sol union review · quota-resume extension · scout auto-failover on quota
+reply       "9 both, 8 tomorrow" → I fix both findings with tests, ship, and pull on winpc     Δ
+```

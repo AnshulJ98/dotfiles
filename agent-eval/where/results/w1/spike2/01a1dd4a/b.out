@@ -1,0 +1,29 @@
+```
+target  ◇ Sol on high delivers slices from a target, intent and outcome spec, done when:
+          ☐ quality holds in your test auto run tomorrow           8
+higher  ○ auto/slice-contract merged into dotfiles-v2-2026-05, done when:
+          ✓ merge --no-ff lands on dotfiles-v2-2026-05             5fab8f2
+          ✓ pushed to origin                                       origin at 5fab8f2
+          ✓ winpc WSL on the same commit, 51 tests pass            winpc HEAD 5fab8f2
+beyond  ▸ auto runs on contract specs, risk marks and standards, done when:
+          ✓ spec #82 approved                                      your "auto / start"
+          ✓ the slice below, closed                                80cd2ae
+          ☐ review's two Medium findings fixed or waived           9, 11
+          ☐ config/pi/DESIGN.md describes the new worker flow      10, 12
+          ☐ agent-eval/fixtures/orch/rules.md synced to plan.md    6
+slice   ✓ four slices merged on auto/slice-contract and reviewed, done when:
+          ✓ verify.sh passes on the merged base                    75 passed, 0 failed
+          ✓ spec-shape, child-standards, review-specs, worker-model merged   80cd2ae
+          ✓ final review says ship                                 round 1 record, 80cd2ae
+this    ● new rules tried in a real auto run, done when:
+          ☐ one auto run completes on the new rules                8
+
+needs you   8 ● Run a real auto run on the new rules   tomorrow · later          my pick: tomorrow
+            9   Decide the Medium findings    fix both · spec filter only · waive   my pick: both
+           10   Choose when DESIGN.md is updated   now · after its other edits land  my pick: after
+I do next  11   Dispatch a worker for the chosen fixes, rerun tests        after 9
+waiting    12   Update DESIGN.md lines 74 and 157                      until 10 and its edits land
+            6   Sync the orch fixture rules.md                     until eval-suite-2 resumes
+ideas       Opus+Sol union review · quota resume · scout auto-failover · winpc GNU timeout
+reply       "8 tomorrow, 9 both, 10 after" → I dispatch one worker for both fixes, then stop
+```

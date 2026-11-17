@@ -1,0 +1,19 @@
+{
+  "steps": ["warmup:ok", "3:timeout"],
+  "session": {
+    "turns": 108,
+    "mainCost": 34.992811200000006,
+    "compactionCost": 0,
+    "compactions": 88,
+    "turnsAfterFirstCompaction": 101,
+    "avgContextAfterFirstCompaction": 77425
+  },
+  "workers": {
+    "calls": 40,
+    "cost": 0.09830472,
+    "malformed": 0
+  },
+  "verify": "54 passed, 13 failed",
+  "agentsCheck": "exit 1",
+  "diffStat": "41 files changed, 782 insertions(+), 2223 deletions(-)"
+}

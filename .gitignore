@@ -57,6 +57,8 @@ config/pi/bin/pi
 agent-eval/results/
 agent-eval/long/.pkgs/
 agent-eval/long/results/*/grade/**/judge/home/
+# r3-tail's runaway arm left 564M of snapshots; snapshots are reproducible from session.jsonl, not kept from r3 on
+agent-eval/long/results/r[3-9]*/*/snapshots/
 
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/

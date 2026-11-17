@@ -1,0 +1,378 @@
+{
+  "01a1dd4a": {
+    "a": {
+      "sameRungs": true,
+      "rungSim": 0.4428571428571429,
+      "checkSim": 0.3355896628623901,
+      "markAgree": 0.5,
+      "actionSim": 0.37837206196581197,
+      "numberAgree": 0.5
+    },
+    "b": {
+      "sameRungs": true,
+      "rungSim": 0.825,
+      "checkSim": 0.6466200466200466,
+      "markAgree": 0.2857142857142857,
+      "actionSim": 0.3481511544011544,
+      "numberAgree": 1
+    },
+    "c": {
+      "sameRungs": true,
+      "rungSim": 0.7155555555555555,
+      "checkSim": 0.7417671614100185,
+      "markAgree": 0.4444444444444444,
+      "actionSim": 0.39857729076479076,
+      "numberAgree": 1
+    },
+    "d": {
+      "sameRungs": false,
+      "rungSim": 0.7647058823529411,
+      "checkSim": 0.5572779072779073,
+      "markAgree": 0.5,
+      "actionSim": 0.28669146825396824,
+      "numberAgree": 1
+    },
+    "plainCross": [
+      {
+        "sameRungs": false,
+        "rungSim": 0.08506944444444445,
+        "checkSim": 0.1891568748711606,
+        "markAgree": 1,
+        "actionSim": 0.08705357142857142,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0.05263157894736842,
+        "checkSim": 0.19724705309120893,
+        "markAgree": 1,
+        "actionSim": 0.08549107142857143,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0.14423076923076922,
+        "checkSim": 0.14771696557410843,
+        "markAgree": 1,
+        "actionSim": 0.0665719696969697,
+        "numberAgree": null
+      }
+    ],
+    "delta": {
+      "c": 18,
+      "d": 19
+    },
+    "faults": {
+      "a": {
+        "parsed": true,
+        "longRows": 1,
+        "rows": 24,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "b": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 26,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "c": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 26,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "d": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 27,
+        "outside": 0,
+        "openWithoutAction": 0
+      }
+    }
+  },
+  "01a1d8be": {
+    "a": {
+      "sameRungs": false,
+      "rungSim": 0,
+      "checkSim": 0.23221500721500718,
+      "markAgree": 1,
+      "actionSim": 0.03273809523809523,
+      "numberAgree": null
+    },
+    "b": {
+      "sameRungs": true,
+      "rungSim": 0.6,
+      "checkSim": 0.6514987537714809,
+      "markAgree": 0.875,
+      "actionSim": 0.26683673469387753,
+      "numberAgree": 1
+    },
+    "c": {
+      "sameRungs": true,
+      "rungSim": 0.5692307692307692,
+      "checkSim": 0.6254779942279942,
+      "markAgree": 0.7142857142857143,
+      "actionSim": 0.08190321583178727,
+      "numberAgree": null
+    },
+    "d": {
+      "sameRungs": false,
+      "rungSim": 0.39285714285714285,
+      "checkSim": 0.48921555536815275,
+      "markAgree": 0.8,
+      "actionSim": 0,
+      "numberAgree": null
+    },
+    "plainCross": [
+      {
+        "sameRungs": true,
+        "rungSim": 0.12287581699346406,
+        "checkSim": 0.270479797979798,
+        "markAgree": 0,
+        "actionSim": 0.027777777777777776,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0.05808080808080809,
+        "checkSim": 0.130262099012099,
+        "markAgree": null,
+        "actionSim": 0.03571428571428571,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0,
+        "checkSim": 0.1459235209235209,
+        "markAgree": null,
+        "actionSim": 0.03125,
+        "numberAgree": null
+      }
+    ],
+    "delta": {
+      "c": 17,
+      "d": 17
+    },
+    "faults": {
+      "a": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 19,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "b": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 24,
+        "outside": 0,
+        "openWithoutAction": 1
+      },
+      "c": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 24,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "d": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 23,
+        "outside": 0,
+        "openWithoutAction": 1
+      }
+    }
+  },
+  "01a1cbd9": {
+    "a": {
+      "sameRungs": false,
+      "rungSim": 0.025641025641025644,
+      "checkSim": 0.39712121212121215,
+      "markAgree": 0.6666666666666666,
+      "actionSim": 0.4970871913580246,
+      "numberAgree": 0
+    },
+    "b": {
+      "sameRungs": true,
+      "rungSim": 0.35,
+      "checkSim": 0.5053811069882499,
+      "markAgree": 0.8,
+      "actionSim": 0.6309388528138529,
+      "numberAgree": 0.8
+    },
+    "c": {
+      "sameRungs": false,
+      "rungSim": 0.09629629629629628,
+      "checkSim": 0.4854215859897678,
+      "markAgree": 0.75,
+      "actionSim": 0.74463458994709,
+      "numberAgree": 0.8333333333333334
+    },
+    "d": {
+      "sameRungs": true,
+      "rungSim": 0.5,
+      "checkSim": 0.6424537037037037,
+      "markAgree": 0.875,
+      "actionSim": 0.4519923941798942,
+      "numberAgree": 1
+    },
+    "plainCross": [
+      {
+        "sameRungs": true,
+        "rungSim": 0.07222222222222222,
+        "checkSim": 0.20591521273339453,
+        "markAgree": 1,
+        "actionSim": 0.2307098765432099,
+        "numberAgree": 0
+      },
+      {
+        "sameRungs": true,
+        "rungSim": 0.11645299145299144,
+        "checkSim": 0.18490287069832523,
+        "markAgree": 1,
+        "actionSim": 0.09550264550264549,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": true,
+        "rungSim": 0.22271825396825395,
+        "checkSim": 0.17854390979390977,
+        "markAgree": 1,
+        "actionSim": 0.3130291005291005,
+        "numberAgree": 0
+      }
+    ],
+    "delta": {
+      "c": 20,
+      "d": 19
+    },
+    "faults": {
+      "a": {
+        "parsed": true,
+        "longRows": 1,
+        "rows": 25,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "b": {
+        "parsed": true,
+        "longRows": 1,
+        "rows": 29,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "c": {
+        "parsed": true,
+        "longRows": 1,
+        "rows": 25,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "d": {
+        "parsed": true,
+        "longRows": 3,
+        "rows": 28,
+        "outside": 0,
+        "openWithoutAction": 2
+      }
+    }
+  },
+  "01a1c98d": {
+    "a": {
+      "sameRungs": false,
+      "rungSim": 0.05555555555555555,
+      "checkSim": 0.16091720779220775,
+      "markAgree": 1,
+      "actionSim": 0.2239316239316239,
+      "numberAgree": 0
+    },
+    "b": {
+      "sameRungs": true,
+      "rungSim": 0.3333333333333333,
+      "checkSim": 0.7122790404040404,
+      "markAgree": 0.6666666666666666,
+      "actionSim": 0.6737845487845487,
+      "numberAgree": 1
+    },
+    "c": {
+      "sameRungs": true,
+      "rungSim": 0.05773420479302832,
+      "checkSim": 0.16937605218855217,
+      "markAgree": 1,
+      "actionSim": 0.3628472222222222,
+      "numberAgree": 1
+    },
+    "d": {
+      "sameRungs": true,
+      "rungSim": 0.3059027777777778,
+      "checkSim": 0.3875820938320938,
+      "markAgree": 1,
+      "actionSim": 0.44718915343915344,
+      "numberAgree": 1
+    },
+    "plainCross": [
+      {
+        "sameRungs": false,
+        "rungSim": 0.044444444444444446,
+        "checkSim": 0.12375372643229784,
+        "markAgree": null,
+        "actionSim": 0.12841053622303622,
+        "numberAgree": 0
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0.08897243107769422,
+        "checkSim": 0.11911699411699411,
+        "markAgree": null,
+        "actionSim": 0.06539055080721747,
+        "numberAgree": null
+      },
+      {
+        "sameRungs": false,
+        "rungSim": 0.0733173076923077,
+        "checkSim": 0.1126800703505249,
+        "markAgree": null,
+        "actionSim": 0.03466553287981859,
+        "numberAgree": null
+      }
+    ],
+    "delta": {
+      "c": 20,
+      "d": 20
+    },
+    "faults": {
+      "a": {
+        "parsed": true,
+        "longRows": 4,
+        "rows": 19,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "b": {
+        "parsed": true,
+        "longRows": 8,
+        "rows": 22,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "c": {
+        "parsed": true,
+        "longRows": 8,
+        "rows": 22,
+        "outside": 0,
+        "openWithoutAction": 0
+      },
+      "d": {
+        "parsed": true,
+        "longRows": 0,
+        "rows": 25,
+        "outside": 0,
+        "openWithoutAction": 1
+      }
+    }
+  }
+}

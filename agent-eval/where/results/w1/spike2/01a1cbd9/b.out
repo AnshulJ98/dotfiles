@@ -1,0 +1,32 @@
+```
+target  ◇ learn observability from the start: examples, visuals, links, guided rebuilds, done when:
+          ✓ /learn has Read links and a guided Recreate step   config/pi/prompts/learn.md
+          ✓ hints come one at a time                           hint.py
+          ✓ the lab's Docker infra lives on winpc              infra/compose.yaml
+higher  ○ you can do observability hands-on, through GenAI, done when:
+          ✓ rung 00, hello span, learned                       check.py 00-make PASS
+          ☐ rung 00 gap closed: processor and exporter         9
+          ▸ rung 01 learned (slice below)                      10 5 11
+          ☐ rung 02 done, its checks PASS                      12
+          ☐ rungs 03, 04, 05 built and done                    3 6 7 8
+slice   ▸ rung 01, tree of spans, learned, done when:
+          ▸ step-1 guesses sent (this, below)                  10
+          ☐ `uv run check.py 01-recreate` prints PASS          5
+          ☐ 01-modify-a and 01-modify-b print PASS             5
+          ☐ `uv run check.py 01-make` prints PASS              5
+          ☐ rung 01 explained back, answers checked            5 11
+this    ● your two guesses for 01 are written down, done when:
+          ☐ guesses a and b sent to me before running          10
+
+needs you  10 ● Send your 01 guesses a and b      read checkout.py first     my pick: before running
+            9   Run tea.py without the processor  say what prints and why    my pick: before 01
+            5   Do 01 Recreate, Modify, Make      README order, check each   my pick: README order
+            3   Pick rung 05 LLM                  Ollama on winpc · API key  my pick: Ollama on winpc
+I do next  11   Check 01 answers, name gaps, update table   after 10 and 5
+waiting    12   Add rung 02 Recreate, faded to function names, then you do 02   until 11
+            6   Build rung 03, Node→Python propagation      until 12 is reported
+            7   Build rung 04 on the winpc lgtm stack       until 6 is done
+            8   Build rung 05, GenAI with Phoenix           until 3 and 7
+ideas       commit config/pi/prompts/learn.md (still untracked)
+reply       "10: a 4 spans, b only payment.charge": I check them against the run, name the gap
+```

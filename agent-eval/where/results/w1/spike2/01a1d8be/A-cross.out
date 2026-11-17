@@ -1,0 +1,27 @@
+```
+target  ◇ evidence picks bh-vcc or bh-om for my Opus sessions, done when:
+          ☐ r1 scored by the rule: OM ≥3 key items ahead, no lost work, ≤$1 extra  4
+higher  ○ the long eval is saved in dotfiles and rerunnable, done when:
+          ✓ unit tests pass                          agent-eval/long/tests/lib.test.ts (8/8)
+          ☐ agent-eval/long committed                2 5
+beyond  ▸ r1 produces scored vcc vs om evidence, done when:
+          ✓ shared seed saved                        agent-eval/long/seed/session.jsonl
+          ✓ answer key written (47 items)            agent-eval/long/seed/task.json
+          ▸ slice below                              6
+          ☐ recall probes scored after each compaction  3
+slice   ▸ both arms run steps 3,4,5,recall from the seed at 130k, done when:
+          ✓ warm-up done in both arms                results/r1/*/steps.jsonl
+          ▸ this (below)                             6
+          ☐ ≥1 compaction snapshot per arm           6
+this    ● bh-vcc and bh-om reach FINAL, done when:
+          ☐ ALL-DONE in the bg3 log                  6
+
+needs you   1   Decide on a base arm under efb1b4f   a add (~$8, /compact-cap 130k) · b skip  my pick: b
+            2   Approve committing agent-eval/long   commit · hold         my pick: commit after 4
+I do next   3   Run node probe.ts --run r1           after 6
+            4   Report recall, diff, cost; apply rule   after 3
+            5   Commit agent-eval/long + results/r1  your "commit" (2)
+waiting     6 ● Let bg3 finish both arms             until ALL-DONE in bg3 log
+ideas       Sonnet 5.5 worker arm; repeat runs per arm
+reply       "1b, 2 commit": I wait for bg3, run probes, report, then commit agent-eval/long.
+```

@@ -1,0 +1,28 @@
+```
+target  ◇ you learn observability hands-on from the start, up to GenAI, done when:
+          ▸ rungs 00–02 done (slice below)               1 2 3 4 6 7
+          ☐ rungs 03, 04, 05 built and done              5 8 9
+slice   ▸ rungs 00–02 done, done when:
+          ✓ rung 00 Modify and Make pass                 uv run check.py 00-make: PASS
+          ✓ rung 00 explained back                       README.md progress row 00
+          ☐ processor/exporter gap closed (tea.py test)  2
+          ▸ rung 01 done (this, below)                   1 3
+          ☐ rung 02 done: (b)–(d) explained out loud     6 7
+this    ● rung 01 learned, done when:
+          ☐ step 1 guesses sent before running           1
+          ☐ `uv run check.py 01-recreate` prints PASS    3
+          ☐ 01-modify-a, 01-modify-b, 01-make PASS       3
+          ☐ rung 01 explained back, gaps named           3 6
+
+needs you   1 ● Send your two step-1 guesses for checkout.py   before any run      my pick: now
+            2   Run tea.py without add_span_processor          say what prints, why  my pick: now
+            3   Work 01 Recreate, Modify, Make, explain-back   hint.py 01 if stuck  my pick: after 1
+            4   Pick rung 05 LLM         Ollama on winpc · API key   my pick: Ollama on winpc (RTX 3060)
+I do next   5   Grade answers, update progress table, memory   after 1-3
+waiting     6   Add rung 02's Recreate step, faded further     until 3 explain-back
+            7   Work through rung 02 with Jaeger (yours)       until 6
+            8   Build rung 03, Node→Python propagation         until 7 is reported
+            9   Build rungs 04 and 05 on the winpc lgtm stack  until 8 and 4
+ideas       commit config/pi/prompts/learn.md and hint.py idea to dotfiles · reserve 192.168.2.35
+reply       "1: 4 spans, root last; 2: nothing prints" → I check both against the output, name gaps
+```

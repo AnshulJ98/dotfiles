@@ -1,0 +1,19 @@
+{
+  "arm": "om-unobserved",
+  "run": "r3-tail",
+  "drop": "G1",
+  "compactAt": 130000,
+  "steps": ["3", "4", "5", "recall"],
+  "resume": false,
+  "compactions0": 0,
+  "setup": [],
+  "flags": [
+    "-e",
+    "/Users/anshulj/Dev/dotfiles.feature-where-spikes/agent-eval/long/.pkgs/node_modules/pi-blackhole/dist/index.js"
+  ],
+  "seed": "2026-11-14T20:57:27.910Z",
+  "model": "anthropic/claude-opus-5-5",
+  "thinking": "medium",
+  "warmMs": 180000,
+  "thinkMs": 45000
+}

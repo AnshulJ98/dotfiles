@@ -1,0 +1,2 @@
+{"step":"warmup","status":"ok","secs":22,"turns":1,"cost":2.0953649999999997,"ctx":116505,"compactions":0}
+{"step":"3","status":"timeout","secs":3600,"turns":107,"cost":36.50559320000001,"ctx":null,"compactions":88}
