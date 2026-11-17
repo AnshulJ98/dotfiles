@@ -63,6 +63,11 @@ integration test against a real (or fake-at-boundary) gateway.
 - **Bug fixes get a test that fails without the fix.** Write it first when
   the cause is unknown; it is how you find it. A failure in code you didn't
   touch: confirm it fails without your change, then report it.
+- **Round-trips, parsers, encoders and invariants get property tests**
+  (fast-check, Hypothesis, proptest) before more example tests.
+- **Judge tests by what they catch, not by how many there are.** Where a
+  mutation tool exists (Stryker, mutmut, cargo-mutants), use its score on
+  the code you changed.
 
 ## Clean Tests
 

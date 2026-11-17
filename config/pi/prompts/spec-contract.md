@@ -30,6 +30,10 @@ interface-frozen: [<only if callers must not see a change: globs of files whose 
 Scope; without an entry, `cdk deploy|destroy|bootstrap` and `aws`
 create/put/update/delete/terminate/invoke calls are blocked.
 
+Tests written or approved before dispatch stay out of files-allowed and
+are listed as given under Acceptance criteria; the settle check then
+fails any edit to them.
+
 `interface-frozen` files may change bodies but not export headers: an
 export added, removed or re-signed in a touched frozen file fails the
 settle check, and so does a new file under a frozen glob. The freeze
@@ -46,8 +50,9 @@ Then exactly these sections and nothing else:
 3. Files — each file to create or change, one line on the change.
    Every path here must match files-allowed.
 4. Acceptance criteria — observable behavior, numbered, each phrased
-   as a check the agent can run. The first is a test that fails before
-   the change.
+   as a check the agent can run. For a bug or new behaviour, the first
+   is a test that fails before the change; for a refactor, the existing
+   tests are the check.
 5. Edge cases — a table: input or state → expected behavior.
 6. Open decisions — anything unresolved, plus the fact that would
    settle each one.
