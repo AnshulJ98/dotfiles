@@ -7,6 +7,8 @@ description: D2 declarative diagramming syntax reference for backend, service, a
 
 Declarative diagramming language. Text to SVG/PNG/PDF. Beats Mermaid for nested containers and styling.
 
+Default to PNG for rendered diagrams and Markdown embeds: PNG works in the user's Neovim Markdown preview and opens quickly in Yazi. Keep the `.d2` source editable; export SVG only when explicitly requested.
+
 ## Install
 
 ```bash
@@ -16,13 +18,13 @@ brew install d2   # or: curl -fsSL https://d2lang.com/install.sh | sh
 ## CLI
 
 ```bash
-d2 in.d2 out.svg                 # render
-d2 --watch in.d2 out.svg         # live reload
-d2 in.d2 out.png                 # PNG (also .pdf)
-d2 --layout elk in.d2 out.svg    # ELK layout (use this for complex graphs)
-d2 --theme 200 in.d2 out.svg     # theme 0-100+
-d2 --sketch in.d2 out.svg        # hand-drawn look
-d2 --pad 50 in.d2 out.svg        # padding
+d2 in.d2 out.png                 # render (always specify PNG; D2 defaults to SVG)
+d2 --watch in.d2 out.png         # live reload
+d2 in.d2 out.svg                 # SVG only when explicitly requested (also .pdf)
+d2 --layout elk in.d2 out.png    # ELK layout (use this for complex graphs)
+d2 --theme 200 in.d2 out.png     # theme 0-100+
+d2 --sketch in.d2 out.png        # hand-drawn look
+d2 --pad 50 in.d2 out.png        # padding
 ```
 
 Layout engines: `dagre` (default, fast), `elk` (complex graphs, preferred), `tala` (proprietary).
@@ -282,10 +284,10 @@ vpc.private.ecs.task.app -> s3
 ## Workflow
 
 1. Write `docs/architecture.d2`.
-2. Render: `d2 --layout elk docs/architecture.d2 docs/architecture.svg`.
-3. Iterate: `d2 --watch --layout elk docs/architecture.d2 docs/architecture.svg`.
-4. Reference: `![Architecture](docs/architecture.svg)`.
-5. Commit both `.d2` source and rendered SVG.
+2. Render: `d2 --layout elk docs/architecture.d2 docs/architecture.png`.
+3. Iterate: `d2 --watch --layout elk docs/architecture.d2 docs/architecture.png`.
+4. Reference: `![Architecture](docs/architecture.png)`.
+5. Commit both `.d2` source and rendered PNG.
 
 ## D2 vs Mermaid
 
