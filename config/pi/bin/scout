@@ -392,7 +392,8 @@ if [ "$RW" = 1 ]; then
   # "type" above this file (~/package.json on the work laptop) makes node warn.
   SPEC_ERROR="$(node --no-warnings --input-type=module -e '
     import { readFileSync } from "node:fs";
-    const { parseSpec } = await import(process.argv[1]);
+    import { pathToFileURL } from "node:url";
+    const { parseSpec } = await import(pathToFileURL(process.argv[1]).href);
     const parsed = parseSpec(readFileSync(process.argv[2], "utf8"));
     if (typeof parsed === "string") console.log(parsed);' "$SENSORS" "$BRIEF_FILE" 2>&1)" || true
   [ -z "$SPEC_ERROR" ] || {

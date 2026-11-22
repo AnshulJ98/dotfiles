@@ -93,7 +93,8 @@ if [ -d "$AGENT/npm/node_modules/@gotgenes/pi-anthropic-auth" ]; then
 fi
 # Extensions patch these prototypes and skip silently when a method is gone,
 # so a pi upgrade would turn them into no-ops.
-PI_PKG="$(node --no-warnings --input-type=module -e "import { piPackage } from '$DOT/tests/pi-package.ts'; console.log(piPackage())" 2>/dev/null)"
+# A file URL, not a path: Windows ESM reads "C:" as a URL scheme.
+PI_PKG="$(node --no-warnings --input-type=module -e "import { pathToFileURL } from 'node:url'; const { piPackage } = await import(pathToFileURL(process.argv[1]).href); console.log(piPackage())" "$DOT/tests/pi-package.ts" 2>/dev/null)"
 proto_fn() { # package class method
   (cd "$PI_PKG" && node --input-type=module -e \
     "const m = await import('$1'); process.exit(typeof m['$2']?.prototype?.['$3'] === 'function' ? 0 : 1)")
