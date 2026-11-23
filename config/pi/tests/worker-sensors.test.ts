@@ -1,6 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   appendFileSync,
   mkdirSync,
@@ -18,12 +18,29 @@ import workerSensors, {
   depsChanged,
   forbiddenBash,
   isAllowed,
+  killTree,
   nextStep,
   parseSpec,
   repoRelative,
   ruleFailures,
   testWeakening,
 } from "../extensions/worker-sensors.ts";
+
+test("killTree: ends a detached shell and the job it started", async () => {
+  const child = spawn("bash", ["-c", "sleep 30 & sleep 30; wait"], {
+    detached: true,
+    stdio: "ignore",
+  });
+  const closed = new Promise<string>((resolve) =>
+    child.on("close", () => resolve("closed")),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  killTree(child.pid!);
+  const late = new Promise<string>((resolve) =>
+    setTimeout(() => resolve("still running"), 5000).unref(),
+  );
+  assert.equal(await Promise.race([closed, late]), "closed");
+});
 
 const spec = (extra: string, tests = "npm test") =>
   `---\nfiles-allowed: [src/**]\ntests: ${tests}\n${extra}---\nbody\n`;

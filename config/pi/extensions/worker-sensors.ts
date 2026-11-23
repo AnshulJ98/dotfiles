@@ -70,6 +70,7 @@ import {
   normalize,
   relative,
   resolve,
+  sep,
 } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -444,6 +445,19 @@ interface RunResult {
   timedOut: boolean;
 }
 
+/** Kill a detached child and everything it started. Windows has no process groups (kill(-pid) throws ESRCH). */
+export function killTree(pid: number): void {
+  try {
+    if (process.platform === "win32")
+      execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+      });
+    else process.kill(-pid, "SIGKILL");
+  } catch {
+    // The tree exited between the timer firing and the kill.
+  }
+}
+
 function runShell(command: string, cwd: string): Promise<RunResult> {
   return new Promise((done) => {
     const child = spawn("bash", ["-c", command], { cwd, detached: true });
@@ -456,11 +470,7 @@ function runShell(command: string, cwd: string): Promise<RunResult> {
     child.stderr.on("data", append);
     const timer = setTimeout(() => {
       timedOut = true;
-      try {
-        if (child.pid) process.kill(-child.pid, "SIGKILL");
-      } catch {
-        // ESRCH: the group exited between the timer firing and the kill.
-      }
+      if (child.pid) killTree(child.pid);
     }, TEST_TIMEOUT_MS);
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -868,7 +878,8 @@ async function scanRules(root: string): Promise<RuleHit[] | CheckFailure> {
   return hits.map((h) => ({
     ruleId: h.ruleId,
     severity: h.severity,
-    file: normalize(h.file),
+    // git's form (always /), so it matches the changed paths; normalize gives \ on Windows
+    file: normalize(h.file).split(sep).join("/"),
     line: h.range.start.line + 1,
     message: h.message ?? "",
   }));

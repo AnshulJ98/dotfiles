@@ -231,13 +231,16 @@ test("extension: single flight, minute polling, failures, timeout, and shutdown"
     childProcess,
     "execFile",
     (
-      _file: string,
+      file: string,
       args: string[],
       options: { timeout: number; env: NodeJS.ProcessEnv },
       callback: typeof finish,
     ) => {
       calls++;
-      assert.deepEqual(args, ["--json"]);
+      assert.equal(file, process.execPath);
+      assert.equal(args.length, 2);
+      assert.match(args[0], /[\\/]bin[\\/]pi-health$/);
+      assert.equal(args[1], "--json");
       assert.equal(options.timeout, 10_000);
       assert.deepEqual(options.env, { ...process.env });
       finish = callback;

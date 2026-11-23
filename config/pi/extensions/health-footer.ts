@@ -21,9 +21,10 @@ export default function (pi: ExtensionAPI) {
     let text: string | undefined;
     try {
       const stdout = await new Promise<string>((resolve, reject) => {
+        // Run by node, not by its #! line: Windows cannot execute a script file (spawn ENOENT).
         execFile(
-          health,
-          ["--json"],
+          process.execPath,
+          [health, "--json"],
           {
             timeout: 10_000,
             encoding: "utf8",

@@ -2,7 +2,13 @@
 // extensions/auto-run.ts: the pure parsers as tables, the refusals against real git in temp repos, and the handlers through a fake pi.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -376,6 +382,16 @@ test("the handlers: block, report a dirty checkout once, and nudge twice per ope
       `pid=${process.pid}\nrepo=/elsewhere/.git\n`,
     );
     assert.equal(scoutRunning(repo), false, "another repo's scout");
+    writeFileSync(
+      join(running, "3.meta"),
+      `pid=4194303\nwinpid=${process.pid}\n`,
+    );
+    assert.equal(
+      scoutRunning(repo),
+      true,
+      "Git Bash: the MSYS pid is unseen, the winpid is live",
+    );
+    rmSync(join(running, "3.meta"));
     writeFileSync(join(running, "1.meta"), "pid=1\n");
     assert.equal(await settle(), undefined, "a scout is still running");
   } finally {
