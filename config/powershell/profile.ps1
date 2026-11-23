@@ -2,7 +2,9 @@
 # counterpart of home/.zshrc and home/.zsh-colors.zsh.
 # WezTerm and Windows Terminal start PowerShell with -NoProfile and dot-source this file,
 # because $PROFILE lives in OneDrive Documents and fails while OneDrive is not running.
-# The 5.1 $PROFILE is also a one-line stub to this file, for other hosts.
+# Both $PROFILE files (5.1 and 7) are also one-line stubs to this file, for other hosts.
+# pwsh's OneDrive Modules folder was cloud-only and broke PSReadLine at startup, before
+# any profile runs; it was renamed to Modules.cloud-only.<time> beside it.
 $DOT = "$HOME\Dev\dotfiles"
 $e = [char]27
 
