@@ -165,7 +165,8 @@ function readRunning(now: number): ScoutMeta[] {
     const fields = readMetaFile(path);
     const meta = fields && toMeta(fields);
     if (!meta) continue;
-    if (!isAlive(meta.pid)) {
+    // winpid: under Git Bash the wrapper's $$ is an MSYS pid that process.kill cannot see.
+    if (!isAlive(Number(fields.winpid) || meta.pid)) {
       reapKilled(path, fields, now);
       continue;
     }

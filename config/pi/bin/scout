@@ -478,8 +478,11 @@ fi
 mkdir -p "$SESSIONS" "$DONE"
 OUT="$RUNNING/$$.out"
 FIRST_LINE="${TASK%%$'\n'*}"
-printf 'pid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\nmode=%s\nrepo=%s\n' \
-  "$$" "$MODEL" "$THINKING" "$TIMEOUT" "$(($(date +%s) * 1000))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" \
+# winpid: under Git Bash $$ is an MSYS pid; the extension checks liveness with node's process.kill,
+# which sees only Windows pids. Elsewhere there is no /proc/$$/winpid and it equals $$.
+WINPID="$(cat "/proc/$$/winpid" 2>/dev/null || echo "$$")"
+printf 'pid=%s\nwinpid=%s\nmodel=%s\nthinking=%s\ntimeout=%s\nstarted=%s\nsession=%s\ntask=%s\nmode=%s\nrepo=%s\n' \
+  "$$" "$WINPID" "$MODEL" "$THINKING" "$TIMEOUT" "$(($(date +%s) * 1000))" "${PI_SESSION_FILE:-}" "${FIRST_LINE:0:80}" \
   "$PI_SCOUT_MODE" "$PI_SCOUT_GIT_DIR" >"$META"
 finish() {
   local rc=$?
