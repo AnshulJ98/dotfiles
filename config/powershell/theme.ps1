@@ -53,4 +53,10 @@ if (Test-Path $wt) {
 # WezTerm reloads when its config file changes.
 (Get-Item "$DOT\config\wezterm\wezterm.lua").LastWriteTime = Get-Date
 
-"theme: $Name. In pi run /reload; new prompts pick it up in WezTerm now."
+# bat (and delta through it) reads themes from its cache; current.tmTheme follows the link.
+if (Get-Command bat -ErrorAction SilentlyContinue) {
+  bat cache --build | Out-Null
+  if ($LASTEXITCODE) { Write-Warning 'bat cache did not rebuild' }
+}
+
+"theme: $Name. In pi run /reload; restart yazi and lazygit; new prompts pick it up in WezTerm now."
