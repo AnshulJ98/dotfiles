@@ -74,3 +74,4 @@ agents/skills/skill-creator
 # Python bytecode (kitty compiles its watcher next to it)
 __pycache__/
 config/wezterm/local.lua
+config/powershell/local.ps1

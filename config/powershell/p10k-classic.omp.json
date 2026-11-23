@@ -1,0 +1,145 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "version": 3,
+  "final_space": true,
+  "console_title_template": "{{ .Folder }}",
+  "blocks": [
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "segments": [
+        {
+          "type": "text",
+          "style": "plain",
+          "foreground": "#444444",
+          "template": "╭─"
+        },
+        {
+          "type": "os",
+          "style": "powerline",
+          "background": "#1c1c1c",
+          "foreground": "#eeeeee",
+          "template": " {{ if .WSL }}WSL {{ end }}{{ .Icon }} ",
+          "powerline_symbol": ""
+        },
+        {
+          "type": "path",
+          "style": "powerline",
+          "background": "#1c1c1c",
+          "foreground": "#00afff",
+          "properties": {
+            "style": "agnoster_short",
+            "max_depth": 3,
+            "home_icon": "~",
+            "folder_separator_icon": "/"
+          },
+          "template": "<#6c6c6c></> <#0087af></> <b>{{ .Path }}</b> ",
+          "powerline_symbol": ""
+        },
+        {
+          "type": "git",
+          "style": "powerline",
+          "background": "#1c1c1c",
+          "foreground": "#5fd700",
+          "foreground_templates": [
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}#d7af00{{ end }}"
+          ],
+          "properties": {
+            "fetch_status": true,
+            "fetch_stash_count": true,
+            "branch_icon": " ",
+            "branch_ahead_icon": "⇡",
+            "branch_behind_icon": "⇣",
+            "branch_identical_icon": "",
+            "branch_gone_icon": "⇣⇡"
+          },
+          "template": "<#6c6c6c></> {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if gt .StashCount 0 }} *{{ .StashCount }}{{ end }}{{ if .Staging.Changed }} +{{ add .Staging.Added .Staging.Modified .Staging.Deleted }}{{ end }}{{ if gt .Working.Modified 0 }} !{{ .Working.Modified }}{{ end }}{{ if gt .Working.Untracked 0 }} ?{{ .Working.Untracked }}{{ end }} ",
+          "powerline_symbol": ""
+        }
+      ]
+    },
+    {
+      "type": "prompt",
+      "alignment": "right",
+      "filler": "<#444444,transparent>·</>",
+      "segments": [
+        {
+          "type": "status",
+          "style": "diamond",
+          "background": "#1c1c1c",
+          "foreground": "#5faf00",
+          "foreground_templates": [
+            "{{ if .Error }}#d70000{{ end }}"
+          ],
+          "leading_diamond": "",
+          "properties": {
+            "always_enabled": true
+          },
+          "template": " {{ if .Error }}{{ .Code }} ✘{{ else }}✔{{ end }} "
+        },
+        {
+          "type": "executiontime",
+          "style": "plain",
+          "background": "#1c1c1c",
+          "foreground": "#a8a8a8",
+          "properties": {
+            "threshold": 3000,
+            "style": "austin"
+          },
+          "template": "<#6c6c6c></> {{ .FormattedMs }}  "
+        },
+        {
+          "type": "python",
+          "style": "plain",
+          "background": "#1c1c1c",
+          "foreground": "#00afaf",
+          "properties": {
+            "display_mode": "environment",
+            "fetch_virtual_env": true
+          },
+          "template": "<#6c6c6c></> {{ .Venv }}  "
+        },
+        {
+          "type": "node",
+          "style": "plain",
+          "background": "#1c1c1c",
+          "foreground": "#5faf00",
+          "properties": {
+            "display_mode": "files",
+            "fetch_package_manager": false
+          },
+          "template": "<#6c6c6c></> {{ .Full }}  "
+        },
+        {
+          "type": "time",
+          "style": "plain",
+          "background": "#1c1c1c",
+          "foreground": "#5f8787",
+          "properties": {
+            "time_format": "3:04:05 PM"
+          },
+          "template": "<#6c6c6c></> {{ .CurrentDate | date .Format }}  "
+        },
+        {
+          "type": "text",
+          "style": "plain",
+          "foreground": "#444444",
+          "template": "─╮"
+        }
+      ]
+    },
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "newline": true,
+      "segments": [
+        {
+          "type": "text",
+          "style": "plain",
+          "foreground": "#444444",
+          "template": "╰─"
+        }
+      ]
+    }
+  ]
+}

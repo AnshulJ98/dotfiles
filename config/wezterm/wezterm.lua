@@ -125,11 +125,23 @@ end)
 
 -- Shell -----------------------------------------------------------------------
 if is_windows then
+  -- PowerShell 7 if installed (scoop/winget), else the built-in 5.1; both load config/powershell/profile.ps1.
+  local pwsh7 = io.open(wezterm.home_dir .. "/scoop/shims/pwsh.exe", "r")
+    or io.open("C:/Program Files/PowerShell/7/pwsh.exe", "r")
+  if pwsh7 then
+    pwsh7:close()
+  end
+  -- Load the repo profile directly: $PROFILE sits in OneDrive and breaks when its client is not running.
+  local function ps(exe)
+    return { exe, "-NoLogo", "-NoProfile", "-NoExit", "-Command", ". '" .. DOT .. "/config/powershell/profile.ps1'" }
+  end
+  local powershell = ps(pwsh7 and "pwsh.exe" or "powershell.exe")
   local git_bash = { "C:/Program Files/Git/bin/bash.exe", "-l", "-i" }
-  config.default_prog = git_bash
+  config.default_prog = powershell
   config.launch_menu = {
+    { label = "PowerShell", args = powershell },
+    { label = "Windows PowerShell 5.1", args = ps("powershell.exe") },
     { label = "Git Bash", args = git_bash },
-    { label = "PowerShell", args = { "powershell.exe", "-NoLogo" } },
     { label = "WSL Ubuntu", args = { "wsl.exe", "-d", "Ubuntu", "--cd", "~" } },
   }
 end
