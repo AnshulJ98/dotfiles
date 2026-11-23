@@ -69,9 +69,7 @@
           "style": "diamond",
           "background": "234",
           "foreground": "70",
-          "foreground_templates": [
-            "{{ if .Error }}160{{ end }}"
-          ],
+          "foreground_templates": ["{{ if .Error }}160{{ end }}"],
           "leading_diamond": "",
           "properties": {
             "always_enabled": true
