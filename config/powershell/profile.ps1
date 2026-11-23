@@ -13,8 +13,8 @@ $e = [char]27
 # fail to load, and pwsh bundles a newer PSReadLine, so leave that folder out. posh-git
 # is saved to ~/.local/share/powershell/Modules instead (Save-Module posh-git -Path ...).
 if ($PSVersionTable.PSEdition -eq 'Core') {
-  $docsModules = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'PowerShell\Modules'
-  $env:PSModulePath = ($env:PSModulePath -split ';' | Where-Object { $_ -and $_ -ne $docsModules }) -join ';'
+  # A string match: looking up the Documents folder (GetFolderPath, Test-Path) cost ~50 ms cold.
+  $env:PSModulePath = (($env:PSModulePath -split ';') -notlike '*\Documents\PowerShell\Modules' -ne '') -join ';'
 }
 $dotModules = "$HOME\.local\share\powershell\Modules"
 
@@ -24,7 +24,8 @@ $dotCache = "$env:LOCALAPPDATA\dotfiles\pwsh"
 # Tools are found by their install path: each Get-Command miss searches all of PATH (40-90 ms).
 # For scoop apps this is the app's own exe, whose date changes on update (the shim's does not).
 function Get-DotExe([string]$Name, [string[]]$Paths = @("$HOME\scoop\apps\$Name\current\$Name.exe")) {
-  foreach ($p in $Paths) { if (Test-Path $p) { return $p } }
+  # File.Exists: Test-Path took ~40 ms on oh-my-posh's app alias (a reparse point).
+  foreach ($p in $Paths) { if ([IO.File]::Exists($p)) { return $p } }
 }
 function Get-DotInit([string]$Name, [string]$Exe, [scriptblock]$Make) {
   $f = "$dotCache\$Name.ps1"
@@ -36,8 +37,13 @@ function Get-DotInit([string]$Name, [string]$Exe, [scriptblock]$Make) {
 }
 
 # Prompt: oh-my-posh port of home/.p10k.zsh (classic, darkest, two lines, full frame).
-$omp = "$env:LOCALAPPDATA\Programs\oh-my-posh\bin\oh-my-posh.exe"
-if (-not (Test-Path $omp)) { $omp = (Get-Command oh-my-posh -ErrorAction SilentlyContinue).Source }
+# winget's oh-my-posh (33.2.0) is an MSIX package; its command is this app alias.
+# The second path is the older per-user install.
+$omp = Get-DotExe oh-my-posh @(
+  "$env:LOCALAPPDATA\Microsoft\WindowsApps\oh-my-posh.exe",
+  "$env:LOCALAPPDATA\Programs\oh-my-posh\bin\oh-my-posh.exe"
+)
+if (-not $omp) { $omp = (Get-Command oh-my-posh -ErrorAction SilentlyContinue).Source }
 if ($omp) {
   & $omp init pwsh --config "$DOT\config\powershell\p10k-classic.omp.json" | Invoke-Expression
 }
@@ -174,9 +180,19 @@ if (Get-DotExe claude @("$HOME\.local\bin\claude.exe", "$env:APPDATA\npm\claude.
   if ($gh) { $env:GITHUB_PERSONAL_ACCESS_TOKEN = & $gh auth token 2>$null }
 }
 
-# Chocolatey tab completion, if installed.
-$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-if ($env:ChocolateyInstall -and (Test-Path $ChocolateyProfile)) { Import-Module $ChocolateyProfile }
+# Chocolatey's completion, imported on the first Tab after `choco` (importing it cost ~100 ms).
+# Its module only defines the legacy TabExpansion, which pwsh 7 never calls and posh-git
+# replaces in 5.1, so this calls the module's ChocolateyTabExpansion (not exported;
+# checked against Chocolatey 0.12.1).
+if ($env:ChocolateyInstall -and (Test-Path "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1")) {
+  Register-ArgumentCompleter -CommandName choco, cinst, cup -Native -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $m = Get-Module chocolateyProfile
+    if (-not $m) { $m = Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1" -Global -PassThru }
+    $len = $cursorPosition - $commandAst.Extent.StartOffset
+    & $m { ChocolateyTabExpansion $args[0] } $commandAst.ToString().PadRight($len).Substring(0, $len)
+  }
+}
 
 # Per-machine additions: config/powershell/local.ps1 (gitignored).
 if (Test-Path "$DOT\config\powershell\local.ps1") { . "$DOT\config\powershell\local.ps1" }
