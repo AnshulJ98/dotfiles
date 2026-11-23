@@ -1,6 +1,14 @@
 -- WezTerm: a light port of config/kitty/kitty.conf for machines without kitty (Windows).
 -- Colours come from config/themes/current/kitty.conf, so `theme <name>` drives this too.
 -- kitty's cmd+ maps become ctrl+shift+ here; workspaces, zdo/zgoto and hints are not ported.
+--
+--   ctrl+shift+t        new tab, current folder     ctrl+shift+alt+t   new tab, home
+--   ctrl+shift+n        new window, current folder  ctrl+shift+alt+l   shell picker
+--   ctrl+shift+d        split right                 ctrl+shift+alt+d   split down
+--   ctrl+shift+w        close pane                  ctrl+shift+q       close tab
+--   ctrl+alt+arrows     focus pane                  ctrl+shift+alt+arrows  resize pane
+--   ctrl+shift+alt+f    zoom pane                   alt+1..9           go to tab
+--   ctrl+shift+i        rename tab                  ctrl+shift+p       command palette
 local wezterm = require("wezterm")
 local act = wezterm.action
 local config = wezterm.config_builder()
@@ -30,10 +38,15 @@ local theme_file = DOT .. "/config/themes/current/kitty.conf"
 wezterm.add_to_config_reload_watch_list(theme_file)
 local k = kitty_theme(theme_file)
 if k then
-  local ansi, brights = {}, {}
+  local ansi, brights, indexed = {}, {}, {}
   for i = 0, 7 do
     ansi[i + 1] = k["color" .. i]
     brights[i + 1] = k["color" .. (i + 8)]
+  end
+  -- Themes also retint xterm-256 slots (the 232-255 greys and p10k's accents) so the
+  -- prompt, which uses p10k's indexed colours, follows the theme as it does in kitty.
+  for i = 16, 255 do
+    indexed[i] = k["color" .. i]
   end
   config.colors = {
     foreground = k.foreground,
@@ -46,6 +59,7 @@ if k then
     split = k.active_border_color,
     ansi = ansi,
     brights = brights,
+    indexed = indexed,
     tab_bar = {
       background = k.tab_bar_background,
       active_tab = { bg_color = k.active_tab_background, fg_color = k.active_tab_foreground, intensity = "Bold" },
@@ -155,8 +169,11 @@ local CS = "CTRL|SHIFT"
 config.keys = {
   { key = "Enter", mods = "ALT", action = act.SendString("\x1b[13;3u") },
   { key = "F11", mods = "NONE", action = act.ToggleFullScreen },
-  -- tabs and panes (kitty cmd+t / cmd+w / cmd+shift+w / cmd+d / cmd+shift+d)
+  -- tabs, windows and panes. New ones open in the current pane's folder (the prompt reports
+  -- it with OSC 7); kitty's cmd+t / cmd+shift+t / cmd+n / cmd+w / cmd+d / cmd+shift+d.
   { key = "t", mods = CS, action = act.SpawnTab("CurrentPaneDomain") },
+  { key = "t", mods = CS .. "|ALT", action = act.SpawnCommandInNewTab({ cwd = wezterm.home_dir }) },
+  { key = "n", mods = CS, action = act.SpawnCommandInNewWindow({ domain = "CurrentPaneDomain" }) },
   { key = "w", mods = CS, action = act.CloseCurrentPane({ confirm = false }) },
   { key = "q", mods = CS, action = act.CloseCurrentTab({ confirm = false }) },
   { key = "d", mods = CS, action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },

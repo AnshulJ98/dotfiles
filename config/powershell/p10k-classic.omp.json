@@ -11,38 +11,39 @@
         {
           "type": "text",
           "style": "plain",
-          "foreground": "#444444",
+          "foreground": "238",
           "template": "╭─"
         },
         {
           "type": "os",
           "style": "powerline",
-          "background": "#1c1c1c",
-          "foreground": "#eeeeee",
-          "template": " {{ if .WSL }}WSL {{ end }}{{ .Icon }} ",
-          "powerline_symbol": ""
+          "background": "234",
+          "foreground": "255",
+          "template": "{{ if .WSL }}WSL {{ end }}{{ .Icon }} ",
+          "powerline_symbol": "",
+          "leading_powerline_symbol": "█"
         },
         {
           "type": "path",
           "style": "powerline",
-          "background": "#1c1c1c",
-          "foreground": "#00afff",
+          "background": "234",
+          "foreground": "39",
           "properties": {
             "style": "agnoster_short",
             "max_depth": 3,
             "home_icon": "~",
             "folder_separator_icon": "/"
           },
-          "template": "<#6c6c6c></> <#0087af></> <b>{{ .Path }}</b> ",
+          "template": "<242></> <31></> <b>{{ .Path }}</b> ",
           "powerline_symbol": ""
         },
         {
           "type": "git",
           "style": "powerline",
-          "background": "#1c1c1c",
-          "foreground": "#5fd700",
+          "background": "234",
+          "foreground": "76",
           "foreground_templates": [
-            "{{ if or (.Working.Changed) (.Staging.Changed) }}#d7af00{{ end }}"
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}178{{ end }}"
           ],
           "properties": {
             "fetch_status": true,
@@ -53,7 +54,7 @@
             "branch_identical_icon": "",
             "branch_gone_icon": "⇣⇡"
           },
-          "template": "<#6c6c6c></> {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if gt .StashCount 0 }} *{{ .StashCount }}{{ end }}{{ if .Staging.Changed }} +{{ add .Staging.Added .Staging.Modified .Staging.Deleted }}{{ end }}{{ if gt .Working.Modified 0 }} !{{ .Working.Modified }}{{ end }}{{ if gt .Working.Untracked 0 }} ?{{ .Working.Untracked }}{{ end }} ",
+          "template": "<242></> {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if gt .StashCount 0 }} *{{ .StashCount }}{{ end }}{{ if .Staging.Changed }} +{{ add .Staging.Added .Staging.Modified .Staging.Deleted }}{{ end }}{{ if gt .Working.Modified 0 }} !{{ .Working.Modified }}{{ end }}{{ if gt .Working.Untracked 0 }} ?{{ .Working.Untracked }}{{ end }} ",
           "powerline_symbol": ""
         }
       ]
@@ -61,15 +62,15 @@
     {
       "type": "prompt",
       "alignment": "right",
-      "filler": "<#444444,transparent>·</>",
+      "filler": "<238,transparent>·</>",
       "segments": [
         {
           "type": "status",
           "style": "diamond",
-          "background": "#1c1c1c",
-          "foreground": "#5faf00",
+          "background": "234",
+          "foreground": "70",
           "foreground_templates": [
-            "{{ if .Error }}#d70000{{ end }}"
+            "{{ if .Error }}160{{ end }}"
           ],
           "leading_diamond": "",
           "properties": {
@@ -80,50 +81,50 @@
         {
           "type": "executiontime",
           "style": "plain",
-          "background": "#1c1c1c",
-          "foreground": "#a8a8a8",
+          "background": "234",
+          "foreground": "248",
           "properties": {
             "threshold": 3000,
             "style": "austin"
           },
-          "template": "<#6c6c6c></> {{ .FormattedMs }}  "
+          "template": "<242></> {{ .FormattedMs }}  "
         },
         {
           "type": "python",
           "style": "plain",
-          "background": "#1c1c1c",
-          "foreground": "#00afaf",
+          "background": "234",
+          "foreground": "37",
           "properties": {
             "display_mode": "environment",
             "fetch_virtual_env": true
           },
-          "template": "<#6c6c6c></> {{ .Venv }}  "
+          "template": "<242></> {{ .Venv }}  "
         },
         {
           "type": "node",
           "style": "plain",
-          "background": "#1c1c1c",
-          "foreground": "#5faf00",
+          "background": "234",
+          "foreground": "70",
           "properties": {
             "display_mode": "files",
             "fetch_package_manager": false
           },
-          "template": "<#6c6c6c></> {{ .Full }}  "
+          "template": "<242></> {{ .Full }}  "
         },
         {
           "type": "time",
           "style": "plain",
-          "background": "#1c1c1c",
-          "foreground": "#5f8787",
+          "background": "234",
+          "foreground": "66",
           "properties": {
             "time_format": "3:04:05 PM"
           },
-          "template": "<#6c6c6c></> {{ .CurrentDate | date .Format }}  "
+          "template": "<242></> {{ .CurrentDate | date .Format }}  "
         },
         {
           "type": "text",
           "style": "plain",
-          "foreground": "#444444",
+          "foreground": "238",
           "template": "─╮"
         }
       ]
@@ -136,7 +137,7 @@
         {
           "type": "text",
           "style": "plain",
-          "foreground": "#444444",
+          "foreground": "238",
           "template": "╰─"
         }
       ]
