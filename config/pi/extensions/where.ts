@@ -4,12 +4,15 @@
  * `/where` gathers facts (your last messages verbatim, git status and this
  * session's commits, pi-blackhole's high and critical observations, the last
  * card while it is still in context), sends them with the rules in
- * lib/where-rules.md as a hidden message, and activates the where_card tool for
- * that one run. The model fills the card; lib/where-card.ts checks it (errors go
+ * lib/where-rules.md as a hidden message, and the model answers through the
+ * where_card tool. The model fills the card; lib/where-card.ts checks it (errors go
  * back to the model), lays it out to 100 columns, and shows a ✓ whose proof is
  * not in the facts as unverified. `/where <n>` asks for a brief of action n.
  *
- * The tool is inactive outside a /where run, so it costs no prompt tokens otherwise.
+ * The tool stays active and refuses calls outside a /where run. Switching it on
+ * and off per run changed the tool list, which Bedrock sends at the head of every
+ * request (pi-ai 1.5.2 bedrock-converse-stream.js:152), so each /where and the
+ * prompt after it rewrote the whole prompt cache.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -123,7 +126,7 @@ async function git(
 
 export default function (pi: ExtensionAPI) {
   // Facts of the /where run in flight; the tool checks proof against them.
-  let facts: (Facts & { toolText: string }) | null = null;
+  let facts: (Facts & { toolText: string; cwd: string }) | null = null;
 
   const branch = (ctx: ExtensionContext) =>
     ctx.sessionManager.getBranch() as unknown as BranchEntry[];
@@ -131,13 +134,17 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: TOOL,
     label: "Where card",
-    defaultActive: false,
     // model-only: a direct call, not one inside codemode, so terminate ends the run and the card shows as its own result
     exposure: "model-only",
     description:
       "Report where we are by outcome as a card (kind card) or a brief of one action or rung (kind brief). Only during /where.",
     parameters: params,
-    async execute(_id, p, _signal, _onUpdate, ctx) {
+    async execute(_id, p) {
+      // terminate: true would end whatever run made the call, so only a /where run may.
+      if (!facts)
+        throw new Error(
+          "where_card runs only inside /where; do not call it otherwise.",
+        );
       if (p.kind === "brief") {
         const b = p.brief as Brief | undefined;
         const errs = b
@@ -145,9 +152,10 @@ export default function (pi: ExtensionAPI) {
           : ['kind "brief" needs a brief object'];
         if (errs.length) throw new Error(errs.join("\n"));
         const text = renderBrief(b as Brief);
+        const details: CardDetails = { kind: "brief", text };
         return {
           content: [{ type: "text", text }],
-          details: { kind: "brief", text } satisfies CardDetails,
+          details,
           terminate: true,
         };
       }
@@ -163,13 +171,9 @@ export default function (pi: ExtensionAPI) {
         throw new Error(
           "Fix and call where_card again:\n- " + errs.join("\n- "),
         );
-      const f = facts ?? {
-        ...factsFromBranch(branch(ctx)),
-        gitStatus: "",
-        gitLog: "",
-      };
+      const f = facts;
       const exists = (p: string) =>
-        existsSync(isAbsolute(p) ? p : resolve(ctx.cwd, p));
+        existsSync(isAbsolute(p) ? p : resolve(f.cwd, p));
       const { text, unverified } = renderCard(
         card,
         proofChecker(f, f.toolText, exists),
@@ -177,9 +181,10 @@ export default function (pi: ExtensionAPI) {
       const note = unverified.length
         ? `\n\n(${unverified.length} done check(s) shown unverified: proof not found in git, files, memory or tool output)`
         : "";
+      const details: CardDetails = { kind: "card", text };
       return {
         content: [{ type: "text", text: text + note }],
-        details: { kind: "card", text } satisfies CardDetails,
+        details,
         terminate: true,
       };
     },
@@ -203,8 +208,8 @@ export default function (pi: ExtensionAPI) {
         lastCard,
         gitStatus: gitStatus.split("\n").slice(0, 25).join("\n"),
         gitLog,
+        cwd: ctx.cwd,
       };
-      pi.setActiveTools([...new Set([...pi.getActiveTools(), TOOL])]);
       pi.sendMessage(
         {
           customType: "where-request",
@@ -220,8 +225,6 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("agent_end", async () => {
-    if (!pi.getActiveTools().includes(TOOL)) return;
-    pi.setActiveTools(pi.getActiveTools().filter((t) => t !== TOOL));
     facts = null;
   });
 }
