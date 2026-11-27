@@ -1,0 +1,53 @@
+# One vocabulary for every theme. A theme file sets vars.palette and imports this file.
+# An unclassed shape or edge means "exists today". A class marks what differs.
+
+# Every shape gets rounded corners and a hairline stroke; every edge a hairline.
+# Triple globs, because * and ** do not carry through an import (d2 0.9.0).
+***.style.border-radius: 8
+***.style.stroke-width: 1
+(*** -> ***)[*].style.stroke-width: 1
+# A glob beats a class (d2 0.9.0), so a class that sets a stroke width is repeated here as a filtered glob.
+***: {
+  &class: focus
+  style.stroke-width: 2
+}
+(*** -> ***)[*]: {
+  &class: exception
+  style.stroke-width: 2
+}
+
+classes: {
+  # State of a shape.
+  target: { style: { fill: "#f6f0e7"; stroke: "#8c877d"; stroke-dash: 4; font-color: "#3d3a34" } }
+  external: { style: { fill: "#f1def1" } }
+  focus: { style: { fill: "#fbf4d0"; stroke-width: 2 } }
+  risk: { style: { fill: "#fde4e1"; stroke: "#c62828" } }
+  muted: { style: { fill: ${palette.n6}; stroke: ${palette.n3}; font-color: ${palette.ink2} } }
+
+  # Tints, for lanes and groups that need telling apart. They carry no meaning of their own; say what each is in the legend.
+  blue: { style: { fill: "#e1ecfa"; stroke: "#3b6fb5" } }
+  green: { style: { fill: "#e0f2e3"; stroke: "#3d7d4a" } }
+  amber: { style: { fill: "#fbf0d0"; stroke: "#a06f0c" } }
+  rose: { style: { fill: "#fae1e6"; stroke: "#b0455c" } }
+  violet: { style: { fill: "#ece4f8"; stroke: "#6b4fa8" } }
+  teal: { style: { fill: "#dcf1ef"; stroke: "#2e7d7a" } }
+  grey: { style: { fill: "#eef0f3"; stroke: "#6b7280" } }
+
+  # A plain frame around related shapes.
+  group: { style: { fill: "#ffffff"; stroke: ${palette.n4}; font-color: ${palette.ink2} } }
+
+  # Edges.
+  planned: { style: { stroke: "#8c877d"; stroke-dash: 4; font-color: "#5b574f" } }
+  async: { style: { stroke-dash: 3 } }
+  exception: { style: { stroke: "#c62828"; stroke-width: 2; font-color: "#c62828"; bold: true } }
+
+  # Names from the old light-corporate palette, kept so existing diagrams still render. They follow the theme.
+  container: { style: { fill: ${palette.b5}; stroke: ${palette.n5}; font-color: ${palette.ink} } }
+  primary: { style: { fill: ${palette.accent}; stroke: ${palette.ink}; font-color: white; border-radius: 8 } }
+  accent: { style: { fill: ${palette.mid}; stroke: ${palette.ink}; font-color: white; border-radius: 8 } }
+  pastel: { style: { fill: ${palette.b3}; stroke: ${palette.n5}; font-color: ${palette.ink} } }
+  database: { shape: cylinder; style: { fill: ${palette.accent}; font-color: white } }
+  store: { shape: stored_data; style: { fill: ${palette.b3}; font-color: ${palette.ink} } }
+  queue: { shape: queue; style: { fill: ${palette.mid}; font-color: white } }
+  ok: { style: { fill: "#7fa87f"; font-color: white; border-radius: 8 } }
+}

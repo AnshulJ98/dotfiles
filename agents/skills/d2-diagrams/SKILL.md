@@ -28,27 +28,64 @@ d2 --pad 50 in.d2 out.png        # padding
 ```
 
 Layout engines: `dagre` (default, fast), `elk` (complex graphs, preferred), `tala` (proprietary).
-Themes: `0` default, `1` grey, `3` terminal, `5` terrastruct, `100` origami, `101` dark mauve, `200` cool classics.
+Themes: `0` default, `1` grey, `3` terminal, `5` terrastruct, `100` origami, `101` dark mauve, `200` cool classics. The styles below need theme `0`.
 
-## Palette (light-corporate)
+## Styles
 
-Every example below inherits from the `classes` block. Reuse this block verbatim.
+Diagrams are light only and set no colours of their own. The look comes from `styles/` in this skill: four themes and one vocabulary of classes.
+
+Copy `styles/<theme>.d2` and `styles/vocabulary.d2` next to the diagram, import the theme on the first line, and render with the default `--theme 0`:
 
 ```d2
-classes: {
-    container: { style.fill: "#eef2f8"; style.stroke: "#d4dce8"; style.font-color: "#33415c" }
-    primary:   { style.fill: "#4a72b0"; style.stroke: "#33415c"; style.font-color: white; style.border-radius: 8 }
-    accent:    { style.fill: "#6a9bcc"; style.stroke: "#33415c"; style.font-color: white; style.border-radius: 8 }
-    pastel:    { style.fill: "#a8c5e0"; style.stroke: "#d4dce8"; style.font-color: "#33415c" }
-    database:  { shape: cylinder; style.fill: "#4a72b0"; style.font-color: white }
-    store:     { shape: stored_data; style.fill: "#a8c5e0"; style.font-color: "#33415c" }
-    queue:     { shape: queue; style.fill: "#6a9bcc"; style.font-color: white }
-    ok:        { style.fill: "#7fa87f"; style.font-color: white; style.border-radius: 8 }
-    muted:     { style.fill: "#eef2f8"; style.stroke: "#8a97ab"; style.font-color: "#8a97ab" }
-}
+...@slate
 ```
 
-Tokens: bg `#f7f9fc`, containers `#eef2f8`, border `#d4dce8`, primary `#4a72b0`, accent `#6a9bcc`, pastel `#a8c5e0`, text `#33415c`, muted `#8a97ab`, ok `#7fa87f`.
+To render without copying, import by the absolute path of this skill's folder: `...@"/abs/path/to/d2-diagrams/styles/slate"`.
+
+| Theme | Look |
+| --- | --- |
+| `slate` | Steel blue on warm grey. The default. |
+| `indigo` | Navy strokes on lavender. |
+| `teal` | Deep teal on mint grey. |
+| `graphite` | Charcoal on warm grey, for the most formal documents. |
+
+An unclassed shape or edge means "exists today". A class marks what differs:
+
+| Class | On | Means |
+| --- | --- | --- |
+| `target` | shape | Planned, not built |
+| `external` | shape | Outside the platform |
+| `focus` | shape | The subject of this diagram |
+| `risk` | shape | A problem the reader must notice |
+| `muted` | shape | Background, out of scope |
+| `blue` `green` `amber` `rose` `violet` `teal` `grey` | shape | A tint for a lane or a group. It has no fixed meaning; name it in the legend. |
+| `group` | shape | A plain frame around related shapes |
+| `planned` | edge | A call that does not happen yet |
+| `async` | edge | An asynchronous call |
+| `exception` | edge | A shortcut or a deviation the reader must notice |
+
+Rules:
+
+- Add a legend when a diagram uses a state class or a tint.
+- Number the messages of a sequence diagram when the text refers to steps (`a -> b: 1  Submit order`).
+- Don't set `style.fill` or `style.stroke` inline. If no class fits, add one to `styles/vocabulary.d2`.
+- Don't set `style.border-radius` or `style.stroke-width` either: the vocabulary gives every shape rounded corners and a 1px stroke, and every edge a 1px line.
+- Don't name a shape `style`, `class` or `shape`: d2 reserves those words.
+- The old names `container`, `primary`, `accent`, `pastel`, `database`, `store`, `queue` and `ok` still work and follow the theme. Use the vocabulary above in new diagrams.
+
+```d2
+...@slate
+vars: {
+  d2-legend: {
+    a: Exists today
+    b: Planned { class: target }
+    a -> b: Planned call { class: planned }
+  }
+}
+api: Order API
+notify: Notification service { class: target }
+api -> notify: order placed { class: planned }
+```
 
 ## Syntax
 
@@ -163,12 +200,10 @@ lambda."Validate input": {shape: text}
 ### Classes (reusable styles)
 
 ```d2
-# Define in the classes block, assign with .class
-api.class: primary
-worker.class: accent
-rds.class: database
-s3.class: store
-sqs.class: queue
+# Classes come from the imported theme. Assign with .class or inside the shape.
+gateway.class: target
+vendor: Payment provider { class: external }
+api -> gateway { class: planned }
 ```
 
 ### Layers (multiple diagrams, one file)
@@ -210,12 +245,8 @@ handler: |ts
 ### Microservices
 
 ```d2
+...@slate
 direction: right
-
-classes: {
-    primary:  { style.fill: "#4a72b0"; style.font-color: white; style.border-radius: 8 }
-    database: { shape: cylinder; style.fill: "#4a72b0"; style.font-color: white }
-}
 
 client: Client {shape: person}
 gateway: API Gateway {shape: hexagon}
@@ -244,12 +275,8 @@ services.auth -> data.cache
 ### AWS CDK stack
 
 ```d2
+...@slate
 direction: down
-
-classes: {
-    primary: { style.fill: "#4a72b0"; style.font-color: white; style.border-radius: 8 }
-    accent:  { style.fill: "#6a9bcc"; style.font-color: white; style.border-radius: 8 }
-}
 
 vpc: VPC {
     public: Public Subnets {
@@ -283,7 +310,7 @@ vpc.private.ecs.task.app -> s3
 
 ## Workflow
 
-1. Write `docs/architecture.d2`.
+1. Write `docs/architecture.d2`, with `styles/<theme>.d2` and `styles/vocabulary.d2` copied beside it.
 2. Render: `d2 --layout elk docs/architecture.d2 docs/architecture.png`.
 3. Iterate: `d2 --watch --layout elk docs/architecture.d2 docs/architecture.png`.
 4. Reference: `![Architecture](docs/architecture.png)`.
