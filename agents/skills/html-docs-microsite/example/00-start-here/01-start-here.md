@@ -25,8 +25,15 @@ This document was written as four Markdown files in two folders. One command tur
 ## Try it
 
 - Press `/` and type `webp`.
-- Use **Hide outline**, **Wide** and **Dark** at the top right. Diagrams stay light in dark mode.
+- Use **Hide outline**, **Wide** and **Dark** at the top right. Diagrams and highlighted code follow the selected mode.
 - On a diagram, use **+**, **−** and **Reset**, or open it with **Fullscreen**.
 - Click a diagram or an image to open it fullscreen.
+
+## Highlighted code
+
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+```
 
 [^theme]: `--theme` on the command line wins over `doc.toml`.

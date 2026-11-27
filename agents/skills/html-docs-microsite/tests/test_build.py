@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["markdown-it-py==4.3.0", "mdit-py-plugins==0.7.0"]
+# dependencies = ["markdown-it-py==4.3.0", "mdit-py-plugins==0.7.0", "pygments==2.21.0"]
 # ///
 """Run with uv run tests/test_build.py. Uses real files and the real d2 CLI."""
 
@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
 import shutil
 import sys
 import tempfile
 import unittest
+from html import unescape
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
@@ -167,10 +169,44 @@ class BuildTest(unittest.TestCase):
         self.assertIn('id="fn-first-1"', html)
         self.assertIn('id="fn-second-1"', html)
 
+    def test_inline_app_script_is_emitted(self) -> None:
+        self.source("start.md", "# Start")
+        _, html, _ = self.render()
+        self.assertIn("const root = document.documentElement;", html)
+        self.assertNotIn("{{script}}", html)
+        self.assertNotRegex(html, r"\{\s*\{\s*script;")
+
     def test_template_markers_in_source_are_preserved(self) -> None:
         self.source("start.md", "# Start\nThe placeholder is {{script}}.")
         _, html, _ = self.render()
         self.assertIn("The placeholder is {{script}}.", html)
+
+    def test_highlighting_and_plain_fallback(self) -> None:
+        self.source(
+            "start.md",
+            "# Start\n\n"
+            "```python\n  print('<script>')\n\n```\n\n"
+            "```typescript\nconst x: string = '<script>';\n```\n\n"
+            "```unknown-lexer\n<script>&\n```\n\n"
+            "```\n<script>&\n```",
+        )
+        _, html, _ = self.render()
+        blocks = re.findall(r"<pre[^>]*><code[^>]*>(.*?)</code></pre>", html, re.DOTALL)
+        self.assertEqual(len(blocks), 4)
+        self.assertEqual(
+            [unescape(re.sub(r"<[^>]+>", "", block)) for block in blocks],
+            [
+                "  print('<script>')\n\n",
+                "const x: string = '<script>';\n",
+                "<script>&\n",
+                "<script>&\n",
+            ],
+        )
+        self.assertIn('class="tok-', blocks[0])
+        self.assertIn('class="tok-', blocks[1])
+        self.assertNotIn("<span", blocks[2])
+        self.assertNotIn("<span", blocks[3])
+        self.assertEqual(html.count(':root[data-mode="dark"] .highlight .tok-k '), 1)
 
     @unittest.skipUnless(shutil.which("d2"), "d2 CLI not installed")
     def test_real_d2_themes_render(self) -> None:
@@ -185,6 +221,31 @@ class BuildTest(unittest.TestCase):
                 self.assertIn('<figure class="diagram">', html)
                 self.assertIn("<svg", html)
                 self.assertNotIn("prefers-color-scheme", html)
+                self.assertEqual(html.count('<svg data-variant="light"'), 1)
+                self.assertEqual(html.count('<svg data-variant="dark"'), 1)
+                ids = re.findall(r'\bid="([^"]+)"', html)
+                self.assertEqual(len(ids), len(set(ids)))
+                self.assertIn("#302c25", html.lower())
+
+    @unittest.skipUnless(shutil.which("d2"), "d2 CLI not installed")
+    def test_dark_legacy_solid_fills_have_dark_labels(self) -> None:
+        self.source(
+            "start.md",
+            "# Diagram\n```d2\n"
+            "a: Primary { class: primary }\n"
+            "b: Accent { class: accent }\n"
+            "c: Database { class: database }\n"
+            "d: Queue { class: queue }\n"
+            "e: Ok { class: ok }\n```",
+        )
+        for theme in ["slate", "indigo", "teal", "graphite"]:
+            with self.subTest(theme=theme):
+                _, html, _ = self.render(theme)
+                dark = html.split('data-variant="dark"', 1)[1].split("</figure>", 1)[0]
+                for label in ["Primary", "Accent", "Database", "Queue", "Ok"]:
+                    self.assertRegex(
+                        dark, rf'<text[^>]*fill="#141413"[^>]*>{label}</text>'
+                    )
 
     @unittest.skipUnless(shutil.which("d2"), "d2 CLI not installed")
     def test_bad_d2_fails(self) -> None:

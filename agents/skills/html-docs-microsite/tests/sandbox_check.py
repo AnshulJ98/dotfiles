@@ -45,7 +45,7 @@ async function selfTest() {
     out.outline.afterHide = css(toc, "display");
     $("#t-outline").click();
     const look = () => ({ scheme: css(document.documentElement, "colorScheme"), page: css(document.body, "backgroundColor"),
-      stage: css($(".page:not([hidden]) .stage"), "backgroundColor"), diagram: css($(".page:not([hidden]) .stage svg svg > rect"), "fill") });
+      stage: css($(".page:not([hidden]) .stage"), "backgroundColor"), diagram: css($(".page:not([hidden]) .stage > svg[data-variant='" + (document.documentElement.dataset.mode === "dark" ? "dark" : "light") + "'] svg > rect"), "fill") });
     $("#t-mode").click();
     out.dark = look();
     $("#t-mode").click();
@@ -66,6 +66,29 @@ async function selfTest() {
     out.zoom = zoom;
     const viewer = $("#viewer");
     const vstage = viewer.querySelector(".stage");
+    const active = () => document.documentElement.dataset.mode === "dark" ? "dark" : "light";
+    const idsUnique = () => { const ids = [...document.querySelectorAll("svg[id], svg [id]")].map((e) => e.id); return new Set(ids).size === ids.length; };
+    $("#t-mode").click();
+    const variants = { darkBefore: active(), darkVisible: css(stage.querySelector('[data-variant="dark"]'), "display") !== "none" };
+    press(fig, "full"); await wait(50);
+    variants.darkInViewer = vstage.querySelector("svg")?.dataset.variant;
+    $("#t-mode").click(); await wait(50);
+    variants.lightInViewer = vstage.querySelector("svg")?.dataset.variant;
+    variants.uniqueIds = idsUnique();
+    press(viewer, "close"); await wait(50);
+    variants.lightReturned = !!stage.querySelector('[data-variant="light"]');
+    dispatchEvent(new Event("resize")); await wait(50);
+    variants.resizeFit = !!pct.textContent;
+    $("#t-mode").click();
+    press(fig, "full"); await wait(50);
+    dispatchEvent(new Event("beforeprint")); await wait(50);
+    variants.printClosed = !viewer.open && !!stage.querySelector('[data-variant="dark"]');
+    variants.printLight = active() === "light";
+    dispatchEvent(new Event("afterprint")); await wait(50);
+    variants.restoredDark = active() === "dark";
+    variants.idsAfterPrint = idsUnique();
+    $("#t-mode").click();
+    out.variants = variants;
     press(fig, "full"); await wait(100);
     const full = { open: viewer.open, hasDiagram: !!vstage.querySelector("svg"), fit: viewer.querySelector(".pct").textContent, wholeDiagramVisible: !scrolls(vstage) };
     press(viewer, "in"); press(viewer, "in"); press(viewer, "in");
@@ -81,6 +104,10 @@ async function selfTest() {
     byClick.diagramBack = !!stage.querySelector("svg");
     location.hash = "#architecture/diagrams-and-images"; await wait(300);
     const img = $(".page:not([hidden]) .content img");
+    const imageFilter = css(img, "filter");
+    $("#t-mode").click();
+    out.imageUnchangedInDark = css(img, "filter") === imageFilter;
+    $("#t-mode").click();
     img.click(); await wait(200);
     Object.assign(byClick, { imageClickOpens: viewer.open && !!vstage.querySelector("img"), imageFit: viewer.querySelector(".pct").textContent, wholeImageVisible: !scrolls(vstage) });
     press(viewer, "in"); press(viewer, "in");
@@ -112,7 +139,7 @@ def main() -> int:
     built = Path(sys.argv[1])
     head, body_close, tail = (
         built.read_text("utf-8")
-        .replace('<meta charset="utf-8">', '<meta charset="utf-8">' + PROBE, 1)
+        .replace("<head>", "<head>" + PROBE, 1)
         .rpartition("</body>")
     )
     copy = built.with_suffix(".sandbox.html")

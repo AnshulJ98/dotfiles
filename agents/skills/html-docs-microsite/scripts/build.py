@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["markdown-it-py==4.3.0", "mdit-py-plugins==0.7.0"]
+# dependencies = ["markdown-it-py==4.3.0", "mdit-py-plugins==0.7.0", "pygments==2.21.0"]
 # ///
 """Build a folder of Markdown into one self-contained HTML file.
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import re
 import subprocess
 import sys
@@ -28,6 +29,10 @@ from markdown_it.token import Token
 from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.front_matter import front_matter_plugin
 from mdit_py_plugins.gfm import gfm_plugin
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import get_lexer_by_name
+from pygments.util import ClassNotFound
 
 SKILL = Path(__file__).resolve().parent.parent
 ASSETS = SKILL / "assets"
@@ -148,6 +153,26 @@ class Site:
         def fence(self, tokens, idx, options, env):
             if tokens[idx].info.strip() == "d2":
                 return site._d2(tokens[idx].content, env["page"])
+            language = tokens[idx].info.strip().split(maxsplit=1)
+            if language:
+                try:
+                    lexer = get_lexer_by_name(
+                        language[0], stripnl=False, ensurenl=False
+                    )
+                except ClassNotFound:
+                    pass
+                else:
+                    return (
+                        '<pre class="highlight"><code>'
+                        + highlight(
+                            tokens[idx].content,
+                            lexer,
+                            HtmlFormatter(
+                                nowrap=True, classprefix="tok-", style="friendly"
+                            ),
+                        )
+                        + "</code></pre>\n"
+                    )
             return plain_fence(tokens, idx, options, env)
 
         def image(self, tokens, idx, options, env):
@@ -249,14 +274,19 @@ class Site:
 
     def _d2(self, source: str, page: Page) -> str:
         page.diagrams += 1
-        salt = re.sub(r"[^a-z0-9]", "", page.id.lower()) + str(page.diagrams)
-        # No --dark-theme: without it d2 emits no prefers-color-scheme rule, so the SVG stays light.
+        salt = hashlib.sha256(f"{page.id}:{page.diagrams}".encode()).hexdigest()
+        variants = []
+        for mode in ("light", "dark"):
+            variants.append(self._render_d2(source, page, salt, mode))
+        return f'<figure class="diagram">{DIAGRAM_BAR}<div class="stage">{"".join(variants)}</div></figure>\n'
+
+    def _render_d2(self, source: str, page: Page, salt: str, mode: str) -> str:
         cmd = [
             "d2",
             "--no-xml-tag",
             "--omit-version",
             "--salt",
-            salt,
+            salt + mode,
             "--theme",
             "0",
             "--pad",
@@ -266,9 +296,16 @@ class Site:
             "-",
             "-",
         ]
+        style = (
+            self.style
+            if mode == "light"
+            else self.style.with_name(self.style.name + "-dark")
+        )
+        if not style.with_suffix(".d2").is_file():
+            raise BuildError(f"missing {mode} diagram theme: {style}.d2")
         run = subprocess.run(
             cmd,
-            input=f'...@"{self.style}"\n{source}'.encode(),
+            input=f'...@"{style}"\n{source}'.encode(),
             capture_output=True,
             check=False,
         )
@@ -280,10 +317,15 @@ class Site:
         svg = run.stdout.decode()
         box = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
         width = box.group(1) if box else "800"
-        self.stats["d2"] += 1
+        if mode == "light":
+            self.stats["d2"] += 1
         self.stats["d2_bytes"] += len(svg)
-        svg = svg.replace("<svg ", f'<svg style="max-width:{width}px" ', 1)
-        return f'<figure class="diagram">{DIAGRAM_BAR}<div class="stage">{svg}</div></figure>\n'
+        svg = svg.replace('id="d2-svg"', f'id="d2-svg-{salt}-{mode}"').replace(
+            "#d2-svg", f"#d2-svg-{salt}-{mode}"
+        )
+        return svg.replace(
+            "<svg ", f'<svg data-variant="{mode}" style="max-width:{width}px" ', 1
+        )
 
     def _embed(self, src: str, page: Page) -> str:
         if src.startswith("data:"):
@@ -362,7 +404,11 @@ def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
     theme = theme or config.get("theme", "slate")
     if not (styles / f"{theme}.d2").is_file():
         known = ", ".join(
-            sorted(p.stem for p in styles.glob("*.d2") if p.stem != "vocabulary")
+            sorted(
+                p.stem
+                for p in styles.glob("*.d2")
+                if p.stem != "vocabulary" and not p.stem.endswith("-dark")
+            )
         )
         raise BuildError(f"no theme {theme!r} in {styles} (found: {known or 'none'})")
     site = Site(src, styles.resolve() / theme)
@@ -370,7 +416,15 @@ def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
         "title": escape(config.get("title", words(strip_order(src.name)))),
         "subtitle": escape(config.get("subtitle", f"Built {date.today():%-d %b %Y}")),
         "theme": theme,
-        "style": (ASSETS / "style.css").read_text("utf-8"),
+        "style": (ASSETS / "style.css").read_text("utf-8")
+        + "\n"
+        + HtmlFormatter(style="friendly", classprefix="tok-").get_style_defs(
+            ':root:not([data-mode="dark"]) .highlight'
+        )
+        + "\n"
+        + HtmlFormatter(style="github-dark", classprefix="tok-").get_style_defs(
+            ':root[data-mode="dark"] .highlight'
+        ),
         "script": (ASSETS / "app.js").read_text("utf-8"),
         "nav": site.sidebar(),
         "pages": site.articles(),

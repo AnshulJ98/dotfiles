@@ -46,7 +46,7 @@ The command-line theme wins. Put the HTML outside the source folder.
 
 ## Diagrams and design
 
-Use fenced `d2` blocks. Load the `d2-diagrams` skill for syntax and the shared class vocabulary. The builder imports the selected theme into every diagram, so omit imports in the fence. Do not duplicate palettes or inline colours.
+Use fenced `d2` blocks. Known language fences such as `python` and `typescript` are highlighted at build time; unknown or unlabelled fences remain escaped plain text. Load the `d2-diagrams` skill for syntax and the shared class vocabulary. The builder imports the selected theme into every diagram, so omit imports in the fence. Do not duplicate palettes or inline colours.
 
 Use `target` for planned components, `external` for outside services, `focus` for the subject, `exception` for exceptional edges. Name tint meanings in a legend. Keep the diagram source, not a screenshot of it.
 
@@ -56,7 +56,7 @@ The bundled design uses warm neutrals, pastel accents, restrained rules and syst
 
 - Run the builder and inspect its exit status. It rejects duplicate page addresses, missing images, broken Markdown links and missing heading fragments. It also detects common external resource tags. A failed validation may still write an HTML file; do not deliver it as a successful build.
 - Open the HTML locally and inspect the first page, a table, a diagram and an image. Check navigation and search. Click images or diagrams for fullscreen; check zoom, Fit/Reset and closing.
-- Confirm the requested theme. The top bar toggles outline, standard/wide width, and light/dark page mode. Diagrams remain light in this release. View settings are deliberately not saved: sandboxed viewers may prohibit storage.
+- Confirm the requested theme. The top bar toggles outline, standard/wide width, and light/dark page mode. Diagrams and highlighted code follow the selected mode; images are unchanged. View settings are deliberately not saved: sandboxed viewers may prohibit storage.
 - Keep the Markdown folder as the editable source. Deliver the HTML path and the exact rebuild command.
 - Do not promise SharePoint compatibility: a local sandbox emulation passes, but a real tenant has not been tested. No upload or deployment is part of this workflow.
 
@@ -71,4 +71,4 @@ uv run <skill>/tests/test_build.py
 
 For the browser sandbox probe, run `python3 <skill>/tests/sandbox_check.py /tmp/microsite/example.html`, then serve that output folder over HTTP and open `harness.html`. The probe is tied to the example's page names; its JSON reports viewer actions and runtime/CSP errors.
 
-Current limits: no syntax highlighting, no dark diagram palette, no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing, small-screen layout and forced-dark rendering need further testing.
+Current limits: no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing uses fitted light diagrams but long diagrams, tables and code may still paginate poorly. Narrow-screen work is deferred; the outline intentionally hides at narrow widths. Chrome 158 forced-dark checks pass in both modes; browser extensions and real SharePoint are untested.

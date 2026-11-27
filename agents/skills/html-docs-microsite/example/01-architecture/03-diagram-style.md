@@ -51,7 +51,7 @@ data: Data {
   class: green
   grid-rows: 1
   db: Orders { shape: cylinder }
-  bus: Events { shape: queue }
+  bus: Events { class: queue }
   reports: Reporting store { shape: cylinder; class: target }
 }
 platform: "Platform: identity, logging, deployment" { class: grey }

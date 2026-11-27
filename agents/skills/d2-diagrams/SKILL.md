@@ -32,13 +32,15 @@ Themes: `0` default, `1` grey, `3` terminal, `5` terrastruct, `100` origami, `10
 
 ## Styles
 
-Diagrams are light only and set no colours of their own. The look comes from `styles/` in this skill: four themes and one vocabulary of classes.
+Diagrams should set no colours of their own. The look comes from `styles/` in this skill: four light themes and corresponding `-dark` variants, with light and dark semantic vocabularies.
 
 Copy `styles/<theme>.d2` and `styles/vocabulary.d2` next to the diagram, import the theme on the first line, and render with the default `--theme 0`:
 
 ```d2
 ...@slate
 ```
+
+For a dark render, copy `<theme>-dark.d2` and `vocabulary-dark.d2` instead and import `<theme>-dark`. The HTML microsite builder renders both variants automatically.
 
 To render without copying, import by the absolute path of this skill's folder: `...@"/abs/path/to/d2-diagrams/styles/slate"`.
 
@@ -68,7 +70,7 @@ Rules:
 
 - Add a legend when a diagram uses a state class or a tint.
 - Number the messages of a sequence diagram when the text refers to steps (`a -> b: 1  Submit order`).
-- Don't set `style.fill` or `style.stroke` inline. If no class fits, add one to `styles/vocabulary.d2`.
+- Don't set `style.fill` or `style.stroke` inline. If no class fits, add it to both `styles/vocabulary.d2` and `styles/vocabulary-dark.d2`.
 - Don't set `style.border-radius` or `style.stroke-width` either: the vocabulary gives every shape rounded corners and a 1px stroke, and every edge a 1px line.
 - Don't name a shape `style`, `class` or `shape`: d2 reserves those words.
 - The old names `container`, `primary`, `accent`, `pastel`, `database`, `store`, `queue` and `ok` still work and follow the theme. Use the vocabulary above in new diagrams.

@@ -1,5 +1,5 @@
 /* Warm neutrals and one accent per theme. Space and type size separate things; a rule or a fill appears only where it
-   carries information. Light is the default, dark is a button. Diagrams stay light in both. */
+   carries information. Light is the default, dark is a button. */
 :root {
   color-scheme: only light;
   --bg: #fcfbf8;
@@ -29,6 +29,7 @@
 }
 :root[data-mode="dark"] {
   color-scheme: dark;
+  --stage: #191918;
   --bg: #191918;
   --subtle: #222221;
   --fg: #eeeeec;
@@ -426,7 +427,7 @@ figcaption {
   color: var(--muted);
 }
 
-/* Diagrams: a toolbar and a frame the diagram scrolls inside. The frame is white in dark mode too. */
+/* Diagrams: a toolbar and a frame the diagram scrolls inside. */
 .diagram {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -458,6 +459,10 @@ figcaption {
   background: var(--stage);
   color-scheme: only light;
 }
+:root:not([data-mode="dark"]) .stage > svg[data-variant="dark"],
+:root[data-mode="dark"] .stage > svg[data-variant="light"] {
+  display: none;
+}
 .stage svg,
 .stage img {
   display: block;
@@ -470,7 +475,7 @@ figcaption {
 .content img {
   cursor: zoom-in;
 }
-/* The fullscreen viewer is light in dark mode too, so it restates the light values. */
+/* Fullscreen uses the same canvas as the selected diagram. */
 #viewer {
   --bg: #fcfbf8;
   --fg: #24221e;
@@ -571,7 +576,43 @@ figcaption {
   .diagram {
     break-inside: avoid;
   }
-  .stage {
+  html,
+  body {
+    background: white !important;
+  }
+  main {
+    padding: 0;
+  }
+  h1,
+  h2,
+  h3,
+  figcaption {
+    break-after: avoid;
+  }
+  .diagram {
+    border: 0;
     overflow: visible;
+  }
+  .diagram .stage {
+    display: block;
+    padding: 0;
+    height: auto !important;
+    overflow: visible;
+  }
+  .diagram .stage > svg {
+    width: auto !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 240mm;
+  }
+  .table-wrap,
+  pre {
+    overflow: visible;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    break-inside: avoid;
   }
 }

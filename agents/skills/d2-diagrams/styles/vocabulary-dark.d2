@@ -1,0 +1,53 @@
+# One vocabulary for every theme. A theme file sets vars.palette and imports this file.
+# An unclassed shape or edge means "exists today". A class marks what differs.
+
+# Every shape gets rounded corners and a hairline stroke; every edge a hairline.
+# Triple globs, because * and ** do not carry through an import (d2 0.9.0).
+***.style.border-radius: 8
+***.style.stroke-width: 1
+(*** -> ***)[*].style.stroke-width: 1
+# A glob beats a class (d2 0.9.0), so a class that sets a stroke width is repeated here as a filtered glob.
+***: {
+  &class: focus
+  style.stroke-width: 2
+}
+(*** -> ***)[*]: {
+  &class: exception
+  style.stroke-width: 2
+}
+
+classes: {
+  # State of a shape.
+  target: { style: { fill: "#302c25"; stroke: "#b9ad93"; stroke-dash: 4; font-color: "#e5dac4" } }
+  external: { style: { fill: "#392b3d"; stroke: "#c19ac7"; font-color: "#eedcf1" } }
+  focus: { style: { fill: "#403820"; stroke: "#d7be69"; stroke-width: 2; font-color: "#f9e8b3" } }
+  risk: { style: { fill: "#402826"; stroke: "#f59a8d"; font-color: "#ffc7bf" } }
+  muted: { style: { fill: ${palette.n6}; stroke: ${palette.n3}; font-color: ${palette.ink2} } }
+
+  # Tints, for lanes and groups that need telling apart. They carry no meaning of their own; say what each is in the legend.
+  blue: { style: { fill: "#223447"; stroke: "#8eb6e9"; font-color: "#dce9fa" } }
+  green: { style: { fill: "#233b2c"; stroke: "#8fc49d"; font-color: "#e0f2e3" } }
+  amber: { style: { fill: "#3c331e"; stroke: "#d9b65b"; font-color: "#f7e9bf" } }
+  rose: { style: { fill: "#3e2931"; stroke: "#dc9aa9"; font-color: "#fae1e6" } }
+  violet: { style: { fill: "#342a46"; stroke: "#b99ce3"; font-color: "#ece4f8" } }
+  teal: { style: { fill: "#213936"; stroke: "#8ac6bf"; font-color: "#dcf1ef" } }
+  grey: { style: { fill: "#30302d"; stroke: "#b5b3ad"; font-color: "#eeeeec" } }
+
+  # A plain frame around related shapes.
+  group: { style: { fill: "#191918"; stroke: "#827e75"; font-color: "#c2bfb6" } }
+
+  # Edges.
+  planned: { style: { stroke: "#b9ad93"; stroke-dash: 4; font-color: "#e5dac4" } }
+  async: { style: { stroke-dash: 3 } }
+  exception: { style: { stroke: "#ff9b8c"; stroke-width: 2; font-color: "#ffb1a4"; bold: true } }
+
+  # Legacy solid fills need dark ink: white on a pastel accent loses contrast.
+  container: { style: { fill: ${palette.b5}; stroke: ${palette.n5}; font-color: ${palette.ink} } }
+  primary: { style: { fill: ${palette.accent}; stroke: ${palette.ink}; font-color: "#141413"; border-radius: 8 } }
+  accent: { style: { fill: ${palette.mid}; stroke: ${palette.ink}; font-color: "#141413"; border-radius: 8 } }
+  pastel: { style: { fill: ${palette.b3}; stroke: ${palette.n5}; font-color: ${palette.ink} } }
+  database: { shape: cylinder; style: { fill: ${palette.accent}; font-color: "#141413" } }
+  store: { shape: stored_data; style: { fill: ${palette.b3}; font-color: ${palette.ink} } }
+  queue: { shape: queue; style: { fill: ${palette.mid}; font-color: "#141413" } }
+  ok: { style: { fill: "#7fa87f"; font-color: "#141413"; border-radius: 8 } }
+}

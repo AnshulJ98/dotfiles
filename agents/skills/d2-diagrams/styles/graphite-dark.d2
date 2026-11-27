@@ -1,0 +1,26 @@
+# Theme "graphite": charcoal on near-white, for the most formal documents. Dark variant.
+# Use: put  ...@"<path to this folder>/graphite-dark"  on the first line of a diagram, and render with --theme 0 (the default).
+vars: {
+  palette: {
+    ink: "#eeeeec"
+    ink2: "#c2bfb6"
+    n3: "#aaa69c"
+    n4: "#827e75"
+    n5: "#494640"
+    n6: "#272522"
+    accent: "#d8d6d0"
+    mid: "#698797"
+    b3: "#394857"
+    b4: "#303942"
+    b5: "#252d35"
+    b6: "#20262c"
+  }
+  d2-config: {
+    theme-overrides: {
+      N1: ${palette.ink}; N2: ${palette.ink2}; N3: ${palette.n3}; N4: ${palette.n4}; N5: ${palette.n5}; N6: ${palette.n6}; N7: "#191918"
+      B1: ${palette.accent}; B2: ${palette.accent}; B3: ${palette.b3}; B4: ${palette.b4}; B5: ${palette.b5}; B6: ${palette.b6}
+      AA2: ${palette.accent}; AA4: ${palette.b4}; AA5: ${palette.b5}; AB4: ${palette.b4}; AB5: ${palette.b5}
+    }
+  }
+}
+...@vocabulary-dark

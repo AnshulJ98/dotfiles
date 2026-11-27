@@ -24,6 +24,7 @@
   toggle("t-width", "data-width", "wide", ["Wide", "Standard"]);
   toggle("t-mode", "data-mode", "dark", ["Dark", "Light"], (dark) => {
     scheme.content = dark ? "dark" : "only light";
+    for (const sync of diagramModes) sync();
   });
 
   function route() {
@@ -176,7 +177,9 @@
   const viewerStage = viewer.querySelector(".stage");
   const full = control(viewer.querySelector(".bar"), viewerStage, true);
   const inline = [];
+  const diagramModes = [];
   let afterClose = null;
+  let activeDiagram = null;
   function openFull(el, after) {
     full.el = el;
     full.zoom = null;
@@ -185,11 +188,16 @@
     viewer.showModal();
     full.draw();
   }
-  viewer.addEventListener("close", () => {
+  function finishFull() {
+    if (!afterClose) return;
     const el = full.el;
     full.el = null;
-    afterClose(el);
-  });
+    const done = afterClose;
+    afterClose = null;
+    activeDiagram = null;
+    done(el);
+  }
+  viewer.addEventListener("close", finishFull);
   viewer
     .querySelector('[data-act="close"]')
     .addEventListener("click", () => viewer.close());
@@ -197,17 +205,38 @@
   for (const figure of document.querySelectorAll(".diagram")) {
     const stage = figure.querySelector(".stage");
     const c = control(figure.querySelector(".bar"), stage, false);
-    c.el = stage.querySelector("svg");
+    const variants = [...stage.querySelectorAll(":scope > svg")];
+    const current = () =>
+      variants.find(
+        (svg) =>
+          svg.dataset.variant ===
+          (root.dataset.mode === "dark" ? "dark" : "light"),
+      );
+    c.el = current();
     inline.push(c);
+    const sync = () => {
+      if (activeDiagram === sync) {
+        stage.append(full.el);
+        full.el = current();
+        viewerStage.append(full.el);
+        full.zoom = null;
+        full.draw();
+      } else {
+        c.el = current();
+        c.reset();
+      }
+    };
+    diagramModes.push(sync);
     const enter = () => {
       const svg = c.el;
       c.reset();
       stage.style.height = stage.offsetHeight + "px"; // hold the gap while the diagram is away
       c.el = null;
       // The diagram itself moves: a copy would repeat every id inside the SVG.
-      openFull(svg, () => {
-        stage.append(svg);
-        c.el = svg;
+      activeDiagram = sync;
+      openFull(svg, (returned) => {
+        stage.append(returned);
+        c.el = current();
         c.reset();
       });
     };
@@ -227,6 +256,10 @@
   // Paper is light and fitted, whatever the screen shows.
   let wasDark = false;
   addEventListener("beforeprint", () => {
+    if (viewer.open) {
+      viewer.close();
+      finishFull();
+    }
     wasDark = root.dataset.mode === "dark";
     if (wasDark) $("t-mode").click();
     for (const c of inline) c.reset();
