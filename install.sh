@@ -120,6 +120,8 @@ link "$DOT/config/themes" "$HOME/.config/themes"
 link "$DOT/config/themes/theme" "$HOME/.local/bin/theme"
 # zmx session switcher for any terminal: ssh -t host '~/.local/bin/zmx-pick' (iPad, WSL).
 link "$DOT/config/zmx/zmx-pick" "$HOME/.local/bin/zmx-pick"
+# agent-browser with its own profile; `agb --brave` drives the real Brave in emergencies.
+link "$DOT/config/agent-browser/agb" "$HOME/.local/bin/agb"
 link "$DOT/config/btop/btop.conf" "$HOME/.config/btop/btop.conf"
 mkdir -p "$HOME/.config/btop/themes"
 ln -sfn "$HOME/.config/themes/current/btop.theme" "$HOME/.config/btop/themes/current.theme"

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# agb: agent-browser with a persistent profile of its own, or, as an emergency
+# fallback, your real Brave over CDP.
+#   agb <command> [args]          agent-browser's own Chrome; logins persist in $AGB_PROFILE
+#   agb --brave <command> [args]  your logged-in Brave (emergencies only: real passwords, real sessions)
+# The Brave path needs brave://inspect/#remote-debugging turned on and the consent
+# prompt allowed. Brave writes a new browser id to DevToolsActivePort on every
+# restart, so it is read fresh on each call.
+set -euo pipefail
+
+AGB_PROFILE="${AGB_PROFILE:-$HOME/.local/share/agent-browser/profile}"
+BRAVE_PORT_FILE="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/DevToolsActivePort"
+
+command -v agent-browser >/dev/null || {
+  echo "agb: agent-browser not installed (npm i -g agent-browser)" >&2
+  exit 127
+}
+
+if [ "${1:-}" = "--brave" ]; then
+  shift
+  if [ ! -r "$BRAVE_PORT_FILE" ]; then
+    echo "agb: no $BRAVE_PORT_FILE. In Brave open brave://inspect/#remote-debugging, turn it on, click Allow." >&2
+    exit 1
+  fi
+  # the second line has no trailing newline, so read returns 1 on it
+  {
+    read -r port
+    read -r path || [ -n "$path" ]
+  } <"$BRAVE_PORT_FILE"
+  if ! nc -z 127.0.0.1 "$port" 2>/dev/null; then
+    echo "agb: Brave is not listening on 127.0.0.1:$port (stale DevToolsActivePort). Turn on brave://inspect/#remote-debugging." >&2
+    exit 1
+  fi
+  echo "agb: driving your real Brave profile (emergency mode)" >&2
+  exec agent-browser --session brave --cdp "ws://127.0.0.1:$port$path" "$@"
+fi
+
+mkdir -p "$AGB_PROFILE"
+exec agent-browser --profile "$AGB_PROFILE" "$@"

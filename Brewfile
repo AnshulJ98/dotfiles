@@ -273,3 +273,5 @@ npm "react-icons"
 npm "react"
 npm "react-dom"
 npm "sharp"
+# Browser automation for agents; config/agent-browser/ab wraps it
+npm "agent-browser"
