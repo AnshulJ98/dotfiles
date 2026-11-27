@@ -195,6 +195,11 @@ export default function (pi: ExtensionAPI) {
       "Where we are by outcome: a card with done-when checks and numbered actions; /where <n> briefs action n",
     handler: async (args, ctx) => {
       await ctx.waitForIdle();
+      // A session that ran /where before f6fc657 recorded where_card as removed, and pi
+      // restores that on resume (agent-session.js _restoreToolsFromTranscript, pi 1.6.1-1.7.0).
+      // Turn it back on once; after that the list stays fixed.
+      const active = pi.getActiveTools();
+      if (!active.includes(TOOL)) pi.setActiveTools([...active, TOOL]);
       const b = factsFromBranch(branch(ctx));
       const since = b.since ? ["--since=" + b.since] : ["-n", "15"];
       const [gitStatus, gitLog] = await Promise.all([

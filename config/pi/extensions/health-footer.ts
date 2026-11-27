@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type {
   ExtensionAPI,
@@ -22,8 +23,9 @@ export default function (pi: ExtensionAPI) {
     try {
       const stdout = await new Promise<string>((resolve, reject) => {
         // Run by node, not by its #! line: Windows cannot execute a script file (spawn ENOENT).
+        // A node upgrade deletes the binary a running pi started from; then use node on PATH.
         execFile(
-          process.execPath,
+          existsSync(process.execPath) ? process.execPath : "node",
           [health, "--json"],
           {
             timeout: 10_000,

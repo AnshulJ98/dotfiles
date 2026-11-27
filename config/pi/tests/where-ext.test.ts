@@ -22,7 +22,7 @@ const { default: where } = await import("../extensions/where.ts");
 
 type Exec = (id: string, p: unknown) => Promise<{ terminate?: boolean }>;
 
-function load() {
+function load(active: string[] = ["read", "where_card"]) {
   const tools: Array<{ name: string; defaultActive?: boolean; execute: Exec }> =
     [];
   const commands: Record<
@@ -39,8 +39,11 @@ function load() {
     on: (event: string, h: () => Promise<void>) => (handlers[event] = h),
     exec: async () => ({ code: 1, stdout: "", stderr: "" }),
     sendMessage: (m: unknown) => sent.push(m),
-    getActiveTools: () => [],
-    setActiveTools: (names: string[]) => toolListChanges.push(names),
+    getActiveTools: () => [...active],
+    setActiveTools: (names: string[]) => {
+      toolListChanges.push(names);
+      active = names;
+    },
   } as never);
   const ctx = {
     cwd: process.cwd(),
@@ -84,4 +87,14 @@ test("/where runs the card without touching the tool list, then refuses again af
   await handlers.agent_end();
   await assert.rejects(tool.execute("2", card), /only inside \/where/);
   assert.deepEqual(toolListChanges, []);
+});
+
+// Sessions that ran /where under the pre-f6fc657 extension recorded where_card as removed,
+// and pi restores that on resume (agent-session.js _restoreToolsFromTranscript, pi 1.6.1-1.7.0).
+test("/where re-activates a where_card the resumed session restored as removed, once", async () => {
+  const { commands, handlers, toolListChanges, ctx } = load(["read"]);
+  await commands.where.handler("", ctx);
+  await handlers.agent_end();
+  await commands.where.handler("", ctx);
+  assert.deepEqual(toolListChanges, [["read", "where_card"]]);
 });

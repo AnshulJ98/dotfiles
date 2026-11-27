@@ -192,6 +192,38 @@ test("extension: each poll replaces the status, with no held dead or quiet probl
   }
 });
 
+test("extension: falls back to node on PATH when the node binary pi started from is gone", async (t) => {
+  const files: string[] = [];
+  t.mock.method(
+    childProcess,
+    "execFile",
+    (
+      file: string,
+      _args: readonly string[],
+      _options: object,
+      callback: (error: Error | null, stdout: string) => void,
+    ) => {
+      files.push(file);
+      callback(null, JSON.stringify({ problems: [] }));
+    },
+  );
+  syncBuiltinESMExports();
+  const execPath = process.execPath;
+  // A `brew upgrade node` deletes the Cellar path a running pi was started from.
+  process.execPath = join(tmpdir(), "no-such-node-" + process.pid);
+  const pi = load(tmpdir());
+  try {
+    await pi.fire("session_start");
+    await pi.waitForStatus(1);
+    assert.deepEqual(files, ["node"]);
+  } finally {
+    process.execPath = execPath;
+    await pi.fire("session_shutdown");
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test("extension: session_start and agent_end return while the child never calls back", async (t) => {
   let calls = 0;
   t.mock.method(childProcess, "execFile", () => {
