@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "1.5.2",
+  "lastChangelogVersion": "1.6.1",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "medium",
@@ -11,7 +11,6 @@
       "write"
     ]
   },
-  "showCacheMissNotices": true,
   "cacheWarming": "idle",
   "theme": "current",
   "quietStartup": true,
@@ -56,6 +55,7 @@
     "~/Dev/dotfiles/config/pi/extensions/ask-user-args.ts",
     "~/Dev/dotfiles/config/pi/extensions/pi-holder.ts",
     "~/Dev/dotfiles/config/pi/extensions/health-footer.ts",
+    "~/Dev/dotfiles/config/pi/extensions/where.ts",
     "-builtin:mcp",
     "-builtin:tool-search",
     "-builtin:llama.cpp"
@@ -79,9 +79,15 @@
   ],
   "extensionChangelogVersions": {
     "{\"source\":\"npm:pi-rtk-optimizer\",\"scope\":\"user\"}": "0.9.0",
-    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.47.0",
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.48.0",
     "{\"source\":\"npm:pi-usage-widget\",\"scope\":\"user\"}": "0.2.1",
-    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.5.0",
+    "{\"source\":\"npm:@gotgenes/pi-anthropic-auth\",\"scope\":\"user\"}": "3.7.0",
     "{\"source\":\"npm:pi-blackhole@0.5.18\",\"scope\":\"user\"}": "0.5.18"
+  },
+  "notices": {
+    "cacheMisses": true,
+    "cacheWarming": true,
+    "compactionCosts": true,
+    "reasoningDrops": true
   }
 }
