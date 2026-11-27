@@ -113,10 +113,8 @@ class ThemeTests(unittest.TestCase):
                 self.assertFalse((self.base / "apps.log").exists())
                 self.assertFalse((self.home / ".pi").exists())
 
-    def test_jankyborders_use_subdued_neutral_colors(self):
+    def test_jankyborders_use_blue_active_color(self):
         for name in NAMES:
-            if name == "midnightvoid":
-                continue  # Preserve the original border colours.
             with self.subTest(name=name):
                 settings = dict(
                     line.split("=", 1)
@@ -124,9 +122,7 @@ class ThemeTests(unittest.TestCase):
                     if line.startswith("BORDER_")
                 )
                 active = settings["BORDER_ACTIVE"]
-                channels = [int(active[i : i + 2], 16) for i in (4, 6, 8)]
-                self.assertLessEqual(max(channels) - min(channels), 6)
-                self.assertLessEqual(max(channels), 115)
+                self.assertEqual(active, "0xff4682b4")
                 self.assertNotEqual(active, settings["BORDER_INACTIVE"])
 
     def test_decorations_are_visible_without_a_terminal_contrast_floor(self):

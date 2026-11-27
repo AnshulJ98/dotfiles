@@ -37,6 +37,7 @@ inner.horizontal = 10
 inner.vertical = 10
 outer.left = 10
 outer.bottom = 10
+# The built-in notch strip already reserves enough room for the 28pt SketchyBar.
 outer.top = 10
 outer.right = 10
 
