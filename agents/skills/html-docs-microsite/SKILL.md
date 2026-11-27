@@ -18,6 +18,8 @@ uv run <skill>/scripts/build.py <markdown-folder> <output.html>
 uv run <skill>/scripts/build.py <markdown-folder> <output.html> --theme indigo
 ```
 
+Pass `--full-res` to embed original image bytes without WebP conversion.
+
 Theme names: `slate` (default), `indigo`, `teal`, `graphite`. To use a separately installed D2 style folder, pass `--styles /path/to/d2-diagrams/styles`.
 
 An optional `doc.toml` at the source root sets metadata:
@@ -52,9 +54,17 @@ Use `target` for planned components, `external` for outside services, `focus` fo
 
 The bundled design uses warm neutrals, pastel accents, restrained rules and system fonts. Select a theme instead of restyling each document. Do not add CDN fonts, scripts, stylesheets, remote images or embedded frames: the output must work without a network.
 
+## Reading and navigation
+
+Without JavaScript, all pages remain visible in reading order.
+
+The sidebar lists the active page's second-level sections; the right-hand outline also includes third-level headings.
+
+Every figure has zoom and fullscreen controls. Focus a figure and press Enter or f for fullscreen; in the viewer use + and - to zoom, 0 to fit, 1 for 1:1, and Escape to close.
+
 ## Verify and deliver
 
-- Run the builder and inspect its exit status. It rejects duplicate page addresses, missing images, broken Markdown links and missing heading fragments. It also detects common external resource tags. A failed validation may still write an HTML file; do not deliver it as a successful build.
+- Run the builder and inspect its exit status. It rejects duplicate page addresses, missing images, broken Markdown links and missing heading fragments. It also detects common external resource tags. A failed build leaves the output file unchanged.
 - Open the HTML locally and inspect the first page, a table, a diagram and an image. Check navigation and search. Click images or diagrams for fullscreen; check zoom, Fit/Reset and closing.
 - Confirm the requested theme. The top bar toggles outline, standard/wide width, and light/dark page mode. Diagrams and highlighted code follow the selected mode; images are unchanged. View settings are deliberately not saved: sandboxed viewers may prohibit storage.
 - Keep the Markdown folder as the editable source. Deliver the HTML path and the exact rebuild command.
@@ -69,6 +79,6 @@ uv run <skill>/scripts/build.py <skill>/example /tmp/microsite/example.html
 uv run <skill>/tests/test_build.py
 ```
 
-For the browser sandbox probe, run `python3 <skill>/tests/sandbox_check.py /tmp/microsite/example.html`, then serve that output folder over HTTP and open `harness.html`. The probe is tied to the example's page names; its JSON reports viewer actions and runtime/CSP errors.
+For the browser sandbox probe, run `python3 <skill>/tests/sandbox_check.py /tmp/microsite/example.html`, then serve that output folder over HTTP and open `harness.html`. The probe selects the first available page, heading and figure; its JSON reports viewer actions and runtime/CSP errors.
 
 Current limits: no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing uses fitted light diagrams but long diagrams, tables and code may still paginate poorly. Narrow-screen work is deferred; the outline intentionally hides at narrow widths. Chrome 158 forced-dark checks pass in both modes; browser extensions and real SharePoint are untested.

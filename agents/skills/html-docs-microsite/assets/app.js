@@ -7,6 +7,10 @@
   const results = $("results");
   const q = $("q");
   const docTitle = document.title;
+  document.querySelector(".skip-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("main").focus();
+  });
 
   // View switches. Their state lives on <html> and is gone on reload: the SharePoint viewer blocks storage.
   function toggle(id, attr, value, labels, after) {
@@ -16,6 +20,7 @@
       if (on) root.setAttribute(attr, value);
       else root.removeAttribute(attr);
       button.textContent = labels[on ? 1 : 0];
+      button.setAttribute("aria-pressed", String(on));
       if (after) after(on);
     });
   }
@@ -28,13 +33,40 @@
   });
 
   function route() {
-    const id = decodeURIComponent(location.hash.slice(1));
-    const target = (id && document.getElementById(id)) || pages[0];
+    let id = "";
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      // Malformed fragments fall back to the first page.
+    }
+    const target =
+      pages
+        .flatMap((p) => [p, ...p.querySelectorAll("h1, h2, h3, h4, h5, h6")])
+        .find((el) => id && el.id === id) || pages[0];
     const page = target.closest(".page");
-    for (const p of pages) p.hidden = p !== page;
+    const notice = $("route-notice");
+    notice.replaceChildren();
+    notice.hidden = !id || target !== pages[0] || id === pages[0].id;
+    if (!notice.hidden) {
+      notice.append(
+        document.createTextNode("The link #" + id + " was not found "),
+      );
+      const dismiss = document.createElement("button");
+      dismiss.textContent = "Dismiss";
+      dismiss.type = "button";
+      dismiss.addEventListener("click", () => {
+        notice.hidden = true;
+      });
+      notice.append(dismiss);
+    }
+    for (const p of pages) {
+      p.hidden = p !== page;
+      p.classList.toggle("active", p === page);
+    }
     for (const a of navLinks)
       a.classList.toggle("active", a.getAttribute("href") === "#" + page.id);
     document.title = page.dataset.title + " · " + docTitle;
+    page.querySelector("h1")?.focus({ preventScroll: true });
     if (target === page) scrollTo(0, 0);
     else target.scrollIntoView();
   }
@@ -55,8 +87,13 @@
             title: page.dataset.title + " › " + el.textContent,
             text: "",
           };
-        } else if (!el.matches(".diagram, .pager"))
-          entry.text += " " + el.textContent;
+        } else if (!el.matches(".pager")) {
+          const copy = el.cloneNode(true);
+          copy
+            .querySelectorAll(".bar, .stage")
+            .forEach((node) => node.remove());
+          entry.text += " " + copy.textContent;
+        }
       }
       index.push(entry);
     }
@@ -82,15 +119,22 @@
                 0,
                 e.text.toLowerCase().indexOf(terms[0]) - 30,
               );
-              const snippet = escapeHtml(
-                e.text.slice(at, at + 110).trim(),
-              ).replace(
-                new RegExp(
-                  terms[0].replace(/[.*+?^$(){}|[\]\\]/g, "\\$&"),
-                  "ig",
-                ),
-                "<mark>$&</mark>",
+              const raw = e.text.slice(at, at + 110).trim();
+              const pattern = new RegExp(
+                terms[0].replace(/[.*+?^$(){}|[\]\\]/g, "\\$&"),
+                "ig",
               );
+              let end = 0;
+              let snippet = "";
+              for (const match of raw.matchAll(pattern)) {
+                snippet +=
+                  escapeHtml(raw.slice(end, match.index)) +
+                  "<mark>" +
+                  escapeHtml(match[0]) +
+                  "</mark>";
+                end = match.index + match[0].length;
+              }
+              snippet += escapeHtml(raw.slice(end));
               return (
                 '<li><a href="#' +
                 e.id +
@@ -154,6 +198,10 @@
       c.zoom = Math.min(8, Math.max(0.25, next / 4));
       c.draw();
     };
+    c.actual = () => {
+      c.zoom = 1;
+      c.draw();
+    };
     c.reset = () => {
       c.zoom = null;
       if (!fitHeight) stage.style.height = "";
@@ -165,6 +213,7 @@
       if (act === "in") c.step(1);
       else if (act === "out") c.step(-1);
       else if (act === "reset") c.reset();
+      else if (act === "actual") c.actual();
     });
     new ResizeObserver(() => {
       if (c.zoom === null) c.draw();
@@ -173,19 +222,22 @@
   }
 
   // Fullscreen is a <dialog>, not the Fullscreen API: the SharePoint viewer's sandbox does not allow that API.
-  const viewer = $("viewer");
+  const viewer = document.querySelector("dialog#viewer");
   const viewerStage = viewer.querySelector(".stage");
   const full = control(viewer.querySelector(".bar"), viewerStage, true);
   const inline = [];
   const diagramModes = [];
   let afterClose = null;
+  let trigger = null;
   let activeDiagram = null;
   function openFull(el, after) {
     full.el = el;
     full.zoom = null;
     afterClose = after;
+    trigger = document.activeElement;
     viewerStage.append(el);
     viewer.showModal();
+    viewer.querySelector("button").focus();
     full.draw();
   }
   function finishFull() {
@@ -196,13 +248,23 @@
     afterClose = null;
     activeDiagram = null;
     done(el);
+    trigger?.focus({ preventScroll: true });
   }
+  viewer.addEventListener("keydown", (e) => {
+    if (e.key === "+") full.step(1);
+    else if (e.key === "-") full.step(-1);
+    else if (e.key === "0") full.reset();
+    else if (e.key === "1") full.actual();
+    else return;
+    e.preventDefault();
+  });
   viewer.addEventListener("close", finishFull);
   viewer
     .querySelector('[data-act="close"]')
     .addEventListener("click", () => viewer.close());
 
   for (const figure of document.querySelectorAll(".diagram")) {
+    figure.tabIndex = 0;
     const stage = figure.querySelector(".stage");
     const c = control(figure.querySelector(".bar"), stage, false);
     const variants = [...stage.querySelectorAll(":scope > svg")];
@@ -242,16 +304,40 @@
     };
     figure.querySelector('[data-act="full"]').addEventListener("click", enter);
     stage.addEventListener("click", (e) => {
-      if (e.target.closest("svg")) enter();
+      if (e.target.closest("svg")) {
+        figure.focus({ preventScroll: true });
+        enter();
+      }
     });
   }
-  for (const img of document.querySelectorAll(".content img")) {
-    img.addEventListener("click", () => {
+  for (const figure of document.querySelectorAll(".image-figure")) {
+    const stage = figure.querySelector(".stage");
+    const img = stage.querySelector("img");
+    const c = control(figure.querySelector(".bar"), stage, false);
+    c.el = img;
+    inline.push(c);
+    img.addEventListener("load", c.draw);
+    c.draw();
+    const enter = () => {
       const copy = img.cloneNode();
       copy.addEventListener("load", () => full.draw());
       openFull(copy, () => copy.remove());
+    };
+    figure.querySelector('[data-act="full"]').addEventListener("click", enter);
+    img.addEventListener("click", () => {
+      figure.focus({ preventScroll: true });
+      enter();
     });
   }
+  addEventListener("keydown", (e) => {
+    if (
+      e.target.matches("figure.diagram, figure.image-figure") &&
+      (e.key === "Enter" || e.key.toLowerCase() === "f")
+    ) {
+      e.preventDefault();
+      e.target.querySelector('[data-act="full"]').click();
+    }
+  });
 
   // Paper is light and fitted, whatever the screen shows.
   let wasDark = false;

@@ -189,6 +189,16 @@ button:hover {
   background: var(--hover);
   color: var(--fg);
 }
+.sections {
+  display: none;
+}
+#nav a.active + .sections {
+  display: block;
+}
+#nav .sections a {
+  padding-left: 1.5rem;
+  font-size: 0.9em;
+}
 #nav a.active {
   background: var(--accent-soft);
   color: var(--accent);
@@ -223,8 +233,18 @@ main {
   gap: 4rem;
   justify-content: center;
 }
-.page[hidden] {
+.js .page:not(.active) {
   display: none;
+}
+.skip-link {
+  position: absolute;
+  left: -10000px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  background: var(--bg);
 }
 .toc {
   position: sticky;
@@ -428,7 +448,8 @@ figcaption {
 }
 
 /* Diagrams: a toolbar and a frame the diagram scrolls inside. */
-.diagram {
+.diagram,
+.image-figure {
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -476,7 +497,7 @@ figcaption {
   cursor: zoom-in;
 }
 /* Fullscreen uses the same canvas as the selected diagram. */
-#viewer {
+dialog#viewer {
   --bg: #fcfbf8;
   --fg: #24221e;
   --muted: #69655d;
@@ -492,11 +513,11 @@ figcaption {
   background: var(--stage);
   color-scheme: only light;
 }
-#viewer[open] {
+dialog#viewer[open] {
   display: flex;
   flex-direction: column;
 }
-#viewer .stage {
+dialog#viewer .stage {
   flex: 1;
   min-height: 0;
 }
@@ -566,7 +587,7 @@ figcaption {
     display: none;
   }
   .page,
-  .page[hidden] {
+  .js .page:not(.active) {
     display: block;
     break-before: page;
   }

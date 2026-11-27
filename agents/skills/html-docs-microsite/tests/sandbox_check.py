@@ -1,7 +1,7 @@
-"""Load the built example the way SharePoint's HTML viewer does, and self-test it there.
+"""Load a built site the way SharePoint's HTML viewer does, and self-test it there.
 
 The CSP and the sandbox attribute are copied from github.com/SharePoint/sharepoint-html SKILL.md (read 2026-11-27).
-The self-test names pages of example/, so build that folder first:
+For example:
   uv run scripts/build.py example /tmp/microsite/example.html
   python3 tests/sandbox_check.py /tmp/microsite/example.html   -> example.sandbox.html and harness.html beside it
 Then serve that folder over http and open harness.html; the result JSON appears in <pre id="result">.
@@ -31,7 +31,9 @@ async function selfTest() {
   try {
     try { localStorage.getItem("x"); out.localStorage = "allowed"; } catch (e) { out.localStorage = e.name; }
     out.firstPage = visible();
-    location.hash = "#architecture/diagram-style";
+    const firstPage = $(".page");
+    const firstHeading = firstPage.querySelector("h2, h3");
+    if (firstHeading) location.hash = "#" + firstHeading.id;
     await wait(300);
     out.afterHashChange = visible();
     const content = $(".page:not([hidden]) .content");
@@ -44,13 +46,19 @@ async function selfTest() {
     $("#t-outline").click();
     out.outline.afterHide = css(toc, "display");
     $("#t-outline").click();
-    const look = () => ({ scheme: css(document.documentElement, "colorScheme"), page: css(document.body, "backgroundColor"),
-      stage: css($(".page:not([hidden]) .stage"), "backgroundColor"), diagram: css($(".page:not([hidden]) .stage > svg[data-variant='" + (document.documentElement.dataset.mode === "dark" ? "dark" : "light") + "'] svg > rect"), "fill") });
+    const look = () => ({ scheme: css(document.documentElement, "colorScheme"), page: css(document.body, "backgroundColor") });
     $("#t-mode").click();
     out.dark = look();
     $("#t-mode").click();
     out.light = look();
-    const fig = $(".page:not([hidden]) .diagram");
+    const fig = document.querySelector(".page figure.diagram, .page figure.image-figure");
+    if (!fig) {
+      out.errors = window.__errors;
+      parent.postMessage(JSON.stringify(out, null, 1), "*");
+      return;
+    }
+    location.hash = "#" + fig.closest(".page").id;
+    await wait(300);
     const stage = fig.querySelector(".stage");
     const pct = fig.querySelector(".pct");
     const press = (scope, act) => scope.querySelector('[data-act="' + act + '"]').click();
@@ -68,6 +76,7 @@ async function selfTest() {
     const vstage = viewer.querySelector(".stage");
     const active = () => document.documentElement.dataset.mode === "dark" ? "dark" : "light";
     const idsUnique = () => { const ids = [...document.querySelectorAll("svg[id], svg [id]")].map((e) => e.id); return new Set(ids).size === ids.length; };
+    if (fig.classList.contains("diagram")) {
     $("#t-mode").click();
     const variants = { darkBefore: active(), darkVisible: css(stage.querySelector('[data-variant="dark"]'), "display") !== "none" };
     press(fig, "full"); await wait(50);
@@ -89,8 +98,9 @@ async function selfTest() {
     variants.idsAfterPrint = idsUnique();
     $("#t-mode").click();
     out.variants = variants;
+    }
     press(fig, "full"); await wait(100);
-    const full = { open: viewer.open, hasDiagram: !!vstage.querySelector("svg"), fit: viewer.querySelector(".pct").textContent, wholeDiagramVisible: !scrolls(vstage) };
+    const full = { open: viewer.open, hasDiagram: !!vstage.querySelector("svg, img"), fit: viewer.querySelector(".pct").textContent, wholeDiagramVisible: !scrolls(vstage) };
     press(viewer, "in"); press(viewer, "in"); press(viewer, "in");
     Object.assign(full, { inThrice: viewer.querySelector(".pct").textContent, scrollsInside: scrolls(vstage) });
     press(viewer, "reset");
@@ -98,12 +108,13 @@ async function selfTest() {
     press(viewer, "close"); await wait(50);
     Object.assign(full, { closed: !viewer.open, diagramBackInPage: !!stage.querySelector("svg"), pageLabel: pct.textContent });
     out.fullscreen = full;
-    stage.querySelector("svg").dispatchEvent(new MouseEvent("click", { bubbles: true })); await wait(100);
+    stage.querySelector("svg, img").dispatchEvent(new MouseEvent("click", { bubbles: true })); await wait(100);
     const byClick = { diagramClickOpens: viewer.open && !!vstage.querySelector("svg") };
     press(viewer, "close"); await wait(50);
     byClick.diagramBack = !!stage.querySelector("svg");
-    location.hash = "#architecture/diagrams-and-images"; await wait(300);
-    const img = $(".page:not([hidden]) .content img");
+    const img = $(".page .content img");
+    if (img) {
+    location.hash = "#" + img.closest(".page").id; await wait(300);
     const imageFilter = css(img, "filter");
     $("#t-mode").click();
     out.imageUnchangedInDark = css(img, "filter") === imageFilter;
@@ -116,6 +127,7 @@ async function selfTest() {
     const imageClosed = new Promise((resolve) => viewer.addEventListener("close", resolve, { once: true }));
     press(viewer, "close"); await imageClosed;
     Object.assign(byClick, { closed: !viewer.open, copyRemoved: !vstage.querySelector("img"), imageStillInPage: !!$(".page:not([hidden]) .content img") });
+    }
     out.clickToFullscreen = byClick;
     const q = $("#q");
     q.value = "data uri";

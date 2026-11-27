@@ -37,5 +37,4 @@ A link to a file or heading that does not exist stops the build with the file na
 uv run scripts/build.py example /tmp/microsite/example.html --theme indigo
 ```
 
-> [!WARNING]
-> Code blocks are not syntax highlighted yet.
+Known language code blocks are syntax highlighted at build time.

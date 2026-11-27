@@ -2,6 +2,9 @@
 <html lang="en" data-theme="{{theme}}">
   <head>
     <meta charset="utf-8" />
+    <script>
+      document.documentElement.classList.add("js");
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="only light" />
     <meta name="darkreader-lock" />
@@ -11,31 +14,58 @@
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
     <header class="topbar">
       <div class="brand">
         <strong>{{title}}</strong><small>{{subtitle}}</small>
       </div>
       <div class="tools">
-        <button id="t-outline" type="button">Hide outline</button>
-        <button id="t-width" type="button">Wide</button>
-        <button id="t-mode" type="button">Dark</button>
+        <button id="t-outline" type="button" aria-pressed="false">
+          Hide outline
+        </button>
+        <button id="t-width" type="button" aria-pressed="false">Wide</button>
+        <button id="t-mode" type="button" aria-pressed="false">Dark</button>
         <button id="t-print" type="button">Print</button>
       </div>
     </header>
     <aside class="sidebar">
-      <input id="q" type="search" placeholder="Search  /" autocomplete="off" />
+      <input
+        id="q"
+        type="search"
+        aria-label="Search documentation"
+        placeholder="Search  /"
+        autocomplete="off"
+      />
       <nav id="nav">{{nav}}</nav>
       <ol id="results" hidden></ol>
     </aside>
-    <main>{{pages}}</main>
-    <dialog id="viewer">
+    <main id="main" tabindex="-1">
+      <div id="route-notice" hidden></div>
+      {{pages}}
+    </main>
+    <dialog id="viewer" aria-label="Figure viewer">
       <div class="bar">
-        <button type="button" data-act="out" aria-label="Zoom out">
+        <button
+          type="button"
+          data-act="out"
+          title="Zoom out (-)"
+          aria-label="Zoom out"
+        >
           &minus;</button
         ><span class="pct"></span
-        ><button type="button" data-act="in" aria-label="Zoom in">+</button
-        ><button type="button" data-act="reset">Fit</button
-        ><button type="button" data-act="close">Close</button>
+        ><button
+          type="button"
+          data-act="in"
+          title="Zoom in (+)"
+          aria-label="Zoom in"
+        >
+          +</button
+        ><button type="button" data-act="actual" title="Actual size (1)">
+          1:1</button
+        ><button type="button" data-act="reset" title="Fit (0)">Fit</button
+        ><button type="button" data-act="close" title="Close (Escape)">
+          Close
+        </button>
       </div>
       <div class="stage"></div>
     </dialog>

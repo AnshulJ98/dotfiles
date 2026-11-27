@@ -13,20 +13,20 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date
 from html import escape
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
-from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.front_matter import front_matter_plugin
 from mdit_py_plugins.gfm import gfm_plugin
 from pygments import highlight
@@ -46,17 +46,20 @@ MIME = {
     ".webp": "image/webp",
     ".svg": "image/svg+xml",
 }
-RAW_IMG = re.compile(r'(<img\b[^>]*?\ssrc=")([^"]+)"')
-# The SharePoint viewer's CSP blocks every one of these, silently.
-EXTERNAL = re.compile(
-    r'<(?:img|image|script|link|iframe|source|video|audio)\b[^>]*?\s(?:src|href|xlink:href)="(https?:[^"]+)"'
+TAG = re.compile(
+    r"<(img|image|script|link|iframe|source|video|audio|a)\b[^>]*>", re.IGNORECASE
 )
+ATTR = re.compile(
+    r"""\s(src|href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=`<>]+))""",
+    re.IGNORECASE,
+)
+RAW_TEXT = re.compile(r"<(title|textarea|style|xmp|plaintext)(?=[\s/>])", re.IGNORECASE)
 DIAGRAM_BAR = (
-    '<div class="bar"><span class="pct"></span>'
-    '<button type="button" data-act="out" aria-label="Zoom out">&minus;</button>'
-    '<button type="button" data-act="in" aria-label="Zoom in">+</button>'
-    '<button type="button" data-act="reset">Reset</button>'
-    '<button type="button" data-act="full">Fullscreen</button></div>'
+    '<div class="bar"><button type="button" data-act="out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>'
+    '<span class="pct"></span><button type="button" data-act="in" title="Zoom in (+)" aria-label="Zoom in">+</button>'
+    '<button type="button" data-act="actual" title="Actual size (1)">1:1</button>'
+    '<button type="button" data-act="reset" title="Fit (0)">Fit</button>'
+    '<button type="button" data-act="full" title="Fullscreen (f)">Fullscreen</button></div>'
 )
 
 
@@ -87,7 +90,14 @@ def natural(name: str) -> list[int | str]:
 
 
 def page_id(src: Path, file: Path) -> str:
-    return "/".join(strip_order(part) for part in file.relative_to(src).parts)
+    return (
+        re.sub(
+            r"[^a-z0-9-]+",
+            "-",
+            "-".join(strip_order(part) for part in file.relative_to(src).parts).lower(),
+        ).strip("-")
+        or "page"
+    )
 
 
 def markdown_files(folder: Path) -> list[Path]:
@@ -110,13 +120,15 @@ class Page:
     html: str = ""
     diagrams: int = 0
     titled: bool = False
-    slugs: Counter[str] = field(default_factory=Counter)
+    slugs: set[str] = field(default_factory=set)
 
 
 class Site:
-    def __init__(self, src: Path, style: Path) -> None:
+    def __init__(self, src: Path, style: Path, full_res: bool = False) -> None:
         self.src = src
         self.style = style  # theme file without its .d2 suffix, as d2 imports want it
+        self.full_res = full_res
+        self.image_cache: dict[Path, str] = {}
         files = markdown_files(src)
         if not files:
             raise BuildError(f"no .md files under {src}")
@@ -141,12 +153,7 @@ class Site:
                 )
 
     def _markdown(self) -> MarkdownIt:
-        md = (
-            MarkdownIt("commonmark")
-            .use(gfm_plugin)
-            .use(footnote_plugin)
-            .use(front_matter_plugin)
-        )
+        md = MarkdownIt("commonmark").use(gfm_plugin).use(front_matter_plugin)
         plain_fence = md.renderer.rules["fence"]
         site = self
 
@@ -181,16 +188,12 @@ class Site:
             img = f'<img src="{site._embed(str(tok.attrGet("src")), env["page"])}" alt="{escape(alt)}">'
             if not tok.meta.get("block"):
                 return img
-            title = tok.attrGet("title")
+            title = tok.attrGet("title") or alt
             caption = f"<figcaption>{escape(str(title))}</figcaption>" if title else ""
-            return f"<figure>{img}{caption}</figure>\n"
+            return f'<figure class="image-figure" tabindex="0">{DIAGRAM_BAR}<div class="stage">{img}</div>{caption}</figure>\n'
 
         def raw_html(self, tokens, idx, options, env):
-            # pandoc's docx -> gfm output carries images as raw <img> tags.
-            return RAW_IMG.sub(
-                lambda m: m.group(1) + site._embed(m.group(2), env["page"]) + '"',
-                tokens[idx].content,
-            )
+            return site._raw_html(tokens[idx].content, env["page"])
 
         md.add_render_rule("fence", fence)
         md.add_render_rule("image", image)
@@ -214,9 +217,80 @@ class Site:
             "docId": re.sub(r"[^A-Za-z0-9]+", "-", pid),
         }  # docId keeps footnote ids unique per page
         tokens = self.md.parse(file.read_text("utf-8"), env)
+        self._guard_raw_text(tokens, page)
         self._prepare(tokens, page)
+        if not page.titled:
+            raise BuildError(f"{file.relative_to(self.src)}: missing H1 title")
         page.html = self.md.renderer.render(tokens, self.md.options, env)
+        if page.diagrams:
+            print(
+                f"page {file.relative_to(self.src)}: {page.diagrams} diagrams",
+                file=sys.stderr,
+            )
         return page
+
+    def _guard_raw_text(self, tokens: list[Token], page: Page) -> None:
+        for tok in tokens:
+            if tok.type == "html_block":
+                parts = [(tok.content, 0)]
+            elif tok.type == "inline":
+                parts = []
+                offset = 0
+                for child in tok.children or []:
+                    if child.type == "html_inline":
+                        pos = tok.content.find(child.content, offset)
+                        if pos >= 0:
+                            parts.append((child.content, tok.content[:pos].count("\n")))
+                            offset = pos + len(child.content)
+            else:
+                continue
+            for content, offset in parts:
+                match = RAW_TEXT.search(content)
+                if match:
+                    line = (
+                        (tok.map[0] if tok.map else 0)
+                        + offset
+                        + content[: match.start()].count("\n")
+                        + 1
+                    )
+                    raise BuildError(
+                        f"{page.file.relative_to(self.src)}:{line}: raw <{match.group(1)}> is not allowed"
+                    )
+
+    def _raw_html(self, content: str, page: Page) -> str:
+        def tag(match: re.Match[str]) -> str:
+            name = match.group(1).lower()
+
+            def attr(a: re.Match[str]) -> str:
+                key = a.group(1).lower()
+                value = next(v for v in a.groups()[1:] if v is not None)
+                if name == "img" and key == "src":
+                    return ' src="' + escape(self._embed(value, page), quote=True) + '"'
+                if name == "a" and key == "href":
+                    self._warn_link(value, page)
+                elif name != "a" and re.match(r"https?:", value, re.IGNORECASE):
+                    self.problems.append(
+                        f"{page.file.relative_to(self.src)}: external resource will not load in the SharePoint viewer: {value}"
+                    )
+                return a.group(0)
+
+            return ATTR.sub(attr, match.group(0))
+
+        return TAG.sub(tag, content)
+
+    def _warn_link(self, href: str, page: Page) -> None:
+        url = urlsplit(href)
+        if (
+            url.path
+            and not url.scheme
+            and not url.netloc
+            and not url.path.startswith("/")
+            and not url.path.lower().endswith(".md")
+        ):
+            print(
+                f"warning: {page.file.relative_to(self.src)}: relative link {href} will not be embedded",
+                file=sys.stderr,
+            )
 
     def _prepare(self, tokens: list[Token], page: Page) -> None:
         for i, tok in enumerate(tokens):
@@ -228,12 +302,16 @@ class Site:
                 )
                 level = int(tok.tag[1])
                 if level == 1 and not page.titled:
+                    tok.attrSet("tabindex", "-1")
                     page.title, page.titled = text, True
                     continue
-                slug = slugify(text)
-                page.slugs[slug] += 1
-                if page.slugs[slug] > 1:
-                    slug += f"-{page.slugs[slug] - 1}"
+                base = slugify(text)
+                slug = base
+                suffix = 0
+                while slug in page.slugs:
+                    suffix += 1
+                    slug = f"{base}-{suffix}"
+                page.slugs.add(slug)
                 hid = f"{page.id}--{slug}"
                 tok.attrSet("id", hid)
                 self.anchors.add(hid)
@@ -256,8 +334,9 @@ class Site:
                         )
 
     def _link(self, href: str, page: Page) -> str:
+        self._warn_link(href, page)
         if href.startswith("#"):
-            target = f"{page.id}--{href[1:]}"
+            target = f"{page.id}--{slugify(unquote(href[1:]))}"
         else:
             m = re.fullmatch(r"([^#:]+\.md)(?:#(.*))?", href)
             if not m:
@@ -268,7 +347,7 @@ class Site:
                     f"{page.file.relative_to(self.src)}: link {href} points at a file that does not exist"
                 )
                 return href
-            target = pid + (f"--{m.group(2)}" if m.group(2) else "")
+            target = pid + (f"--{slugify(unquote(m.group(2)))}" if m.group(2) else "")
         self.links.append((page.file, href, target))
         return "#" + target
 
@@ -303,12 +382,20 @@ class Site:
         )
         if not style.with_suffix(".d2").is_file():
             raise BuildError(f"missing {mode} diagram theme: {style}.d2")
-        run = subprocess.run(
-            cmd,
-            input=f'...@"{style}"\n{source}'.encode(),
-            capture_output=True,
-            check=False,
-        )
+        try:
+            run = subprocess.run(
+                cmd,
+                input=f'...@"{style}"\n{source}'.encode(),
+                capture_output=True,
+                check=False,
+                timeout=60,
+            )
+        except FileNotFoundError as err:
+            raise BuildError("d2 not found on PATH") from err
+        except subprocess.TimeoutExpired as err:
+            raise BuildError(
+                f"{page.file.relative_to(self.src)}: d2 block {page.diagrams} timed out after 60 seconds"
+            ) from err
         if run.returncode != 0:
             where = f"{page.file.relative_to(self.src)}: d2 block {page.diagrams}"
             raise BuildError(
@@ -341,10 +428,16 @@ class Site:
             raise BuildError(
                 f"{page.file.relative_to(self.src)}: image {src} is missing or not a supported type"
             )
+        if path in self.image_cache:
+            return self.image_cache[path]
         data = path.read_bytes()
         self.stats["images"] += 1
         self.stats["image_bytes_in"] += len(data)
-        if path.suffix.lower() in (".png", ".jpg", ".jpeg") and len(data) > 100_000:
+        if (
+            not self.full_res
+            and path.suffix.lower() in (".png", ".jpg", ".jpeg")
+            and len(data) > 100_000
+        ):
             try:
                 webp = subprocess.run(
                     ["cwebp", "-quiet", "-q", "82", str(path), "-o", "-"],
@@ -355,8 +448,12 @@ class Site:
                 webp = None
             if webp and webp.returncode == 0 and len(webp.stdout) < len(data):
                 data, mime = webp.stdout, "image/webp"
+            elif webp and webp.returncode != 0:
+                print(f"warning: cwebp failed for {path}", file=sys.stderr)
         self.stats["image_bytes_out"] += len(data)
-        return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+        uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
+        self.image_cache[path] = uri
+        return uri
 
     def sidebar(self) -> str:
         out: list[str] = []
@@ -371,6 +468,12 @@ class Site:
                     )
                     out.append(f'<p class="group">{label}</p>')
             out.append(f'<a href="#{page.id}">{escape(page.title)}</a>')
+            sections = "".join(
+                f'<a href="#{hid}">{escape(text)}</a>'
+                for level, hid, text in page.toc
+                if level == 2
+            )
+            out.append(f'<div class="sections">{sections}</div>')
         return "\n".join(out)
 
     def articles(self) -> str:
@@ -388,20 +491,36 @@ class Site:
                 nxt = self.pages[i + 1]
                 pager += f'<a class="next" href="#{nxt.id}"><small>Next</small>{escape(nxt.title)}</a>'
             out.append(
-                f'<article class="page" id="{page.id}" data-title="{escape(page.title)}" hidden>'
+                f'<article class="page" id="{page.id}" data-title="{escape(page.title)}">'
                 f'<div class="content">{page.html}<nav class="pager">{pager}</nav></div>'
                 f'<nav class="toc">{"<p class=group>On this page</p>" + toc if toc else ""}</nav></article>'
             )
         return "\n".join(out)
 
 
-def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
+def build(
+    src: Path, out: Path, theme: str | None, styles: Path, full_res: bool = False
+) -> int:
     src = src.resolve()
     config_file = src / "doc.toml"
-    config = (
-        tomllib.loads(config_file.read_text("utf-8")) if config_file.is_file() else {}
-    )
+    allowed = "title, subtitle, theme"
+    try:
+        config = (
+            tomllib.loads(config_file.read_text("utf-8"))
+            if config_file.is_file()
+            else {}
+        )
+    except tomllib.TOMLDecodeError as err:
+        raise BuildError(f"{config_file}: {err}; allowed keys: {allowed}") from err
+    if set(config) - {"title", "subtitle", "theme"}:
+        raise BuildError(
+            f"{config_file}: unknown keys: {set(config) - {'title', 'subtitle', 'theme'}}; allowed keys: {allowed}"
+        )
     theme = theme or config.get("theme", "slate")
+    if theme not in {"slate", "indigo", "teal", "graphite"}:
+        raise BuildError(
+            f"no theme {theme!r} in CSS; choose slate, indigo, teal or graphite"
+        )
     if not (styles / f"{theme}.d2").is_file():
         known = ", ".join(
             sorted(
@@ -411,10 +530,10 @@ def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
             )
         )
         raise BuildError(f"no theme {theme!r} in {styles} (found: {known or 'none'})")
-    site = Site(src, styles.resolve() / theme)
+    site = Site(src, styles.resolve() / theme, full_res)
     values = {
         "title": escape(config.get("title", words(strip_order(src.name)))),
-        "subtitle": escape(config.get("subtitle", f"Built {date.today():%-d %b %Y}")),
+        "subtitle": escape(config.get("subtitle", "")),
         "theme": theme,
         "style": (ASSETS / "style.css").read_text("utf-8")
         + "\n"
@@ -435,12 +554,21 @@ def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
         lambda m: values[m.group(1)],
         (ASSETS / "template.html").read_text("utf-8"),
     )
-    site.problems += [
-        f"external resource will not load in the SharePoint viewer: {url}"
-        for url in EXTERNAL.findall(page)
-    ]
+    if site.problems:
+        print("\n".join(site.problems), file=sys.stderr)
+        return 1
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page, "utf-8")
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=out.parent, delete=False
+        ) as temp:
+            temp_path = Path(temp.name)
+            temp.write(page)
+        os.replace(temp_path, out)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     s = site.stats
 
     def kb(n: int) -> str:
@@ -450,9 +578,6 @@ def build(src: Path, out: Path, theme: str | None, styles: Path) -> int:
         f"theme {theme}, pages {len(site.pages)}, d2 {s['d2']} ({kb(s['d2_bytes'])}), images {s['images']} "
         f"({kb(s['image_bytes_in'])} -> {kb(s['image_bytes_out'])}), output {kb(len(page.encode()))} -> {out}"
     )
-    if site.problems:
-        print("\n".join(site.problems), file=sys.stderr)
-        return 1
     return 0
 
 
@@ -469,9 +594,14 @@ def main() -> int:
     ap.add_argument(
         "--styles", type=Path, default=DEFAULT_STYLES, help="folder of d2 theme files"
     )
+    ap.add_argument(
+        "--full-res",
+        action="store_true",
+        help="embed original image bytes without WebP conversion",
+    )
     args = ap.parse_args()
     try:
-        return build(args.src, args.out, args.theme, args.styles)
+        return build(args.src, args.out, args.theme, args.styles, args.full_res)
     except BuildError as err:
         print(f"build failed: {err}", file=sys.stderr)
         return 1

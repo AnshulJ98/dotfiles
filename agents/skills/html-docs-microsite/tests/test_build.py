@@ -6,15 +6,20 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import io
+import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 from html import unescape
 from pathlib import Path
+from unittest.mock import patch
 
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
@@ -62,11 +67,200 @@ class BuildTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
-    def render(self, theme: str | None = None) -> tuple[int, str, str]:
+    def render(
+        self, theme: str | None = None, full_res: bool = False
+    ) -> tuple[int, str, str]:
         stdout, stderr = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            code = builder.build(self.src, self.out, theme, builder.DEFAULT_STYLES)
-        return code, self.out.read_text("utf-8"), stderr.getvalue()
+            code = builder.build(
+                self.src, self.out, theme, builder.DEFAULT_STYLES, full_res
+            )
+        return (
+            code,
+            self.out.read_text("utf-8") if self.out.exists() else "",
+            stderr.getvalue(),
+        )
+
+    def browser(self, html: str, script: str, fragment: str = "") -> object:
+        default = Path.home() / "Library/Caches/ms-playwright"
+        cache = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", str(default)))
+        pattern = "chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+        shells = sorted(cache.glob(pattern))
+        if not shells:
+            self.skipTest(f"headless Chromium shell absent in {cache}")
+        path = self.root / "browser.html"
+        probe = f'<pre id="t"></pre><script>(() => {{ const t=document.getElementById("t"), q=document.getElementById("q"), results=document.querySelector("ol#results"); {script} }})()</script>'
+        path.write_text(html.replace("</body>", probe + "</body>"), encoding="utf-8")
+        args = [str(shells[-1]), "--disable-gpu", "--virtual-time-budget=2000"]
+        args += ["--dump-dom", path.as_uri() + fragment]
+        run = subprocess.run(
+            args, capture_output=True, text=True, timeout=30, check=True
+        )
+        match = re.search(r'<pre id="t">(.*?)</pre>', run.stdout, re.DOTALL)
+        self.assertIsNotNone(match, run.stderr)
+        return json.loads(unescape(match.group(1)))
+
+    def site(self) -> str:
+        self.source(
+            "01-start.md",
+            "# Start\n\nBefore section amp lt gt & < and >.\n\n## First section\n\nSection body.\n",
+        )
+        self.source(
+            "02-results.md", "# Results\n\n## Second section\n\n![tiny](tiny.png)\n"
+        )
+        png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aWQAAAAASUVORK5CYII="
+        (self.src / "tiny.png").write_bytes(base64.b64decode(png))
+        code, html, errors = self.render(full_res=True)
+        self.assertEqual((code, errors), (0, ""))
+        return html
+
+    def test_route_page_named_like_ui_id(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            't.textContent=JSON.stringify([...document.querySelectorAll(".page")].filter(p=>!p.hidden).map(p=>p.id))',
+            "#results",
+        )
+        self.assertEqual(result, ["results"])
+
+    def test_route_malformed_hash(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            't.textContent=JSON.stringify(document.querySelector(".page:not([hidden])").id)',
+            "#%E0",
+        )
+        self.assertEqual(result, "start")
+
+    def test_route_unknown_hash_banner(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            'const n=document.querySelector("#route-notice"); const before=n.textContent; n.querySelector("button").click(); t.textContent=JSON.stringify([before,n.hidden,document.querySelector(".page:not([hidden])").id])',
+            "#%3Cx%3E",
+        )
+        self.assertEqual(result, ["The link #<x> was not found Dismiss", True, "start"])
+
+    def test_pages_visible_without_js(self) -> None:
+        html = self.site()
+        self.assertNotRegex(html, r'<article class="page"[^>]* hidden')
+
+    def test_image_figure_has_toolbar(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            'const f=document.querySelector(".image-figure"); t.textContent=JSON.stringify([f.tabIndex,...[...f.querySelectorAll("button")].map(b=>[b.dataset.act,b.title])])',
+        )
+        self.assertEqual(result[0], 0)
+        self.assertEqual(
+            [b[0] for b in result[1:]], ["out", "in", "actual", "reset", "full"]
+        )
+        self.assertTrue(all(b[1] for b in result[1:]))
+
+    def test_viewer_keys(self) -> None:
+        html = self.site()
+        script = """
+        const f=document.querySelector(".image-figure"); f.focus();
+        f.dispatchEvent(new KeyboardEvent("keydown",{key:"f",bubbles:true}));
+        const d=document.querySelector("#viewer"), p=d.querySelector(".pct");
+        const key=k=>d.dispatchEvent(new KeyboardEvent("keydown",{key:k,bubbles:true}));
+        const fit=p.textContent; key("+"); const plus=p.textContent; key("0");
+        const reset=p.textContent; key("1"); const actual=p.textContent;
+        t.textContent=JSON.stringify([fit,plus,reset,actual,d.contains(document.activeElement)]);
+        """
+        result = self.browser(html, script, "#results")
+        self.assertGreater(int(result[1][:-1]), int(result[0][:-1]))
+        self.assertEqual(result[0], result[2])
+        self.assertEqual(result[3:], ["100%", True])
+
+    def test_fit_never_upscales_small_image(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            'const f=document.querySelector(".image-figure"); f.querySelector("[data-act=full]").click(); t.textContent=JSON.stringify(document.querySelector("#viewer .pct").textContent)',
+            "#results",
+        )
+        self.assertLessEqual(int(result[:-1]), 100)
+
+    def test_search_snippet_has_no_toolbar_text(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            'q.value="section"; q.dispatchEvent(new Event("input")); t.textContent=JSON.stringify(results.textContent)',
+        )
+        self.assertNotIn("Fullscreen", result)
+        self.assertNotIn("100%", result)
+
+    def test_search_escapes_entities(self) -> None:
+        html = self.site()
+        for term in ("amp", "lt", "gt"):
+            with self.subTest(term=term):
+                result = self.browser(
+                    html,
+                    f'q.value="{term}"; q.dispatchEvent(new Event("input")); t.textContent=JSON.stringify(results.innerHTML)',
+                )
+                self.assertIn(f"<mark>{term}</mark>", result)
+                self.assertNotIn(f"&<mark>{term}</mark>;", result)
+
+    def test_search_finds_text_before_first_h2(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            'q.value="Before section"; q.dispatchEvent(new Event("input")); t.textContent=JSON.stringify(results.textContent)',
+        )
+        self.assertIn("Before section", result)
+
+    def test_sidebar_lists_active_page_sections(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            't.textContent=JSON.stringify([...document.querySelectorAll("#nav .sections")].map(e=>[getComputedStyle(e).display,e.textContent]))',
+            "#results",
+        )
+        self.assertEqual(result[0][0], "none")
+        self.assertNotEqual(result[1][0], "none")
+        self.assertIn("Second section", result[1][1])
+
+    def test_accessibility_attributes(self) -> None:
+        html = self.site()
+        self.assertIn('<a class="skip-link"', html)
+        self.assertIn('aria-label="Search documentation"', html)
+        self.assertIn('aria-label="Figure viewer"', html)
+        self.assertEqual(html.count('aria-pressed="false"'), 3)
+        self.assertIn('<h1 tabindex="-1">', html)
+
+    def test_route_focuses_h1(self) -> None:
+        html = self.site()
+        result = self.browser(
+            html,
+            "t.textContent=JSON.stringify([document.activeElement.tagName,document.activeElement.textContent])",
+            "#results",
+        )
+        self.assertEqual(result, ["H1", "Results"])
+
+    def test_page_named_viewer_does_not_replace_dialog(self) -> None:
+        self.source("01-start.md", "# Start")
+        self.source("02-viewer.md", "# Viewer")
+        code, html, errors = self.render()
+        self.assertEqual((code, errors), (0, ""))
+        result = self.browser(
+            html,
+            'const p=document.querySelector("article#viewer"); t.textContent=JSON.stringify([p.hidden,getComputedStyle(p).display,document.activeElement.textContent])',
+            "#viewer",
+        )
+        self.assertEqual(result, [False, "grid", "Viewer"])
+
+    def test_sandbox_check_generic(self) -> None:
+        self.site()
+        run = subprocess.run(
+            [sys.executable, str(SKILL / "tests/sandbox_check.py"), str(self.out)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertTrue((self.out.parent / "harness.html").exists())
+        self.assertTrue(self.out.with_suffix(".sandbox.html").exists())
 
     def test_pages_headings_and_links(self) -> None:
         self.source("01-start.md", "# Start\n[Go](02-services.md#request-flow)\n")
@@ -90,6 +284,82 @@ class BuildTest(unittest.TestCase):
                 code, _, errors = self.render()
                 self.assertEqual(code, 1)
                 self.assertIn(link, errors)
+
+    def test_missing_d2_is_build_error(self) -> None:
+        self.source("start.md", "# Start\n\n```d2\na -> b\n```")
+        with (
+            patch.object(builder.subprocess, "run", side_effect=FileNotFoundError()),
+            self.assertRaisesRegex(builder.BuildError, "d2.*PATH"),
+        ):
+            self.render()
+
+    def test_d2_has_timeout(self) -> None:
+        self.source("start.md", "# Start\n\n```d2\na -> b\n```")
+        with patch.object(
+            builder.subprocess,
+            "run",
+            side_effect=builder.subprocess.TimeoutExpired("d2", 60),
+        ) as run:
+            with self.assertRaisesRegex(builder.BuildError, "timed out"):
+                self.render()
+            self.assertEqual(run.call_args.kwargs["timeout"], 60)
+
+    def test_theme_must_have_css(self) -> None:
+        self.source("start.md", "# Start")
+        styles = self.root / "styles"
+        styles.mkdir()
+        (styles / "custom.d2").write_text("")
+        with self.assertRaisesRegex(builder.BuildError, "theme"):
+            builder.build(self.src, self.out, "custom", styles)
+
+    def test_alt_is_used_for_caption_and_escaped(self) -> None:
+        self.source("pic.svg", '<svg xmlns="http://www.w3.org/2000/svg"/>')
+        self.source("start.md", '# Start\n\n![A "quote" & <tag>](pic.svg)')
+        _, html, _ = self.render()
+        self.assertIn('alt="A &quot;quote&quot; &amp; &lt;tag&gt;"', html)
+        self.assertIn(
+            "<figcaption>A &quot;quote&quot; &amp; &lt;tag&gt;</figcaption>", html
+        )
+
+    def test_missing_h1_fails(self) -> None:
+        self.source("start.md", "## Not a title")
+        with self.assertRaisesRegex(builder.BuildError, "start.md"):
+            self.render()
+
+    def test_default_subtitle_is_empty(self) -> None:
+        self.source("start.md", "# Start")
+        _, html, _ = self.render()
+        self.assertIn("<small></small>", html)
+
+    def test_bad_config_fails_with_allowed_keys(self) -> None:
+        self.source("start.md", "# Start")
+        for config in ["bad =", 'unknown = "x"']:
+            with self.subTest(config=config):
+                self.source("doc.toml", config)
+                with self.assertRaisesRegex(
+                    builder.BuildError, "title.*subtitle.*theme"
+                ):
+                    self.render()
+
+    def test_heading_suffix_collisions(self) -> None:
+        self.source("start.md", "# Start\n## foo\n## foo-1\n## foo")
+        _, html, _ = self.render()
+        ids = re.findall(r'id="(start--foo[^"]*)"', html)
+        self.assertEqual(len(ids), 3)
+        self.assertEqual(len(set(ids)), 3)
+
+    def test_page_ids_are_safe(self) -> None:
+        self.source('01-A "quoted" name.md', "# Start")
+        _, html, _ = self.render()
+        match = re.search(r'<article class="page" id="([^"]+)"', html)
+        self.assertIsNotNone(match)
+        self.assertRegex(match.group(1), r"^[a-z0-9-]+$")
+
+    def test_fragments_are_normalized(self) -> None:
+        self.source("start.md", "# Start\n[Go](#Request%20Flow)\n## Request Flow")
+        code, html, errors = self.render()
+        self.assertEqual((code, errors), (0, ""))
+        self.assertIn('href="#start--request-flow"', html)
 
     def test_duplicate_page_addresses_fail(self) -> None:
         self.source("01-start.md", "# One")
@@ -127,6 +397,127 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(html.count("data:image/svg+xml;base64,"), 2)
         self.assertIn("<figcaption>Caption</figcaption>", html)
+
+    def test_raw_text_elements_fail(self) -> None:
+        for tag in ["title", "textarea", "style", "xmp", "plaintext"]:
+            for body in [f"before <{tag}>bad", f"<{tag}>bad"]:
+                with self.subTest(tag=tag, body=body):
+                    self.source("start.md", f"# Start\n\n{body}")
+                    with self.assertRaisesRegex(
+                        builder.BuildError, rf"start.md:3:.*{tag}"
+                    ):
+                        self.render()
+        self.source("start.md", "# Start\n\n```html\n<title>safe\n```\n\n`<title>`")
+        self.assertEqual(self.render()[0], 0)
+
+    def test_full_res_keeps_original_bytes(self) -> None:
+        data = b"x" * 100001
+        (self.src / "pic.png").write_bytes(data)
+        self.source("start.md", "# Start\n![pic](pic.png)")
+        with patch.object(builder.subprocess, "run") as run:
+            code, html, _ = self.render(full_res=True)
+        self.assertEqual(code, 0)
+        self.assertIn(base64.b64encode(data).decode(), html)
+        run.assert_not_called()
+
+    def test_image_used_twice_encoded_once(self) -> None:
+        (self.src / "pic.png").write_bytes(b"x" * 100001)
+        self.source("start.md", "# Start\n![one](pic.png)\n![two](./pic.png)")
+        with patch.object(
+            builder.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess([], 0, b"webp", b""),
+        ) as run:
+            code, html, _ = self.render()
+        self.assertEqual(code, 0)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(html.count("data:image/webp;base64,"), 2)
+
+    def test_cwebp_failure_warns(self) -> None:
+        (self.src / "pic.png").write_bytes(b"x" * 100001)
+        self.source("start.md", "# Start\n![pic](pic.png)")
+        with patch.object(
+            builder.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess([], 1, b"", b"error"),
+        ):
+            code, _, errors = self.render()
+        self.assertEqual(code, 0)
+        self.assertIn("warning", errors)
+        self.assertIn("pic.png", errors)
+
+    def test_failed_build_writes_nothing(self) -> None:
+        self.source("start.md", "# Start\n[bad](missing.md)")
+        code, _, _ = self.render()
+        self.assertEqual(code, 1)
+        self.assertFalse(self.out.exists())
+        run = subprocess.run(
+            [
+                sys.executable,
+                str(SKILL / "scripts/build.py"),
+                str(self.src),
+                str(self.out),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(run.returncode, 1)
+        self.assertFalse(self.out.exists())
+        self.out.parent.mkdir(parents=True, exist_ok=True)
+        self.out.write_text("previous")
+        self.assertEqual(self.render()[0], 1)
+        self.assertEqual(self.out.read_text(), "previous")
+
+    def test_remote_image_reported_once(self) -> None:
+        for image in [
+            "![x](https://example.com/x.png)",
+            "<img src='https://example.com/x.png'>",
+        ]:
+            with self.subTest(image=image):
+                self.source("start.md", "# Start\n" + image)
+                code, _, errors = self.render()
+                self.assertEqual(code, 1)
+                self.assertEqual(errors.count("https://example.com/x.png"), 1)
+
+    def test_single_quoted_src_is_embedded(self) -> None:
+        self.source("pic.svg", "<svg/>")
+        self.source("start.md", "# Start\n<img src='pic.svg'>\n<img src=pic.svg>")
+        code, html, _ = self.render()
+        self.assertEqual(code, 0)
+        self.assertEqual(html.count("data:image/svg+xml;base64,"), 2)
+
+    def test_non_md_relative_link_warns(self) -> None:
+        self.source(
+            "start.md",
+            "# Start\n[PDF](file.pdf)\n<a href='pic.png'>image</a>\n[Web](https://example.com)",
+        )
+        code, _, errors = self.render()
+        self.assertEqual(code, 0)
+        for href in ["file.pdf", "pic.png"]:
+            self.assertIn(f"start.md: relative link {href}", errors)
+        self.assertNotIn("example.com", errors)
+
+    @unittest.skipUnless(shutil.which("d2"), "d2 CLI not installed")
+    def test_progress_lines_for_d2_pages(self) -> None:
+        self.source("01-one.md", "# One\n```d2\na -> b\n```")
+        self.source("02-two.md", "# Two\n```d2\nc -> d\n```")
+        code, _, errors = self.render()
+        self.assertEqual(code, 0)
+        self.assertIn("page 01-one.md: 1 diagrams", errors)
+        self.assertIn("page 02-two.md: 1 diagrams", errors)
+
+    @unittest.skipUnless(shutil.which("d2"), "d2 CLI not installed")
+    def test_example_builds(self) -> None:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            code = builder.build(
+                SKILL / "example", self.out, None, builder.DEFAULT_STYLES
+            )
+        self.assertEqual(code, 0)
+        self.assertTrue(self.out.exists())
 
     def test_missing_image_fails(self) -> None:
         self.source("start.md", "# Start\n![Missing](missing.png)")
@@ -166,8 +557,8 @@ class BuildTest(unittest.TestCase):
             self.source(name, "# Page\nText[^n]\n\n[^n]: Note")
         code, html, _ = self.render()
         self.assertEqual(code, 0)
-        self.assertIn('id="fn-first-1"', html)
-        self.assertIn('id="fn-second-1"', html)
+        self.assertEqual(html.count('id="fn-first-1"'), 1)
+        self.assertEqual(html.count('id="fn-second-1"'), 1)
 
     def test_inline_app_script_is_emitted(self) -> None:
         self.source("start.md", "# Start")
@@ -217,7 +608,8 @@ class BuildTest(unittest.TestCase):
         for theme in ["slate", "indigo", "teal", "graphite"]:
             with self.subTest(theme=theme):
                 code, html, errors = self.render(theme)
-                self.assertEqual((code, errors), (0, ""))
+                self.assertEqual(code, 0)
+                self.assertIn("page start.md: 1 diagrams", errors)
                 self.assertIn('<figure class="diagram">', html)
                 self.assertIn("<svg", html)
                 self.assertNotIn("prefers-color-scheme", html)
