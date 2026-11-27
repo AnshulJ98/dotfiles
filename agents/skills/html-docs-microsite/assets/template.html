@@ -2,13 +2,19 @@
 <html lang="en" data-theme="{{theme}}">
   <head>
     <meta charset="utf-8" />
+    <title>{{title}}</title>
     <script>
       document.documentElement.classList.add("js");
+      try {
+        const key = "hdm:" + document.title + ":" + location.pathname;
+        const saved = JSON.parse(localStorage.getItem(key)) || {};
+        if (saved.mode ?? matchMedia("(prefers-color-scheme: dark)").matches)
+          document.documentElement.dataset.mode = "dark";
+      } catch {}
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="only light" />
     <meta name="darkreader-lock" />
-    <title>{{title}}</title>
     <style>
       {{style}}
     </style>

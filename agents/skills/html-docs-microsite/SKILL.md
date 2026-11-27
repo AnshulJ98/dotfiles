@@ -45,10 +45,12 @@ The command-line theme wins. Put the HTML outside the source folder.
 5. Keep images beside the source and use relative paths. A standalone image becomes a figure; its Markdown title becomes the caption.
 6. Use GFM tables, task lists, alerts (`> [!NOTE]`), strikethrough and footnotes. YAML front matter is hidden, not used as metadata.
 7. For Word or PDF input, use its document skill to extract content first. Review the Markdown and extracted images before building; this skill does not parse those formats.
+8. Rules are experimental: a blockquote starting with `[!RULE] OBS-01` and rule text on following lines defines a rule. Prefixes are 2–8 capitals; ids have two or more digits. A prefix counts once it has a definition, and the build prints `rule prefixes: ...` so a typo shows. Known-prefix mentions link to definitions; undefined or duplicate rules fail. A generated Rules page lists definitions and citers.
+9. A `glossary.md` page defines terms with `## Term` and a first paragraph; first uses per page link automatically (including plurals). In a folder containing `decisions`, `NNN-*.md` pages are ADRs; `ADR-NNN` links to them and populates Cited by. Unknown ADRs fail; without a decisions folder, `ADR-NNN` stays plain text.
 
 ## Diagrams and design
 
-Use fenced `d2` blocks. Known language fences such as `python` and `typescript` are highlighted at build time; unknown or unlabelled fences remain escaped plain text. Load the `d2-diagrams` skill for syntax and the shared class vocabulary. The builder imports the selected theme into every diagram, so omit imports in the fence. Do not duplicate palettes or inline colours.
+Use fenced `d2` blocks. Known language fences such as `python` and `typescript` are highlighted at build time; unknown or unlabelled fences remain escaped plain text. Load the `d2-diagrams` skill for syntax and the shared class vocabulary. The builder imports the selected theme into every diagram, so omit imports in the fence. Do not duplicate palettes or inline colours. Mermaid fences remain code and warn: render to SVG/PNG first with `mmdc -i x.mmd -o x.svg`. Images and non-D2 figures stay unchanged on a white padded card in dark mode; they are never inverted.
 
 Use `target` for planned components, `external` for outside services, `focus` for the subject, `exception` for exceptional edges. Name tint meanings in a legend. Keep the diagram source, not a screenshot of it.
 
@@ -58,7 +60,7 @@ The bundled design uses warm neutrals, pastel accents, restrained rules and syst
 
 Without JavaScript, all pages remain visible in reading order.
 
-The sidebar lists the active page's second-level sections; the right-hand outline also includes third-level headings.
+The sidebar is a folder tree at any depth. A folder's `00-*.md` (normally `00-index.md`) is its landing page, not a repeated page row. Chevrons only expand; links only navigate. Page sections start closed, and navigation opens the active path without closing other branches. Both outlines highlight the current second- or third-level section. Builds warn at four nested folders.
 
 Every figure has zoom and fullscreen controls. Focus a figure and press Enter or f for fullscreen; in the viewer use + and - to zoom, 0 to fit, 1 for 1:1, and Escape to close.
 
@@ -66,13 +68,13 @@ Every figure has zoom and fullscreen controls. Focus a figure and press Enter or
 
 - Run the builder and inspect its exit status. It rejects duplicate page addresses, missing images, broken Markdown links and missing heading fragments. It also detects common external resource tags. A failed build leaves the output file unchanged.
 - Open the HTML locally and inspect the first page, a table, a diagram and an image. Check navigation and search. Click images or diagrams for fullscreen; check zoom, Fit/Reset and closing.
-- Confirm the requested theme. The top bar toggles outline, standard/wide width, and light/dark page mode. Diagrams and highlighted code follow the selected mode; images are unchanged. View settings are deliberately not saved: sandboxed viewers may prohibit storage.
+- Confirm the requested theme. The top bar toggles outline, standard/wide width, and light/dark page mode. Diagrams and highlighted code follow the selected mode; images are unchanged. Dark, Wide, Outline and reading position are saved per document title and path when storage permits; with nothing saved, dark follows the OS. URL hashes always win. Storage-blocked viewers still work.
 - Keep the Markdown folder as the editable source. Deliver the HTML path and the exact rebuild command.
 - Do not promise SharePoint compatibility: a local sandbox emulation passes, but a real tenant has not been tested. No upload or deployment is part of this workflow.
 
 ## Example and checks
 
-Build the included four-page example:
+Build the included example (nested tree, rules, glossary and an ADR):
 
 ```sh
 uv run <skill>/scripts/build.py <skill>/example /tmp/microsite/example.html

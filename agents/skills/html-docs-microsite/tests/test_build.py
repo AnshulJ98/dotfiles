@@ -114,6 +114,108 @@ class BuildTest(unittest.TestCase):
         self.assertEqual((code, errors), (0, ""))
         return html
 
+    def test_feature_registers_and_tree(self) -> None:
+        body = "# Landing\n## First\n> [!RULE] OBS-01\n> Keep records.\n\n## Last"
+        self.source("01-a/02-b/03-c/00-index.md", body)
+        self.source("glossary.md", "# Glossary\n\n## Record\n\nAn entry.")
+        self.source("decisions/001-store.md", "# Store\n\nChosen storage.")
+        cites = "OBS-01 ADR-001 Records record. `OBS-99` [OBS-98](https://example.com)"
+        self.source("z.md", "# Citer\n\n" + cites)
+        code, html, errors = self.render()
+        self.assertEqual(code, 0)
+        self.assertIn("rule prefixes: OBS", errors)
+        self.assertIn('id="rule-obs-01"', html)
+        self.assertIn('href="#decisions-store"', html)
+        self.assertIn('class="citedby"', html)
+        self.assertIn('title="An entry.">Records</a> record.', html)
+        self.assertIn("<th>Cited by</th>", html)
+        result = self.browser(
+            html,
+            """
+        const nav=document.querySelector("#nav"), dirs=nav.querySelectorAll(".dir");
+        const link=nav.querySelector('a[href="#a-b-c-index"]'), node=link.closest(".node"), b=node.querySelector(".chev");
+        const hash=location.hash; b.click(); const closed=node.classList.contains("closed");
+        link.click();
+        setTimeout(()=>{ const active=nav.querySelector("a.active"), last=nav.querySelector('a[href="#a-b-c-index--last"]');
+          const open=!node.classList.contains("closed"); last.click();
+          setTimeout(()=>{ scrollTo(0,0); t.textContent=JSON.stringify([dirs.length,nav.querySelectorAll('a[href="#a-b-c-index"]').length,closed,hash==="",open,last.classList.contains("here"),document.querySelector("#route-notice").hidden]); },100);
+        },100);
+        """,
+        )
+        self.assertEqual(result, [4, 1, True, True, True, True, True])
+        self.assertNotRegex(html, r"history\.(?:pushState|replaceState)")
+        self.assertIn("localStorage", html.split("</head>")[0])
+
+    def test_reference_failures_and_mermaid(self) -> None:
+        self.source("decisions/001-d.md", "# D")
+        for body, error in [
+            ("ADR-999", "ADR-999"),
+            ("> [!RULE] SEC-100\n> One.\n\nSEC-101", "SEC-101"),
+            ("> [!RULE] OBS-01\n> One.\n\nOBS-99", "OBS-99"),
+            ("> [!RULE] OBS-01\n> One.\n\n" * 2, "duplicate rule OBS-01"),
+        ]:
+            with self.subTest(error=error):
+                self.source("start.md", "# Start\n\n" + body)
+                code, _, errors = self.render()
+                self.assertEqual(code, 1)
+                self.assertIn(error, errors)
+                self.assertIn("start.md", errors)
+        shutil.rmtree(self.src / "decisions", ignore_errors=True)
+        self.source("start.md", "# Start\n\nHTTP-2 ADR-007\n\n```mermaid\na-->b\n```")
+        code, html, errors = self.render()
+        self.assertEqual(code, 0)
+        self.assertIn("start.md:5", errors)
+        self.assertIn("mmdc -i x.mmd -o x.svg", errors)
+        self.assertNotIn('id="rules"', html)
+        self.assertIn("HTTP-2 ADR-007", html)
+
+    def test_footnote_and_storage_throwing(self) -> None:
+        self.source("first.md", "# First")
+        self.source("second.md", "# Second\n\nText[^n]\n\n[^n]: Note")
+        _, html, _ = self.render()
+        blocker = '<script>Object.defineProperty(window,"localStorage",{get(){throw Error("blocked")}})</script>'
+        html = html.replace("<head>", "<head>" + blocker)
+        probe = 't.textContent=JSON.stringify([document.querySelector(".page:not([hidden])").id,document.querySelector("#route-notice").hidden])'
+        result = self.browser(html, probe, "#fn-second-1")
+        self.assertEqual(result, ["second", True])
+
+    def test_scroll_spy_and_restore(self) -> None:
+        self.source("a.md", "# A\n## First\nBody.\n### Middle\nBody.\n## Last\nBody.")
+        self.source("b.md", "# B")
+        _, html, _ = self.render()
+        html = html.replace("<p>", '<p style="height:1000px">')
+        # dump-dom's virtual clock need not advance compositor frames; drive this clock boundary.
+        clock = (
+            "window.testFrames=[]; window.requestAnimationFrame=f=>testFrames.push(f);"
+        )
+        controlled = html.replace(
+            'document.documentElement.classList.add("js");', clock
+        )
+        script = """
+        testFrames.splice(0).forEach(f=>f()); const first=[...document.querySelectorAll("a.here")].map(a=>a.hash);
+        scrollTo(0,document.documentElement.scrollHeight); dispatchEvent(new Event("scroll")); dispatchEvent(new Event("scroll"));
+        const pending=testFrames.length; testFrames.splice(0).forEach(f=>f());
+        t.textContent=JSON.stringify([first,[...document.querySelectorAll("a.here")].map(a=>a.hash),pending]);
+        """
+        self.assertEqual(
+            self.browser(controlled, script), [["#a--first"] * 2, ["#a--last"] * 2, 1]
+        )
+        marker = 'document.documentElement.classList.add("js");'
+        for fragment, section, expected in [
+            ("", "a--middle", "a"),
+            ("#b", "a--middle", "b"),
+            ("", "stale", "a"),
+        ]:
+            with self.subTest(fragment=fragment, section=section):
+                state = {"page": "b", "section": section, "mode": True}
+                state.update(width=True, outline=True)
+                state = json.dumps(state)
+                seed = f'try{{localStorage.setItem("hdm:"+document.title+":"+location.pathname,JSON.stringify({state}))}}catch{{}};'
+                seeded = html.replace(marker, seed + marker)
+                probe = 'setTimeout(()=>{t.textContent=JSON.stringify([document.querySelector(".page:not([hidden])").id,document.querySelector("#route-notice").hidden,document.documentElement.dataset.mode]);},150)'
+                result = self.browser(seeded, probe, fragment)
+                self.assertEqual(result, [expected, True, "dark"])
+
     def test_route_page_named_like_ui_id(self) -> None:
         html = self.site()
         result = self.browser(
@@ -612,7 +714,9 @@ class BuildTest(unittest.TestCase):
                 self.assertIn("page start.md: 1 diagrams", errors)
                 self.assertIn('<figure class="diagram">', html)
                 self.assertIn("<svg", html)
-                self.assertNotIn("prefers-color-scheme", html)
+                # d2 SVGs must not switch on the OS setting; the page's own early script may.
+                for svg in re.findall(r"<svg.*?</svg>", html, re.DOTALL):
+                    self.assertNotIn("prefers-color-scheme", svg)
                 self.assertEqual(html.count('<svg data-variant="light"'), 1)
                 self.assertEqual(html.count('<svg data-variant="dark"'), 1)
                 ids = re.findall(r'\bid="([^"]+)"', html)

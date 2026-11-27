@@ -21,7 +21,7 @@ import tempfile
 import tomllib
 from collections import Counter
 from dataclasses import dataclass, field
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -61,6 +61,28 @@ DIAGRAM_BAR = (
     '<button type="button" data-act="reset" title="Fit (0)">Fit</button>'
     '<button type="button" data-act="full" title="Fullscreen (f)">Fullscreen</button></div>'
 )
+
+
+def map_text(html, transform, headings=False):
+    """Transform prose, never attributes, code, existing links or SVG markup."""
+    skip = ["code", "pre", "a", "svg", "script", "style"]
+    if headings:
+        skip += ["h1", "h2", "h3", "h4", "h5", "h6"]
+    out, stack = [], []
+    for part in re.split(r"(<[^>]+>)", html):
+        tag = re.match(r"<(/?)([\w]+)", part.lower())
+        if tag:
+            closing, name = tag.groups()
+            if closing and stack and stack[-1] == name:
+                stack.pop()
+            elif not closing and name in skip and not part.endswith("/>"):
+                stack.append(name)
+        out.append(part if part.startswith("<") or stack else transform(part))
+    return "".join(out)
+
+
+def strip_tags(html: str) -> str:
+    return unescape(re.sub(r"<[^>]+>", "", html)).strip()
 
 
 class BuildError(Exception):
@@ -146,6 +168,7 @@ class Site:
         self.stats: Counter[str] = Counter()
         self.md = self._markdown()
         self.pages = [self._page(f) for f in files]
+        self._references()
         for file, href, target in self.links:
             if target not in self.anchors:
                 self.problems.append(
@@ -217,6 +240,11 @@ class Site:
             "docId": re.sub(r"[^A-Za-z0-9]+", "-", pid),
         }  # docId keeps footnote ids unique per page
         tokens = self.md.parse(file.read_text("utf-8"), env)
+        if len(file.relative_to(self.src).parts) >= 5:
+            print(
+                f"warning: {file.relative_to(self.src)}: nested 4+ folders deep",
+                file=sys.stderr,
+            )
         self._guard_raw_text(tokens, page)
         self._prepare(tokens, page)
         if not page.titled:
@@ -317,6 +345,9 @@ class Site:
                 self.anchors.add(hid)
                 if level in (2, 3):
                     page.toc.append((level, hid, text))
+            elif tok.type == "fence" and tok.info.strip() == "mermaid":
+                warning = f"warning: {page.file.relative_to(self.src)}:{tok.map[0] + 1}: render Mermaid to SVG/PNG first (mmdc -i x.mmd -o x.svg)"
+                print(warning, file=sys.stderr)
             elif tok.type == "inline":
                 children = tok.children or []
                 if (
@@ -455,26 +486,148 @@ class Site:
         self.image_cache[path] = uri
         return uri
 
-    def sidebar(self) -> str:
-        out: list[str] = []
-        group = None
+    def _references(self) -> None:
+        rules, refs, terms = {}, {}, {}
+        block = r"(?s)<blockquote>\s*<p>\[!RULE\] ([A-Z]{2,8}-\d{2,})(?:\n|</p>\s*<p>|(?=</p>))(.*?)</p>\s*</blockquote>"
         for page in self.pages:
-            if page.group != group:
-                group = page.group
-                if group:
-                    number = re.match(r"\d+", group)
-                    label = (number.group() + " · " if number else "") + escape(
-                        words(strip_order(group))
-                    )
-                    out.append(f'<p class="group">{label}</p>')
-            out.append(f'<a href="#{page.id}">{escape(page.title)}</a>')
-            sections = "".join(
-                f'<a href="#{hid}">{escape(text)}</a>'
-                for level, hid, text in page.toc
-                if level == 2
+
+            def define(m, page=page):
+                rid, body = m.groups()
+                if rid in rules:
+                    name = page.file.relative_to(self.src)
+                    self.problems.append(f"{name}: duplicate rule {rid}")
+                anchor = "rule-" + rid.lower()
+                rules[rid] = (body, page)
+                refs[rid] = (anchor, strip_tags(body), page, [])
+                return f'<div class="rule" id="{anchor}"><a class="rule-id" href="#rules--{rid.lower()}">{rid}</a><p>{body}</p></div>'
+
+            page.html = re.sub(block, define, page.html)
+            parts = page.file.relative_to(self.src).parts
+            if any("decisions" in d.lower() for d in parts[:-1]) and re.match(
+                r"\d{3}-", parts[-1]
+            ):
+                refs["ADR-" + parts[-1][:3]] = (page.id, page.title, page, [])
+            if strip_order(page.file.name).lower() == "glossary":
+                for level, hid, term in page.toc:
+                    if level == 2:
+                        pattern = r'(?s)id="%s"[^>]*>.*?</h2>\s*<p>(.*?)</p>'
+                        m = re.search(pattern % re.escape(hid), page.html)
+                        terms[term.lower()] = (hid, strip_tags(m[1]) if m else "", page)
+        prefixes = sorted({rid.split("-")[0] for rid in rules})
+        if prefixes:
+            print("rule prefixes: " + ", ".join(prefixes), file=sys.stderr)
+        rule_prefixes = "|".join(prefixes) or r"(?!)"
+        # ADR mentions link only when the doc has a decisions folder, like rule prefixes.
+        adr = r"|ADR-\d{3}" if any(k.startswith("ADR-") for k in refs) else ""
+        pattern = rf"\b(?:(?:{rule_prefixes})-\d{{2,}}{adr})\b"
+        names = "|".join(map(re.escape, sorted(terms, key=len, reverse=True)))
+        term_pattern = re.compile(r"(?i)\b(" + names + r")(?:es|s)?\b")
+
+        def link_page(page):
+            def cite(m):
+                rid = m[0]
+                if rid not in refs:
+                    name = page.file.relative_to(self.src)
+                    self.problems.append(f"{name}: undefined reference {rid}")
+                    return rid
+                anchor, title, owner, cited = refs[rid]
+                if page.id != "rules" and page is not owner and page.id not in cited:
+                    cited.append(page.id)
+                return (
+                    f'<a class="ref" href="#{anchor}" title="{escape(title)}">{rid}</a>'
+                )
+
+            page.html = map_text(page.html, lambda text: re.sub(pattern, cite, text))
+            used = set()
+
+            def term_link(m):
+                key = m[1].lower()
+                hid, definition, owner = terms[key]
+                if key in used or page is owner:
+                    return m[0]
+                used.add(key)
+                return f'<a class="term" href="#{hid}" title="{escape(definition)}">{m[0]}</a>'
+
+            if terms:
+                link_terms = lambda text: term_pattern.sub(term_link, text)
+                page.html = map_text(page.html, link_terms, headings=True)
+
+        for page in self.pages:
+            link_page(page)
+        titles = {p.id: p.title for p in self.pages}
+
+        def citations(ids):
+            links = (f'<a href="#{p}">{escape(titles[p])}</a>' for p in ids)
+            return ", ".join(links) or "—"
+
+        for rid, (_, _, owner, cited) in refs.items():
+            if re.fullmatch(r"ADR-\d{3}", rid):
+                owner.html += f'<aside class="citedby"><h2>Cited by</h2>{citations(cited)}</aside>'
+        if rules:
+            if "rules" in self.anchors:
+                self.problems.append("generated Rules id conflicts with source: rules")
+            rows = "".join(
+                f'<tr id="rules--{rid.lower()}"><td><a href="#{refs[rid][0]}">{rid}</a></td><td>{body}</td><td><a href="#{owner.id}">{escape(owner.title)}</a></td><td>{citations(refs[rid][3])}</td></tr>'
+                for rid, (body, owner) in sorted(rules.items())
             )
-            out.append(f'<div class="sections">{sections}</div>')
-        return "\n".join(out)
+            html = f'<h1 tabindex="-1">Rules</h1><div class="table-wrap"><table><thead><tr><th>Id</th><th>Text</th><th>Defined in</th><th>Cited by</th></tr></thead><tbody>{rows}</tbody></table></div>'
+            register = Page(self.src / "rules.md", "rules", "", "Rules", html=html)
+            link_page(register)
+            self.pages.append(register)
+
+    def sidebar(self) -> str:
+        tree = {}
+        for page in self.pages:
+            node = tree
+            for part in page.file.relative_to(self.src).parts[:-1]:
+                node = node.setdefault(part, {})
+            node[page.file.name] = page
+
+        def sections(page):
+            return "".join(
+                f'<a class="l{level}" href="#{hid}">{escape(text)}</a>'
+                for level, hid, text in page.toc
+            )
+
+        def row(label, href="", children="", kind="pg"):
+            head = f"<span>{escape(label)}</span>"
+            if href:
+                head = f'<a href="#{href}">{escape(label)}</a>'
+            chev = '<span class="gap"></span>'
+            if children or kind == "dir":
+                chev = f'<button class="chev" type="button" aria-expanded="true" aria-label="Toggle {escape(label)}">›</button>'
+            cls = "sections" if kind == "pg" else ""
+            return f'<div class="node {kind}"><div class="row">{chev}{head}</div><div class="kids {cls}">{children}</div></div>'
+
+        def render(node):
+            out = []
+            order = lambda name: (name == "rules.md", natural(name))
+            for name in sorted(node, key=order):
+                item = node[name]
+                if isinstance(item, Page):
+                    kids = ""
+                    if any(t[0] == 2 for t in item.toc):
+                        kids = sections(item)
+                    out.append(row(item.title, item.id, kids))
+                    continue
+                pages = [p for p in item.values() if isinstance(p, Page)]
+                indexes = [p for p in pages if p.file.name.startswith("00-")]
+                landing = indexes[0] if indexes else None
+                label = words(strip_order(name))
+                if landing and len(landing.title) <= 28:
+                    label = landing.title
+                number = re.match(r"\d+", name)
+                if number and not re.match(r"\d", label):
+                    label = number[0] + " · " + label
+                children = render({n: p for n, p in item.items() if p is not landing})
+                kids = children
+                if landing and landing.toc:
+                    kids = f'<div class="sections">{sections(landing)}</div>' + kids
+                href = landing.id if landing else ""
+                out.append(row(label, href, kids, "dir"))
+            return "".join(out)
+
+        return '<div class="tree">' + render(tree) + "</div>"
 
     def articles(self) -> str:
         out: list[str] = []

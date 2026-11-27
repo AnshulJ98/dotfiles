@@ -189,15 +189,55 @@ button:hover {
   background: var(--hover);
   color: var(--fg);
 }
-.sections {
+.js #nav .closed > .kids {
   display: none;
 }
-#nav a.active + .sections {
-  display: block;
+#nav .row {
+  display: flex;
+  align-items: center;
+}
+#nav .chev,
+#nav .gap {
+  flex: none;
+  width: 1.25rem;
+  height: 1.6rem;
+}
+#nav .chev {
+  padding: 0;
+  transform: rotate(90deg);
+}
+#nav .closed > .row > .chev {
+  transform: none;
+}
+#nav .kids {
+  margin-left: 0.62rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid var(--line);
+}
+.rule {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+}
+.term {
+  color: inherit;
+  text-decoration: underline dotted;
 }
 #nav .sections a {
-  padding-left: 1.5rem;
-  font-size: 0.9em;
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding-block: 0.2rem;
+}
+/* You are here: the section on screen, distinct from the active page. */
+#nav a.here,
+.toc a.here {
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+  border-radius: 0;
+}
+/* Route changes focus the h1 for screen readers; no ring for that. */
+h1[tabindex="-1"]:focus {
+  outline: none;
 }
 #nav a.active {
   background: var(--accent-soft);
@@ -267,6 +307,7 @@ main {
 .toc a:hover {
   color: var(--fg);
 }
+#nav .l3,
 .toc .l3 {
   padding-left: 1.8rem;
 }
@@ -335,6 +376,8 @@ hr {
 .content a:hover {
   text-decoration-color: currentColor;
 }
+.ref,
+.rule-id,
 code {
   font: 0.875em/1.45 var(--mono);
   background: var(--subtle);
@@ -390,6 +433,7 @@ blockquote > :last-child,
 .markdown-alert > :last-child {
   margin-bottom: 0;
 }
+.rule,
 .markdown-alert {
   --tone: var(--note);
   margin: 0 0 1.25rem;
@@ -423,6 +467,7 @@ blockquote > :last-child,
 input[type="checkbox"] {
   accent-color: var(--accent);
 }
+.citedby,
 .footnotes {
   margin-top: 3rem;
   font-size: 0.875rem;
@@ -495,6 +540,14 @@ figcaption {
 .diagram .stage svg,
 .content img {
   cursor: zoom-in;
+}
+/* Images and non-d2 SVGs stay as authored; in dark mode they sit on a light card. */
+:root[data-mode="dark"]
+  .content
+  :is(.stage:has(> img, > svg:not([data-variant])), p > img) {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
 }
 /* Fullscreen uses the same canvas as the selected diagram. */
 dialog#viewer {

@@ -12,9 +12,80 @@
     $("main").focus();
   });
 
-  // View switches. Their state lives on <html> and is gone on reload: the SharePoint viewer blocks storage.
+  const storageKey = "hdm:" + docTitle + ":" + location.pathname;
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(storageKey)) || {};
+  } catch {}
+  let currentPage, section;
+  let locked = false;
+  let pending = 0;
+  function save() {
+    saved = { ...saved, page: currentPage?.id, section };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(saved));
+    } catch {}
+  }
+  function mark(id) {
+    if (id === section) return;
+    section = id;
+    for (const a of document.querySelectorAll("#nav a, .toc a"))
+      a.classList.toggle("here", a.getAttribute("href") === "#" + id);
+    save();
+  }
+  function spy() {
+    pending = 0;
+    if (locked || !currentPage) return;
+    const headings = [...currentPage.querySelectorAll("h2[id], h3[id]")];
+    const height = document.documentElement.scrollHeight;
+    const remaining = Math.max(0, height - innerHeight - scrollY);
+    const top =
+      document.querySelector(".topbar").getBoundingClientRect().bottom + 8;
+    const line =
+      top + (innerHeight - top) * (1 - Math.min(1, remaining / innerHeight));
+    const above = headings.filter((h) => h.getBoundingClientRect().top <= line);
+    mark((remaining < 1 ? headings.at(-1) : above.at(-1) || headings[0])?.id);
+  }
+  function schedule() {
+    pending ||= requestAnimationFrame(spy);
+  }
+  addEventListener("scroll", schedule, { passive: true });
+  addEventListener("resize", schedule);
+  const release = () => {
+    locked = false;
+    schedule();
+  };
+  addEventListener("wheel", release, { passive: true });
+  addEventListener("touchstart", release, { passive: true });
+  addEventListener("keydown", (e) => {
+    if (/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(e.key))
+      release();
+  });
+  $("main").addEventListener("pointerdown", release);
+  const branches = nav.querySelectorAll(".pg:has(.chev)");
+  for (const node of branches) node.classList.add("closed");
+  nav.addEventListener("click", (e) => {
+    const b = e.target.closest(".chev");
+    if (b) {
+      const closed = b.closest(".node").classList.toggle("closed");
+      b.setAttribute("aria-expanded", String(!closed));
+    }
+  });
+  function reveal() {
+    for (const b of nav.querySelectorAll(".chev")) {
+      if (b.closest(".node").querySelector("a.active"))
+        b.closest(".node").classList.remove("closed");
+      const expanded = !b.closest(".node").classList.contains("closed");
+      b.setAttribute("aria-expanded", String(expanded));
+    }
+  }
+
+  // Storage is optional in sandboxed viewers.
   function toggle(id, attr, value, labels, after) {
     const button = $(id);
+    const initial = root.getAttribute(attr) === value;
+    button.textContent = labels[initial ? 1 : 0];
+    button.setAttribute("aria-pressed", String(initial));
     button.addEventListener("click", () => {
       const on = root.getAttribute(attr) !== value;
       if (on) root.setAttribute(attr, value);
@@ -22,9 +93,14 @@
       button.textContent = labels[on ? 1 : 0];
       button.setAttribute("aria-pressed", String(on));
       if (after) after(on);
+      saved[attr.slice(5)] = on;
+      save();
     });
   }
   const scheme = document.querySelector('meta[name="color-scheme"]');
+  if (saved.width) root.dataset.width = "wide";
+  if (saved.outline) root.dataset.outline = "off";
+  scheme.content = root.dataset.mode === "dark" ? "dark" : "only light";
   toggle("t-outline", "data-outline", "off", ["Hide outline", "Show outline"]);
   toggle("t-width", "data-width", "wide", ["Wide", "Standard"]);
   toggle("t-mode", "data-mode", "dark", ["Dark", "Light"], (dark) => {
@@ -39,14 +115,17 @@
     } catch {
       // Malformed fragments fall back to the first page.
     }
+    const restoring = !location.hash;
+    if (restoring) id = saved.section || saved.page || "";
     const target =
       pages
-        .flatMap((p) => [p, ...p.querySelectorAll("h1, h2, h3, h4, h5, h6")])
+        .flatMap((p) => [p, ...p.querySelectorAll("[id]")])
         .find((el) => id && el.id === id) || pages[0];
     const page = target.closest(".page");
     const notice = $("route-notice");
     notice.replaceChildren();
-    notice.hidden = !id || target !== pages[0] || id === pages[0].id;
+    notice.hidden =
+      restoring || !id || target !== pages[0] || id === pages[0].id;
     if (!notice.hidden) {
       notice.append(
         document.createTextNode("The link #" + id + " was not found "),
@@ -65,6 +144,12 @@
     }
     for (const a of navLinks)
       a.classList.toggle("active", a.getAttribute("href") === "#" + page.id);
+    currentPage = page;
+    reveal();
+    locked = target.matches("h2, h3");
+    mark(locked ? target.id : undefined);
+    save();
+    if (!locked) schedule();
     document.title = page.dataset.title + " · " + docTitle;
     page.querySelector("h1")?.focus({ preventScroll: true });
     if (target === page) scrollTo(0, 0);
@@ -72,6 +157,10 @@
   }
   addEventListener("hashchange", route);
   route();
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest('a[href^="#"]');
+    if (a && a.hash === location.hash) route();
+  });
 
   // Search: sections are cut at h2/h3 and scanned with includes(); built on first use.
   let index;
