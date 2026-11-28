@@ -28,3 +28,7 @@
 	path = ~/.config/themes/current/delta.gitconfig
 [difftool "hunk"]
 	cmd = hunk difftool \"$LOCAL\" \"$REMOTE\" \"$MERGED\"
+# Per-machine overrides, last so they win; a missing file is ignored. winpc
+# resets the osxkeychain helper there and uses gh's.
+[include]
+	path = ~/.gitconfig.local
