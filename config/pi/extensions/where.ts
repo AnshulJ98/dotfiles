@@ -137,14 +137,13 @@ export default function (pi: ExtensionAPI) {
     // model-only: a direct call, not one inside codemode, so terminate ends the run and the card shows as its own result
     exposure: "model-only",
     description:
-      "Report where we are by outcome as a card (kind card) or a brief of one action or rung (kind brief). Only during /where.",
+      "Report where we are by outcome as a card (kind card) or a brief of one action or rung (kind brief). Best run through /where, which gathers the facts that verify done checks.",
     parameters: params,
     async execute(_id, p) {
-      // terminate: true would end whatever run made the call, so only a /where run may.
-      if (!facts)
-        throw new Error(
-          "where_card runs only inside /where; do not call it otherwise.",
-        );
+      // terminate: true would end whatever run made the call, so only a /where run ends it.
+      // Outside one ("/where" typed mid-message reaches the model as text) the card
+      // still renders, with no facts to check proofs against.
+      const inWhere = facts !== null;
       if (p.kind === "brief") {
         const b = p.brief as Brief | undefined;
         const errs = b
@@ -156,7 +155,7 @@ export default function (pi: ExtensionAPI) {
         return {
           content: [{ type: "text", text }],
           details,
-          terminate: true,
+          terminate: inWhere,
         };
       }
       // StringEnum fields come through as unknown in the static type (pi-ai's Schema vs this typebox); the schema already checked them.
@@ -172,20 +171,25 @@ export default function (pi: ExtensionAPI) {
           "Fix and call where_card again:\n- " + errs.join("\n- "),
         );
       const f = facts;
-      const exists = (p: string) =>
-        existsSync(isAbsolute(p) ? p : resolve(f.cwd, p));
       const { text, unverified } = renderCard(
         card,
-        proofChecker(f, f.toolText, exists),
+        f
+          ? proofChecker(f, f.toolText, (p: string) =>
+              existsSync(isAbsolute(p) ? p : resolve(f.cwd, p)),
+            )
+          : () => false,
       );
+      const why = f
+        ? "proof not found in git, files, memory or tool output"
+        : "called outside /where, so no proof was checked";
       const note = unverified.length
-        ? `\n\n(${unverified.length} done check(s) shown unverified: proof not found in git, files, memory or tool output)`
+        ? `\n\n(${unverified.length} done check(s) shown unverified: ${why})`
         : "";
       const details: CardDetails = { kind: "card", text };
       return {
         content: [{ type: "text", text: text + note }],
         details,
-        terminate: true,
+        terminate: inWhere,
       };
     },
   });

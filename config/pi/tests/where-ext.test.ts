@@ -1,7 +1,8 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // extensions/where.ts imports pi packages at runtime; they resolve from the installed pi release.
 // The tool list must stay fixed: Bedrock sends it at the head of every request, so a
-// change rewrites the whole prompt cache. Outside a /where run the tool refuses.
+// change rewrites the whole prompt cache. Outside a /where run the tool still renders,
+// but checks no proof and does not end the run.
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { join } from "node:path";
@@ -20,7 +21,10 @@ register(
 
 const { default: where } = await import("../extensions/where.ts");
 
-type Exec = (id: string, p: unknown) => Promise<{ terminate?: boolean }>;
+type Exec = (
+  id: string,
+  p: unknown,
+) => Promise<{ terminate?: boolean; content: Array<{ text: string }> }>;
 
 function load(active: string[] = ["read", "where_card"]) {
   const tools: Array<{ name: string; defaultActive?: boolean; execute: Exec }> =
@@ -73,19 +77,35 @@ test("where_card is active from the start", () => {
   assert.notEqual(tool.defaultActive, false);
 });
 
-test("where_card refuses a call outside /where", async () => {
+const doneCard = {
+  ...card,
+  rungs: [
+    {
+      level: "target",
+      outcome: "where_card renders outside /where",
+      checks: [
+        { state: "done", text: "guard loosened", proof: "abc1234" },
+        { state: "open", text: "fix merged", actions: [1] },
+      ],
+    },
+  ],
+};
+
+test("where_card outside /where renders, marks done proofs unverified, and does not end the run", async () => {
   const { tool } = load();
-  await assert.rejects(tool.execute("1", card), /only inside \/where/);
+  const result = await tool.execute("1", doneCard);
+  assert.notEqual(result.terminate, true);
+  assert.match(result.content[0].text, /unverified: abc1234/);
 });
 
-test("/where runs the card without touching the tool list, then refuses again after agent_end", async () => {
+test("/where runs the card without touching the tool list, then renders without ending the run after agent_end", async () => {
   const { tool, commands, handlers, toolListChanges, sent, ctx } = load();
   await commands.where.handler("", ctx);
   assert.equal(sent.length, 1);
   const result = await tool.execute("1", card);
   assert.equal(result.terminate, true);
   await handlers.agent_end();
-  await assert.rejects(tool.execute("2", card), /only inside \/where/);
+  assert.notEqual((await tool.execute("2", card)).terminate, true);
   assert.deepEqual(toolListChanges, []);
 });
 
