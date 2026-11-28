@@ -7,6 +7,25 @@
   const results = $("results");
   const q = $("q");
   const docTitle = document.title;
+  const menu = $("t-menu");
+  const narrow = matchMedia("(max-width: 48rem)");
+  function setDrawer(open, restore = true) {
+    const wasOpen = root.dataset.drawer === "open";
+    open = open && narrow.matches;
+    if (open) root.dataset.drawer = "open";
+    else delete root.dataset.drawer;
+    menu.setAttribute("aria-expanded", String(open));
+    if (open) q.focus();
+    else if (wasOpen && restore) menu.focus();
+  }
+  menu.addEventListener("click", () =>
+    setDrawer(root.dataset.drawer !== "open"),
+  );
+  $("drawer-backdrop").addEventListener("click", () => setDrawer(false));
+  $("sidebar").addEventListener("click", (e) => {
+    if (e.target.closest("#nav a, #results a")) setDrawer(false);
+  });
+  narrow.addEventListener("change", () => setDrawer(false, false));
   document.querySelector(".skip-link").addEventListener("click", (e) => {
     e.preventDefault();
     $("main").focus();
@@ -36,7 +55,9 @@
   function spy() {
     pending = 0;
     if (locked || !currentPage) return;
-    const headings = [...currentPage.querySelectorAll("h2[id], h3[id]")];
+    const headings = [...currentPage.querySelectorAll("h2[id], h3[id]")].filter(
+      (h) => !h.closest(".tab-panel:not(.is-selected)"),
+    );
     const height = document.documentElement.scrollHeight;
     const remaining = Math.max(0, height - innerHeight - scrollY);
     const top =
@@ -108,12 +129,64 @@
     for (const sync of diagramModes) sync();
   });
 
+  function selectTab(panel) {
+    const box = panel.parentElement;
+    for (const p of box.querySelectorAll(":scope > .tab-panel")) {
+      const selected = p === panel;
+      p.classList.toggle("is-selected", selected);
+      const button = $(p.getAttribute("aria-labelledby"));
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    }
+    schedule();
+  }
+  for (const box of document.querySelectorAll(".tabs")) {
+    const panels = [...box.querySelectorAll(":scope > .tab-panel")];
+    const list = document.createElement("div");
+    list.setAttribute("role", "tablist");
+    list.setAttribute("aria-label", "Content tabs");
+    for (const panel of panels) {
+      const heading = panel.querySelector("h4");
+      panel.id = "panel-" + heading.id;
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", "tab-" + heading.id);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.id = "tab-" + heading.id;
+      button.textContent = heading.textContent;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-controls", panel.id);
+      button.addEventListener("click", () => {
+        selectTab(panel);
+        release();
+      });
+      button.addEventListener("keydown", (e) => {
+        const i = panels.indexOf(panel);
+        const next = {
+          ArrowRight: (i + 1) % panels.length,
+          ArrowLeft: (i + panels.length - 1) % panels.length,
+          Home: 0,
+          End: panels.length - 1,
+        }[e.key];
+        if (next === undefined) return;
+        e.preventDefault();
+        selectTab(panels[next]);
+        release();
+        list.children[next].focus();
+      });
+      list.append(button);
+    }
+    box.prepend(list);
+    box.classList.add("is-tabbed");
+    selectTab(panels[0]);
+  }
+
   function route() {
     let id = "";
     try {
       id = decodeURIComponent(location.hash.slice(1));
     } catch {
-      // Malformed fragments fall back to the first page.
+      id = location.hash.slice(1);
     }
     const restoring = !location.hash;
     if (restoring) id = saved.section || saved.page || "";
@@ -152,7 +225,11 @@
     if (!locked) schedule();
     document.title = page.dataset.title + " · " + docTitle;
     page.querySelector("h1")?.focus({ preventScroll: true });
+    const panel = target.closest(".tab-panel");
+    if (panel) selectTab(panel);
     if (target === page) scrollTo(0, 0);
+    else if (panel && target === panel.querySelector(":scope > h4:first-child"))
+      target.closest(".tabs").scrollIntoView();
     else target.scrollIntoView();
   }
   addEventListener("hashchange", route);
@@ -168,6 +245,13 @@
     index = [];
     for (const page of pages) {
       let entry = { id: page.id, title: page.dataset.title, text: "" };
+      const text = (el) => {
+        const copy = el.cloneNode(true);
+        copy
+          .querySelectorAll(".bar, .stage, .tabs")
+          .forEach((node) => node.remove());
+        return " " + copy.textContent;
+      };
       for (const el of page.querySelector(".content").children) {
         if (/^H[23]$/.test(el.tagName)) {
           index.push(entry);
@@ -176,12 +260,16 @@
             title: page.dataset.title + " › " + el.textContent,
             text: "",
           };
-        } else if (!el.matches(".pager")) {
-          const copy = el.cloneNode(true);
-          copy
-            .querySelectorAll(".bar, .stage")
-            .forEach((node) => node.remove());
-          entry.text += " " + copy.textContent;
+        } else if (!el.matches(".pager, .tabs, .eyebrow, .otp")) {
+          entry.text += text(el);
+        }
+        for (const panel of el.querySelectorAll(".tab-panel")) {
+          const heading = panel.querySelector("h4");
+          index.push({
+            id: heading.id,
+            title: entry.title + " › " + heading.textContent,
+            text: text(panel),
+          });
         }
       }
       index.push(entry);
@@ -239,9 +327,11 @@
   addEventListener("keydown", (e) => {
     if (e.key === "/" && document.activeElement !== q) {
       e.preventDefault();
+      if (narrow.matches) setDrawer(true);
       q.focus();
     }
     if (e.key === "Escape") {
+      setDrawer(false);
       q.value = "";
       q.dispatchEvent(new Event("input"));
       q.blur();
@@ -401,14 +491,14 @@
   }
   for (const figure of document.querySelectorAll(".image-figure")) {
     const stage = figure.querySelector(".stage");
-    const img = stage.querySelector("img");
+    const img = stage.querySelector("img, svg.img");
     const c = control(figure.querySelector(".bar"), stage, false);
     c.el = img;
     inline.push(c);
     img.addEventListener("load", c.draw);
     c.draw();
     const enter = () => {
-      const copy = img.cloneNode();
+      const copy = img.cloneNode(true);
       copy.addEventListener("load", () => full.draw());
       openFull(copy, () => copy.remove());
     };

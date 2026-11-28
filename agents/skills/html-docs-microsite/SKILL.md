@@ -9,7 +9,15 @@ Keep content in Markdown. Run the bundled builder to produce one HTML file; do n
 
 ## Build
 
-Requires Python 3.11+ and `uv`. Python dependencies are pinned in the script header and installed by `uv run`. D2 blocks require the `d2` CLI and the sibling `d2-diagrams/styles/` folder. Optional `cwebp` compresses large PNG/JPEG images; without it the originals are embedded.
+Requires Python 3.11+ and `uv`. Python dependencies are pinned in the script header and installed by `uv run`. D2 blocks require the `d2` CLI; styles are bundled in `assets/d2-styles/`. Optional `cwebp` compresses large PNG/JPEG images; without it the originals are embedded.
+
+The master styles live in `agents/skills/d2-diagrams/styles/`. After editing the master, copy the files from the dotfiles repository root:
+
+```sh
+cp agents/skills/d2-diagrams/styles/*.d2 agents/skills/html-docs-microsite/assets/d2-styles/
+```
+
+A test fails when the bundled styles differ from the master (and skips when the master is absent).
 
 Resolve `<skill>` to this skill's directory. Commands work from any working directory:
 
@@ -19,6 +27,7 @@ uv run <skill>/scripts/build.py <markdown-folder> <output.html> --theme indigo
 ```
 
 Pass `--full-res` to embed original image bytes without WebP conversion.
+Repeated images with readable raster dimensions are embedded once via an SVG symbol and lose right-click Save Image.
 
 Theme names: `slate` (default), `indigo`, `teal`, `graphite`. To use a separately installed D2 style folder, pass `--styles /path/to/d2-diagrams/styles`.
 
@@ -28,9 +37,11 @@ An optional `doc.toml` at the source root sets metadata:
 title = "Service design"
 subtitle = "Architecture and delivery plan"
 theme = "slate"
+brand = "SD"
+footer = "Internal reference"
 ```
 
-The command-line theme wins. Put the HTML outside the source folder.
+The command-line theme wins. Optional `brand` is 1–4 characters in an accent square before the title; `footer` is escaped plain text at the sidebar bottom (after long navigation). Put the HTML outside the source folder.
 
 ## Author the source
 
@@ -48,6 +59,24 @@ The command-line theme wins. Put the HTML outside the source folder.
 8. Rules are experimental: a blockquote starting with `[!RULE] OBS-01` and rule text on following lines defines a rule. Prefixes are 2–8 capitals; ids have two or more digits. A prefix counts once it has a definition, and the build prints `rule prefixes: ...` so a typo shows. Known-prefix mentions link to definitions; undefined or duplicate rules fail. A generated Rules page lists definitions and citers.
 9. A `glossary.md` page defines terms with `## Term` and a first paragraph; first uses per page link automatically (including plurals). In a folder containing `decisions`, `NNN-*.md` pages are ADRs; `ADR-NNN` links to them and populates Cited by. Unknown ADRs fail; without a decisions folder, `ADR-NNN` stays plain text.
 
+10. Use tabs for alternatives within a chapter:
+
+    ```markdown
+    ::: tabs
+    #### Python
+    pip install ...
+
+    #### TypeScript
+    npm i ...
+    :::
+    ```
+
+    Each `####` starts a panel and keeps its normal heading id for links.
+    `##` and `###` are allowed inside a panel and remain in the outline.
+    The build rejects content before the first `####`, empty or nested tabs,
+    and unclosed `:::` blocks, with file and line. Without JavaScript and in
+    print all panels and titles show; on GitHub the delimiter lines are plain text.
+
 ## Diagrams and design
 
 Use fenced `d2` blocks. Known language fences such as `python` and `typescript` are highlighted at build time; unknown or unlabelled fences remain escaped plain text. Load the `d2-diagrams` skill for syntax and the shared class vocabulary. The builder imports the selected theme into every diagram, so omit imports in the fence. Do not duplicate palettes or inline colours. Mermaid fences remain code and warn: render to SVG/PNG first with `mmdc -i x.mmd -o x.svg`. Images and non-D2 figures stay unchanged on a white padded card in dark mode; they are never inverted.
@@ -60,7 +89,9 @@ The bundled design uses warm neutrals, pastel accents, restrained rules and syst
 
 Without JavaScript, all pages remain visible in reading order.
 
-The sidebar is a folder tree at any depth. A folder's `00-*.md` (normally `00-index.md`) is its landing page, not a repeated page row. Chevrons only expand; links only navigate. Page sections start closed, and navigation opens the active path without closing other branches. Both outlines highlight the current second- or third-level section. Builds warn at four nested folders.
+Each page has an eyebrow above its H1: its folder label (when nested) and position in reading order. Below 70rem, a collapsible “On this page” box replaces the right outline when the page has H2s. Below 48rem, the sticky top bar’s Menu button opens a sidebar drawer with the title and subtitle; Escape, the backdrop or a navigation/search link closes it and restores menu focus.
+
+The sidebar is an unnumbered folder tree at any depth. A folder's `00-*.md` (normally `00-index.md`) is its landing page, not a repeated page row. Chevrons only expand; links only navigate. Page sections start closed, and navigation opens the active path without closing other branches. Both outlines highlight the current second- or third-level section. Builds warn at four nested folders. A page whose filename after its order prefix is `glossary.md` appears at the top level at the end of reading order, just before generated Rules, regardless of its source folder; its page id and links stay unchanged.
 
 Every figure has zoom and fullscreen controls. Focus a figure and press Enter or f for fullscreen; in the viewer use + and - to zoom, 0 to fit, 1 for 1:1, and Escape to close.
 
@@ -83,4 +114,4 @@ uv run <skill>/tests/test_build.py
 
 For the browser sandbox probe, run `python3 <skill>/tests/sandbox_check.py /tmp/microsite/example.html`, then serve that output folder over HTTP and open `harness.html`. The probe selects the first available page, heading and figure; its JSON reports viewer actions and runtime/CSP errors.
 
-Current limits: no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing uses fitted light diagrams but long diagrams, tables and code may still paginate poorly. Narrow-screen work is deferred; the outline intentionally hides at narrow widths. Chrome 158 forced-dark checks pass in both modes; browser extensions and real SharePoint are untested.
+Current limits: no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing uses fitted light diagrams but long diagrams, tables and code may still paginate poorly. The right outline hides at narrow widths in favour of the inline “On this page” box. Browser check record: Chrome for Testing 158 / Playwright chromium headless shell (home machine). This automated run used the cached headless shell (145.0.7632.6); Chrome 158 was not rerun. Browser tests find Chromium under `PLAYWRIGHT_BROWSERS_PATH` or `~/Library/Caches/ms-playwright` and skip with a reason otherwise. Forced-dark checks pass in both modes; browser extensions and real SharePoint are untested.

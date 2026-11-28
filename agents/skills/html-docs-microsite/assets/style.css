@@ -128,7 +128,27 @@ button:hover {
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
-.brand strong {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.brand strong,
+.side-head strong {
   display: block;
   font-size: 0.9375rem;
   font-weight: 600;
@@ -149,9 +169,27 @@ button:hover {
   top: var(--top);
   height: calc(100vh - var(--top));
   overflow-y: auto;
-  padding: 1.25rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1rem;
   border-right: 1px solid var(--line);
   font-size: 0.875rem;
+}
+.sidebar > * {
+  flex-shrink: 0;
+}
+.side-foot {
+  margin-top: auto;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+#t-menu,
+#drawer-backdrop,
+.side-head {
+  display: none;
 }
 #q {
   width: 100%;
@@ -178,8 +216,11 @@ button:hover {
   color: var(--fg);
 }
 #nav a,
-#results a {
+#results a,
+#nav .row > span:not(.gap) {
   display: block;
+  flex: 1;
+  min-width: 0;
   padding: 0.3rem 0.6rem;
   border-radius: 6px;
   color: var(--muted);
@@ -232,6 +273,7 @@ button:hover {
 .toc a.here {
   color: var(--accent);
   font-weight: 600;
+  background: transparent;
   box-shadow: inset 2px 0 0 var(--accent);
   border-radius: 0;
 }
@@ -239,8 +281,12 @@ button:hover {
 h1[tabindex="-1"]:focus {
   outline: none;
 }
-#nav a.active {
+#nav .row:has(> a.active) {
   background: var(--accent-soft);
+  border-radius: 6px;
+}
+#nav .row:has(> a.active) :is(a, button) {
+  background: transparent;
   color: var(--accent);
   font-weight: 600;
 }
@@ -299,7 +345,8 @@ main {
   margin: 0 0 0.35rem;
   padding: 0 0 0 1rem;
 }
-.toc a {
+.toc a,
+.otp a {
   display: block;
   padding: 0.2rem 0 0.2rem 1rem;
   color: var(--muted);
@@ -308,7 +355,8 @@ main {
   color: var(--fg);
 }
 #nav .l3,
-.toc .l3 {
+.toc .l3,
+.otp .l3 {
   padding-left: 1.8rem;
 }
 :root[data-outline="off"] .page {
@@ -318,6 +366,26 @@ main {
   display: none;
 }
 
+.eyebrow {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+.otp {
+  display: none;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--subtle);
+  font-size: 0.875rem;
+}
+.otp summary {
+  cursor: pointer;
+  padding: 0.55rem 0.9rem;
+  font-weight: 600;
+}
 .content {
   font-size: 1.0625rem;
   line-height: 1.65;
@@ -477,6 +545,7 @@ figure {
   margin: 2rem 0;
 }
 figure img,
+svg.img,
 .content p > img {
   display: block;
   max-width: 100%;
@@ -486,10 +555,34 @@ figure img,
   border-radius: 10px;
 }
 figcaption {
-  margin-top: 0.6rem;
+  margin-top: 0.45rem;
   text-align: center;
-  font-size: 0.8125rem;
-  color: var(--muted);
+  font-size: 0.875rem;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.tabs.is-tabbed {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.is-tabbed > [role="tablist"] {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.is-tabbed [role="tab"][aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.is-tabbed > .tab-panel {
+  padding: 1rem;
+}
+.is-tabbed > .tab-panel:not(.is-selected),
+.is-tabbed > .tab-panel > h4:first-child {
+  display: none;
 }
 
 /* Diagrams: a toolbar and a frame the diagram scrolls inside. */
@@ -538,13 +631,14 @@ figcaption {
   margin: auto;
 }
 .diagram .stage svg,
+.content svg.img,
 .content img {
   cursor: zoom-in;
 }
 /* Images and non-d2 SVGs stay as authored; in dark mode they sit on a light card. */
 :root[data-mode="dark"]
   .content
-  :is(.stage:has(> img, > svg:not([data-variant])), p > img) {
+  :is(.stage:has(> img, > svg:not([data-variant])), p > img, p > svg.img) {
   background: white;
   padding: 1rem;
   border-radius: 8px;
@@ -599,6 +693,9 @@ dialog#viewer .stage {
 }
 
 @media (max-width: 70rem) {
+  .otp {
+    display: block;
+  }
   .page {
     grid-template-columns: minmax(0, var(--measure));
   }
@@ -607,13 +704,56 @@ dialog#viewer .stage {
     display: none;
   }
 }
-@media (max-width: 48rem) {
+@media screen and (max-width: 48rem) {
   body {
     display: block;
   }
+  /* One row of height --top: the fragment scroll reserves only that much. */
   .topbar {
-    position: static;
-    padding: 0.5rem 1rem;
+    height: var(--top);
+    gap: 0.6rem;
+    padding: 0 0.75rem;
+  }
+  .brand small {
+    display: none;
+  }
+  .brand strong {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .tools {
+    flex: none;
+  }
+  .js #t-menu,
+  .js .side-head {
+    display: block;
+  }
+  .js .sidebar {
+    position: fixed;
+    z-index: 5;
+    inset: 0 auto 0 0;
+    width: min(20rem, 86vw);
+    height: auto;
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    transform: translateX(-105%);
+    visibility: hidden;
+  }
+  .js[data-drawer="open"] .sidebar {
+    transform: none;
+    visibility: visible;
+  }
+  .js[data-drawer="open"] #drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 4;
+    border-radius: 0;
+    background: #0004;
+  }
+  .js[data-drawer="open"] body {
+    overflow: hidden;
   }
   .sidebar {
     position: static;
@@ -629,12 +769,21 @@ dialog#viewer .stage {
   }
 }
 @media print {
+  .is-tabbed > .tab-panel:not(.is-selected),
+  .is-tabbed > .tab-panel > h4:first-child {
+    display: block;
+  }
+  .is-tabbed > [role="tablist"] {
+    display: none;
+  }
   body {
     display: block;
   }
   .topbar,
   .sidebar,
   .toc,
+  .otp,
+  #drawer-backdrop,
   .bar,
   .pager {
     display: none;

@@ -5,7 +5,7 @@
 """Build a folder of Markdown into one self-contained HTML file.
 
 Run:   uv run scripts/build.py <folder> <out.html> [--theme slate|indigo|teal|graphite]
-Needs: d2 on PATH and the d2-diagrams skill beside this one (or --styles); cwebp is optional.
+Needs: d2 on PATH for diagrams; styles are bundled. cwebp is optional.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from urllib.parse import unquote, urlsplit
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
+from mdit_py_plugins.container import container_plugin
 from mdit_py_plugins.front_matter import front_matter_plugin
 from mdit_py_plugins.gfm import gfm_plugin
 from pygments import highlight
@@ -36,8 +37,8 @@ from pygments.util import ClassNotFound
 
 SKILL = Path(__file__).resolve().parent.parent
 ASSETS = SKILL / "assets"
-# The diagram themes belong to the d2-diagrams skill, which is installed beside this one.
-DEFAULT_STYLES = SKILL.parent / "d2-diagrams" / "styles"
+# Master themes live in d2-diagrams/styles; keep this bundled copy in sync.
+DEFAULT_STYLES = SKILL / "assets" / "d2-styles"
 MIME = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -51,6 +52,10 @@ TAG = re.compile(
 )
 ATTR = re.compile(
     r"""\s(src|href|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=`<>]+))""",
+    re.IGNORECASE,
+)
+IMG_ATTR = re.compile(
+    r"""\s(src|alt|class)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=`<>]+))""",
     re.IGNORECASE,
 )
 RAW_TEXT = re.compile(r"<(title|textarea|style|xmp|plaintext)(?=[\s/>])", re.IGNORECASE)
@@ -90,7 +95,11 @@ class BuildError(Exception):
 
 
 def strip_order(name: str) -> str:
-    return re.sub(r"^\d+[-_. ]*", "", name).removesuffix(".md")
+    return re.sub(r"\.md$", "", re.sub(r"^\d+[-_. ]*", "", name), flags=re.IGNORECASE)
+
+
+def is_glossary(file: Path) -> bool:
+    return strip_order(file.name).lower() == "glossary"
 
 
 def words(slug: str) -> str:
@@ -127,9 +136,84 @@ def markdown_files(folder: Path) -> list[Path]:
     for entry in sorted(folder.iterdir(), key=lambda p: natural(p.name)):
         if entry.is_dir():
             out += markdown_files(entry)
-        elif entry.suffix == ".md":
+        elif entry.suffix.lower() == ".md":
             out.append(entry)
     return out
+
+
+def image_dimensions(data: bytes) -> tuple[int, int] | None:
+    """Read raster headers, including the WebP bytes produced by cwebp."""
+    width = height = 0
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+        if data[12:16] == b"IHDR":
+            width = int.from_bytes(data[16:20], "big")
+            height = int.from_bytes(data[20:24], "big")
+    elif data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+        width = int.from_bytes(data[6:8], "little")
+        height = int.from_bytes(data[8:10], "little")
+    elif data.startswith(b"\xff\xd8"):
+        pos = 2
+        while pos + 4 <= len(data):
+            if data[pos] != 0xFF:
+                break
+            pos += 1
+            while pos < len(data) and data[pos] == 0xFF:
+                pos += 1
+            if pos >= len(data):
+                break
+            marker = data[pos]
+            pos += 1
+            if marker in (0xD9, 0xDA):
+                break
+            if marker == 0x01 or 0xD0 <= marker <= 0xD8:
+                continue
+            size = int.from_bytes(data[pos : pos + 2], "big")
+            if size < 2 or pos + size > len(data):
+                break
+            if (
+                marker
+                in (
+                    0xC0,
+                    0xC1,
+                    0xC2,
+                    0xC3,
+                    0xC5,
+                    0xC6,
+                    0xC7,
+                    0xC9,
+                    0xCA,
+                    0xCB,
+                    0xCD,
+                    0xCE,
+                    0xCF,
+                )
+                and size >= 7
+            ):
+                height = int.from_bytes(data[pos + 3 : pos + 5], "big")
+                width = int.from_bytes(data[pos + 5 : pos + 7], "big")
+                break
+            pos += size
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        pos = 12
+        while pos + 8 <= len(data):
+            kind = data[pos : pos + 4]
+            size = int.from_bytes(data[pos + 4 : pos + 8], "little")
+            chunk = data[pos + 8 : pos + 8 + size]
+            if len(chunk) != size:
+                break
+            if kind == b"VP8 " and size >= 10 and chunk[3:6] == b"\x9d\x01\x2a":
+                width = int.from_bytes(chunk[6:8], "little") & 0x3FFF
+                height = int.from_bytes(chunk[8:10], "little") & 0x3FFF
+            elif kind == b"VP8L" and size >= 5 and chunk[0] == 0x2F:
+                bits = int.from_bytes(chunk[1:5], "little")
+                width, height = (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+            elif kind == b"VP8X" and size >= 10:
+                width = int.from_bytes(chunk[4:7], "little") + 1
+                height = int.from_bytes(chunk[7:10], "little") + 1
+            if width and height:
+                break
+            pos += 8 + size + (size % 2)
+    return (width, height) if width > 0 and height > 0 else None
 
 
 @dataclass
@@ -151,7 +235,9 @@ class Site:
         self.style = style  # theme file without its .d2 suffix, as d2 imports want it
         self.full_res = full_res
         self.image_cache: dict[Path, str] = {}
-        files = markdown_files(src)
+        self.image_counts: Counter[Path] = Counter()
+        self.image_symbols: dict[Path, tuple[str, int, int]] = {}
+        files = sorted(markdown_files(src), key=is_glossary)
         if not files:
             raise BuildError(f"no .md files under {src}")
         self.ids = {f: page_id(src, f) for f in files}
@@ -167,6 +253,8 @@ class Site:
         self.anchors: set[str] = set(self.ids.values())
         self.stats: Counter[str] = Counter()
         self.md = self._markdown()
+        for file in files:
+            self._count_images(self.md.parse(file.read_text("utf-8")), file)
         self.pages = [self._page(f) for f in files]
         self._references()
         for file, href, target in self.links:
@@ -177,6 +265,7 @@ class Site:
 
     def _markdown(self) -> MarkdownIt:
         md = MarkdownIt("commonmark").use(gfm_plugin).use(front_matter_plugin)
+        container_plugin(md, "tabs")
         plain_fence = md.renderer.rules["fence"]
         site = self
 
@@ -208,7 +297,12 @@ class Site:
         def image(self, tokens, idx, options, env):
             tok = tokens[idx]
             alt = self.renderInlineAsText(tok.children or [], options, env)
-            img = f'<img src="{site._embed(str(tok.attrGet("src")), env["page"])}" alt="{escape(alt)}">'
+            img = site._image(
+                str(tok.attrGet("src")),
+                alt,
+                env["page"],
+                figure=bool(tok.meta.get("block")),
+            )
             if not tok.meta.get("block"):
                 return img
             title = tok.attrGet("title") or alt
@@ -216,7 +310,10 @@ class Site:
             return f'<figure class="image-figure" tabindex="0">{DIAGRAM_BAR}<div class="stage">{img}</div>{caption}</figure>\n'
 
         def raw_html(self, tokens, idx, options, env):
-            return site._raw_html(tokens[idx].content, env["page"])
+            tok = tokens[idx]
+            return site._raw_html(
+                tok.content, env["page"], tok.block or bool(tok.meta.get("block"))
+            )
 
         md.add_render_rule("fence", fence)
         md.add_render_rule("image", image)
@@ -231,6 +328,25 @@ class Site:
         )
         return md
 
+    def _count_images(self, tokens: list[Token], file: Path) -> None:
+        for tok in tokens:
+            sources = []
+            if tok.type == "image":
+                sources.append(str(tok.attrGet("src")))
+            elif tok.type in ("html_block", "html_inline"):
+                for tag in TAG.finditer(tok.content):
+                    if tag.group(1).lower() == "img":
+                        sources.extend(
+                            unescape(next(v for v in a.groups()[1:] if v is not None))
+                            for a in ATTR.finditer(tag.group(0))
+                            if a.group(1).lower() == "src"
+                        )
+            for src in sources:
+                if not src.startswith("data:") and not re.match(r"https?:", src):
+                    self.image_counts[(file.parent / unquote(src)).resolve()] += 1
+            if tok.children and tok.type != "image":
+                self._count_images(tok.children, file)
+
     def _page(self, file: Path) -> Page:
         pid = self.ids[file]
         group = file.relative_to(self.src).parts[0] if file.parent != self.src else ""
@@ -239,14 +355,15 @@ class Site:
             "page": page,
             "docId": re.sub(r"[^A-Za-z0-9]+", "-", pid),
         }  # docId keeps footnote ids unique per page
-        tokens = self.md.parse(file.read_text("utf-8"), env)
+        source = file.read_text("utf-8")
+        tokens = self.md.parse(source, env)
         if len(file.relative_to(self.src).parts) >= 5:
             print(
                 f"warning: {file.relative_to(self.src)}: nested 4+ folders deep",
                 file=sys.stderr,
             )
         self._guard_raw_text(tokens, page)
-        self._prepare(tokens, page)
+        self._prepare(tokens, page, len(source.splitlines()))
         if not page.titled:
             raise BuildError(f"{file.relative_to(self.src)}: missing H1 title")
         page.html = self.md.renderer.render(tokens, self.md.options, env)
@@ -285,17 +402,43 @@ class Site:
                         f"{page.file.relative_to(self.src)}:{line}: raw <{match.group(1)}> is not allowed"
                     )
 
-    def _raw_html(self, content: str, page: Page) -> str:
+    def _raw_html(self, content: str, page: Page, block: bool = False) -> str:
+        figures = set()
+        if block:
+            if re.fullmatch(r"\s*<img\b[^>]*>\s*", content, re.IGNORECASE):
+                figures.add(content.index("<"))
+            figures.update(
+                m.start(1)
+                for m in re.finditer(
+                    r"<p\b[^>]*>\s*(<img\b[^>]*>)\s*</p\s*>",
+                    content,
+                    re.IGNORECASE,
+                )
+            )
+
         def tag(match: re.Match[str]) -> str:
             name = match.group(1).lower()
+            if name == "img":
+                attrs = {
+                    a.group(1).lower(): unescape(
+                        next(v for v in a.groups()[1:] if v is not None)
+                    )
+                    for a in IMG_ATTR.finditer(match.group(0))
+                }
+                if "src" in attrs:
+                    return self._image(
+                        attrs["src"],
+                        attrs.get("alt", ""),
+                        page,
+                        match.group(0),
+                        figure=match.start() in figures,
+                    )
 
             def attr(a: re.Match[str]) -> str:
                 key = a.group(1).lower()
                 value = next(v for v in a.groups()[1:] if v is not None)
-                if name == "img" and key == "src":
-                    return ' src="' + escape(self._embed(value, page), quote=True) + '"'
                 if name == "a" and key == "href":
-                    self._warn_link(value, page)
+                    return f' href="{escape(self._link(unescape(value), page))}"'
                 elif name != "a" and re.match(r"https?:", value, re.IGNORECASE):
                     self.problems.append(
                         f"{page.file.relative_to(self.src)}: external resource will not load in the SharePoint viewer: {value}"
@@ -320,7 +463,54 @@ class Site:
                 file=sys.stderr,
             )
 
-    def _prepare(self, tokens: list[Token], page: Page) -> None:
+    def _prepare(self, tokens: list[Token], page: Page, line_count: int) -> None:
+        wrapped = []
+        tabs = None
+        panel = False
+
+        def fail(token: Token, message: str) -> None:
+            line = token.map[0] + 1
+            raise BuildError(f"{page.file.relative_to(self.src)}:{line}: {message}")
+
+        def panel_token(nesting: int) -> Token:
+            token = Token(
+                "tab_panel_open" if nesting == 1 else "tab_panel_close", "div", nesting
+            )
+            token.block = True
+            if nesting == 1:
+                token.attrSet("class", "tab-panel")
+            return token
+
+        for tok in tokens:
+            if tok.type == "container_tabs_open":
+                if tabs is not None:
+                    fail(tok, "nested tabs")
+                tabs, panel = tok, False
+            elif tok.type == "container_tabs_close":
+                # mdit-py-plugins 0.7.0: implicit closes have empty/partial markup;
+                # map[1] reaches EOF rather than a closing marker (regression tested).
+                if tabs.map[1] >= line_count or not re.fullmatch(
+                    rf":{{{len(tabs.markup)},}}[ \t]*", tok.markup
+                ):
+                    fail(tabs, "unclosed :::")
+                if not panel:
+                    fail(tabs, "empty tabs")
+                wrapped.append(panel_token(-1))
+                tabs = None
+            elif tabs is not None:
+                if (
+                    tok.type == "heading_open"
+                    and tok.tag == "h4"
+                    and tok.level == tabs.level + 1
+                ):
+                    if panel:
+                        wrapped.append(panel_token(-1))
+                    wrapped.append(panel_token(1))
+                    panel = True
+                elif not panel:
+                    fail(tok, "content before first ####")
+            wrapped.append(tok)
+        tokens[:] = wrapped
         for i, tok in enumerate(tokens):
             if tok.type == "heading_open":
                 text = "".join(
@@ -358,6 +548,15 @@ class Site:
                     # An image alone in a paragraph becomes a block-level figure.
                     children[0].meta["block"] = True
                     tokens[i - 1].hidden = tokens[i + 1].hidden = True
+                if (
+                    len(children) == 1
+                    and children[0].type == "html_inline"
+                    and re.fullmatch(
+                        r"<img\b[^>]*>", children[0].content, re.IGNORECASE
+                    )
+                    and tokens[i - 1].type == "paragraph_open"
+                ):
+                    children[0].meta["block"] = True
                 for child in children:
                     if child.type == "link_open":
                         child.attrSet(
@@ -369,7 +568,7 @@ class Site:
         if href.startswith("#"):
             target = f"{page.id}--{slugify(unquote(href[1:]))}"
         else:
-            m = re.fullmatch(r"([^#:]+\.md)(?:#(.*))?", href)
+            m = re.fullmatch(r"([^#:]+\.md)(?:#(.*))?", href, re.IGNORECASE)
             if not m:
                 return href
             pid = self.ids.get((page.file.parent / unquote(m.group(1))).resolve())
@@ -445,6 +644,46 @@ class Site:
             "<svg ", f'<svg data-variant="{mode}" style="max-width:{width}px" ', 1
         )
 
+    def _image(
+        self, src: str, alt: str, page: Page, raw: str = "", *, figure: bool = False
+    ) -> str:
+        uri = self._embed(src, page)
+        if figure and uri.startswith("data:") and ";base64," in uri:
+            dimensions = image_dimensions(base64.b64decode(uri.split(",", 1)[1]))
+            if dimensions is not None and dimensions[0] < 1600:
+                print(
+                    f"warning: {page.file.relative_to(self.src)}: image {src} is {dimensions[0]}px wide; figures read best at 1600px or more",
+                    file=sys.stderr,
+                )
+        symbol = None
+        if not src.startswith("data:") and not re.match(r"https?:", src):
+            symbol = self.image_symbols.get((page.file.parent / unquote(src)).resolve())
+        if symbol is None:
+            if raw:
+                return ATTR.sub(
+                    lambda a: (
+                        f' src="{escape(uri)}"'
+                        if a.group(1).lower() == "src"
+                        else a.group(0)
+                    ),
+                    raw,
+                )
+            return f'<img src="{escape(uri)}" alt="{escape(alt)}">'
+        sid, width, height = symbol
+        extra, classes = "", "img"
+        if raw:
+            for attr in IMG_ATTR.finditer(raw):
+                if attr.group(1).lower() == "class":
+                    classes += " " + unescape(
+                        next(v for v in attr.groups()[1:] if v is not None)
+                    )
+            extra = IMG_ATTR.sub("", raw)[4:].rstrip(">/").rstrip()
+        return (
+            f'<svg class="{escape(classes)}" viewBox="0 0 {width} {height}" '
+            f'role="img" aria-label="{escape(alt)}"{extra}>'
+            f'<use href="#{sid}"/></svg>'
+        )
+
     def _embed(self, src: str, page: Page) -> str:
         if src.startswith("data:"):
             return src
@@ -484,6 +723,13 @@ class Site:
         self.stats["image_bytes_out"] += len(data)
         uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
         self.image_cache[path] = uri
+        if self.image_counts[path] >= 2:
+            dimensions = image_dimensions(data)
+            if dimensions is not None:
+                self.image_symbols[path] = (
+                    f"img-{len(self.image_symbols) + 1}",
+                    *dimensions,
+                )
         return uri
 
     def _references(self) -> None:
@@ -507,7 +753,7 @@ class Site:
                 r"\d{3}-", parts[-1]
             ):
                 refs["ADR-" + parts[-1][:3]] = (page.id, page.title, page, [])
-            if strip_order(page.file.name).lower() == "glossary":
+            if is_glossary(page.file):
                 for level, hid, term in page.toc:
                     if level == 2:
                         pattern = r'(?s)id="%s"[^>]*>.*?</h2>\s*<p>(.*?)</p>'
@@ -575,11 +821,29 @@ class Site:
             link_page(register)
             self.pages.append(register)
 
+    def folder_label(self, folder: Path) -> str:
+        landing = next(
+            (
+                p
+                for p in self.pages
+                if p.file.parent == folder
+                and p.file.name.startswith("00-")
+                and not is_glossary(p.file)
+            ),
+            None,
+        )
+        if landing and len(landing.title) <= 28:
+            return landing.title
+        return words(strip_order(folder.name))
+
     def sidebar(self) -> str:
         tree = {}
         for page in self.pages:
             node = tree
-            for part in page.file.relative_to(self.src).parts[:-1]:
+            parts = page.file.relative_to(self.src).parts[:-1]
+            if is_glossary(page.file):
+                parts = ()
+            for part in parts:
                 node = node.setdefault(part, {})
             node[page.file.name] = page
 
@@ -599,9 +863,9 @@ class Site:
             cls = "sections" if kind == "pg" else ""
             return f'<div class="node {kind}"><div class="row">{chev}{head}</div><div class="kids {cls}">{children}</div></div>'
 
-        def render(node):
+        def render(node, folder=self.src):
             out = []
-            order = lambda name: (name == "rules.md", natural(name))
+            order = lambda n: (n == "rules.md", is_glossary(Path(n)), natural(n))
             for name in sorted(node, key=order):
                 item = node[name]
                 if isinstance(item, Page):
@@ -613,13 +877,10 @@ class Site:
                 pages = [p for p in item.values() if isinstance(p, Page)]
                 indexes = [p for p in pages if p.file.name.startswith("00-")]
                 landing = indexes[0] if indexes else None
-                label = words(strip_order(name))
-                if landing and len(landing.title) <= 28:
-                    label = landing.title
-                number = re.match(r"\d+", name)
-                if number and not re.match(r"\d", label):
-                    label = number[0] + " · " + label
-                children = render({n: p for n, p in item.items() if p is not landing})
+                label = self.folder_label(folder / name)
+                children = render(
+                    {n: p for n, p in item.items() if p is not landing}, folder / name
+                )
                 kids = children
                 if landing and landing.toc:
                     kids = f'<div class="sections">{sections(landing)}</div>' + kids
@@ -631,11 +892,35 @@ class Site:
 
     def articles(self) -> str:
         out: list[str] = []
+        if self.image_symbols:
+            symbols = "".join(
+                f'<symbol id="{sid}" viewBox="0 0 {width} {height}">'
+                f'<image href="{self.image_cache[path]}" width="{width}" height="{height}"/></symbol>'
+                for path, (sid, width, height) in self.image_symbols.items()
+            )
+            out.append(
+                '<svg hidden aria-hidden="true" style="position:absolute;width:0;height:0">'
+                + symbols
+                + "</svg>"
+            )
         for i, page in enumerate(self.pages):
             toc = "\n".join(
                 f'<a class="l{level}" href="#{hid}">{escape(text)}</a>'
                 for level, hid, text in page.toc
             )
+            label = (
+                ""
+                if page.file.parent == self.src or is_glossary(page.file)
+                else self.folder_label(page.file.parent) + " / "
+            )
+            eyebrow = f'<p class="eyebrow">{escape(label.upper())}{i + 1} OF {len(self.pages)}</p>'
+            box = (
+                f'<details class="otp"><summary>On this page</summary><div>{toc}</div></details>'
+                if any(t[0] == 2 for t in page.toc)
+                else ""
+            )
+            body = page.html.replace("<h1", eyebrow + "<h1", 1)
+            body = body.replace("</h1>", "</h1>" + box, 1)
             pager = ""
             if i > 0:
                 prev = self.pages[i - 1]
@@ -645,7 +930,7 @@ class Site:
                 pager += f'<a class="next" href="#{nxt.id}"><small>Next</small>{escape(nxt.title)}</a>'
             out.append(
                 f'<article class="page" id="{page.id}" data-title="{escape(page.title)}">'
-                f'<div class="content">{page.html}<nav class="pager">{pager}</nav></div>'
+                f'<div class="content">{body}<nav class="pager">{pager}</nav></div>'
                 f'<nav class="toc">{"<p class=group>On this page</p>" + toc if toc else ""}</nav></article>'
             )
         return "\n".join(out)
@@ -656,7 +941,7 @@ def build(
 ) -> int:
     src = src.resolve()
     config_file = src / "doc.toml"
-    allowed = "title, subtitle, theme"
+    allowed = "title, subtitle, theme, brand, footer"
     try:
         config = (
             tomllib.loads(config_file.read_text("utf-8"))
@@ -665,10 +950,17 @@ def build(
         )
     except tomllib.TOMLDecodeError as err:
         raise BuildError(f"{config_file}: {err}; allowed keys: {allowed}") from err
-    if set(config) - {"title", "subtitle", "theme"}:
+    unknown = set(config) - set(allowed.split(", "))
+    if unknown:
         raise BuildError(
-            f"{config_file}: unknown keys: {set(config) - {'title', 'subtitle', 'theme'}}; allowed keys: {allowed}"
+            f"{config_file}: unknown keys: {unknown}; allowed keys: {allowed}"
         )
+    brand = config.get("brand")
+    if brand is not None and (not isinstance(brand, str) or not 1 <= len(brand) <= 4):
+        raise BuildError(f"{config_file}: brand must be 1-4 characters")
+    footer = config.get("footer", "")
+    if not isinstance(footer, str):
+        raise BuildError(f"{config_file}: footer must be plain text")
     theme = theme or config.get("theme", "slate")
     if theme not in {"slate", "indigo", "teal", "graphite"}:
         raise BuildError(
@@ -688,6 +980,10 @@ def build(
         "title": escape(config.get("title", words(strip_order(src.name)))),
         "subtitle": escape(config.get("subtitle", "")),
         "theme": theme,
+        "brand": f'<span class="mark" aria-hidden="true">{escape(brand)}</span>'
+        if brand
+        else "",
+        "footer": f'<div class="side-foot">{escape(footer)}</div>' if footer else "",
         "style": (ASSETS / "style.css").read_text("utf-8")
         + "\n"
         + HtmlFormatter(style="friendly", classprefix="tok-").get_style_defs(

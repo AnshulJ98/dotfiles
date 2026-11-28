@@ -38,3 +38,17 @@ uv run scripts/build.py example /tmp/microsite/example.html --theme indigo
 ```
 
 Known language code blocks are syntax highlighted at build time.
+
+::: tabs
+#### Default theme
+
+```bash
+uv run scripts/build.py example /tmp/microsite/example.html
+```
+
+#### Indigo theme
+
+```bash
+uv run scripts/build.py example /tmp/microsite/example.html --theme indigo
+```
+:::
