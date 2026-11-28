@@ -4,7 +4,6 @@
 #   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
 #     name, --window opens it in an OS window of its own; ZWS_HOST comes from the instance, CWD is remote there)
 #     --holder SESSION before CWD: its pane reattaches that zmx session
-#   zws bring NAME  workspace NAME reopened in this OS window, from another one or closed
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -162,25 +161,6 @@ rename) # empty answer: back to the folder's name
   overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2"
   ;;
 close) kitten @ action close_session "$2" ;;
-bring)
-  # Saved first as workspaces.py saves it, since its file can be 2 s old. close-tab asks nothing
-  # and only detaches the panes' zmx sessions; reopening reattaches them. Without its leading
-  # new_os_window the file opens in the focused OS window; workspaces.py's next save puts the
-  # line back only if the workspace still has a window of its own.
-  [[ ${2:-} =~ ^[a-zA-Z0-9._-]+$ ]] || exit 2
-  file=$DIR/$2.kitty-session match="session:^${2//./\\.}\$"
-  if kitten @ ls --match-tab "$match" >/dev/null 2>&1; then
-    kitten @ action save_as_session --save-only "--match='$match and not var:transient=1'" "$file" || exit
-    kitten @ close-tab --match "$match" >/dev/null || exit
-    for _ in 1 2 3 4 5 6 7 8 9 10; do # kitty may drop the tabs on a later pass of its loop
-      kitten @ ls --match-tab "$match" >/dev/null 2>&1 || break
-      sleep 0.2
-    done
-  fi
-  [ -s "$file" ] || exit 1
-  awk 'started || !/^[[:space:]]*(new_os_window[[:space:]]*)?$/ { started = 1; print }' "$file" >"$file.tmp" &&
-    mv "$file.tmp" "$file" && go "$2"
-  ;;
 worktree) # wt makes or picks the worktree and reports it to this instance
   if [ -n "${ZWS_HOST:-}" ]; then
     case $2 in
@@ -201,7 +181,7 @@ worktree) # wt makes or picks the worktree and reports it to this instance
   esac
   ;;
 *)
-  sed -n '2,10p' "$0" >&2
+  sed -n '2,9p' "$0" >&2
   exit 2
   ;;
 esac

@@ -46,7 +46,7 @@ _sync_pending = False
 _quitting = False  # windows close one by one on quit; saving then would drop workspaces from .open
 _owner = False  # this kitty started on a workspace and has reopened the rest, so it keeps .open
 _tries = 0
-_labelled: dict[str, str] = {}  # zmx session -> the workspace its label names
+_labelled: dict[str, tuple[str, ...]] = {}  # zmx session -> the labels it was given
 _refused: dict[str, int] = {}  # zmx session -> labels zmx refused
 _check_tries = 0
 _launched: dict[int, list[float]] = {}  # tab id -> recent dock launches
@@ -66,7 +66,10 @@ INTERNALS = (
         "created_in_session_name os_window_id user_vars id write_to_child screen program_status cwd_of_child child last_focused_at open_url_handler",
     ),
     ("kitty.child:Child", "argv"),
-    ("kitty.tabs:Tab", "tab_manager_ref id __iter__ active_window"),
+    (
+        "kitty.tabs:Tab",
+        "tab_manager_ref id __iter__ active_window created_in_session_name",
+    ),
     ("kitty.fast_data_types:Screen", "last_reported_cwd columns cursor draw"),
     ("kitty.program_status:ProgramStatus", "as_list"),
     (
@@ -194,50 +197,82 @@ def _place(path: str, own_window: bool) -> None:
 
 
 def _label(boss) -> None:
-    """Label each pane's zmx session with its workspace. kitty drops a closed pane from the session
-    file; the label stays with the session, so bin/zpick-rows can still place it once detached."""
+    """Label each pane's zmx session with where it is: space, its workspace; slot, its tab's index
+    among the workspace's tabs; near, another pane's session in that tab. kitty drops a closed pane
+    from the session file; the labels stay with the session, so bin/zpick-rows can put it back."""
     zmx = shutil.which("zmx") or "/opt/homebrew/bin/zmx"
-    for w in boss.all_windows:
-        name, holder = w.created_in_session_name, w.user_vars.get("holder", "")
-        if (
-            not name
-            or not holder
-            or _labelled.get(holder) == name
-            or _refused.get(holder, 0) > 3
-        ):
-            continue
-        # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
-        # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
-        host = zkitty.instance_host()
-        if host:
-            script = (
-                '"$1" "$2" "$3" "$4" "$5" "$6" >/dev/null 2>&1 || '
-                'kitten @ set-user-vars --match "id:$7" zlabel=retry'
-            )
-            args = (os.path.join(FOLDER, "bin/zhost"), host, "zmx", "set")
-        else:
-            script = (
-                '"$1" set "$2" "$3" >/dev/null 2>&1 || '
-                'kitten @ set-user-vars --match "id:$4" zlabel=retry'
-            )
-            args = (zmx,)
-        boss.call_remote_control(
-            None,
-            (
-                "launch",
-                "--type=background",
-                "--allow-remote-control",
-                "sh",
-                "-c",
-                script,
-                "sh",
-                *args,
-                holder,
-                "space=" + zcore.label(name),
-                str(w.id),
-            ),
+    host = zkitty.instance_host()
+    if host:
+        command = (os.path.join(FOLDER, "bin/zhost"), host, "zmx", "set")
+    else:
+        command = (zmx, "set")
+    slots: dict[str, int] = {}
+    for tab in boss.all_tabs:
+        panes = [w for w in tab if w.user_vars.get("role") != "sidebar"]
+        space = next(
+            (w.created_in_session_name for w in panes if w.created_in_session_name), ""
         )
-        _labelled[holder] = name
+        if not space:
+            continue
+        slot = slots[space] = slots.get(space, -1) + 1
+        for w in panes:
+            name, holder = w.created_in_session_name, w.user_vars.get("holder", "")
+            near = next(
+                (
+                    o.user_vars["holder"]
+                    for o in panes
+                    if o is not w and o.user_vars.get("holder")
+                ),
+                "",
+            )
+            labels = (
+                "space=" + zcore.label(name),
+                f"slot={slot}",
+                "near=" + zcore.label(near),  # empty: zmx removes it
+            )
+            if (
+                not name
+                or not holder
+                or _labelled.get(holder) == labels
+                or _refused.get(holder, 0) > 3
+            ):
+                continue
+            # kitty runs it: no process may be started from this thread (tests/test_kitty.py). zmx
+            # refuses while the session is not up yet; the refusal comes back as zlabel=retry.
+            script = (
+                'id=$1; shift; "$@" >/dev/null 2>&1 || '
+                'kitten @ set-user-vars --match "id:$id" zlabel=retry'
+            )
+            boss.call_remote_control(
+                None,
+                (
+                    "launch",
+                    "--type=background",
+                    "--allow-remote-control",
+                    "sh",
+                    "-c",
+                    script,
+                    "sh",
+                    str(w.id),
+                    *command,
+                    holder,
+                    *labels,
+                ),
+            )
+            _labelled[holder] = labels
+
+
+def _adopt(boss) -> None:
+    """A tab moved into another OS window (kitten @ detach-tab, bin/zpick bringing a workspace
+    here) has no workspace name while its panes keep theirs (kitty 0.50.0 boss._move_tab_to,
+    Tab.take_over_from). Unnamed, the tab bar shows it in every workspace of that window and
+    save_as_session leaves it out, so it takes its panes' name."""
+    for tab in boss.all_tabs:
+        if tab.created_in_session_name:
+            continue
+        names = {w.created_in_session_name for w in tab}
+        if len(names) == 1 and "" not in names:
+            tab.created_in_session_name = names.pop()
 
 
 def _save(timer_id: int | None = None) -> None:
@@ -473,6 +508,7 @@ def on_tab_bar_dirty(boss, window, data) -> None:
     if not _save_pending:
         _save_pending = True
         add_timer(_safe(_save), 2.0, False)
+    _adopt(boss)  # kitty draws the bar after its watchers return
 
 
 @_safe

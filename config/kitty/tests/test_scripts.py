@@ -66,8 +66,6 @@ if cmd == "kitten":
         if ready.exists() and time.time() >= float(ready.read_text()):
             print('[{"platform_window_id": 42}]')
         sys.exit(0)
-    if "close-tab" in args: (root / "tabs-closed").touch()
-    if "--match-tab" in args and (root / "tabs-closed").exists(): sys.exit(1)
     if "launch" in args and mode.startswith("det:"): print(42)
     if "ls" in args and os.environ.get("KITTY_LS"):
         print(os.environ["KITTY_LS"])
@@ -1794,21 +1792,36 @@ elif args[:1] == ["attach"]:
         self.assertIn("holder=remote", launch)
 
     def test_picker_reattach_goes_to_the_sessions_workspace(self):
-        # zpick-rows --route names the workspace; zpick opens the tab there, asks where it must.
+        # zpick-rows --route names the workspace and the pane's old place; zpick opens it there,
+        # asks where it must.
         ws = self.root / "workspaces"
         dev = ws / "dev.kitty-session"
         pane = ["--cwd", "/x", "--var", "holder=sess"]
-        into = ["@", "launch", "--type=tab", "--match", "session:^dev$"]
-        into += ["--add-to-session", "dev", *pane]
-        there = [into, ["@", "focus-window", "--match", "id:42"]]
+        put = ["--add-to-session", "dev", *pane]
+        into = ["@", "launch", "--type=tab", "--match", "session:^dev$", *put]
+        focus = ["@", "focus-window", "--match", "id:42"]
+        there = [into, focus]
+        split = ["@", "launch", "--match", "window_id:7", "--next-to", "id:7"]
+        split += ["--location=split", *put]
+        before = ["@", "launch", "--type=tab", "--match", "window_id:7"]
+        before += ["--location=before", *put]
+        tab7 = ["@", "focus-tab", "--match", "window_id:7"]
+        move = ["@", "detach-tab", "--match", "session:^dev$"]
+        move += ["--target-tab", "window_id:1"]
         here = [["@", "launch", "--type=tab", *pane]]
         goto = ["@", "action", "goto_session"]
         zshell = str(self.root.resolve() / "zshell")  # zpick finds itself with realpath
-        save = ["@", "action", "save_as_session", "--save-only"]
-        save += ["--match='session:^dev$ and not var:transient=1'", str(dev)]
         for route, key, answer, expected in (
             ("here\tdev", "", "", there),
-            ("other\tdev", "", "", there),
+            ("here\tdev\tsplit\t7", "", "", [split, focus]),
+            ("here\tdev\tbefore\t7", "", "", [tab7, before, focus]),
+            ("here\tdev", "ctrl-o", "", there),
+            ("other\tdev", "", "", [move, *there]),  # its tabs come here
+            ("other\tdev\tsplit\t7", "", "", [move, split, focus]),
+            ("other\tdev", "ctrl-o", "", [[*into, "--keep-focus"]]),  # focus stays here
+            ("other\tdev\tsplit\t7", "ctrl-o", "", [[*split, "--keep-focus"]]),
+            # a tab is placed by its OS window's active tab, which only focus can set
+            ("other\tdev\tbefore\t7", "ctrl-o", "", [[*into, "--keep-focus"]]),
             ("closed\tdev", "", "y", [[*goto, str(dev)], *there]),
             ("closed\tdev", "", "", [[*goto, str(dev)], *there]),  # enter: the default
             ("closed\tdev", "", "n", here),
@@ -1826,18 +1839,6 @@ elif args[:1] == ["attach"]:
                     + [zshell],
                 ],
             ),
-            ("here\tdev", "ctrl-b", "", there),
-            (
-                "other\tdev",
-                "ctrl-b",
-                "",
-                [
-                    save,
-                    ["@", "close-tab", "--match", "session:^dev$"],
-                    [*goto, str(dev)],
-                ]
-                + there,
-            ),
             (
                 "",
                 "",
@@ -1846,8 +1847,7 @@ elif args[:1] == ["attach"]:
             ),  # no answer from zpick-rows: where the picker was opened
         ):
             with self.subTest(route=route, key=key, answer=answer):
-                for path in (self.root / "calls", self.root / "tabs-closed"):
-                    path.unlink(missing_ok=True)
+                (self.root / "calls").unlink(missing_ok=True)
                 shutil.rmtree(ws, ignore_errors=True)
                 ws.mkdir()
                 dev.write_text("new_os_window\ncd /x\nlaunch --var=holder=sess\n")
@@ -1863,11 +1863,6 @@ elif args[:1] == ["attach"]:
                 self.assertEqual(result.returncode, 0, result.stderr)
                 kitten = [a for a in self.calls("kitten") if a[1] != "ls"]
                 self.assertEqual(kitten, expected)
-                if key == "ctrl-b" and route.startswith("other"):
-                    # brought into this OS window: no line sends it back to one of its own
-                    self.assertEqual(
-                        dev.read_text(), "cd /x\nlaunch --var=holder=sess\n"
-                    )
                 if answer == "n" and route.startswith("none"):
                     text = (ws / "x.kitty-session").read_text()
                     self.assertEqual(text, "cd /x\nlaunch --var holder=sess\n")

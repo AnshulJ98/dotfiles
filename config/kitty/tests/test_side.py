@@ -823,7 +823,41 @@ class SideTests(unittest.TestCase):
         ):
             with self.subTest(sessions=sessions, where=where, origin=origin):
                 self.assertEqual(
-                    rows.route(kitty, sessions, where, files, "s", origin), expected
+                    rows.route(kitty, sessions, where, files, "s", origin),
+                    expected + ("", ""),  # no slot or near label: its last tab
+                )
+
+    def test_route_puts_the_pane_back_by_its_neighbour_else_its_tab_index(self):
+        rows = self.load_rows()
+        pane = lambda i, space, holder: {
+            "id": i,
+            "session_name": space,
+            "user_vars": {"holder": holder},
+        }
+        dock = {"id": 10, "session_name": "dev", "user_vars": {"role": "sidebar"}}
+        kitty = [
+            {"id": 1, "tabs": [{"windows": [pane(5, "main", "h5")]}]},
+            {
+                "id": 2,
+                "tabs": [
+                    {"windows": [pane(6, "dev", "h6")]},
+                    {"windows": [dock, pane(8, "dev", "h8"), pane(9, "dev", "h9")]},
+                ],
+            },
+        ]
+        hexed = lambda text: text.encode().hex()
+        for labels, expected in (
+            ({"near": hexed("h9"), "slot": "0"}, ("split", "9")),  # its neighbour wins
+            ({"near": hexed("gone"), "slot": "1"}, ("before", "8")),  # not the dock
+            ({"near": hexed("h5"), "slot": "0"}, ("before", "6")),  # h5 is not in dev
+            ({"slot": "2"}, ("", "")),  # dev has fewer tabs now: its last
+            ({"slot": "x", "near": "!"}, ("", "")),
+        ):
+            with self.subTest(labels=labels):
+                sessions = {"s": {"space": hexed("dev"), **labels}}
+                self.assertEqual(
+                    rows.route(kitty, sessions, {}, set(), "s", "5"),
+                    ("other", "dev", *expected),
                 )
 
     def test_facts_live_folder_program_refs_and_stdin_cli(self):

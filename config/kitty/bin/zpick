@@ -38,7 +38,7 @@ footer() {
     echo "attached: $(tr '\n' ' ' <"$ZPICK_VIEW.ask")· ^x again kills"
   elif [ "${ZPICK_MODE:-}" = zmx ]; then
     echo 'enter attach · ^n new · ^t view · ^x kill · ^\ back · esc'
-  else echo 'enter go · ^b bring · ^s split · ^t view · tab mark · ^x kill · esc'; fi
+  else echo 'enter go · ^o open there · ^s split · ^t view · tab mark · ^x kill · esc'; fi
 }
 # fzf runs this for the list. It also notes the row of the pane the picker came from.
 list() {
@@ -176,26 +176,38 @@ import json, sys
 try: print(json.load(sys.stdin)[0]["tabs"][0]["windows"][0].get("session_name", ""))
 except (ValueError, IndexError, KeyError): pass')
 
-attach() { # name cwd split|tab|WORKSPACE [plain]: reattach a detached session as a split next to
-  # $from, a tab in the picker's workspace, or a tab in the open WORKSPACE, in whichever OS window
-  # holds it. No command: kitty runs its shell (zshell), which reattaches the holder session; a
-  # kitty whose shell is not zshell (plain, cmd+alt+enter's) is given it by name.
-  local args=(--var "holder=$1") cmd=() id
+attach() { # name cwd split|tab [plain]: reattach a detached session as a split next to $from or
+  # a tab in the picker's workspace. No command: kitty runs its shell (zshell), which reattaches
+  # the holder session; a kitty whose shell is not zshell (plain, cmd+alt+enter's) is given it by name.
+  local args=(--var "holder=$1") cmd=()
   if [ -z "${ZWS_HOST:-}" ] || [ "${ZPICK_MODE:-}" = zmx ]; then args=(--cwd "$2" "${args[@]}"); fi
   [ "${4:-}" = plain ] && cmd=("$here/zshell")
-  case $3 in
-  split | tab) [ -n "$ws" ] && args+=(--add-to-session "$ws") ;;
-  esac
+  [ -n "$ws" ] && args+=(--add-to-session "$ws")
   if [ "$3" = split ] && [ -n "$from" ]; then
     # launch opens in the active tab (the picker) unless --match names the target window's tab.
     kitten @ focus-window --match "id:$from" >/dev/null 2>&1
     kitten @ launch --match "window_id:$from" --location=vsplit "${args[@]}" ${cmd[@]+"${cmd[@]}"} >/dev/null
-  elif [ "$3" = split ] || [ "$3" = tab ]; then
+  else
     kitten @ launch --type=tab "${args[@]}" ${cmd[@]+"${cmd[@]}"} >/dev/null
-  else # zpick-rows only names workspaces of [a-zA-Z0-9._-], so only the dot needs escaping
-    id=$(kitten @ launch --type=tab --match "session:^${3//./\\.}\$" --add-to-session "$3" "${args[@]}") &&
-      { [ -z "$id" ] || kitten @ focus-window --match "id:$id" >/dev/null; }
   fi
+}
+put() { # name cwd WORKSPACE place window [keep]: reattach into the open WORKSPACE, in whichever OS
+  # window holds it, where the pane last was (zpick-rows --route): split next to window, a tab
+  # before window's tab, else its last tab. keep: focus stays here, so a tab only goes last, since
+  # kitty places a new tab relative to its OS window's active tab.
+  local args=(--add-to-session "$3") id=
+  if [ -z "${ZWS_HOST:-}" ]; then args+=(--cwd "$2"); fi
+  args+=(--var "holder=$1")
+  if [ -n "${6:-}" ]; then args+=(--keep-focus); fi
+  case $4:${6:-} in
+  split:*) id=$(kitten @ launch --match "window_id:$5" --next-to "id:$5" --location=split "${args[@]}") ;;
+  before:) kitten @ focus-tab --match "window_id:$5" >/dev/null &&
+    id=$(kitten @ launch --type=tab --match "window_id:$5" --location=before "${args[@]}") ;;
+  *) false ;;
+  esac ||
+    # zpick-rows only names workspaces of [a-zA-Z0-9._-], so only the dot needs escaping
+    id=$(kitten @ launch --type=tab --match "session:^${3//./\\.}\$" "${args[@]}") || return
+  [ -n "${6:-}" ] || [ -z "$id" ] || kitten @ focus-window --match "id:$id" >/dev/null
 }
 ask() { # question: yes unless n is pressed. The picker's terminal is fds 3 and 4 (see the loop).
   local key=
@@ -203,22 +215,27 @@ ask() { # question: yes unless n is pressed. The picker's terminal is fds 3 and 
   echo >&3
   [ "$key" != n ] && [ "$key" != N ]
 }
-reattach() { # name cwd key: back to the workspace the session was last in (zpick-rows --route)
-  local state='' space=''
-  IFS=$'\t' read -r state space < <("$here/zpick-rows" --route "$1" "$from")
+where() { # session: sets state space place window (zpick-rows --route)
+  IFS=$'\t' read -r state space place window < <("$here/zpick-rows" --route "$1" "$from")
+}
+reattach() { # name cwd key: back to where the session last was
+  local state='' space='' place='' window=''
+  where "$1"
   case $3:$state in
   ctrl-s:plain) attach "$1" "$2" split plain ;;
   ctrl-s:*) attach "$1" "$2" split ;;
   *:plain) attach "$1" "$2" tab plain ;;
-  ctrl-b:other | ctrl-b:closed) # bring the workspace into this OS window, then the tab
-    "$here/zws" bring "$space"
-    attach "$1" "$2" "$space" || attach "$1" "$2" tab
+  ctrl-o:other) put "$1" "$2" "$space" "$place" "$window" keep || attach "$1" "$2" tab ;;
+  *:other) # its tabs move into this OS window with their panes attached, so nothing redraws
+    kitten @ detach-tab --match "session:^${space//./\\.}\$" --target-tab "window_id:$from" >/dev/null
+    put "$1" "$2" "$space" "$place" "$window" || attach "$1" "$2" tab
     ;;
-  *:here | *:other) attach "$1" "$2" "$space" || attach "$1" "$2" tab ;;
+  *:here) put "$1" "$2" "$space" "$place" "$window" || attach "$1" "$2" tab ;;
   *:closed)
     if ask "reopen $space?"; then
       kitten @ action goto_session "$DIR/$space.kitty-session"
-      attach "$1" "$2" "$space" || attach "$1" "$2" tab
+      where "$1" # its panes have window ids now
+      put "$1" "$2" "$space" "$place" "$window" || attach "$1" "$2" tab
     else attach "$1" "$2" tab; fi
     ;;
   *:none)
@@ -244,7 +261,7 @@ THEME_ACCENT=4 THEME_SEL=8 # the active theme's accent and selection, where the 
 A=$THEME_ACCENT
 keys=(--bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)"
   --bind 'zero:change-ghost(nothing here · ctrl-t switches view)')
-if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect 'ctrl-s,ctrl-b'); fi
+if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect 'ctrl-s,ctrl-o'); fi
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
   --track --id-nth 1,2 --listen "$ZPICK_VIEW.sock" \

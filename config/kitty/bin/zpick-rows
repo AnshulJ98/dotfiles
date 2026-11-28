@@ -86,9 +86,10 @@ def zmx_sessions() -> dict[str, dict[str, str]]:
     return out
 
 
-def space_label(z: dict) -> str:
-    """The workspace kitty labelled this session with (workspaces.py, zcore.label), or ''."""
-    value = z.get("space", "")
+def space_label(z: dict, key: str = "space") -> str:
+    """The workspace (or with key near, the neighbour session) kitty labelled this session with
+    (workspaces.py _label, zcore.label), or ''."""
+    value = z.get(key, "")
     try:
         return bytes.fromhex(value).decode()
     except ValueError:
@@ -136,34 +137,57 @@ def route(
     files: set,
     holder: str,
     origin: str,
-) -> tuple[str, str]:
-    """Where cmd+alt+g reattaches the detached session holder: (state, workspace). The workspace is
-    the one kitty labelled the session with (a closed pane is in no file), else the newest saved
-    file holding it. state: here (open in the OS window of the picker's pane origin) | other (open
-    in another) | closed (only its file is left) | none (no workspace known) | plain (origin has no
-    zmx session: a kitty whose shell is not zshell, cmd+alt+enter's)."""
-    held, mine, open_in = "", None, {}
+) -> tuple[str, str, str, str]:
+    """Where cmd+alt+g reattaches the detached session holder: (state, workspace, place, window).
+    The workspace is the one kitty labelled the session with (a closed pane is in no file), else
+    the newest saved file holding it. state: here (open in the OS window of the picker's pane
+    origin) | other (open in another) | closed (only its file is left) | none (no workspace known)
+    | plain (origin has no zmx session: a kitty whose shell is not zshell, cmd+alt+enter's).
+    place, for an open workspace, from the slot and near labels: split (next to window, the pane
+    it shared a tab with) | before (window's tab, the one at its old index) | '' (its last tab)."""
+    held, mine, open_in, tabs = "", None, {}, {}
     for o in kitty:
         for t in o["tabs"]:
+            panes = [w for w in t["windows"] if w["user_vars"].get("role") != "sidebar"]
             for w in t["windows"]:
                 if w.get("session_name"):
                     open_in.setdefault(w["session_name"], set()).add(o.get("id"))
                 if str(w.get("id")) == origin:
                     mine, held = o.get("id"), w["user_vars"].get("holder", "")
+            name = next((w["session_name"] for w in panes if w.get("session_name")), "")
+            if name:
+                tabs.setdefault(name, []).append(panes)
     if not held:
-        return "plain", ""
+        return "plain", "", "", ""
     space = (
         space_label(sessions.get(holder, {}))
         or where.get(holder, ("",))[0][: -len(".kitty-session")]
     )
     # zws's rule for names; it also keeps the name safe in a kitty match expression
     if not re.fullmatch(r"[a-zA-Z0-9._-]+", space) or space in (".", ".."):
-        return "none", ""
-    if space in open_in:
-        return ("here" if mine in open_in[space] else "other"), space
-    if space + ".kitty-session" in files:
-        return "closed", space
-    return "none", ""
+        return "none", "", "", ""
+    if space not in open_in:
+        if space + ".kitty-session" in files:
+            return "closed", space, "", ""
+        return "none", "", "", ""
+    state = "here" if mine in open_in[space] else "other"
+    z = sessions.get(holder, {})
+    near, slot = space_label(z, "near"), z.get("slot", "")
+    ws_tabs = tabs.get(space, [])
+    window = next(
+        (
+            w["id"]
+            for panes in ws_tabs
+            for w in panes
+            if near and w["user_vars"].get("holder") == near
+        ),
+        None,
+    )
+    if window is not None:
+        return state, space, "split", str(window)
+    if slot.isdigit() and int(slot) < len(ws_tabs) and ws_tabs[int(slot)]:
+        return state, space, "before", str(ws_tabs[int(slot)][0]["id"])
+    return state, space, "", ""
 
 
 def live_cwds(pids: list[str]) -> dict[str, str]:

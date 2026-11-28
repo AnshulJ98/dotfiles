@@ -26,11 +26,20 @@ class Window:
         self.user_vars: dict[str, str] = {}
 
 
+class Tab(list):
+    """A kitty tab: its windows, and the workspace it was made in."""
+
+    created_in_session_name = ""
+
+
 class Boss:
     """Stands in for kitty: save_as_session writes the file, as kitty does."""
 
     def __init__(self, windows: list[Window], active: Window, saved: str):
         self.all_windows = windows
+        self.all_tabs = [
+            Tab([w]) for w in windows
+        ]  # a tab per window unless a test sets them
         self.active_window = active
         self.saved = saved
         self.calls: list[tuple[str, ...]] = []
@@ -426,7 +435,7 @@ class SavingTests(unittest.TestCase):
 
             def labels():
                 found = [
-                    tuple(c[-3:-1])
+                    tuple(c[c.index("set") + 1 :])
                     for c in boss.calls
                     if c[:2] == ("launch", "--type=background")
                 ]
@@ -435,13 +444,60 @@ class SavingTests(unittest.TestCase):
 
             module._save()
             self.assertEqual(
-                labels(), [("a-1", "space=6d79207370616365"), ("b-1", "space=62")]
+                labels(),
+                [
+                    ("a-1", "space=6d79207370616365", "slot=0", "near="),
+                    ("b-1", "space=62", "slot=0", "near="),
+                ],
             )
             module._save()
             self.assertEqual(labels(), [])
             a.created_in_session_name = "b"
             module._save()  # a pane moved to another workspace is labelled again
-            self.assertEqual(labels(), [("a-1", "space=62")])
+            self.assertEqual(
+                labels(),
+                [
+                    ("a-1", "space=62", "slot=0", "near="),
+                    ("b-1", "space=62", "slot=1", "near="),  # b's second tab now
+                ],
+            )
+
+    def test_labels_name_another_pane_of_the_tab_to_reattach_next_to(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a, b, dock = Window("w", 1), Window("w", 1), Window("w", 1)
+            a.user_vars["holder"], b.user_vars["holder"] = "a-1", "b-1"
+            dock.user_vars.update(role="sidebar", holder="d-1")
+            boss = Boss([a, b, dock], active=a, saved="launch\n")
+            boss.all_tabs = [Tab([dock, a, b])]
+            module = load(directory, boss)
+            module._label(boss)
+            self.assertEqual(
+                [c[c.index("set") + 1 :] for c in boss.calls],
+                [
+                    ("a-1", "space=77", "slot=0", "near=" + b"b-1".hex()),
+                    ("b-1", "space=77", "slot=0", "near=" + b"a-1".hex()),
+                ],
+            )
+
+    def test_a_tab_moved_to_another_os_window_takes_its_panes_workspace(self):
+        # kitten @ detach-tab leaves the moved tab unnamed: the tab bar would show it in every
+        # workspace of that window and save_as_session would leave it out.
+        with tempfile.TemporaryDirectory() as directory:
+            moved, mixed, free, named = (
+                Tab([Window("dev", 1), Window("dev", 1)]),
+                Tab([Window("dev", 1), Window("", 1)]),
+                Tab([Window("", 1)]),
+                Tab([Window("dev", 1)]),
+            )
+            named.created_in_session_name = "main"
+            boss = Boss([], None, "")
+            boss.all_tabs = [moved, mixed, free, named]
+            module = load(directory, boss)
+            module.on_tab_bar_dirty(boss, None, {})
+            self.assertEqual(
+                [t.created_in_session_name for t in boss.all_tabs],
+                ["dev", "", "", "main"],
+            )
 
     def test_host_label_uses_zhost_and_keeps_retry_and_bookkeeping(self):
         from unittest.mock import patch
@@ -458,15 +514,17 @@ class SavingTests(unittest.TestCase):
             (call,) = boss.calls
             self.assertIn("zlabel=retry", call[5])
             self.assertEqual(
-                call[-7:],
+                call[7:],
                 (
+                    "5",
                     str(KITTY_DIR / "bin/zhost"),
                     "box",
                     "zmx",
                     "set",
                     "a-1",
                     "space=6d79207370616365",
-                    "5",
+                    "slot=0",
+                    "near=",
                 ),
             )
             module._label(boss)
@@ -478,7 +536,7 @@ class SavingTests(unittest.TestCase):
             kitten.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
             kitten.chmod(0o700)
             result = subprocess.run(
-                ["sh", "-c", call[5], "sh", str(fake), *call[-6:]],
+                ["sh", "-c", call[5], "sh", "5", str(fake), *call[9:]],
                 env=dict(os.environ, PATH=directory + ":/usr/bin:/bin"),
                 capture_output=True,
                 text=True,
@@ -508,7 +566,7 @@ class SavingTests(unittest.TestCase):
             self.assertIn(
                 "--allow-remote-control", first
             )  # a refusal comes back as zlabel=retry
-            self.assertEqual(first[-1], "5")
+            self.assertEqual(first[7], "5")
             for _ in range(3):
                 module.on_set_user_var(boss, a, {"key": "zlabel", "value": "retry"})
                 self.assertIn(
