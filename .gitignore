@@ -64,8 +64,6 @@ agent-eval/**/*.jsonl
 # Eval results carry local paths, host names and session ids; they stay local (history scrubbed 11-28)
 agent-eval/long/results/
 agent-eval/where/results/
-# Raycast build source maps, ~5 MB each (history scrubbed 11-28)
-archive/legacy-mac/**/*.js.map
 
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/

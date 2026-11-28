@@ -20,7 +20,6 @@ config/pi/         → ~/.pi/agent/*                       pi coding agent (see 
 claude/            → ~/.claude/*                         Claude Code settings, agents, skills
 agents/skills/     → ~/.agents/skills                    skills shared across harnesses
 vscode-insiders/   → ~/Library/.../Code*/User            settings, keybindings, snippets, custom CSS
-archive/           (no symlinks)                         retired configs, kept for reference
 Brewfile           full machine manifest for `brew bundle`
 install.sh         idempotent bootstrap
 githooks/          pre-commit: verifies generated AGENTS files match fragments
