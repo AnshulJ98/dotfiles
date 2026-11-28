@@ -66,6 +66,7 @@ class ThemeTests(unittest.TestCase):
             "brew",
             "git",
             "ya",
+            "uv",
         ):
             file = self.bin / command
             file.write_text(
@@ -73,6 +74,13 @@ class ThemeTests(unittest.TestCase):
                 'if [ "$(basename "$0")" = "$FAIL_APP" ]; then exit 1; fi\n'
             )
             file.chmod(0o755)
+        # install.sh's pip step is a network install, faked like brew; other python3 calls stay real.
+        python = self.bin / "python3"
+        python.write_text(
+            '#!/bin/sh\nif [ "$1 $2" = "-m pip" ]; then echo "python3 $*" >> "$APP_LOG"; exit 0; fi\n'
+            f'exec {shutil.which("python3")} "$@"\n'
+        )
+        python.chmod(0o755)
         self.env = dict(
             os.environ,
             HOME=str(self.home),
