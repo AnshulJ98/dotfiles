@@ -1,7 +1,7 @@
 {
   "id": "booking-cancel-ids",
   "role": "worker",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "703b89e1df0a43be1cf15354786aed113033ec1e",
   "test": "cd booking && npm test",
   "allowed": [
@@ -9,10 +9,6 @@
     "booking/src/booking.ts",
     "booking/src/http.ts"
   ],
-  "hidden": [
-    "booking/src/booking.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ]
+  "hidden": ["booking/src/booking.test.ts"],
+  "link": ["node_modules"]
 }

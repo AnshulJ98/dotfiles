@@ -1,14 +1,10 @@
 {
   "id": "plan-malformed-json",
   "role": "plan",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "5b48a1efa98e9ac483bb2da04c440926b5bafd90",
   "test": "cd booking && npm test",
-  "hidden": [
-    "booking/src/booking.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ],
+  "hidden": ["booking/src/booking.test.ts"],
+  "link": ["node_modules"],
   "decisions": []
 }

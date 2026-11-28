@@ -1,15 +1,11 @@
 {
   "id": "plan-free-slots",
   "role": "plan",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "750b739ece6fab2dab975d3106578cbdb1c53dda",
   "test": "cd booking && npm test",
-  "hidden": [
-    "booking/src/booking.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ],
+  "hidden": ["booking/src/booking.test.ts"],
+  "link": ["node_modules"],
   "decisions": [
     {
       "id": "min-zero",

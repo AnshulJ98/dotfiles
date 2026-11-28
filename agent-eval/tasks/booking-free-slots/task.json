@@ -1,17 +1,10 @@
 {
   "id": "booking-free-slots",
   "role": "worker",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "750b739ece6fab2dab975d3106578cbdb1c53dda",
   "test": "cd booking && npm test",
-  "allowed": [
-    "booking/src/booking.test.ts",
-    "booking/src/booking.ts"
-  ],
-  "hidden": [
-    "booking/src/booking.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ]
+  "allowed": ["booking/src/booking.test.ts", "booking/src/booking.ts"],
+  "hidden": ["booking/src/booking.test.ts"],
+  "link": ["node_modules"]
 }

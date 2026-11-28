@@ -202,10 +202,10 @@ check "map skill tests pass" "node --test '$DOT'/../../agents/skills/map/tests/*
 # node --test strips types without checking them, so a wrong tool-result shape or a
 # renamed pi export only fails at runtime, inside pi. The tsconfig is built here:
 # the pi release path carries its version, and the file list is every .ts in the
-# config. tsc comes from TSC or ~/Dev/pi-lab (not installed everywhere): a missing
+# config. tsc comes from TSC or ~/Dev/archive/pi-lab (not installed everywhere): a missing
 # tsc is reported, not failed, so the rest of the signal stays usable.
 echo "[types]"
-TSC="${TSC:-$HOME/Dev/pi-lab/node_modules/typescript/bin/tsc}"
+TSC="${TSC:-$HOME/Dev/archive/pi-lab/node_modules/typescript/bin/tsc}"
 if [ -x "$TSC" ] && [ -d "$PI_PKG" ]; then
   NM="$(cd "$PI_PKG/../.." && pwd)"
   TSCONFIG="$(mktemp "${TMPDIR:-/tmp}/pi-verify-tsconfig.XXXXXX")"

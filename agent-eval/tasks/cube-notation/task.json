@@ -1,7 +1,7 @@
 {
   "id": "cube-notation",
   "role": "worker",
-  "repo": "~/Dev/sim/cube",
+  "repo": "~/Dev/archive/sim/cube",
   "fix": "f486a3c461b9d09b2fac671936187c5b468bb6aa",
   "test": "npm run check",
   "allowed": [
@@ -16,7 +16,5 @@
     "src/notation.test.ts",
     "src/scramble.test.ts"
   ],
-  "link": [
-    "node_modules"
-  ]
+  "link": ["node_modules"]
 }

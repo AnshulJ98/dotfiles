@@ -1,17 +1,10 @@
 {
   "id": "cube-cli",
   "role": "worker",
-  "repo": "~/Dev/sim/cube",
+  "repo": "~/Dev/archive/sim/cube",
   "fix": "293ee7718e2ced78a9fabdb451b0475bc7936620",
   "test": "npm run check",
-  "allowed": [
-    "src/cli.test.ts",
-    "src/cli.ts"
-  ],
-  "hidden": [
-    "src/cli.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ]
+  "allowed": ["src/cli.test.ts", "src/cli.ts"],
+  "hidden": ["src/cli.test.ts"],
+  "link": ["node_modules"]
 }

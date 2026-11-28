@@ -1,17 +1,10 @@
 {
   "id": "differ-format",
   "role": "worker",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "9c2c7172751ba3399d17ea8afc94ebf693888711",
   "test": "cd differ && npm test",
-  "allowed": [
-    "differ/src/format.test.ts",
-    "differ/src/format.ts"
-  ],
-  "hidden": [
-    "differ/src/format.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ]
+  "allowed": ["differ/src/format.test.ts", "differ/src/format.ts"],
+  "hidden": ["differ/src/format.test.ts"],
+  "link": ["node_modules"]
 }

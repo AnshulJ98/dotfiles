@@ -1,14 +1,10 @@
 {
   "id": "plan-delete-404",
   "role": "plan",
-  "repo": "~/Dev/pi-lab",
+  "repo": "~/Dev/archive/pi-lab",
   "fix": "807f50d19a79a3d9492e66bb6bda7c985d427fbb",
   "test": "cd booking && npm test",
-  "hidden": [
-    "booking/src/booking.test.ts"
-  ],
-  "link": [
-    "node_modules"
-  ],
+  "hidden": ["booking/src/booking.test.ts"],
+  "link": ["node_modules"],
   "decisions": []
 }
