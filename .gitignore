@@ -59,6 +59,8 @@ agent-eval/long/.pkgs/
 agent-eval/long/results/*/grade/**/judge/home/
 # r3-tail's runaway arm left 564M of snapshots; snapshots are reproducible from session.jsonl, not kept from r3 on
 agent-eval/long/results/r[3-9]*/*/snapshots/
+# Session transcripts and run logs stay local: the repo is public (history scrubbed 11-28)
+agent-eval/**/*.jsonl
 
 # Claude Code account-synced skills (runtime cache; ~/.claude/skills links here)
 claude/skills/synced/
