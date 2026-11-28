@@ -195,7 +195,9 @@ done
 
 # --- the node tests; run here in review, never by workers ---
 echo "[tests]"
-check "node tests pass" "node --test '$DOT'/tests/*.test.ts"
+# One node --test so the suites run in parallel: about the slowest file's time, not the sum.
+ROOT="$DOT/../.."
+check "node tests pass (pi, git, nvim, agent-eval)" "node --test '$DOT'/tests/*.test.ts '$ROOT'/config/git/tests/*.test.ts '$ROOT'/config/nvim/tests/*.test.ts '$ROOT'/agent-eval/tests/*.test.ts '$ROOT'/agent-eval/long/tests/*.test.ts '$ROOT'/agent-eval/where/tests/*.test.ts"
 check "map skill tests pass" "node --test '$DOT'/../../agents/skills/map/tests/*.test.mjs"
 
 # --- strict type check of every extension, lib and test against the running pi ---

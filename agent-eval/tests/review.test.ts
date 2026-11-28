@@ -3,20 +3,9 @@
 // trial.sh / validate.sh driven by stub pi binaries: no model, no tokens.
 import "../../config/pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { after, test } from "node:test";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
 import { gradeReview, parseJudged } from "../lib/record.ts";
 import {
   combine,
@@ -29,114 +18,41 @@ import {
   passes,
   render,
 } from "../lib/review.ts";
+import {
+  EVAL_DIR,
+  scratch,
+  shimHome,
+  run,
+  write,
+  git,
+  finding,
+  FINDINGS,
+  VERDICTS,
+  ITEMS,
+  SHIM,
+  DEFECTS,
+  FACTS,
+  PROMPT,
+  makeTask,
+  type Role,
+  YES,
+  FOUND_ONE,
+  id,
+  record,
+  judge,
+  near,
+  flag,
+  factsTask,
+  ANSWER,
+  trial,
+  workspace,
+} from "./review-harness.ts";
 
-const EVAL_DIR = resolve(import.meta.dirname, "..");
-const scratch = realpathSync(mkdtempSync(join(tmpdir(), "review-test-")));
-const realHome = join(scratch, "real-home");
-const shimHome = join(scratch, "shim-home");
-const keep: string[] = [];
-after(() =>
-  [scratch, ...keep].forEach((d) =>
-    rmSync(d, { recursive: true, force: true }),
-  ),
-);
-
-// Not the outer node --test's environment (a nested node --test would think it is a child). PI_SCOUT_REAL_GIT
-// stays because a scout's PATH carries a git guard that refuses to run without it.
-const env = (extra: Record<string, string> = {}) => ({
-  PATH: process.env.PATH ?? "",
-  ...(process.env.PI_SCOUT_REAL_GIT
-    ? { PI_SCOUT_REAL_GIT: process.env.PI_SCOUT_REAL_GIT }
-    : {}),
-  HOME: realHome,
-  TERM: "xterm",
-  LANG: "C",
-  ...extra,
-});
-const run = (
-  script: string,
-  args: string[],
-  extra: Record<string, string> = {},
-) =>
-  spawnSync(join(EVAL_DIR, script), args, {
-    encoding: "utf8",
-    env: env(extra),
-  });
-
-function write(path: string, content: string, mode?: number): void {
-  mkdirSync(resolve(path, ".."), { recursive: true });
-  writeFileSync(path, content);
-  if (mode) chmodSync(path, mode);
-}
-
-function git(cwd: string, ...args: string[]): string {
-  const r = spawnSync(
-    "git",
-    [
-      "-c",
-      "user.name=t",
-      "-c",
-      "user.email=t@example.invalid",
-      "-c",
-      "commit.gpgsign=false",
-      ...args,
-    ],
-    { cwd, encoding: "utf8", env: env() },
-  );
-  assert.equal(r.status, 0, r.stderr);
-  return r.stdout.trim();
-}
-
-// ---- pure helpers ----
-
-const FENCE = "```";
-const finding = { file: "a.ts", line: 3, severity: "high", claim: "x" };
-const FINDINGS: [string, string, unknown][] = [
-  ["a bare array", JSON.stringify([finding]), [finding]],
-  [
-    "a code fence around it",
-    FENCE + "json\n" + JSON.stringify([finding]) + "\n" + FENCE,
-    [finding],
-  ],
-  ["an empty array is a review with no findings", "[]", []],
-  [
-    "severity lower-cased or medium, missing file, non-numeric or null line",
-    '[{"file":"a","line":null,"severity":"HIGH","claim":"c"},{"line":"x","severity":"urgent","claim":"c"}]',
-    [
-      { file: "a", line: null, severity: "high", claim: "c" },
-      { file: "", line: null, severity: "medium", claim: "c" },
-    ],
-  ],
-  ["no claim", '[{"file":"a","line":1,"severity":"low"}]', undefined],
-  ["an item that is not an object", '["c"]', undefined],
-  [
-    "a stray bracket after the array",
-    JSON.stringify([finding]) + " Done [really].",
-    undefined,
-  ],
-  ["no array, broken JSON, an object", "no findings", undefined],
-  ["", "[{", undefined],
-  ["", '{"claim":"c"}', undefined],
-];
 for (const [name, text, want] of FINDINGS)
   test("parseFindings: " + name, () =>
     assert.deepEqual(parseFindings(text), want),
   );
 
-const VERDICTS: [string, string, number, boolean[] | undefined][] = [
-  ["case and spaces", '["yes"," NO ","Yes"]', 3, [true, false, true]],
-  [
-    "a fence with prose before it",
-    "Answer:\n" + FENCE + '\n["no","no"]\n' + FENCE,
-    2,
-    [false, false],
-  ],
-  ["too short", '["yes"]', 2, undefined],
-  ["too long", '["yes","no","no"]', 2, undefined],
-  ["booleans are not answers", "[true,false]", 2, undefined],
-  ["another word", '["yes","maybe"]', 2, undefined],
-  ["no array", "yes, no", 2, undefined],
-];
 for (const [name, text, n, want] of VERDICTS)
   test("parseVerdicts: " + name, () =>
     assert.deepEqual(parseVerdicts(text, n), want),
@@ -234,42 +150,6 @@ test("parseJudged reads judge.sh's line, anything else is infra; a review passes
   );
 });
 
-const ITEMS: [string, unknown, unknown][] = [
-  [
-    "text and id only, minor false",
-    [{ id: "a", text: "t" }],
-    [{ id: "a", text: "t", minor: false }],
-  ],
-  [
-    "minor true only when the JSON says true",
-    [
-      { id: "a", text: "t", minor: true },
-      { id: "b", text: "t", minor: "true" },
-      { id: "c", text: "t", minor: 1 },
-      { id: "d", text: "t", minor: false },
-    ],
-    [
-      { id: "a", text: "t", minor: true },
-      { id: "b", text: "t", minor: false },
-      { id: "c", text: "t", minor: false },
-      { id: "d", text: "t", minor: false },
-    ],
-  ],
-  [
-    "extra fields such as hit are dropped",
-    [{ id: "a", text: "t", hit: "SECRET" }],
-    [{ id: "a", text: "t", minor: false }],
-  ],
-  ["an empty list", [], []],
-  ["not a list", { id: "a", text: "t" }, undefined],
-  ["an item that is not an object", ["t"], undefined],
-  ["null item", [null], undefined],
-  ["missing id", [{ text: "t" }], undefined],
-  ["empty id", [{ id: "", text: "t" }], undefined],
-  ["blank text", [{ id: "a", text: "  " }], undefined],
-  ["numeric id", [{ id: 1, text: "t" }], undefined],
-  ["numeric text", [{ id: "a", text: 2 }], undefined],
-];
 for (const [name, raw, want] of ITEMS) {
   test("normalizeItems: " + name, () => {
     if (want === undefined) assert.throws(() => normalizeItems(raw), Error);
@@ -317,206 +197,6 @@ test("metIds lists the ids both judges said yes to, in item order; passes ignore
 
 // ---- stubs and fixtures ----
 // A role with no reply configured fails (exit 1, no output, no session).
-
-write(join(realHome, ".pi/agent/auth.json"), "{}");
-write(join(shimHome, ".pi/agent/auth.json"), "{}");
-const SHIM = join(
-  shimHome,
-  ".pi/agent/npm/node_modules/@gotgenes/pi-anthropic-auth/src/index.ts",
-);
-write(SHIM, "export default () => {};\n");
-
-const source = join(scratch, "source-repo");
-write(join(source, "booking/src/a.ts"), "export const a = 1;\n");
-write(join(source, "booking/src/b.ts"), "export const b = 2;\n");
-write(join(source, "README.md"), "tickets\n");
-write(join(source, "log.md"), "log\n");
-git(source, "init", "-q");
-git(source, "add", "-A");
-git(source, "commit", "-q", "-m", "one");
-const revSha = git(source, "rev-parse", "HEAD");
-write(join(source, "booking/src/late.ts"), "export const late = 3;\n");
-git(source, "add", "-A");
-git(source, "commit", "-q", "-m", "two");
-
-const DEFECTS = [1, 2, 3].map((k) => ({
-  id: "d" + k,
-  text: "defect text " + k,
-  hit: "HITMARK-" + k + " finding that states defect " + k,
-}));
-const DECOYS = ["decoy claim one", "decoy claim two"];
-const FACTS = [1, 2, 3].map((k) => ({
-  id: "f" + k,
-  text: "fact text " + k,
-  hit: "HITMARK-" + k + " answer sentence stating fact " + k,
-}));
-const PROMPT = "Review booking/src/a.ts and booking/src/b.ts\n";
-function makeTask(
-  id: string,
-  over: Record<string, unknown> = {},
-  prompt = PROMPT,
-): string {
-  const dir = join(scratch, "tasks", id);
-  write(
-    join(dir, "task.json"),
-    JSON.stringify({
-      id,
-      role: "review",
-      repo: source,
-      rev: revSha,
-      exclude: ["README.md", "log.md"],
-      defects: DEFECTS,
-      decoys: DECOYS,
-      ...over,
-    }),
-  );
-  write(join(dir, "prompt.md"), prompt);
-  return dir;
-}
-
-type Role = "reviewer" | "extract" | "a" | "b";
-/** What a stub answers for a role: the text to print, YES (all yes), or SMART (yes for a defect whose hit marker is in the prompt). */
-const YES = "@yes";
-const SMART = "@smart";
-const ROLES: Role[] = ["extract", "a", "b", "reviewer"];
-const MODEL_GLOB: Record<Role, string> = {
-  extract: "*haiku*",
-  a: "*opus*",
-  b: "*gpt*",
-  reviewer: "*",
-};
-const COST: Record<Role, number> = {
-  reviewer: 0.5,
-  extract: 0.01,
-  a: 0.1,
-  b: 0.2,
-};
-const FOUND_ONE = JSON.stringify([
-  { file: "booking/src/a.ts", line: 1, severity: "high", claim: "claim one" },
-]);
-
-let counter = 0;
-/** A stub pi, one script per behaviour (it runs under env -i, so everything is baked in). Each role's arguments go to <stub>.<role>. */
-function makePi(replies: Partial<Record<Role, string>>): {
-  path: string;
-  seen: (role: Role) => string[] | undefined;
-} {
-  const path = join(scratch, "pi-" + counter++);
-  const arms = ROLES.map((role) => {
-    const reply = replies[role];
-    const session = JSON.stringify({
-      type: "message",
-      message: {
-        role: "assistant",
-        usage: {
-          input: 1,
-          output: 1,
-          cacheRead: 0,
-          cacheWrite: 0,
-          cost: { total: COST[role] },
-        },
-        content: [],
-      },
-    });
-    let body: string;
-    if (reply === undefined) body = "echo no reply configured >&2; exit 1";
-    else if (reply === YES) body = 'echo \'["yes","yes","yes"]\'';
-    else if (reply === SMART)
-      body =
-        'out=; sep=; for k in 1 2 3; do case "$prompt" in *HITMARK-$k*) v=yes ;; *) v=no ;; esac; out="$out$sep$(printf \'"%s"\' "$v")"; sep=,; done; echo "[$out]"';
-    else {
-      const file = path + "." + role + ".reply";
-      write(
-        file,
-        role === "reviewer"
-          ? JSON.stringify({
-              type: "message_end",
-              message: {
-                role: "assistant",
-                content: [{ type: "text", text: reply }],
-              },
-            }) + "\n"
-          : reply,
-      );
-      body = "cat '" + file + "'";
-    }
-    const log =
-      reply === undefined
-        ? ""
-        : '; mkdir -p "$sdir"; echo \'' + session + '\' > "$sdir/s.jsonl"';
-    return (
-      "  " +
-      MODEL_GLOB[role] +
-      ") role=" +
-      role +
-      "\n    " +
-      record(path, role) +
-      log +
-      "\n    " +
-      body +
-      " ;;"
-    );
-  });
-  write(
-    path,
-    [
-      "#!/usr/bin/env bash",
-      "model=; sdir=; prev=; prompt=",
-      'for a in "$@"; do case "$prev" in --model) model=$a ;; --session-dir) sdir=$a ;; esac; prev=$a; prompt=$a; done',
-      'case "$model" in',
-      ...arms,
-      "esac",
-      "",
-    ].join("\n"),
-    0o755,
-  );
-  return {
-    path,
-    seen: (role) =>
-      existsSync(path + "." + role)
-        ? readFileSync(path + "." + role, "utf8")
-            .split("\0")
-            .slice(0, -1)
-        : undefined,
-  };
-}
-const record = (path: string, role: Role): string =>
-  "{ printf 'HOME=%s\\0' \"$HOME\"; printf '%s\\0' \"$@\"; } > '" +
-  path +
-  "." +
-  role +
-  "'";
-
-function judge(
-  replies: Partial<Record<Role, string>>,
-  opts: {
-    review?: string;
-    args?: string[];
-    home?: string;
-    task?: string;
-    files?: Record<string, string>;
-  } = {},
-) {
-  const pi = makePi(replies);
-  const trial = join(scratch, "trial-" + counter++);
-  mkdirSync(trial, { recursive: true });
-  for (const [name, content] of Object.entries(opts.files ?? {}))
-    write(join(trial, name), content);
-  if (!("review" in opts) || opts.review !== undefined)
-    write(join(trial, "review.txt"), opts.review ?? "The review text.\n");
-  const task = opts.task ?? makeTask("jt-" + counter);
-  const r = run("judge.sh", [trial, task, ...(opts.args ?? [])], {
-    EVAL_JUDGE_PI: pi.path,
-    EVAL_REAL_HOME: opts.home ?? realHome,
-  });
-  const line = r.stdout.trim().split("\n").pop() ?? "";
-  return { r, pi, trial, out: line === "" ? undefined : JSON.parse(line) };
-}
-const near = (a: number, b: number) =>
-  assert.ok(Math.abs(a - b) < 1e-9, a + " is not " + b);
-const flag = (args: string[], name: string) => args[args.indexOf(name) + 1];
-
-// ---- judge.sh ----
 
 test("judge.sh: both judges yes on everything passes; bare flags, blinded prompts, costs, own session dirs", () => {
   const { r, pi, trial, out } = judge({ extract: FOUND_ONE, a: YES, b: YES });
@@ -649,7 +329,7 @@ test("judge.sh: an empty or missing review is infra without any model call", () 
 });
 
 test("judge.sh --findings skips the extraction; invalid findings are infra; usage errors exit 2", () => {
-  const findings = join(scratch, "findings-" + counter++ + ".json");
+  const findings = join(scratch, "findings-" + id() + ".json");
   write(findings, FOUND_ONE);
   const ok = judge(
     { a: YES, b: YES },
@@ -693,7 +373,7 @@ test("judge.sh --extract-only: counts findings and high severity, extraction fai
     const { r, pi, trial, out } = judge(
       { extract: reply },
       {
-        task: makeTask("extract-" + counter++, { defects: undefined }),
+        task: makeTask("extract-" + id(), { defects: undefined }),
         args: ["--extract-only", "--subject", subject],
       },
     );
@@ -729,10 +409,6 @@ test("judge.sh --extract-only: counts findings and high severity, extraction fai
 });
 
 // ---- judge.sh kinds ----
-
-const factsTask = (id: string, over: Record<string, unknown> = {}) =>
-  makeTask(id, { defects: undefined, facts: FACTS, ...over });
-const ANSWER = "The answer says fact one and fact two.\n";
 
 test("judge.sh --kind facts: the digest is the subject, the task's facts are the items, no extractor call", () => {
   const { r, pi, trial, out } = judge(
@@ -774,9 +450,9 @@ test("judge.sh --kind facts: the digest is the subject, the task's facts are the
 });
 
 test("judge.sh --kind rubric: --subject and --items are required; the items come from the file, the context is in the prompt", () => {
-  const subject = join(scratch, "subject-" + counter++ + ".md");
-  const itemsFile = join(scratch, "items-" + counter++ + ".json");
-  const context = join(scratch, "context-" + counter++ + ".md");
+  const subject = join(scratch, "subject-" + id() + ".md");
+  const itemsFile = join(scratch, "items-" + id() + ".json");
+  const context = join(scratch, "context-" + id() + ".md");
   write(subject, "PLAN BODY\n");
   write(
     itemsFile,
@@ -855,14 +531,14 @@ test("judge.sh --kind rubric: --subject and --items are required; the items come
     ["--kind", "rubric", "--subject", subject],
     ["--kind", "rubric", "--items", itemsFile],
   ]) {
-    const t = join(scratch, "trial-" + counter++);
+    const t = join(scratch, "trial-" + id());
     mkdirSync(t);
     assert.equal(run("judge.sh", [t, task, ...args]).status, 2, args.join(" "));
   }
 });
 
 test("judge.sh --items replaces the task's list for any kind; met follows item order for review too", () => {
-  const itemsFile = join(scratch, "items-" + counter++ + ".json");
+  const itemsFile = join(scratch, "items-" + id() + ".json");
   write(
     itemsFile,
     JSON.stringify([
@@ -988,7 +664,7 @@ test("judge.sh kinds: an empty or missing subject, a missing or empty or bad ite
       name,
     );
   }
-  const t = join(scratch, "trial-" + counter++);
+  const t = join(scratch, "trial-" + id());
   mkdirSync(t);
   for (const args of [
     ["--kind", "nope"],
@@ -1021,24 +697,6 @@ test("the facts and rubric prompts hold the subject and the numbered items and n
 });
 
 // ---- trial.sh, review branch ----
-
-function trial(
-  replies: Partial<Record<Role, string>>,
-  task = makeTask("rt-" + counter),
-) {
-  const pi = makePi(replies);
-  const out = join(scratch, "out-" + counter++ + ".jsonl");
-  const r = run("trial.sh", [task, "prov/model-x", "high", "2", out], {
-    EVAL_REVIEW_PI: pi.path,
-    EVAL_JUDGE_PI: pi.path,
-    EVAL_REAL_HOME: realHome,
-  });
-  const rec = existsSync(out)
-    ? JSON.parse(readFileSync(out, "utf8").trim().split("\n").pop()!)
-    : undefined;
-  if (rec) keep.push(rec.dir);
-  return { r, rec, pi, out };
-}
 
 test("trial.sh review: a review that finds everything passes; the record, the workspace at rev, the reviewer's flags", () => {
   const { r, rec, pi, out } = trial({
@@ -1146,313 +804,3 @@ test("trial.sh: a review task without rev is still unsupported", () => {
 });
 
 // ---- validate.sh, review tasks ----
-
-test("validate.sh: a review task is VALID when the workspace builds, the prompt's files exist and defects are complete", () => {
-  const good = run("validate.sh", [makeTask("vr-good")]);
-  assert.equal(good.status, 0, good.stdout + good.stderr);
-  assert.equal(good.stdout.trim(), "VALID vr-good");
-  const bad: [string, Record<string, unknown>, string | undefined, RegExp][] = [
-    [
-      "a file the prompt names is missing",
-      {},
-      "Review booking/src/missing.ts\n",
-      /missing from the workspace: booking\/src\/missing.ts/,
-    ],
-    [
-      "a file the prompt names was excluded",
-      {},
-      "Review README.md\n",
-      /missing from the workspace: README.md/,
-    ],
-    ["the prompt names no file", {}, "Review the code\n", /names no file/],
-    ["no defects", { defects: [] }, undefined, /non-empty list/],
-    [
-      "a defect without a hit",
-      { defects: [{ id: "d1", text: "t" }] },
-      undefined,
-      /non-empty list/,
-    ],
-    [
-      "duplicate ids",
-      { defects: [DEFECTS[0], DEFECTS[0]] },
-      undefined,
-      /not unique/,
-    ],
-    [
-      "a rev that does not exist",
-      { rev: "0".repeat(40) },
-      undefined,
-      /cannot build/,
-    ],
-    [
-      "an exclude path outside the workspace",
-      { exclude: ["../x"] },
-      undefined,
-      /cannot build/,
-    ],
-  ];
-  for (const [name, over, prompt, reason] of bad) {
-    const r = run("validate.sh", [makeTask("vr-bad", over, prompt)]);
-    assert.notEqual(r.status, 0, name);
-    assert.match(r.stdout, new RegExp("^INVALID vr-bad: .*"), name);
-    assert.match(r.stdout, reason, name);
-  }
-});
-
-// ---- injected review patches ----
-
-function patchedTask(id: string, over: Record<string, unknown> = {}): string {
-  const dir = makeTask(id, {
-    patches: ["a.patch", "b.patch"],
-    test: "test -f README.md && test -L deps && grep -q 'a = 1' booking/src/a.ts && grep -q 'b = 2' booking/src/b.ts",
-    link: ["deps"],
-    paths: ["booking"],
-    ...over,
-  });
-  for (const [file, from, to] of [
-    ["a", 1, 9],
-    ["b", 2, 8],
-  ]) {
-    write(
-      join(dir, file + ".patch"),
-      `diff --git a/booking/src/${file}.ts b/booking/src/${file}.ts
---- a/booking/src/${file}.ts
-+++ b/booking/src/${file}.ts
-@@ -1 +1 @@
--export const ${file} = ${from};
-+export const ${file} = ${to};
-`,
-    );
-  }
-  return dir;
-}
-
-function workspace(task: string, ws: string) {
-  return spawnSync(
-    "bash",
-    [
-      "-c",
-      'source "$1/lib/task.sh"; make_workspace "$2" "$3" base',
-      "_",
-      EVAL_DIR,
-      task,
-      ws,
-    ],
-    { encoding: "utf8", env: env() },
-  );
-}
-
-test("make_workspace: patches are ordered, applied after excludes and hidden in a clean single commit", () => {
-  const task = patchedTask("wp", {
-    paths: undefined,
-    patches: ["a.patch", "next.patch"],
-  });
-  write(
-    join(task, "next.patch"),
-    readFileSync(join(task, "a.patch"), "utf8")
-      .replace("-export const a = 1;", "-export const a = 9;")
-      .replace("+export const a = 9;", "+export const a = 7;"),
-  );
-  const ws = join(scratch, "patched-ws");
-  const r = workspace(task, ws);
-  assert.equal(r.status, 0, r.stderr);
-  assert.equal(
-    readFileSync(join(ws, "booking/src/a.ts"), "utf8"),
-    "export const a = 7;\n",
-  );
-  assert.ok(!existsSync(join(ws, "README.md")));
-  assert.equal(git(ws, "status", "--porcelain"), "");
-  assert.equal(git(ws, "rev-list", "--count", "HEAD"), "1");
-  assert.deepEqual(git(ws, "ls-files").split("\n"), [
-    "booking/src/a.ts",
-    "booking/src/b.ts",
-  ]);
-});
-
-test("make_workspace: a failing or unsafe patch is non-zero and named", () => {
-  for (const patch of [
-    "missing.patch",
-    "../a.patch",
-    "/tmp/a.patch",
-    "bad.patch",
-  ]) {
-    const task = patchedTask("wp-bad", { patches: [patch] });
-    write(join(task, "bad.patch"), "not a patch\n");
-    const r = workspace(task, join(scratch, "bad-ws-" + counter++));
-    assert.notEqual(r.status, 0, patch);
-    assert.ok(r.stderr.includes(patch), r.stderr);
-  }
-  const task = patchedTask("wp-excluded", {
-    exclude: ["booking/src/a.ts"],
-    patches: ["a.patch"],
-  });
-  const r = workspace(task, join(scratch, "excluded-ws"));
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /a.patch/);
-});
-
-test("validate.sh: review patches each fail tests alone on a full tree, with links", () => {
-  const r = run("validate.sh", [patchedTask("vp-good")]);
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(r.stdout.trim(), "VALID vp-good");
-});
-
-test("validate.sh: rejects unproven review patches with the reason and patch name", () => {
-  const cases: [string, Record<string, unknown>, RegExp][] = [
-    ["passing", { test: "test -f README.md" }, /a.patch.*tests pass/],
-    [
-      "only-a",
-      { test: "test -f README.md && grep -q 'a = 1' booking/src/a.ts" },
-      /b.patch.*tests pass/,
-    ],
-    ["excluded", { exclude: ["booking/src/a.ts"] }, /cannot build.*a.patch/s],
-    ["baseline", { test: "exit 1" }, /tests fail.*without patches/],
-    ["missing-test", { test: undefined }, /patches.*test/],
-    ["apply", { patches: ["missing.patch"] }, /missing.patch.*apply/],
-    ["together", { patches: ["a.patch", "a.patch"] }, /a.patch.*apply/],
-    [
-      "timeout",
-      { test: "grep -q 'a = 1' booking/src/a.ts || sleep 10" },
-      /a.patch.*test.*124/,
-    ],
-  ];
-  for (const [id, over, reason] of cases) {
-    const r = run("validate.sh", [patchedTask("vp-" + id, over)], {
-      EVAL_TEST_TIMEOUT: "1",
-    });
-    assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /^INVALID vp-/);
-    assert.match(r.stdout, reason);
-  }
-});
-
-// ---- check-judges.sh ----
-
-test("check-judges.sh: judges that agree with the known answers exit 0, one line per defect", () => {
-  const pi = makePi({ a: SMART, b: SMART });
-  const r = run("check-judges.sh", [makeTask("cj-good")], {
-    EVAL_JUDGE_PI: pi.path,
-    EVAL_REAL_HOME: realHome,
-  });
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  const lines = r.stdout.trim().split("\n");
-  assert.equal(lines.length, 3);
-  lines.forEach((line, i) =>
-    assert.equal(
-      line,
-      "d" + (i + 1) + " hit: a=yes b=yes; decoys only: a=no b=no; ok",
-    ),
-  );
-  assert.equal(pi.seen("extract"), undefined);
-});
-
-test("check-judges.sh: a judge that always says yes, or one that cannot answer, exits 1 and names the defects it missed", () => {
-  const yes = run("check-judges.sh", [makeTask("cj-yes")], {
-    EVAL_JUDGE_PI: makePi({ a: SMART, b: YES }).path,
-    EVAL_REAL_HOME: realHome,
-  });
-  assert.equal(yes.status, 1, yes.stdout + yes.stderr);
-  assert.equal(
-    yes.stdout
-      .trim()
-      .split("\n")
-      .filter((l) => l.endsWith("; MISS")).length,
-    3,
-  );
-  assert.match(
-    yes.stdout,
-    /^d1 hit: a=yes b=yes; decoys only: a=no b=yes; MISS$/m,
-  );
-  const mute = run("check-judges.sh", [makeTask("cj-mute")], {
-    EVAL_JUDGE_PI: makePi({ a: SMART }).path,
-    EVAL_REAL_HOME: realHome,
-  });
-  assert.equal(mute.status, 1);
-  assert.match(
-    mute.stdout,
-    /^d1 hit: a=yes b=none; decoys only: a=no b=none; MISS$/m,
-  );
-  assert.equal(run("check-judges.sh", []).status, 2);
-  assert.equal(run("check-judges.sh", ["no-such-task"]).status, 2);
-});
-
-test("check-judges.sh: a facts task and a review task each get one ok line per item; a judge that says yes to everything exits 1", () => {
-  const env2 = (pi: string) => ({
-    EVAL_JUDGE_PI: pi,
-    EVAL_REAL_HOME: realHome,
-  });
-  const good = makePi({ a: SMART, b: SMART });
-  const factsPi = makePi({ a: SMART, b: SMART });
-  const facts = run(
-    "check-judges.sh",
-    [factsTask("cjf-good")],
-    env2(factsPi.path),
-  );
-  assert.equal(facts.status, 0, facts.stdout + facts.stderr);
-  const lines = facts.stdout.trim().split("\n");
-  assert.equal(lines.length, 3);
-  lines.forEach((line, i) =>
-    assert.equal(
-      line,
-      "f" + (i + 1) + " hit: a=yes b=yes; decoys only: a=no b=no; ok",
-    ),
-  );
-  const review = run(
-    "check-judges.sh",
-    [makeTask("cjr-good")],
-    env2(good.path),
-  );
-  assert.equal(review.status, 0, review.stdout + review.stderr);
-  assert.equal(
-    review.stdout
-      .trim()
-      .split("\n")
-      .filter((l) => l.endsWith("; ok")).length,
-    3,
-  );
-  // the facts hit run's subject is the hit text and the decoys, one per line; the decoys run's is the decoys alone
-  assert.match(
-    factsPi.seen("a")!.at(-1)!,
-    /<answer>\ndecoy claim one\ndecoy claim two\n<\/answer>/,
-  );
-  for (const task of [factsTask("cjf-yes"), makeTask("cjr-yes")]) {
-    const yes = run(
-      "check-judges.sh",
-      [task],
-      env2(makePi({ a: YES, b: YES }).path),
-    );
-    assert.equal(yes.status, 1, yes.stdout + yes.stderr);
-    assert.equal(
-      yes.stdout
-        .trim()
-        .split("\n")
-        .filter((l) => l.endsWith("; MISS")).length,
-      3,
-    );
-  }
-});
-
-test("check-judges.sh: decoys come from the task; fewer than two, or none, or a task with no items exits 2 with a message", () => {
-  for (const [name, over] of [
-    ["none", { decoys: undefined }],
-    ["one", { decoys: ["only"] }],
-    ["not strings", { decoys: ["a", 2] }],
-  ] as const) {
-    for (const make of [
-      (id: string) => makeTask(id, over),
-      (id: string) => factsTask(id, over),
-    ]) {
-      const r = run("check-judges.sh", [make("cjd-" + name + counter++)], {
-        EVAL_JUDGE_PI: makePi({ a: SMART, b: SMART }).path,
-        EVAL_REAL_HOME: realHome,
-      });
-      assert.equal(r.status, 2, name);
-      assert.match(r.stderr, /decoys/, name);
-    }
-  }
-  assert.equal(
-    run("check-judges.sh", [makeTask("cjd-items", { defects: undefined })])
-      .status,
-    2,
-  );
-});

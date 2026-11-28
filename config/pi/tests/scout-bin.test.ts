@@ -170,6 +170,25 @@ function runScout(
   });
 }
 
+/** Polls pred every 20 ms; true once it holds, false after ms. */
+async function until(pred: () => boolean, ms = 3000): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (!pred()) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return true;
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function report(scoutRoot: string): { verdict: string; reasons: string[] } {
   const run = readdirSync(scoutRoot).find((d) => /^\d+$/.test(d));
   assert.ok(run, "no run folder");
@@ -1087,11 +1106,16 @@ test("a worker that writes no verdict still gets verdict.json", async () => {
 
 test("a worker terminated mid-run (143) still gets verdict.json and a finished entry", async () => {
   const { env, scoutRoot } = sandbox();
+  const pidfile = join(scoutRoot, "..", "fake.pid");
   const run = await runScout(
     ["--spec", "-"],
-    { ...env, FAKE_PI: "sleep" },
+    { ...env, FAKE_PI: "sleep", FAKE_PIDFILE: pidfile },
     SPEC,
-    (pid) => setTimeout(() => process.kill(pid, "SIGTERM"), 1500),
+    // terminate once the worker's pi is running
+    (pid) =>
+      void until(() => existsSync(pidfile), 10_000).then(() =>
+        process.kill(pid, "SIGTERM"),
+      ),
   );
   assert.equal(run.code, 143);
   assert.match(report(scoutRoot).reasons[0], /pi exited 143/);
@@ -1110,13 +1134,7 @@ test("killing scout's process group (pi aborting its bash tool) kills the child 
     await new Promise((r) => setTimeout(r, 100));
   const fakePid = Number(readFileSync(pidfile, "utf8"));
   process.kill(-(child.pid ?? 0), "SIGKILL");
-  await new Promise((r) => setTimeout(r, 300));
-  let alive = true;
-  try {
-    process.kill(fakePid, 0);
-  } catch {
-    alive = false;
-  }
+  const alive = !(await until(() => !isAlive(fakePid)));
   if (alive) process.kill(fakePid, "SIGKILL");
   assert.equal(alive, false, "the child pi outlived scout");
 });
