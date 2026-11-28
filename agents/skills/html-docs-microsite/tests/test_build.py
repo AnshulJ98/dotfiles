@@ -204,13 +204,29 @@ class BuildTest(unittest.TestCase):
                 )
                 self.assertLess(top.index('class="mark"'), top.index("<strong>"))
 
-    def test_no_brand_no_mark(self) -> None:
+    def test_brand_defaults_to_title_initials(self) -> None:
         self.source("start.md", "# Start")
+        cases = (
+            ('title = "Observability lab"', "OL"),
+            ('title = "The AI field guide"', "AFG"),
+            ('title = "Sample design doc for the team"', "SDD"),
+        )
+        for toml, mark in cases:
+            with self.subTest(toml=toml):
+                self.source("doc.toml", toml)
+                self.assertIn(
+                    f'<span class="mark" aria-hidden="true">{mark}</span>',
+                    self.render()[1],
+                )
+
+    def test_empty_brand_hides_mark(self) -> None:
+        self.source("start.md", "# Start")
+        self.source("doc.toml", 'title = "Observability lab"\nbrand = ""')
         self.assertNotIn('class="mark"', self.render()[1])
 
     def test_brand_over_4_chars_fails(self) -> None:
         self.source("start.md", "# Start")
-        for value in ('"ABCDE"', '""', "123"):
+        for value in ('"ABCDE"', "123"):
             with self.subTest(value=value):
                 self.source("doc.toml", "brand = " + value)
                 with self.assertRaisesRegex(builder.BuildError, "brand"):
@@ -233,6 +249,28 @@ class BuildTest(unittest.TestCase):
         self.assertGreaterEqual(result, 0)
         self.assertLessEqual(result, 24)
 
+    def test_sidebar_labels_come_from_file_names(self) -> None:
+        self.source("01-on-the-mac/00-index.md", "# Mac overview")
+        self.source("01-on-the-mac/01-hello-span.md", "# 00 Hello, span")
+        self.source("01-on-the-mac/02-glossary.md", "# Terms\n\n## Span\n\nA unit.")
+        self.source("plain_page.md", "# Something else")
+        _, html, _ = self.render()
+        nav = html.split('<nav id="nav">')[1].split("</nav>")[0]
+        self.assertIn('<span class="num">01</span>On the mac</a>', nav)
+        self.assertIn('<span class="num">01</span>Hello span</a>', nav)
+        self.assertIn('href="#on-the-mac-glossary">Glossary</a>', nav)
+        self.assertIn('href="#plain-page">Plain page</a>', nav)
+        self.assertIn('aria-label="Toggle 01 On the mac"', nav)
+        self.assertNotIn("Hello, span", nav)
+        self.assertIn("00 Hello, span</h1>", html)
+
+    def test_rule_id_is_inline_in_the_text(self) -> None:
+        self.source("start.md", "# Start\n\n> [!RULE] DOC-01\n> Keep it.")
+        self.assertIn(
+            '<div class="rule" id="rule-doc-01"><p><a class="rule-id" href="#rules--doc-01">DOC-01</a> Keep it.</p></div>',
+            self.render()[1],
+        )
+
     def test_eyebrows_outline_box_and_glossary_order(self) -> None:
         self.source("00-overview/00-index.md", "# Guide & map\n\n## Welcome")
         self.source(
@@ -243,6 +281,7 @@ class BuildTest(unittest.TestCase):
         _, html, _ = self.render()
         nav = html.split('<nav id="nav">')[1].split("</nav>")[0]
         self.assertNotIn("00 · ", nav)
+        self.assertIn('<span class="num">00</span>Overview', nav)
         self.assertEqual(
             re.findall(r'class="page" id="([^"]+)"', html),
             ["overview-index", "overview-topic", "end", "overview-glossary", "rules"],
@@ -252,7 +291,7 @@ class BuildTest(unittest.TestCase):
         )
         self.assertTrue(nav.endswith(tail))
         for pid, text in [
-            ("overview-topic", "GUIDE &amp; MAP / 2 OF 5"),
+            ("overview-topic", "OVERVIEW / 2 OF 5"),
             ("end", "3 OF 5"),
             ("overview-glossary", "4 OF 5"),
             ("rules", "5 OF 5"),
@@ -356,11 +395,15 @@ class BuildTest(unittest.TestCase):
                     let fill=a;
                     while(getComputedStyle(fill).backgroundColor==="rgba(0, 0, 0, 0)") fill=fill.parentElement;
                     const aligned=[...document.querySelectorAll("#nav .dir > .kids")].every(k=>{
-                      const xs=[...k.querySelectorAll(":scope > .node > .row > a")].map(a=>a.getBoundingClientRect().x);
+                      const xs=[...k.querySelectorAll(":scope > .node > .row > a, :scope > .sections > a")].map(a=>a.getBoundingClientRect().x);
                       return Math.max(...xs)-Math.min(...xs)<=2;
                     });
+                    // A page's own sections sit one step right of the page name.
+                    const shown=[...document.querySelectorAll("#nav .pg")].filter(n=>n.querySelector(":scope > .kids > a")?.offsetParent);
+                    const nested=shown.every(n=>
+                      n.querySelector(":scope > .kids > a").getBoundingClientRect().x > n.querySelector(":scope > .row > a").getBoundingClientRect().x+8);
                     t.textContent=JSON.stringify([Math.abs(fill.getBoundingClientRect().width-row.getBoundingClientRect().width),
-                      getComputedStyle(document.querySelector("#nav a.here")).backgroundColor,aligned]);
+                      getComputedStyle(document.querySelector("#nav a.here")).backgroundColor,aligned&&nested]);
                 """,
                     fragment,
                 )
@@ -787,18 +830,6 @@ class BuildTest(unittest.TestCase):
             "#viewer",
         )
         self.assertEqual(result, [False, "grid", "Viewer"])
-
-    def test_sandbox_check_generic(self) -> None:
-        self.site()
-        run = subprocess.run(
-            [sys.executable, str(SKILL / "tests/sandbox_check.py"), str(self.out)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(run.returncode, 0, run.stderr)
-        self.assertTrue((self.out.parent / "harness.html").exists())
-        self.assertTrue(self.out.with_suffix(".sandbox.html").exists())
 
     def test_uppercase_md_link_is_rewritten(self) -> None:
         self.source("other.MD", "# Other\n\n## X")

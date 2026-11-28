@@ -41,7 +41,7 @@ brand = "SD"
 footer = "Internal reference"
 ```
 
-The command-line theme wins. Optional `brand` is 1–4 characters in an accent square before the title; `footer` is escaped plain text at the sidebar bottom (after long navigation). Put the HTML outside the source folder.
+The command-line theme wins. `brand` is up to 4 characters in an accent square before the title; it defaults to the title's initials (up to three, small words skipped), and `brand = ""` hides it; `footer` is escaped plain text at the sidebar bottom (after long navigation). Put the HTML outside the source folder.
 
 ## Author the source
 
@@ -49,7 +49,7 @@ The command-line theme wins. Optional `brand` is 1–4 characters in an accent s
 2. Use numbered filenames and folders for reading order:
    `00-start-here/01-overview.md`, `01-architecture/01-services.md`.
    Every `.md` under the source folder is included, so use a dedicated document folder, not a repository root.
-3. Give each file one first-level heading. It becomes the navigation title. Second- and third-level headings populate the right-hand outline.
+3. Give each file one first-level heading. It is the page heading, search title and prev/next text; the sidebar shows the tidied file or folder name instead (`01-hello-span.md` → faint `01` + `Hello span`), so name files the way readers should see them. Second- and third-level headings populate the right-hand outline.
 4. Link to other source files using relative Markdown paths, for example
    `[Services](../01-architecture/01-services.md#request-flow)`.
    Heading fragments are lowercase, punctuation removed, spaces replaced by hyphens. Duplicate headings append `-1`, `-2`.
@@ -91,7 +91,7 @@ Without JavaScript, all pages remain visible in reading order.
 
 Each page has an eyebrow above its H1: its folder label (when nested) and position in reading order. Below 70rem, a collapsible “On this page” box replaces the right outline when the page has H2s. Below 48rem, the sticky top bar’s Menu button opens a sidebar drawer with the title and subtitle; Escape, the backdrop or a navigation/search link closes it and restores menu focus.
 
-The sidebar is an unnumbered folder tree at any depth. A folder's `00-*.md` (normally `00-index.md`) is its landing page, not a repeated page row. Chevrons only expand; links only navigate. Page sections start closed, and navigation opens the active path without closing other branches. Both outlines highlight the current second- or third-level section. Builds warn at four nested folders. A page whose filename after its order prefix is `glossary.md` appears at the top level at the end of reading order, just before generated Rules, regardless of its source folder; its page id and links stay unchanged.
+The sidebar is a folder tree at any depth, labelled from file and folder names with the order prefix shown faint (the glossary drops its number). A folder's `00-*.md` (normally `00-index.md`) is its landing page, not a repeated page row. Chevrons only expand; links only navigate. Page sections start closed, and navigation opens the active path without closing other branches. Both outlines highlight the current second- or third-level section. Builds warn at four nested folders. A page whose filename after its order prefix is `glossary.md` appears at the top level at the end of reading order, just before generated Rules, regardless of its source folder; its page id and links stay unchanged.
 
 Every figure has zoom and fullscreen controls. Focus a figure and press Enter or f for fullscreen; in the viewer use + and - to zoom, 0 to fit, 1 for 1:1, and Escape to close.
 
@@ -111,7 +111,5 @@ Build the included example (nested tree, rules, glossary and an ADR):
 uv run <skill>/scripts/build.py <skill>/example /tmp/microsite/example.html
 uv run <skill>/tests/test_build.py
 ```
-
-For the browser sandbox probe, run `python3 <skill>/tests/sandbox_check.py /tmp/microsite/example.html`, then serve that output folder over HTTP and open `harness.html`. The probe selects the first available page, heading and figure; its JSON reports viewer actions and runtime/CSP errors.
 
 Current limits: no browser Fullscreen API (the viewer uses a dialog), and no annotation-to-Markdown round trip. Raw HTML is trusted author content, not sanitized input. The external-resource check is a compatibility check, not a security boundary. Printing uses fitted light diagrams but long diagrams, tables and code may still paginate poorly. The right outline hides at narrow widths in favour of the inline “On this page” box. Browser check record: Chrome for Testing 158 / Playwright chromium headless shell (home machine). This automated run used the cached headless shell (145.0.7632.6); Chrome 158 was not rerun. Browser tests find Chromium under `PLAYWRIGHT_BROWSERS_PATH` or `~/Library/Caches/ms-playwright` and skip with a reason otherwise. Forced-dark checks pass in both modes; browser extensions and real SharePoint are untested.

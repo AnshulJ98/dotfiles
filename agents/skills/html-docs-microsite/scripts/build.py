@@ -107,6 +107,13 @@ def words(slug: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+def initials(title: str) -> str:
+    """Brand mark default: first letters of up to three words, small words skipped."""
+    small = {"a", "an", "and", "for", "in", "of", "on", "the", "to", "with"}
+    found = re.findall(r"[^\W_]+", title)
+    return "".join(w[0].upper() for w in found if w.lower() not in small)[:3]
+
+
 def slugify(text: str) -> str:
     return (
         re.sub(r"\s+", "-", re.sub(r"[^\w\- ]", "", text.lower()).strip()) or "section"
@@ -745,7 +752,7 @@ class Site:
                 anchor = "rule-" + rid.lower()
                 rules[rid] = (body, page)
                 refs[rid] = (anchor, strip_tags(body), page, [])
-                return f'<div class="rule" id="{anchor}"><a class="rule-id" href="#rules--{rid.lower()}">{rid}</a><p>{body}</p></div>'
+                return f'<div class="rule" id="{anchor}"><p><a class="rule-id" href="#rules--{rid.lower()}">{rid}</a> {body.lstrip()}</p></div>'
 
             page.html = re.sub(block, define, page.html)
             parts = page.file.relative_to(self.src).parts
@@ -822,19 +829,14 @@ class Site:
             self.pages.append(register)
 
     def folder_label(self, folder: Path) -> str:
-        landing = next(
-            (
-                p
-                for p in self.pages
-                if p.file.parent == folder
-                and p.file.name.startswith("00-")
-                and not is_glossary(p.file)
-            ),
-            None,
-        )
-        if landing and len(landing.title) <= 28:
-            return landing.title
         return words(strip_order(folder.name))
+
+    def page_label(self, page: Page) -> str:
+        # Sidebar names come from file names; the H1 stays the page heading.
+        stem = page.file.stem
+        num = re.match(r"\d+", stem)
+        label = words(strip_order(stem))
+        return f"{num[0]} {label}" if num and not is_glossary(page.file) else label
 
     def sidebar(self) -> str:
         tree = {}
@@ -853,13 +855,21 @@ class Site:
                 for level, hid, text in page.toc
             )
 
-        def row(label, href="", children="", kind="pg"):
-            head = f"<span>{escape(label)}</span>"
+        def row(label, href="", children="", kind="pg", number=""):
+            # A leading number ("00 Hello") is shown faint, apart from the words.
+            own = re.fullmatch(r"(\d+)\s+(\S.*)", label, re.DOTALL)
+            if own:
+                number, label = own.groups()
+            text = escape(label)
+            if number:
+                text = f'<span class="num">{escape(number)}</span>' + text
+            head = f"<span>{text}</span>"
             if href:
-                head = f'<a href="#{href}">{escape(label)}</a>'
+                head = f'<a href="#{href}">{text}</a>'
             chev = '<span class="gap"></span>'
             if children or kind == "dir":
-                chev = f'<button class="chev" type="button" aria-expanded="true" aria-label="Toggle {escape(label)}">›</button>'
+                full = f"{number} {label}" if number else label
+                chev = f'<button class="chev" type="button" aria-expanded="true" aria-label="Toggle {escape(full)}">›</button>'
             cls = "sections" if kind == "pg" else ""
             return f'<div class="node {kind}"><div class="row">{chev}{head}</div><div class="kids {cls}">{children}</div></div>'
 
@@ -872,7 +882,7 @@ class Site:
                     kids = ""
                     if any(t[0] == 2 for t in item.toc):
                         kids = sections(item)
-                    out.append(row(item.title, item.id, kids))
+                    out.append(row(self.page_label(item), item.id, kids))
                     continue
                 pages = [p for p in item.values() if isinstance(p, Page)]
                 indexes = [p for p in pages if p.file.name.startswith("00-")]
@@ -885,7 +895,8 @@ class Site:
                 if landing and landing.toc:
                     kids = f'<div class="sections">{sections(landing)}</div>' + kids
                 href = landing.id if landing else ""
-                out.append(row(label, href, kids, "dir"))
+                prefix = re.match(r"\d+", name)
+                out.append(row(label, href, kids, "dir", prefix[0] if prefix else ""))
             return "".join(out)
 
         return '<div class="tree">' + render(tree) + "</div>"
@@ -955,9 +966,12 @@ def build(
         raise BuildError(
             f"{config_file}: unknown keys: {unknown}; allowed keys: {allowed}"
         )
+    title = config.get("title", words(strip_order(src.name)))
     brand = config.get("brand")
-    if brand is not None and (not isinstance(brand, str) or not 1 <= len(brand) <= 4):
-        raise BuildError(f"{config_file}: brand must be 1-4 characters")
+    if brand is None:
+        brand = initials(str(title))
+    elif not isinstance(brand, str) or len(brand) > 4:
+        raise BuildError(f"{config_file}: brand must be 0-4 characters")
     footer = config.get("footer", "")
     if not isinstance(footer, str):
         raise BuildError(f"{config_file}: footer must be plain text")
@@ -977,7 +991,7 @@ def build(
         raise BuildError(f"no theme {theme!r} in {styles} (found: {known or 'none'})")
     site = Site(src, styles.resolve() / theme, full_res)
     values = {
-        "title": escape(config.get("title", words(strip_order(src.name)))),
+        "title": escape(title),
         "subtitle": escape(config.get("subtitle", "")),
         "theme": theme,
         "brand": f'<span class="mark" aria-hidden="true">{escape(brand)}</span>'

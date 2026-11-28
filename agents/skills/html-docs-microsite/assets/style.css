@@ -230,6 +230,19 @@ button:hover {
   background: var(--hover);
   color: var(--fg);
 }
+/* Page and folder names read first; their order numbers stay faint. */
+#nav .row > a,
+#nav .row > span:not(.gap) {
+  color: color-mix(in srgb, var(--fg) 55%, var(--muted));
+  font-weight: 500;
+}
+#nav .num {
+  margin-right: 0.5em;
+  color: var(--muted);
+  opacity: 0.7;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 .js #nav .closed > .kids {
   display: none;
 }
@@ -259,9 +272,16 @@ button:hover {
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
 }
+.rule > p {
+  margin: 0;
+}
 .term {
   color: inherit;
   text-decoration: underline dotted;
+}
+/* Sections take the chevron slot's indent, so they line up with sibling pages. */
+#nav .sections > a {
+  margin-left: 1.25rem;
 }
 #nav .sections a {
   font-size: 0.8rem;
