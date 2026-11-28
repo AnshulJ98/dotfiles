@@ -2,11 +2,11 @@
 // extensions/scout.ts imports pi packages at runtime; they resolve from the installed pi release.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { piPackage } from "./pi-package.ts";
 
@@ -21,6 +21,7 @@ register(
 
 test("a scout killed with SIGKILL still gets a chat entry with its cost", async () => {
   const root = mkdtempSync(join(tmpdir(), "scout-ext-"));
+  after(() => rmSync(root, { recursive: true, force: true }));
   process.env.PI_CODING_AGENT_DIR = root;
   // Workers run the tests with PI_SCOUT_DEPTH=1, and the extension skips loading inside a scout
   delete process.env.PI_SCOUT_DEPTH;

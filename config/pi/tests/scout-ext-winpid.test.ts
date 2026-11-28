@@ -2,11 +2,17 @@
 // Its own file: extensions/scout.ts fixes its directories at import, from PI_CODING_AGENT_DIR.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { piPackage } from "./pi-package.ts";
 
@@ -23,6 +29,7 @@ register(
 // pid of the same process is meta's winpid. Judging by pid reaped live scouts mid-run.
 test("a running scout is judged alive by its winpid when the meta has one", async () => {
   const root = mkdtempSync(join(tmpdir(), "scout-ext-"));
+  after(() => rmSync(root, { recursive: true, force: true }));
   process.env.PI_CODING_AGENT_DIR = root;
   delete process.env.PI_SCOUT_DEPTH;
   const scoutRoot = join(root, "sessions", "scout");

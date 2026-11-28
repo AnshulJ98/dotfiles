@@ -11,13 +11,25 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { EVENT_LINE } from "../lib/events.ts";
+
+const tempRoots: string[] = [];
+/** A temp dir removed once this file's tests finish; sandboxes left behind piled up by the thousand. */
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempRoots.push(dir);
+  return dir;
+}
+after(() => {
+  for (const dir of tempRoots) rmSync(dir, { recursive: true, force: true });
+});
 
 const SCOUT =
   process.env.SCOUT_BIN ?? resolve(import.meta.dirname, "../bin/scout");
@@ -43,7 +55,7 @@ sleep) [ -n "$FAKE_PIDFILE" ] && echo $$ >"$FAKE_PIDFILE"; exec sleep 30 ;;
 args) echo "$args" ;;
 digest) printf '%s' "$FAKE_DIGEST" ;;
 missing) printf '%s\\n' "\${FAKE_DIGEST:-TOOLS-MISSING: web_search, fetch_content}" "Web research could not be done."; exit "\${FAKE_RC:-0}" ;;
-env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
+env) echo "kitty=$KITTY_WINDOW_ID"; echo "zmx=$ZMX_SESSION"; echo "secret=$SCOUT_TEST_SECRET"; echo "mode=$PI_SCOUT_MODE"; echo "git=$(command -v git)"; echo "real=$PI_SCOUT_REAL_GIT"; echo "gitdir=$PI_SCOUT_GIT_DIR" ;;
 verdict) echo "WORKER-SENSORS: SHIP"; echo "report body" ;;
 pass) echo '{"verdict":"PASS","reasons":[],"retriesUsed":0}' >"$PI_WORKER_REPORT"; echo "report body" ;;
 provider-error)
@@ -93,7 +105,7 @@ function gitCommonDir(cwd: string): string {
 }
 
 function sandbox(): { env: NodeJS.ProcessEnv; scoutRoot: string } {
-  const root = mkdtempSync(join(tmpdir(), "scout-bin-"));
+  const root = tempDir("scout-bin-");
   const bin = join(root, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "pi"), FAKE_PI);
@@ -173,7 +185,7 @@ function doneMeta(scoutRoot: string): string {
 
 test("a refused spec leaves no run folder, running meta or spec temp file behind", async () => {
   const { env, scoutRoot } = sandbox();
-  const tmp = mkdtempSync(join(tmpdir(), "scout-spec-tmp-"));
+  const tmp = tempDir("scout-spec-tmp-");
   const run = await runScout(
     ["--spec", "-"],
     { ...env, TMPDIR: tmp },
@@ -393,7 +405,7 @@ test("only -nc children get the generated code standards in their system prompt"
 
 test("missing child standards refuse the run and name the generator without starting pi", () => {
   const { env } = sandbox();
-  const bin = join(mkdtempSync(join(tmpdir(), "scout-no-standards-")), "bin");
+  const bin = join(tempDir("scout-no-standards-"), "bin");
   cpSync(resolve(SCOUT, ".."), bin, {
     recursive: true,
     filter: (source) => !source.endsWith("/standards.prompt.md"),
@@ -414,7 +426,7 @@ test("missing child standards refuse the run and name the generator without star
 });
 
 test("build-agents --check detects drift in the generated child standards", () => {
-  const root = mkdtempSync(join(tmpdir(), "child-standards-drift-"));
+  const root = tempDir("child-standards-drift-");
   const source = resolve(import.meta.dirname, "..");
   mkdirSync(join(root, "bin"));
   for (const file of [
@@ -588,7 +600,7 @@ test("only the first three digest lines and a successful child trigger missing-t
 
 /** A clean repo with two commits, so HEAD~1 is a base. */
 function reviewRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), "scout-review-"));
+  const repo = tempDir("scout-review-");
   const git = (...args: string[]) =>
     spawnSync(
       "git",
@@ -898,7 +910,7 @@ test("a package.json without a type above scout does not refuse the spec", () =>
   // The work laptop has ~/package.json = {}: node warned MODULE_TYPELESS_PACKAGE_JSON while
   // loading worker-sensors.ts for the spec check, and scout read the warning as the spec error.
   const { env } = sandbox();
-  const home = mkdtempSync(join(tmpdir(), "scout-typeless-"));
+  const home = tempDir("scout-typeless-");
   writeFileSync(join(home, "package.json"), "{}\n");
   for (const dir of ["bin", "extensions", "lib"])
     cpSync(resolve(import.meta.dirname, "..", dir), join(home, dir), {
@@ -1249,7 +1261,7 @@ test("a reader that quits early (| head) does not kill the run", () => {
 });
 
 const FAKE_KITTY =
-  '#!/usr/bin/python3\nimport json, os, subprocess, sys\nargs = sys.argv[1:]\nwith open(os.environ["FAKE_KITTY_LOG"], "a") as f:\n    f.write(json.dumps(args) + "\\n")\nif "ls" in args:\n    print(json.dumps([{"tabs": [{"windows": [\n        {"id": 42, "cwd": os.getcwd(), "session_name": "caller"},\n        {"id": 43, "cwd": "/other", "session_name": "other"}]}]}]))\nelif "launch" in args:\n    if os.environ.get("FAKE_KITTY") == "broken":\n        raise SystemExit(1)\n    script = args[-1]\n    env = dict(os.environ, KITTY_WINDOW_ID="99", KITTY_LISTEN_ON="unix:/tmp/new-kitty")\n    subprocess.Popen(["/bin/bash", script], env=env, start_new_session=True,\n                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n    print(99)\n';
+  '#!/usr/bin/python3\nimport json, os, subprocess, sys\nargs = sys.argv[1:]\nwith open(os.environ["FAKE_KITTY_LOG"], "a") as f:\n    f.write(json.dumps(args) + "\\n")\nif "ls" in args:\n    print(json.dumps([{"tabs": [{"windows": [\n        {"id": 42, "cwd": os.getcwd(), "session_name": "caller"},\n        {"id": 43, "cwd": "/other", "session_name": "other"}]}]}]))\nelif "launch" in args:\n    if os.environ.get("FAKE_KITTY") == "broken":\n        raise SystemExit(1)\n    script = args[-1]\n    # A real pane starts from the kitty environment, not the scout one: only pane.sh hands that over\n    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "KITTY_WINDOW_ID": "99", "KITTY_LISTEN_ON": "unix:/tmp/new-kitty"}\n    subprocess.Popen(["/bin/bash", script], env=env, start_new_session=True,\n                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n    print(99)\n';
 
 function kittySandbox(mode = "ok"): {
   env: NodeJS.ProcessEnv;
@@ -1371,4 +1383,23 @@ test("kitty: pane script keeps its secrets private, excludes old identities and 
   assert.doesNotMatch(captured.text, /^export (KITTY_|ZMX_SESSION=)/m);
   assert.match(captured.text, /extensions\/pi-holder\.ts/);
   assert.equal(existsSync(captured.path), false);
+});
+
+test("kitty: the pane gets scout's environment, but no value of it is written to disk", async () => {
+  const { env, scoutRoot } = kittySandbox();
+  const secret = "sentinel-value-3f9c";
+  const run = await runScout(["look"], {
+    ...env,
+    SCOUT_TEST_SECRET: secret,
+    FAKE_PI: "env",
+  });
+  assert.equal(run.code, 0, run.stderr);
+  assert.match(run.stdout, new RegExp(`^secret=${secret}$`, "m"));
+  const captured = await capturePaneScript(
+    { ...env, SCOUT_TEST_SECRET: secret },
+    scoutRoot,
+  );
+  assert.ok(captured.text.includes("timeout --foreground"));
+  assert.equal(captured.text.includes(secret), false);
+  assert.doesNotMatch(captured.text, /^export SCOUT_TEST_SECRET=/m);
 });

@@ -76,8 +76,9 @@
 # extensions/scout-pane.ts writes the digest and exits when the run settles, as
 # pi -p would. The tab closes on rc 0 and stays open otherwise. The child's rc
 # comes from pane.rc: the extension writes 1 on an error or abort, else it is
-# pi's or timeout's. pane.sh holds the environment, so it is 0600 and deleted on
-# exit; the pane's process group dies when scout does.
+# pi's or timeout's. The environment holds tokens, so it never touches disk: scout
+# writes it into the pane.env FIFO and pane.sh reads it from there. pane.sh is 0600
+# and deleted on exit; the pane's process group dies when scout does.
 #
 # Exit codes: 0 ok, 2 usage or recursion refused, 69 tools missing, 75 fan-out refused,
 # 124 timeout or stall, 143 terminated, else pi's. With --rw, verdict.json is written on all of them.
@@ -492,7 +493,8 @@ finish() {
     printf 'rc=%s\nfinished=%s\n' "$rc" "$(($(date +%s) * 1000))"
   } >"$DONE/$$.meta.tmp"
   mv -f "$DONE/$$.meta.tmp" "$DONE/$$.meta"
-  rm -f "$META" "$SESSIONS/pane.sh"
+  [ -z "${ENV_WRITER:-}" ] || kill "$ENV_WRITER" 2>/dev/null
+  rm -f "$META" "$SESSIONS/pane.sh" "$SESSIONS/pane.env"
 }
 trap finish EXIT
 
@@ -632,7 +634,7 @@ PANE_EXT=()
 
 # Shared pane runner: preserve child env/digest/timeout semantics for either terminal.
 write_pane_script() {
-  local script="$SESSIONS/pane.sh" trust n
+  local script="$SESSIONS/pane.sh" envpipe="$SESSIONS/pane.env" trust n
   # A TUI pi blocks on its trust prompt in a folder it was not told to trust; -p
   # proceeds untrusted. Decide it the way -p does: not under a trusted path -> -na.
   trust="$(node -e '
@@ -643,8 +645,18 @@ write_pane_script() {
     } catch {}
     console.log("-na")' "$PWD" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/trust.json" 2>/dev/null)" || trust="-na"
   # The pane's shell is the user's own: hand pi this scout's environment, minus
-  # the terminal identity, which must stay the new pane's. The script holds
-  # tokens, so it is 0600.
+  # the terminal identity, which must stay the new pane's. It holds tokens, so it
+  # goes through a FIFO, which keeps the bytes in the kernel, never in a file.
+  # The writer blocks until the pane opens it; finish kills it if the pane never does.
+  rm -f "$envpipe"
+  (umask 077 && mkfifo "$envpipe")
+  {
+    for n in $(compgen -e); do
+      case "$n" in ZMX_SESSION | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
+      printf 'export %s=%q\n' "$n" "${!n}"
+    done
+  } >"$envpipe" &
+  ENV_WRITER=$!
   (
     umask 077
     {
@@ -653,10 +665,8 @@ write_pane_script() {
       # The pane group dies with scout, SIGKILL included, which skips scout's trap.
       printf '( while kill -0 %s 2>/dev/null && kill -0 $$ 2>/dev/null; do sleep 2; done\n' "$$"
       printf '  kill -0 %s 2>/dev/null || { kill -TERM -- -$$ 2>/dev/null || pkill -TERM -P $$ 2>/dev/null; } ) &\n' "$$"
-      for n in $(compgen -e); do
-        case "$n" in ZMX_SESSION | TERM | TERM_PROGRAM* | COLORTERM | KITTY_* | PWD | OLDPWD | SHLVL | SHELLOPTS | BASHOPTS | _) continue ;; esac
-        printf 'export %s=%q\n' "$n" "${!n}"
-      done
+      # eval, not source: /bin/bash 3.2 sources a FIFO as an empty file
+      printf 'eval "$(cat %q)"; rm -f %q\n' "$envpipe" "$envpipe"
       printf 'export PI_SCOUT_DEPTH=1 SCOUT_DIGEST=%q SCOUT_PANE_RC=%q\ncd %q || exit 2\n' "$OUT" "$SESSIONS/pane.rc" "$PWD"
       printf 'timeout --foreground %q pi' "$TIMEOUT"
       printf ' %q' "${PI_OPTS[@]}" ${trust:+"$trust"} -e "$DIR/../extensions/scout-pane.ts" "${PANE_EXT[@]}" "${BRIEF[@]}" "$TASK"
