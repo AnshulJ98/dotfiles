@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.anshulj.memory-sync</string>
+  <!-- sh -c because launchd expands no ~ or $HOME in plist strings; /usr/sbin holds scutil, which names the host in commits -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin exec "$HOME/Dev/dotfiles/config/memory/memory-sync" &gt;&gt;"$HOME/Library/Logs/memory-sync.log" 2&gt;&amp;1</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

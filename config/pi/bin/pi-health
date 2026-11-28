@@ -12,6 +12,7 @@
 //   - a main session that died without shutting down (plain mode reports it once and removes
 //     its file; --json leaves it for other sessions to see, ignoring files from before this boot)
 //   - an auto run with open slices that nothing live is carrying
+//   - a failed memory-sync run (<logs>/memory-sync.failed), until its next clean run
 // Exit 1 when there is a problem, else 0. --watch reprints every SECS seconds (default 30) and
 // rings the terminal bell on a new problem.
 //
@@ -55,6 +56,9 @@ async function main() {
   const { age, flagFor, knownRepos, readLive, runState, sweep } = await import(
     // A file URL, not a path: Windows ESM reads "C:" as a URL scheme.
     pathToFileURL(path.join(__dirname, "..", "lib", "live.ts")).href
+  );
+  const { logsDir } = await import(
+    pathToFileURL(path.join(__dirname, "..", "lib", "bash-log.ts")).href
   );
   const args = process.argv.slice(2);
   if (args.includes("-h") || args.includes("--help")) {
@@ -200,6 +204,17 @@ async function main() {
         );
       }
     }
+    // config/memory/memory-sync writes this on a failed run and removes it on the next clean one
+    let syncFailed = "";
+    try {
+      syncFailed = fs
+        .readFileSync(path.join(logsDir(), "memory-sync.failed"), "utf8")
+        .trim();
+    } catch {
+      // No marker: the last sync ran clean.
+    }
+    if (syncFailed)
+      add(syncFailed, "memory-sync", "memory-sync", "memory-sync");
     if (!lines.length) lines.push("  no pi process has a live-state file");
     return { lines, problems };
   };

@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync the pi memory repo (~/Dev/memory)
+
+[Service]
+Type=oneshot
+ExecStart=%h/Dev/dotfiles/config/memory/memory-sync

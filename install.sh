@@ -240,6 +240,23 @@ link "$DOT/config/pi/themes" "$HOME/.pi/agent/themes"
 active=$(basename "$(readlink "$DOT/config/themes/current")")
 link "$DOT/config/themes/$active/pi.json" "$HOME/.pi/agent/themes/current.json"
 mkdir -p "$HOME/.pi/agent/skills-local" # settings.json names it; pi does not create it
+# memory.md lives in the private memory repo (dotfiles is public), synced every 10 min.
+# Personal config only: a work machine keeps a plain local ~/.pi/agent/memory.md.
+if [ "$PI_VARIANT" != home ]; then
+  log "skip: memory repo and memory-sync are home-only (--work)"
+elif [ -f "$HOME/Dev/memory/memory.md" ]; then
+  link "$HOME/Dev/memory/memory.md" "$HOME/.pi/agent/memory.md"
+  if [ "$OS" = Darwin ]; then
+    link "$DOT/config/memory/com.anshulj.memory-sync.plist" "$HOME/Library/LaunchAgents/com.anshulj.memory-sync.plist"
+    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.anshulj.memory-sync.plist" 2>/dev/null || true
+  else
+    link "$DOT/config/memory/memory-sync.service" "$HOME/.config/systemd/user/memory-sync.service"
+    link "$DOT/config/memory/memory-sync.timer" "$HOME/.config/systemd/user/memory-sync.timer"
+    systemctl --user daemon-reload && systemctl --user enable --now memory-sync.timer || warn "memory-sync timer not enabled"
+  fi
+else
+  warn "skip: no ~/Dev/memory (git clone https://github.com/AnshulJ98/memory.git ~/Dev/memory)"
+fi
 
 # 7. VSCode (macOS-specific paths) -------------------------------------------
 # Insiders' files are the source; stable VS Code shares them.

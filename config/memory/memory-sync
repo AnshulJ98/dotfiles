@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Syncs the pi memory repo: commit local edits, rebase on origin, push.
+# Run every 10 min by launchd (Mac) or a systemd user timer (Linux); neither
+# starts a second run while one is still going, so there is no lock.
+#
+# A failed run is loud: it exits 1, writes <logs>/memory-sync.failed (pi-health
+# shows it in every pi session's footer), and the first failure in a row posts
+# a desktop notification. The next clean run removes the file.
+set -euo pipefail
+repo="${MEMORY_REPO:-$HOME/Dev/memory}"
+logs="${PI_LOG_DIR:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/logs}"
+failed="$logs/memory-sync.failed"
+# macOS hostname -s can return a MAC address; LocalHostName is the real name.
+host="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+reason=""
+
+notify() {
+  if command -v osascript >/dev/null; then
+    osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title "memory-sync failed"' -e 'end run' "$1"
+  elif command -v notify-send >/dev/null; then
+    notify-send "memory-sync failed" "$1"
+  fi
+}
+
+finish() {
+  local rc=$?
+  if [ "$rc" = 0 ]; then
+    rm -f "$failed"
+    return
+  fi
+  [ -n "$reason" ] || reason="exit $rc"
+  echo "memory-sync $(date '+%F %T'): FAILED on $host: $reason" >&2
+  mkdir -p "$logs"
+  # Once per failure streak: a notification every 10 minutes would get tuned out.
+  [ -e "$failed" ] || notify "$reason" >/dev/null 2>&1 || true
+  printf '%s %s\n' "$(date '+%F %H:%M')" "$reason" >"$failed"
+}
+trap finish EXIT
+trap '[ -n "$reason" ] || reason="line $LINENO: $BASH_COMMAND failed in $repo"' ERR
+
+cd "$repo"
+if [ -n "$(git status --porcelain)" ]; then
+  git add -A
+  git commit -q -m "memory: $host $(date '+%F %H:%M')"
+fi
+if ! git pull -q --rebase; then
+  # union merge covers memory.md; anything else that conflicts needs a human.
+  if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+    reason="rebase conflict in $repo, local commits kept: resolve by hand"
+  else
+    reason="pull failed in $repo (network or auth), local commits kept"
+  fi
+  git rebase --abort 2>/dev/null || true
+  exit 1
+fi
+if [ -n "$(git log '@{u}..' --oneline)" ]; then
+  git push -q
+fi
+echo "memory-sync $(date '+%F %T'): ok $(git rev-parse --short HEAD)"

@@ -370,6 +370,24 @@ function health(
   return { status: run.status, out: run.stdout + run.stderr };
 }
 
+test("pi-health: a memory-sync failure marker is a problem every session sees, until the next clean run removes it", () => {
+  const logs = temp("health-memsync");
+  const cwd = temp("health-memsync-cwd");
+  const reason = "2026-11-28 01:40 rebase conflict in ~/Dev/memory";
+  writeFileSync(join(logs, "memory-sync.failed"), `${reason}\n`);
+  const json = health(logs, cwd, "--json");
+  assert.equal(json.status, 1);
+  assert.deepEqual(JSON.parse(json.out).problems, [
+    { key: "memory-sync", who: "memory-sync", flag: reason, session: "" },
+  ]);
+  assert.match(
+    health(logs, cwd).out,
+    /^! memory-sync {2}· 2026-11-28 01:40 rebase conflict/m,
+  );
+  rmSync(join(logs, "memory-sync.failed"));
+  assert.equal(health(logs, cwd, "--json").status, 0);
+});
+
 test("pi-health: lists each process and its jobs, exits 1 on a quiet one and on a dead main session, which it reports once", () => {
   const logs = temp("health");
   const cwd = temp("health-cwd");
