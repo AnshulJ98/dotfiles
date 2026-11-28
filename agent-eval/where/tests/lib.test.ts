@@ -1,4 +1,5 @@
 // Run: node --test 'agent-eval/where/tests/*.test.ts'
+import "../../../config/pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { comparePair, parseCard, pickCuts, splice, stability } from "../lib.ts";

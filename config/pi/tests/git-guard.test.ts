@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Drives bin/guard/git, the git wrapper bin/scout puts first on a scout child's PATH. Real git, temp repos.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {

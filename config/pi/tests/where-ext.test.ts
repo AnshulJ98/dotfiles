@@ -3,6 +3,7 @@
 // The tool list must stay fixed: Bedrock sends it at the head of every request, so a
 // change rewrites the whole prompt cache. Outside a /where run the tool still renders,
 // but checks no proof and does not end the run.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { join } from "node:path";

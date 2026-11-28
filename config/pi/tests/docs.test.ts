@@ -1,6 +1,7 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // extensions/docs.ts imports pi packages at runtime; they resolve from the installed pi release.
 // fetch is the only system boundary, so it is the only thing stubbed.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { join } from "node:path";

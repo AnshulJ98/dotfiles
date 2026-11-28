@@ -1,5 +1,6 @@
 // Run: node --test 'agent-eval/tests/*.test.ts'
 // Drives lib/isolate.sh and run.sh against a fake real home and a stub pi: no model, no tokens.
+import "../../config/pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

@@ -1,6 +1,7 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // lib/bash-changes.ts: changedBy as a table, snapshot and describe against real git in temp repos;
 // extensions/bash-changes.ts through a fake pi and a fake ctx.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {

@@ -1,4 +1,5 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import {

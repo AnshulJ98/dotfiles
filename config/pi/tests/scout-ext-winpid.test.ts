@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Its own file: extensions/scout.ts fixes its directories at import, from PI_CODING_AGENT_DIR.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

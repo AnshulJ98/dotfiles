@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // The events log (lib/events.ts), the live-state files (lib/live.ts) and bin/pi-health over them.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {

@@ -1,6 +1,7 @@
 // Run: node --test config/pi/tests/
 // Rows mirror the /tmp spikes run against Pi 1.4.0's bash operations (hung curl,
 // sleep, chatty loop, busy loop, throttled download, heartbeat, broken ps).
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {

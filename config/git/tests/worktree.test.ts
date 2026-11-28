@@ -1,6 +1,7 @@
 // Run: node --test 'config/git/tests/*.test.ts'
 // worktree-setup through the template stubs and directly. Real git, temp repos only; real wt rows
 // skip without it, the rest use fake npm/pnpm/yarn/wt scripts that log their call (no real install).
+import "../../pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

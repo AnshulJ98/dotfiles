@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Drives bin/scout with a fake `pi` on PATH: no model, no tokens.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {

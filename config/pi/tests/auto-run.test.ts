@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // extensions/auto-run.ts: the pure parsers as tables, the refusals against real git in temp repos, and the handlers through a fake pi.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {

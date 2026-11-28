@@ -1,6 +1,7 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Drives pi's real edit renderers (from the installed release) so a change to the
 // `preview` field or the box's [header, spacer, body] layout fails here.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { join } from "node:path";

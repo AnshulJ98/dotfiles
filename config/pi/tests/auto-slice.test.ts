@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Drives bin/auto-slice against real git in temp repos, with a fake scout beside it and a fake wt on PATH: no model, no tokens.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

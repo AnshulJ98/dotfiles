@@ -1,5 +1,6 @@
 // Run: node --test 'config/git/tests/*.test.ts'
 // auto-guard through the template stubs, git-hooks-install and husky's init.sh. Real git, temp repos only.
+import "../../pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

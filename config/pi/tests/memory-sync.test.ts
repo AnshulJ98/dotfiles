@@ -1,6 +1,7 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // config/memory/memory-sync against a real bare origin and clones: a failed sync fails loudly
 // (exit 1, a marker pi-health reports, one notification), and a clean run clears it.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

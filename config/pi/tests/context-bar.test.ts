@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // extensions/context-bar.ts imports pi packages at runtime; they resolve from the installed pi release.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { join } from "node:path";

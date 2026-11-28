@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // Cases are the ask_user calls github-copilot/gpt-6-luna sent on 2026-10-28.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeAskArgs } from "../extensions/ask-user-args.ts";

@@ -1,3 +1,4 @@
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import childProcess, { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";

@@ -1,5 +1,6 @@
 // Run: node --test 'config/pi/tests/*.test.ts'
 // The two extensions a --rw worker loads together: a stalled stream is aborted, the run resumes exactly once, and the settle check still ends PASS.
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";

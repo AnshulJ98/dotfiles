@@ -1,6 +1,7 @@
 // Run: node --test config/pi/tests/
 // The before_provider_request handler gets the Bedrock Converse input pi-ai builds
 // (bedrock-converse-stream.js: onPayload(commandInput, model)).
+import "./hermetic.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import bedrockReasoning from "../extensions/bedrock-reasoning.ts";

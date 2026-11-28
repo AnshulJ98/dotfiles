@@ -1,6 +1,7 @@
 // Run: node --test config/nvim/tests/nvfmt.test.ts
 // bin/nvfmt against the installed nvim config: real nvim, conform, shfmt, prettierd, shellcheck and git.
 // Temp directories only. Skipped where that config is not installed.
+import "../../pi/tests/hermetic.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
