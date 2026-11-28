@@ -58,3 +58,10 @@ desc = "Add a Finder tag to the selected files"
 on = ["b", "r"]
 run = "plugin mactag remove"
 desc = "Remove a Finder tag from the selected files"
+
+# alt-t: the hovered folder (a file: its folder) as a new kitty tab, in this pane's workspace.
+# %h goes in as an argument: yazi 26.9.1 shell-quotes it there, so spaces and quotes survive.
+[[mgr.prepend_keymap]]
+on = "<A-t>"
+run = '''shell -- sh -c 'd=$1; [ -d "$d" ] || d=$(dirname -- "$d"); kitten @ launch --match "id:$KITTY_WINDOW_ID" --source-window "id:$KITTY_WINDOW_ID" --add-to-session . --type=tab --cwd "$d" >/dev/null 2>&1' _ %h'''
+desc = "Open the hovered folder as a kitty tab"

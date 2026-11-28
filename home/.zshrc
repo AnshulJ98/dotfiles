@@ -118,6 +118,25 @@ function y() {
   [ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
   command rm -f -- "$tmp"
 }
+
+# alt-y: yazi from the prompt, the same q/Q as `y`. The cd runs as a command line, so the
+# prompt, zoxide and kitty's cwd (the sidebar) update; a half-typed line comes back after it.
+_yazi_cd_key() {
+  local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+  command yazi --cwd-file="$tmp" </dev/tty
+  IFS= read -r -d '' cwd < "$tmp"
+  command rm -f -- "$tmp"
+  if [[ -n $cwd && $cwd != $PWD && -d $cwd ]]; then
+    zle push-line
+    BUFFER="builtin cd -- ${(q)cwd}"
+    zle accept-line
+  else
+    zle reset-prompt
+  fi
+}
+zle -N _yazi_cd_key
+bindkey '\ey' _yazi_cd_key
+
 # === Load P10K ===
 source ~/.zsh/plugins/powerlevel10k/powerlevel10k.zsh-theme
 
@@ -168,6 +187,16 @@ unset _zmx_zsh
 if [[ -n $ZMX_SESSION ]]; then
   _zmx_env() { eval "$(zmx print-env -s . 2>/dev/null)" }
   precmd_functions+=(_zmx_env)
+fi
+
+# alt-c: fuzzy cd with fzf's own widget (fzf --zsh, key bindings only): zoxide's ranked
+# folders first, then folders up to 3 deep under this one. The empty CTRL_T and CTRL_R
+# commands keep zsh's own ctrl-t and ctrl-r.
+if (( $+commands[fzf] )); then
+  FZF_CTRL_T_COMMAND= FZF_CTRL_R_COMMAND=
+  FZF_ALT_C_COMMAND='{ zoxide query -l; fd --type d --hidden --exclude .git --max-depth 3 . "$PWD"; } 2>/dev/null | awk '"'"'!seen[$0]++'"'"
+  FZF_ALT_C_OPTS="--scheme=path --height=60% --layout=reverse --border=rounded --prompt='cd> ' --preview='ls -1Gp {} | head -60'"
+  source <(fzf --zsh 2>/dev/null | sed -n '1,/^### end: key-bindings.zsh ###/p')
 fi
 
 # zoxide: `z foo` jumps to the highest-ranked directory matching foo, `zi`
