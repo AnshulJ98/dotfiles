@@ -70,7 +70,7 @@ export default function (pi: ExtensionAPI) {
               continue;
             const render = child.render.bind(child);
             child.render = (width: number) => {
-              const lines: string[] = render(width);
+              const lines = [...render(width)];
               const first = lines.findIndex((l) =>
                 l.replace(/\x1b\[[0-9;]*m/g, "").trim(),
               );
