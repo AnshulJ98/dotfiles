@@ -369,12 +369,33 @@ def _refresh(boss) -> None:
     _tick(boss)
 
 
+def _shown(tab) -> bool:
+    tm = tab.tab_manager_ref()
+    return tm is not None and tm.active_tab is tab
+
+
+def _dock(boss, tab, name: str) -> bool:
+    # A sidebar that exits at once would be relaunched forever; three in 10 s is enough.
+    recent = _launched[tab.id] = [
+        t for t in _launched.get(tab.id, []) if time.monotonic() - t < 10
+    ]
+    if len(recent) >= 3:
+        return False
+    recent.append(time.monotonic())
+    zkitty.dock(boss, tab.id, name)
+    return True
+
+
 def _sync(timer_id: int | None = None) -> None:
-    """One sidebar dock per workspace tab while the sidebar is on, none while it is off."""
+    """One sidebar dock per workspace tab while the sidebar is on, none while it is off.
+
+    Launching a dock holds kitty's loop about 10 ms (cmd+alt+b with 12 tabs held it 125 ms), so
+    the tabs on screen get theirs at once and the others one per pass, 20 ms apart."""
     global _sync_pending
     _sync_pending = False
     boss = get_boss()
     off = os.path.exists(OFF)
+    hidden = []
     for tab in list(boss.all_tabs):
         docks = _docks(tab)
         name = next(
@@ -389,14 +410,15 @@ def _sync(timer_id: int | None = None) -> None:
             for d in docks:
                 boss.call_remote_control(None, ("close-window", f"--match=id:{d.id}"))
         elif not docks and name and not off:
-            # A sidebar that exits at once would be relaunched forever; three in 10 s is enough.
-            recent = _launched[tab.id] = [
-                t for t in _launched.get(tab.id, []) if time.monotonic() - t < 10
-            ]
-            if len(recent) >= 3:
-                continue
-            recent.append(time.monotonic())
-            zkitty.dock(boss, tab.id, name)
+            if _shown(tab):
+                _dock(boss, tab, name)
+            else:
+                hidden.append((tab, name))
+    while hidden and not _dock(boss, *hidden.pop(0)):
+        pass
+    if hidden and not _sync_pending:
+        _sync_pending = True
+        add_timer(_safe(_sync), 0.02, False)
     _refresh(boss)
 
 

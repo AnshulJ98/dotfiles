@@ -886,10 +886,14 @@ class IntentWatcherTests(unittest.TestCase):
             self.assertIn("AttributeError", Path(directory, "watcher.log").read_text())
 
     def test_sync_uses_shared_dock_and_keeps_launch_guard(self):
+        from types import SimpleNamespace as NS
         from unittest.mock import patch
 
         class Tab(list):
             id = 8
+
+            def tab_manager_ref(self):
+                return NS(active_tab=self)
 
         with tempfile.TemporaryDirectory() as directory:
             pane = Window("alpha", 1)
@@ -904,6 +908,44 @@ class IntentWatcherTests(unittest.TestCase):
                     module._sync()
                 self.assertEqual(dock.call_count, 3)
                 dock.assert_called_with(boss, 8, "alpha")
+
+    def test_sync_docks_tabs_on_screen_first_and_the_rest_one_per_pass(self):
+        # cmd+alt+b launched every tab's dock in one pass: 12 tabs held kitty's loop 125 ms.
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+
+        class Tab(list):
+            def tab_manager_ref(self):
+                return manager
+
+        with tempfile.TemporaryDirectory() as directory:
+            panes = [Window(name, i) for i, name in enumerate("abcd", 1)]
+            tabs = [Tab([p]) for p in panes]
+            for i, tab in enumerate(tabs, 1):
+                tab.id = i
+            manager = NS(active_tab=tabs[2])
+            boss = Boss(panes, panes[2], "")
+            boss.all_tabs = tabs
+            module = load(directory, boss)
+            module._launched[1] = [
+                module.time.monotonic()
+            ] * 3  # tab 1 relaunched too often
+            timers = []
+            with (
+                patch.object(module.zkitty, "dock") as dock,
+                patch.object(module, "_refresh"),
+                patch.object(module, "add_timer", lambda *a: timers.append(a[1])),
+            ):
+                module._sync()
+                self.assertEqual([c.args[1] for c in dock.call_args_list], [3, 2])
+                self.assertEqual(timers, [0.02])
+                for tab in tabs[1:3]:
+                    sidebar = Window(tab[0].created_in_session_name, 9)
+                    sidebar.user_vars["role"] = "sidebar"
+                    tab.append(sidebar)
+                module._sync()
+                self.assertEqual([c.args[1] for c in dock.call_args_list], [3, 2, 4])
+                self.assertEqual(timers, [0.02])  # nothing left but the guarded tab
 
 
 class PushTests(unittest.TestCase):

@@ -25,6 +25,8 @@ cmd, args = pathlib.Path(sys.argv[0]).name, sys.argv[1:]
 with (root / "calls").open("a") as log:
     log.write(json.dumps([cmd, args]) + "\n")
 mode = os.environ.get("MODE", "")
+if cmd == "zpick-rows" and args[:1] == ["--route"]:
+    print(os.environ.get("ROUTE", ""), end="")
 if cmd == "timeout":
     assert args[0] in ("2", "3")
     # Match the requested deadline: Python fake startup can exceed 0.2s under load.
@@ -64,6 +66,9 @@ if cmd == "kitten":
         if ready.exists() and time.time() >= float(ready.read_text()):
             print('[{"platform_window_id": 42}]')
         sys.exit(0)
+    if "close-tab" in args: (root / "tabs-closed").touch()
+    if "--match-tab" in args and (root / "tabs-closed").exists(): sys.exit(1)
+    if "launch" in args and mode.startswith("det:"): print(42)
     if "ls" in args and os.environ.get("KITTY_LS"):
         print(os.environ["KITTY_LS"])
     elif "ls" in args:
@@ -86,6 +91,9 @@ if cmd == "fzf":
     (root / "view").write_text(str(view))
     if mode == "attach-host":
         print("\ndet\tremote\tremote\t/remote/path\t0\tshown")
+        sys.exit(0)
+    if mode.startswith("det:"):  # a detached row, picked with the key after det:
+        print(mode[4:]); print("det\tsess\tsess\t/x\t0\tshown")
         sys.exit(0)
     if mode == "interrupt": time.sleep(30)
     if mode.startswith("pick:"):  # zpick --zmx: query, key and the selected row, as fzf prints them
@@ -1784,6 +1792,86 @@ elif args[:1] == ["attach"]:
         (launch,) = [a for a in self.calls("kitten") if "launch" in a]
         self.assertNotIn("--cwd", launch)
         self.assertIn("holder=remote", launch)
+
+    def test_picker_reattach_goes_to_the_sessions_workspace(self):
+        # zpick-rows --route names the workspace; zpick opens the tab there, asks where it must.
+        ws = self.root / "workspaces"
+        dev = ws / "dev.kitty-session"
+        pane = ["--cwd", "/x", "--var", "holder=sess"]
+        into = ["@", "launch", "--type=tab", "--match", "session:^dev$"]
+        into += ["--add-to-session", "dev", *pane]
+        there = [into, ["@", "focus-window", "--match", "id:42"]]
+        here = [["@", "launch", "--type=tab", *pane]]
+        goto = ["@", "action", "goto_session"]
+        zshell = str(self.root.resolve() / "zshell")  # zpick finds itself with realpath
+        save = ["@", "action", "save_as_session", "--save-only"]
+        save += ["--match='session:^dev$ and not var:transient=1'", str(dev)]
+        for route, key, answer, expected in (
+            ("here\tdev", "", "", there),
+            ("other\tdev", "", "", there),
+            ("closed\tdev", "", "y", [[*goto, str(dev)], *there]),
+            ("closed\tdev", "", "", [[*goto, str(dev)], *there]),  # enter: the default
+            ("closed\tdev", "", "n", here),
+            ("none\t", "", "y", here),
+            ("none\t", "", "n", [[*goto, str(ws / "x.kitty-session")]]),
+            ("plain\t", "", "", [here[0] + [zshell]]),
+            (
+                "plain\t",
+                "ctrl-s",
+                "",
+                [
+                    ["@", "focus-window", "--match", "id:1"],
+                    ["@", "launch", "--match", "window_id:1", "--location=vsplit"]
+                    + pane
+                    + [zshell],
+                ],
+            ),
+            ("here\tdev", "ctrl-b", "", there),
+            (
+                "other\tdev",
+                "ctrl-b",
+                "",
+                [
+                    save,
+                    ["@", "close-tab", "--match", "session:^dev$"],
+                    [*goto, str(dev)],
+                ]
+                + there,
+            ),
+            (
+                "",
+                "",
+                "",
+                here,
+            ),  # no answer from zpick-rows: where the picker was opened
+        ):
+            with self.subTest(route=route, key=key, answer=answer):
+                for path in (self.root / "calls", self.root / "tabs-closed"):
+                    path.unlink(missing_ok=True)
+                shutil.rmtree(ws, ignore_errors=True)
+                ws.mkdir()
+                dev.write_text("new_os_window\ncd /x\nlaunch --var=holder=sess\n")
+                result = subprocess.run(
+                    [str(self.root / "zpick"), "1"],
+                    check=False,
+                    input=answer,
+                    env=dict(self.env, MODE="det:" + key, ROUTE=route),
+                    capture_output=True,
+                    text=True,
+                    timeout=12,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                kitten = [a for a in self.calls("kitten") if a[1] != "ls"]
+                self.assertEqual(kitten, expected)
+                if key == "ctrl-b" and route.startswith("other"):
+                    # brought into this OS window: no line sends it back to one of its own
+                    self.assertEqual(
+                        dev.read_text(), "cd /x\nlaunch --var=holder=sess\n"
+                    )
+                if answer == "n" and route.startswith("none"):
+                    text = (ws / "x.kitty-session").read_text()
+                    self.assertEqual(text, "cd /x\nlaunch --var holder=sess\n")
+        self.assertEqual(self.run_script("zws", "new", "--holder").returncode, 2)
 
     def test_picker_uses_active_theme_colors(self):
         result = self.run_script("zpick", "1")

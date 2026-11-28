@@ -38,7 +38,7 @@ footer() {
     echo "attached: $(tr '\n' ' ' <"$ZPICK_VIEW.ask")· ^x again kills"
   elif [ "${ZPICK_MODE:-}" = zmx ]; then
     echo 'enter attach · ^n new · ^t view · ^x kill · ^\ back · esc'
-  else echo 'enter go · ^s split · ^t view · tab mark · ^x kill · esc'; fi
+  else echo 'enter go · ^b bring · ^s split · ^t view · tab mark · ^x kill · esc'; fi
 }
 # fzf runs this for the list. It also notes the row of the pane the picker came from.
 list() {
@@ -176,25 +176,65 @@ import json, sys
 try: print(json.load(sys.stdin)[0]["tabs"][0]["windows"][0].get("session_name", ""))
 except (ValueError, IndexError, KeyError): pass')
 
-attach() { # name cwd where: reattach a detached session as a tab, or a split next to $from
-  # No command: kitty runs its shell (zshell), which reattaches the holder session.
-  local args=(--var "holder=$1")
+attach() { # name cwd split|tab|WORKSPACE [plain]: reattach a detached session as a split next to
+  # $from, a tab in the picker's workspace, or a tab in the open WORKSPACE, in whichever OS window
+  # holds it. No command: kitty runs its shell (zshell), which reattaches the holder session; a
+  # kitty whose shell is not zshell (plain, cmd+alt+enter's) is given it by name.
+  local args=(--var "holder=$1") cmd=() id
   if [ -z "${ZWS_HOST:-}" ] || [ "${ZPICK_MODE:-}" = zmx ]; then args=(--cwd "$2" "${args[@]}"); fi
-  [ -n "$ws" ] && args+=(--add-to-session "$ws")
+  [ "${4:-}" = plain ] && cmd=("$here/zshell")
+  case $3 in
+  split | tab) [ -n "$ws" ] && args+=(--add-to-session "$ws") ;;
+  esac
   if [ "$3" = split ] && [ -n "$from" ]; then
     # launch opens in the active tab (the picker) unless --match names the target window's tab.
     kitten @ focus-window --match "id:$from" >/dev/null 2>&1
-    kitten @ launch --match "window_id:$from" --location=vsplit "${args[@]}" >/dev/null
-  else
-    kitten @ launch --type=tab "${args[@]}" >/dev/null
+    kitten @ launch --match "window_id:$from" --location=vsplit "${args[@]}" ${cmd[@]+"${cmd[@]}"} >/dev/null
+  elif [ "$3" = split ] || [ "$3" = tab ]; then
+    kitten @ launch --type=tab "${args[@]}" ${cmd[@]+"${cmd[@]}"} >/dev/null
+  else # zpick-rows only names workspaces of [a-zA-Z0-9._-], so only the dot needs escaping
+    id=$(kitten @ launch --type=tab --match "session:^${3//./\\.}\$" --add-to-session "$3" "${args[@]}") &&
+      { [ -z "$id" ] || kitten @ focus-window --match "id:$id" >/dev/null; }
   fi
+}
+ask() { # question: yes unless n is pressed. The picker's terminal is fds 3 and 4 (see the loop).
+  local key=
+  read -r -s -n 1 -p "$1 [Y/n] " key <&4 2>&3
+  echo >&3
+  [ "$key" != n ] && [ "$key" != N ]
+}
+reattach() { # name cwd key: back to the workspace the session was last in (zpick-rows --route)
+  local state='' space=''
+  IFS=$'\t' read -r state space < <("$here/zpick-rows" --route "$1" "$from")
+  case $3:$state in
+  ctrl-s:plain) attach "$1" "$2" split plain ;;
+  ctrl-s:*) attach "$1" "$2" split ;;
+  *:plain) attach "$1" "$2" tab plain ;;
+  ctrl-b:other | ctrl-b:closed) # bring the workspace into this OS window, then the tab
+    "$here/zws" bring "$space"
+    attach "$1" "$2" "$space" || attach "$1" "$2" tab
+    ;;
+  *:here | *:other) attach "$1" "$2" "$space" || attach "$1" "$2" tab ;;
+  *:closed)
+    if ask "reopen $space?"; then
+      kitten @ action goto_session "$DIR/$space.kitty-session"
+      attach "$1" "$2" "$space" || attach "$1" "$2" tab
+    else attach "$1" "$2" tab; fi
+    ;;
+  *:none)
+    if ask "$1 in this workspace? (n: a new one)"; then
+      attach "$1" "$2" tab
+    else "$here/zws" new --holder "$1" "$2"; fi
+    ;;
+  *) attach "$1" "$2" tab ;; # zpick-rows gave no answer: where the picker was opened
+  esac
 }
 open_row() { # kind target holder cwd key
   case $1 in
   ws) [ -n "$2" ] && kitten @ action goto_session "$DIR/$2.kitty-session" ;;
   tab) kitten @ focus-tab --match "id:$2" ;;
   pane) kitten @ focus-window --match "id:$2" ;;
-  det) attach "$2" "$4" "$([ "$5" = ctrl-s ] && echo split || echo tab)" ;;
+  det) reattach "$2" "$4" "$5" ;;
   closed) kitten @ action goto_session "$2" ;;
   esac >/dev/null 2>&1
 }
@@ -204,7 +244,7 @@ THEME_ACCENT=4 THEME_SEL=8 # the active theme's accent and selection, where the 
 A=$THEME_ACCENT
 keys=(--bind "ctrl-t:execute-silent($self --toggle)+reload($self --list)+transform-border-label($self --label)+transform-ghost($self --ghost)"
   --bind 'zero:change-ghost(nothing here · ctrl-t switches view)')
-if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect ctrl-s); fi
+if [ "${ZPICK_MODE:-}" = zmx ]; then keys+=(--print-query --expect ctrl-n); else keys+=(--expect 'ctrl-s,ctrl-b'); fi
 out=$(FZF_DEFAULT_OPTS= SHELL=$(command -v bash) fzf --ansi --multi \
   --delimiter '\t' --with-nth 6 --no-sort --layout reverse \
   --track --id-nth 1,2 --listen "$ZPICK_VIEW.sock" \
@@ -234,6 +274,8 @@ if [ "${ZPICK_MODE:-}" = zmx ]; then
 fi
 [ $rc = 0 ] || exit 0
 key=$(head -1 <<<"$out")
+# The loop reads the rows on stdin, and open_row discards output, so ask() keeps the terminal.
+exec 3>&2 4<&0
 while IFS=$'\t' read -r kind target holder cwd _; do
   [ -n "$kind" ] && open_row "$kind" "$target" "$holder" "$cwd" "$key"
 done < <(tail -n +2 <<<"$out")

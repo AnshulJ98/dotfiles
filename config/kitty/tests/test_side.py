@@ -755,6 +755,77 @@ class SideTests(unittest.TestCase):
         loader.exec_module(module)
         return module
 
+    def test_route_names_the_workspace_a_detached_session_returns_to(self):
+        rows = self.load_rows()
+        kitty = [
+            {
+                "id": 1,
+                "tabs": [
+                    {
+                        "windows": [
+                            {
+                                "id": 5,
+                                "session_name": "main",
+                                "user_vars": {"holder": "h5"},
+                            },
+                            {"id": 7, "session_name": "", "user_vars": {}},
+                        ]
+                    }
+                ],
+            },
+            {
+                "id": 2,
+                "tabs": [
+                    {
+                        "windows": [
+                            {
+                                "id": 6,
+                                "session_name": "dev",
+                                "user_vars": {"holder": "h6"},
+                            },
+                        ]
+                    }
+                ],
+            },
+        ]
+        label = lambda name: {"s": {"space": name.encode().hex()}}
+        in_file = lambda name: {"s": (name + ".kitty-session", "", "")}
+        for sessions, where, files, origin, expected in (
+            (label("main"), {}, set(), "5", ("here", "main")),
+            (label("dev"), {}, set(), "5", ("other", "dev")),
+            (label("dev"), {}, set(), "6", ("here", "dev")),
+            (label("old"), {}, {"old.kitty-session"}, "5", ("closed", "old")),
+            (label("gone"), {}, set(), "5", ("none", "")),  # its file was deleted
+            ({}, in_file("old"), {"old.kitty-session"}, "5", ("closed", "old")),
+            (
+                label("dev"),
+                in_file("old"),
+                {"old.kitty-session"},
+                "5",
+                ("other", "dev"),
+            ),
+            (
+                {},
+                {},
+                set(),
+                "5",
+                ("none", ""),
+            ),  # never labelled: a pane outside workspaces
+            (label("a b"), {}, set(), "5", ("none", "")),  # not a name zws makes
+            (
+                label("main"),
+                {},
+                set(),
+                "7",
+                ("plain", ""),
+            ),  # no zmx session: zsh's kitty
+            (label("main"), {}, set(), "", ("plain", "")),
+        ):
+            with self.subTest(sessions=sessions, where=where, origin=origin):
+                self.assertEqual(
+                    rows.route(kitty, sessions, where, files, "s", origin), expected
+                )
+
     def test_facts_live_folder_program_refs_and_stdin_cli(self):
         rows = self.load_rows()
         with tempfile.TemporaryDirectory() as directory:

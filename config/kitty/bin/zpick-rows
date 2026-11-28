@@ -4,6 +4,7 @@ then closed workspaces (session files with no open tabs).
 
 usage: zpick-rows VIEW [WINDOW]   VIEW is all | detached (detached sessions and closed workspaces
 only) | zmx (every zmx session, no kitty: zmx-pick in any terminal); WINDOW is the pane the picker was opened from, whose workspace is marked current.
+zpick-rows --route SESSION WINDOW prints where reattaching a detached SESSION goes (route()).
 Each row: kind, target, holder, cwd, clients, display; tab separated. kind is ws | tab | pane |
 det | closed; target is the session name, tab id, window id, zmx session or session file.
 clients is 0 only for a session no terminal is attached to. Inside fzf (FZF_COLUMNS) the right
@@ -126,6 +127,43 @@ def spaces() -> tuple[dict[str, tuple[str, str, str]], dict[str, tuple[str, str,
         for h in holders:
             out[h] = by_file[os.path.basename(path)]
     return out, by_file
+
+
+def route(
+    kitty: list,
+    sessions: dict,
+    where: dict,
+    files: set,
+    holder: str,
+    origin: str,
+) -> tuple[str, str]:
+    """Where cmd+alt+g reattaches the detached session holder: (state, workspace). The workspace is
+    the one kitty labelled the session with (a closed pane is in no file), else the newest saved
+    file holding it. state: here (open in the OS window of the picker's pane origin) | other (open
+    in another) | closed (only its file is left) | none (no workspace known) | plain (origin has no
+    zmx session: a kitty whose shell is not zshell, cmd+alt+enter's)."""
+    held, mine, open_in = "", None, {}
+    for o in kitty:
+        for t in o["tabs"]:
+            for w in t["windows"]:
+                if w.get("session_name"):
+                    open_in.setdefault(w["session_name"], set()).add(o.get("id"))
+                if str(w.get("id")) == origin:
+                    mine, held = o.get("id"), w["user_vars"].get("holder", "")
+    if not held:
+        return "plain", ""
+    space = (
+        space_label(sessions.get(holder, {}))
+        or where.get(holder, ("",))[0][: -len(".kitty-session")]
+    )
+    # zws's rule for names; it also keeps the name safe in a kitty match expression
+    if not re.fullmatch(r"[a-zA-Z0-9._-]+", space) or space in (".", ".."):
+        return "none", ""
+    if space in open_in:
+        return ("here" if mine in open_in[space] else "other"), space
+    if space + ".kitty-session" in files:
+        return "closed", space
+    return "none", ""
 
 
 def live_cwds(pids: list[str]) -> dict[str, str]:
@@ -311,6 +349,17 @@ def main() -> None:
         return
     if view == "--facts":
         print(json.dumps(facts(sys.argv[2:])))
+        return
+    if view == "--route":  # zpick-rows --route SESSION WINDOW
+        host = os.environ.get("ZWS_HOST", "")
+        data = fetch_facts(host, []) if host else None
+        sessions = (data or {}).get("sessions", {}) if host else zmx_sessions()
+        where, by_file = spaces()
+        kitty = json.loads(run("kitten", "@", "ls") or "[]")
+        origin = sys.argv[3] if len(sys.argv) > 3 else ""
+        print(
+            "\t".join(route(kitty, sessions, where, set(by_file), sys.argv[2], origin))
+        )
         return
     origin = sys.argv[2] if len(sys.argv) > 2 else ""
     zmx = view in ("zmx", "zmx-detached")  # zmx-pick: no kitty

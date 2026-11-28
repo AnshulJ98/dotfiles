@@ -3,6 +3,8 @@
 # session file in $ZWS_DIR that workspaces.py keeps current, so goto_session reopens it whole.
 #   zws new [--ask | --window] CWD  new workspace on CWD (home if absent; --ask prompts for a
 #     name, --window opens it in an OS window of its own; ZWS_HOST comes from the instance, CWD is remote there)
+#     --holder SESSION before CWD: its pane reattaches that zmx session
+#   zws bring NAME  workspace NAME reopened in this OS window, from another one or closed
 #   zws rename NAME | close NAME | worktree new|open CWD   the sidebar's right-click menu
 # The session name is fixed. What the sidebar and picker show is the ws_name user var of its
 # panes and sidebars if set (rename, --ask), otherwise the repo or folder of its first pane.
@@ -28,20 +30,21 @@ unique() { # cwd [home]
   echo "$name"
 }
 
-create() { # name cwd [shown-name] [window] [host] [remote-dir]
+create() { # name cwd [shown-name] [window] [host] [remote-dir] [holder]
   local published
   published=$(
-    /usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" "${6:-}" <<'PY'
+    /usr/bin/python3 - "$DIR" "$1" "$2" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}" <<'PY'
 import os, re, shlex, sys, tempfile, unicodedata
-directory, base, cwd, shown, window, host, remote = sys.argv[1:]
+directory, base, cwd, shown, window, host, remote, holder = sys.argv[1:]
 if (base in (".", "..") or not re.fullmatch(r"[a-zA-Z0-9._-]+", base)
         or (host and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", host))
         or any(unicodedata.category(c).startswith("C") or c in "\u2028\u2029"
-               for value in (base, cwd, shown, remote) for c in value)):
+               for value in (base, cwd, shown, remote, holder) for c in value)):
     sys.exit("zws: invalid workspace name, host or control character")
 body = ("new_os_window\n" if window else "") + "cd " + cwd + "\n"
 body += "launch" + "".join(" --var " + shlex.quote(var + "=" + value) for var, value in
-                           (("ws_name", shown), ("host", host), ("host_dir", remote)) if value) + "\n"
+                           (("ws_name", shown), ("host", host), ("host_dir", remote),
+                            ("holder", holder)) if value) + "\n"
 fd, temporary = tempfile.mkstemp(prefix=".create-", dir=directory)
 try:
     with os.fdopen(fd, "w") as stream:
@@ -84,12 +87,17 @@ forward-port)
   ;;
 new)
   shift
-  mode= host=${ZWS_HOST:-}
+  mode='' host=${ZWS_HOST:-} holder=''
   while :; do
     case ${1:-} in
     --ask | --window)
       mode=$1
       shift
+      ;;
+    --holder)
+      [ $# -ge 2 ] || exit 2
+      holder=$2
+      shift 2
       ;;
     *) break ;;
     esac
@@ -106,8 +114,8 @@ new)
   fi
   case $mode in
   --ask) overlay "$cwd" 'read -e -i "$1" -p "Workspace name: " n && [ -n "$n" ] && exec "$0" create "$1" "$2" "$n" "$3" "$4"' "$name" "$cwd" ${host:+"$host" "$remote"} ;;
-  --window) create "$name" "$cwd" '' window "$host" "$remote" ;;
-  *) create "$name" "$cwd" '' '' "$host" "$remote" ;;
+  --window) create "$name" "$cwd" '' window "$host" "$remote" "$holder" ;;
+  *) create "$name" "$cwd" '' '' "$host" "$remote" "$holder" ;;
   esac
   ;;
 create) create "$2" "$3" "${4:-}" '' "${5:-}" "${6:-}" ;;
@@ -154,6 +162,25 @@ rename) # empty answer: back to the folder's name
   overlay "$HOME" 'read -e -p "Name for workspace $1 (empty: follow the folder): " n && exec kitten @ set-user-vars --match "session:^$1\$" "ws_name=$n"' "$2"
   ;;
 close) kitten @ action close_session "$2" ;;
+bring)
+  # Saved first as workspaces.py saves it, since its file can be 2 s old. close-tab asks nothing
+  # and only detaches the panes' zmx sessions; reopening reattaches them. Without its leading
+  # new_os_window the file opens in the focused OS window; workspaces.py's next save puts the
+  # line back only if the workspace still has a window of its own.
+  [[ ${2:-} =~ ^[a-zA-Z0-9._-]+$ ]] || exit 2
+  file=$DIR/$2.kitty-session match="session:^${2//./\\.}\$"
+  if kitten @ ls --match-tab "$match" >/dev/null 2>&1; then
+    kitten @ action save_as_session --save-only "--match='$match and not var:transient=1'" "$file" || exit
+    kitten @ close-tab --match "$match" >/dev/null || exit
+    for _ in 1 2 3 4 5 6 7 8 9 10; do # kitty may drop the tabs on a later pass of its loop
+      kitten @ ls --match-tab "$match" >/dev/null 2>&1 || break
+      sleep 0.2
+    done
+  fi
+  [ -s "$file" ] || exit 1
+  awk 'started || !/^[[:space:]]*(new_os_window[[:space:]]*)?$/ { started = 1; print }' "$file" >"$file.tmp" &&
+    mv "$file.tmp" "$file" && go "$2"
+  ;;
 worktree) # wt makes or picks the worktree and reports it to this instance
   if [ -n "${ZWS_HOST:-}" ]; then
     case $2 in
@@ -174,7 +201,7 @@ worktree) # wt makes or picks the worktree and reports it to this instance
   esac
   ;;
 *)
-  sed -n '2,8p' "$0" >&2
+  sed -n '2,10p' "$0" >&2
   exit 2
   ;;
 esac
